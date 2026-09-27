@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/sjkim1127/rust-motion/main/assets/logo.svg" alt="Rust Motion" width="100%" />
+  <img src="./assets/logo.svg" alt="Rust Motion" width="100%" />
 </p>
 
 <p align="center">
