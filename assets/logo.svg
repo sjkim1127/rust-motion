@@ -1,110 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" width="1200" height="360" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 360" width="1160" height="360" role="img" aria-labelledby="title desc">
   <title id="title">Rust Motion</title>
-  <desc id="desc">Rust Motion logo with a video frame, play symbol, cut mark, and timeline</desc>
+  <desc id="desc">A geometric R with a play symbol and timeline, followed by the Rust Motion wordmark.</desc>
 
-  <defs>
-    <linearGradient id="surface" x1="74" y1="36" x2="1126" y2="324" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#111827" />
-      <stop offset="0.52" stop-color="#0B1020" />
-      <stop offset="1" stop-color="#080B12" />
-    </linearGradient>
+  <g aria-hidden="true">
+    <!-- R mark with a play-shaped counter -->
+    <path d="M48 36h107c77 0 121 42 121 105 0 52-28 82-78 96l96 89h-82l-82-81v81H48V36Zm82 62v81h22c28 0 44-13 44-40s-16-41-44-41h-22Z"
+      fill="#102A43" fill-rule="evenodd" />
+    <path d="M144 119c0-5 5-8 9-5l37 22c4 3 4 8 0 11l-37 22c-4 3-9 0-9-5v-45Z"
+      fill="#D35427" />
 
-    <linearGradient id="edge" x1="78" y1="48" x2="1110" y2="318" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#334155" />
-      <stop offset="0.45" stop-color="#1E293B" />
-      <stop offset="1" stop-color="#172033" />
-    </linearGradient>
-
-    <linearGradient id="brand" x1="96" y1="104" x2="270" y2="256" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#67E8F9" />
-      <stop offset="0.48" stop-color="#22D3EE" />
-      <stop offset="1" stop-color="#8B5CF6" />
-    </linearGradient>
-
-    <linearGradient id="wordmark" x1="350" y1="122" x2="1005" y2="208" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#F8FAFC" />
-      <stop offset="0.68" stop-color="#E2E8F0" />
-      <stop offset="1" stop-color="#CBD5E1" />
-    </linearGradient>
-
-    <linearGradient id="timeline" x1="350" y1="0" x2="1080" y2="0" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#22D3EE" />
-      <stop offset="0.56" stop-color="#60A5FA" />
-      <stop offset="1" stop-color="#8B5CF6" />
-    </linearGradient>
-
-    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-      <path d="M32 0H0V32" fill="none" stroke="#94A3B8" stroke-opacity="0.055" />
-    </pattern>
-
-    <filter id="brand-glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="12" />
-    </filter>
-
-    <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="150%">
-      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#020617" flood-opacity="0.55" />
-    </filter>
-
-    <clipPath id="panel-clip">
-      <rect x="20" y="20" width="1160" height="320" rx="28" />
-    </clipPath>
-  </defs>
-
-  <g filter="url(#soft-shadow)">
-    <rect x="20" y="20" width="1160" height="320" rx="28" fill="url(#surface)" />
-    <rect x="20.75" y="20.75" width="1158.5" height="318.5" rx="27.25" fill="none" stroke="url(#edge)" stroke-width="1.5" />
+    <!-- Timeline and playhead -->
+    <path d="M30 294h286" fill="none" stroke="#102A43" stroke-width="10" stroke-linecap="round" />
+    <path d="M30 294h128" fill="none" stroke="#D35427" stroke-width="10" stroke-linecap="round" />
+    <path d="M82 284v20m149-20v20m68-20v20" fill="none" stroke="#8294A5" stroke-width="6" stroke-linecap="round" />
+    <path d="M158 276v36" fill="none" stroke="#D35427" stroke-width="6" stroke-linecap="round" />
+    <circle cx="158" cy="294" r="9" fill="#D35427" stroke="#FFF" stroke-width="3" />
   </g>
 
-  <g clip-path="url(#panel-clip)">
-    <rect x="20" y="20" width="1160" height="320" fill="url(#grid)" />
-    <circle cx="171" cy="180" r="126" fill="#22D3EE" fill-opacity="0.08" filter="url(#brand-glow)" />
-    <circle cx="1110" cy="302" r="160" fill="#8B5CF6" fill-opacity="0.075" filter="url(#brand-glow)" />
-    <path d="M1030 20H1180V170Z" fill="#FFFFFF" fill-opacity="0.018" />
-  </g>
-
-  <!-- Frame-and-cut emblem -->
-  <g>
-    <rect x="79" y="79" width="202" height="202" rx="48" fill="#0B1222" stroke="#334155" stroke-width="2" />
-    <rect x="91" y="91" width="178" height="178" rx="39" fill="#0F172A" stroke="url(#brand)" stroke-width="3" />
-
-    <!-- Film frame corners -->
-    <path d="M112 143V123C112 117 117 112 123 112H143M217 112H237C243 112 248 117 248 123V143M248 217V237C248 243 243 248 237 248H217M143 248H123C117 248 112 243 112 237V217"
-      fill="none" stroke="#94A3B8" stroke-opacity="0.52" stroke-width="5" stroke-linecap="round" />
-
-    <!-- Play shape -->
-    <path d="M156 139.5C156 134.7 161.2 131.7 165.4 134.1L225.2 168.6C229.4 171 229.4 177 225.2 179.4L165.4 213.9C161.2 216.3 156 213.3 156 208.5Z"
-      fill="url(#brand)" />
-    <path d="M172 155L205 174L172 193Z" fill="#07111F" fill-opacity="0.78" />
-
-    <!-- Cut mark -->
-    <path d="M133 225L222 136" fill="none" stroke="#F8FAFC" stroke-width="8" stroke-linecap="round" />
-    <path d="M142 234L231 145" fill="none" stroke="#0F172A" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 8" />
-    <circle cx="132" cy="226" r="7" fill="#22D3EE" stroke="#E0F2FE" stroke-width="2" />
-    <circle cx="223" cy="135" r="7" fill="#8B5CF6" stroke="#EDE9FE" stroke-width="2" />
-  </g>
-
-  <!-- Wordmark -->
-  <g font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
-    <text x="350" y="191" fill="url(#wordmark)" font-size="88" font-weight="760" letter-spacing="-4">RUST MOTION</text>
-    <text x="354" y="232" fill="#94A3B8" font-size="17" font-weight="650" letter-spacing="5.2">CODE-DRIVEN VIDEO IN RUST</text>
-  </g>
-
-  <!-- Timeline signature -->
-  <g>
-    <rect x="350" y="270" width="730" height="4" rx="2" fill="#334155" />
-    <rect x="350" y="270" width="472" height="4" rx="2" fill="url(#timeline)" />
-    <g fill="#0B1020" stroke="#64748B" stroke-width="2">
-      <circle cx="350" cy="272" r="7" />
-      <circle cx="530" cy="272" r="7" />
-      <circle cx="710" cy="272" r="7" />
-      <circle cx="1080" cy="272" r="7" />
-    </g>
-    <circle cx="822" cy="272" r="9" fill="#8B5CF6" stroke="#EDE9FE" stroke-width="2" />
-    <path d="M822 253V291" stroke="#A78BFA" stroke-width="2" stroke-linecap="round" />
-    <path d="M808 253H836" stroke="#A78BFA" stroke-width="3" stroke-linecap="round" />
-    <g fill="#64748B" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="11" font-weight="600">
-      <text x="350" y="300">00:00</text>
-      <text x="1080" y="300" text-anchor="end">SCENE → FRAME → VIDEO</text>
-    </g>
-  </g>
+  <text x="356" y="226" font-family="Inter, 'Avenir Next', 'Segoe UI', sans-serif" font-size="132" font-weight="750" letter-spacing="-5">
+    <tspan fill="#D35427">Rust</tspan><tspan dx="18" fill="#102A43">Motion</tspan>
+  </text>
 </svg>
