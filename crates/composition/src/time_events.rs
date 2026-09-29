@@ -95,13 +95,12 @@ impl TimeEventSchedule {
         let events: Vec<TimeEvent> = self
             .events
             .iter()
-            .filter_map(|event| {
-                // Keep the clip's terminal frame marker so a composition can
-                // use it as the end of a duration interval.
-                (event.frame >= start && event.frame <= end).then(|| TimeEvent {
-                    id: event.id.clone(),
-                    frame: event.frame - start,
-                })
+            // Keep the clip's terminal frame marker so a composition can use
+            // it as the end of a duration interval.
+            .filter(|event| event.frame >= start && event.frame <= end)
+            .map(|event| TimeEvent {
+                id: event.id.clone(),
+                frame: event.frame - start,
             })
             .collect();
         let frames = events
