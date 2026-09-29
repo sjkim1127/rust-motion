@@ -15,12 +15,39 @@ app.innerHTML = `
       <button id="cancel-render" disabled>Cancel</button>
       <span id="message"></span>
     </section>
+    <section class="preview"><canvas id="preview-canvas"></canvas></section>
     <section class="timeline">
       <button id="play-toggle">Pause</button>
       <input id="timeline-slider" type="range" min="0" max="149" value="0" aria-label="timeline frame" />
       <span id="timeline-frame">0 / 149</span>
     </section>
-    <section class="preview"><canvas id="preview-canvas"></canvas></section>
+    <section class="timeline-editor" aria-label="Project timeline editor">
+      <div class="timeline-editor-header">
+        <div class="timeline-title">
+          <h2>Timeline</h2>
+          <span id="timeline-summary">No tracks</span>
+        </div>
+        <div class="timeline-actions">
+          <button id="add-track" type="button">+ Track</button>
+          <button id="add-clip" type="button">+ Clip</button>
+          <label class="snap-control"><input id="timeline-snap" type="checkbox" checked /> Snap</label>
+          <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+          <span id="zoom-level">4 px/frame</span>
+          <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+        </div>
+      </div>
+      <div id="timeline-scroll" class="timeline-scroll" aria-label="Timeline tracks">
+        <div id="timeline-canvas" class="timeline-canvas"></div>
+      </div>
+      <div id="clip-inspector" class="clip-inspector" hidden>
+        <strong id="selected-clip-title">Selected clip</strong>
+        <label>Composition <input id="clip-composition" type="text" /></label>
+        <label>Start frame <input id="clip-start" type="number" min="0" step="1" /></label>
+        <label>Duration <input id="clip-duration" type="number" min="1" step="1" /></label>
+        <button id="duplicate-clip" type="button">Duplicate</button>
+        <button id="remove-clip" type="button" class="danger-button">Delete</button>
+      </div>
+    </section>
     <section class="job-queue"><h2>Render queue</h2><div id="job-list">No jobs</div></section>
     <footer><span id="frame">frame 0</span><span id="protocol">worker protocol…</span><span id="job">job store…</span></footer>
   </main>`;
@@ -2666,16 +2693,334 @@ let project = {
   settings: { width: 1280, height: 720, fps: 30, duration: 150, backend: 'browser' },
   props: { color: '#6c63ff' }, assets: [], tracks: [],
 };
+const timelineCanvas = document.querySelector('#timeline-canvas');
+const timelineScroll = document.querySelector('#timeline-scroll');
+const timelineLabelWidth = 138;
+const timelineZoomStops = [2, 3, 4, 6, 8, 12, 16];
+let timelineScale = 4;
+let selectedTrackId = null;
+let selectedClipId = null;
+
+function makeProjectId(prefix) {
+  const suffix = globalThis.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}-${suffix}`;
+}
+
+function projectTracks() {
+  if (!Array.isArray(project.tracks)) project.tracks = [];
+  return project.tracks;
+}
+
+function selectedClipEntry() {
+  for (const track of projectTracks()) {
+    if (track.id !== selectedTrackId) continue;
+    const clip = track.clips?.find((item) => item.id === selectedClipId);
+    if (clip) return { track, clip };
+  }
+  return null;
+}
+
+function updateClipInspector() {
+  const inspector = document.querySelector('#clip-inspector');
+  const entry = selectedClipEntry();
+  document.querySelector('#duplicate-clip').disabled = !entry;
+  document.querySelector('#remove-clip').disabled = !entry;
+  if (!entry) {
+    inspector.hidden = true;
+    return;
+  }
+
+  const { track, clip } = entry;
+  inspector.hidden = false;
+  document.querySelector('#selected-clip-title').textContent = `${track.id} · ${clip.composition}`;
+  document.querySelector('#clip-composition').value = clip.composition;
+  document.querySelector('#clip-start').value = clip.start;
+  document.querySelector('#clip-start').max = Math.max(0, project.settings.duration - clip.duration);
+  document.querySelector('#clip-duration').value = clip.duration;
+  document.querySelector('#clip-duration').max = Math.max(1, project.settings.duration - clip.start);
+}
+
+function updateTimelineSummary() {
+  const tracks = projectTracks();
+  const clipCount = tracks.reduce((total, track) => total + (track.clips?.length ?? 0), 0);
+  document.querySelector('#timeline-summary').textContent =
+    `${tracks.length} track${tracks.length === 1 ? '' : 's'} · ${clipCount} clip${clipCount === 1 ? '' : 's'} · ${project.settings.duration} frames`;
+}
+
+function timelineClipLabel(clip) {
+  return `${clip.composition} · ${clip.start}–${clip.start + clip.duration}`;
+}
+
+function selectTimelineTrack(trackId) {
+  selectedTrackId = trackId;
+  selectedClipId = null;
+  renderTimeline();
+}
+
+function selectTimelineClip(trackId, clipId) {
+  selectedTrackId = trackId;
+  selectedClipId = clipId;
+  for (const block of timelineCanvas.querySelectorAll('.clip-block')) {
+    block.classList.toggle('selected',
+      block.dataset.trackId === trackId && block.dataset.clipId === clipId);
+  }
+  for (const label of timelineCanvas.querySelectorAll('.timeline-track-label')) {
+    label.classList.toggle('selected', label.dataset.trackId === trackId);
+  }
+  updateClipInspector();
+}
+
+function positionTimelinePlayhead() {
+  const playhead = timelineCanvas.querySelector('.timeline-playhead');
+  if (!playhead) return;
+  playhead.style.left = `${timelineLabelWidth + frame * timelineScale}px`;
+}
+
+function renderTimeline() {
+  const duration = Math.max(1, project.settings.duration);
+  const timelineWidth = duration * timelineScale;
+  const tracks = projectTracks();
+  timelineCanvas.style.setProperty('--timeline-width', `${timelineWidth}px`);
+  timelineCanvas.style.setProperty('--frame-width', `${timelineScale}px`);
+  timelineCanvas.replaceChildren();
+
+  const rulerRow = document.createElement('div');
+  rulerRow.className = 'timeline-row timeline-ruler-row';
+  const rulerLabel = document.createElement('div');
+  rulerLabel.className = 'timeline-sticky-label';
+  rulerLabel.textContent = 'Frame';
+  const ruler = document.createElement('div');
+  ruler.className = 'timeline-ruler-track';
+  const tickStep = timelineScale >= 12 ? 5 : timelineScale >= 6 ? 10 : timelineScale >= 3 ? 15 : 30;
+  const tickFrames = new Set([duration]);
+  for (let tick = 0; tick < duration; tick += tickStep) tickFrames.add(tick);
+  for (const tickFrame of [...tickFrames].sort((left, right) => left - right)) {
+    const tick = document.createElement('div');
+    tick.className = 'timeline-ruler-tick';
+    tick.style.left = `${tickFrame * timelineScale}px`;
+    const label = document.createElement('span');
+    label.textContent = String(tickFrame);
+    tick.append(label);
+    ruler.append(tick);
+  }
+  rulerRow.append(rulerLabel, ruler);
+  timelineCanvas.append(rulerRow);
+
+  if (tracks.length === 0) {
+    const emptyRow = document.createElement('div');
+    emptyRow.className = 'timeline-row timeline-track-row';
+    const emptyLabel = document.createElement('div');
+    emptyLabel.className = 'timeline-sticky-label';
+    emptyLabel.textContent = 'No tracks';
+    const emptyLane = document.createElement('div');
+    emptyLane.className = 'timeline-empty';
+    emptyLane.style.width = `${timelineWidth}px`;
+    emptyLane.textContent = 'Add a track, then add a composition clip.';
+    emptyRow.append(emptyLabel, emptyLane);
+    timelineCanvas.append(emptyRow);
+  }
+
+  for (const [trackIndex, track] of tracks.entries()) {
+    if (!Array.isArray(track.clips)) track.clips = [];
+    const clipRows = [];
+    const clipRowByClip = new Map();
+    for (const clip of track.clips) {
+      let rowIndex = clipRows.findIndex((row) => row.every((other) =>
+        clip.start + clip.duration <= other.start ||
+        clip.start >= other.start + other.duration));
+      if (rowIndex < 0) {
+        rowIndex = clipRows.length;
+        clipRows.push([]);
+      }
+      clipRows[rowIndex].push(clip);
+      clipRowByClip.set(clip, rowIndex);
+    }
+    const trackHeight = Math.max(54, 14 + clipRows.length * 40);
+    const row = document.createElement('div');
+    row.className = 'timeline-row timeline-track-row';
+    row.style.height = `${trackHeight}px`;
+    const label = document.createElement('button');
+    label.type = 'button';
+    label.className = 'timeline-sticky-label timeline-track-label';
+    label.classList.toggle('selected', track.id === selectedTrackId);
+    label.dataset.trackId = track.id;
+    label.setAttribute('aria-label', `Select track ${track.id}`);
+    const name = document.createElement('span');
+    name.textContent = track.id || `Track ${trackIndex + 1}`;
+    const count = document.createElement('small');
+    count.textContent = String(track.clips.length);
+    label.append(name, count);
+    label.addEventListener('click', () => selectTimelineTrack(track.id));
+
+    const lane = document.createElement('div');
+    lane.className = 'timeline-lane';
+    lane.dataset.trackId = track.id;
+    lane.style.width = `${timelineWidth}px`;
+    lane.style.height = `${trackHeight}px`;
+    for (const clip of track.clips) {
+      const block = document.createElement('button');
+      block.type = 'button';
+      block.className = 'clip-block';
+      block.classList.toggle('selected', track.id === selectedTrackId && clip.id === selectedClipId);
+      block.dataset.trackId = track.id;
+      block.dataset.clipId = clip.id;
+      block.style.left = `${clip.start * timelineScale}px`;
+      block.style.top = `${8 + clipRowByClip.get(clip) * 40}px`;
+      block.style.width = `${Math.max(timelineScale, clip.duration * timelineScale)}px`;
+      block.title = `${timelineClipLabel(clip)} frames`;
+      block.setAttribute('aria-label', `${clip.composition}, starts at frame ${clip.start}, duration ${clip.duration} frames`);
+      const labelText = document.createElement('span');
+      labelText.className = 'clip-block-label';
+      labelText.textContent = timelineClipLabel(clip);
+      const startHandle = document.createElement('span');
+      startHandle.className = 'clip-trim-handle clip-trim-start';
+      startHandle.dataset.trimEdge = 'start';
+      startHandle.setAttribute('aria-hidden', 'true');
+      const endHandle = document.createElement('span');
+      endHandle.className = 'clip-trim-handle clip-trim-end';
+      endHandle.dataset.trimEdge = 'end';
+      endHandle.setAttribute('aria-hidden', 'true');
+      block.append(labelText, startHandle, endHandle);
+      block.addEventListener('pointerdown', (event) => beginTimelineClipEdit(event, lane, block, track, clip));
+      lane.append(block);
+    }
+    row.append(label, lane);
+    timelineCanvas.append(row);
+  }
+
+  const playhead = document.createElement('div');
+  playhead.className = 'timeline-playhead';
+  timelineCanvas.append(playhead);
+  document.querySelector('#zoom-level').textContent = `${timelineScale} px/frame`;
+  document.querySelector('#zoom-out').disabled = timelineScale === timelineZoomStops[0];
+  document.querySelector('#zoom-in').disabled = timelineScale === timelineZoomStops[timelineZoomStops.length - 1];
+  updateTimelineSummary();
+  updateClipInspector();
+  positionTimelinePlayhead();
+}
+
+function timelineSnapPoints(excludedClip) {
+  const points = [0, frame, project.settings.duration];
+  for (const track of projectTracks()) {
+    for (const clip of track.clips ?? []) {
+      if (clip === excludedClip) continue;
+      points.push(clip.start, clip.start + clip.duration);
+    }
+  }
+  return points;
+}
+
+function nearestTimelineSnap(value, points) {
+  if (!document.querySelector('#timeline-snap').checked) return value;
+  const tolerance = Math.max(1, Math.ceil(8 / timelineScale));
+  let result = value;
+  let distance = tolerance + 1;
+  for (const point of points) {
+    const nextDistance = Math.abs(point - value);
+    if (nextDistance <= tolerance && nextDistance < distance) {
+      result = point;
+      distance = nextDistance;
+    }
+  }
+  return result;
+}
+
+function beginTimelineClipEdit(event, lane, block, track, clip) {
+  event.preventDefault();
+  selectTimelineClip(track.id, clip.id);
+  const trimEdge = event.target.closest('.clip-trim-handle')?.dataset.trimEdge;
+  const mode = trimEdge === 'start' ? 'trim-start' : trimEdge === 'end' ? 'trim-end' : 'move';
+  const startPointerFrame = Math.round((event.clientX - lane.getBoundingClientRect().left) / timelineScale);
+  const originalStart = clip.start;
+  const originalDuration = clip.duration;
+  const originalEnd = originalStart + originalDuration;
+  const snapPoints = timelineSnapPoints(clip);
+  let changed = false;
+
+  function updateBlock() {
+    block.style.left = `${clip.start * timelineScale}px`;
+    block.style.width = `${Math.max(timelineScale, clip.duration * timelineScale)}px`;
+    block.title = `${timelineClipLabel(clip)} frames`;
+    block.setAttribute('aria-label', `${clip.composition}, starts at frame ${clip.start}, duration ${clip.duration} frames`);
+    block.querySelector('.clip-block-label').textContent = timelineClipLabel(clip);
+    updateClipInspector();
+    updateTimelineSummary();
+  }
+
+  function onPointerMove(moveEvent) {
+    const pointerFrame = Math.round((moveEvent.clientX - lane.getBoundingClientRect().left) / timelineScale);
+    const delta = pointerFrame - startPointerFrame;
+    if (mode === 'move') {
+      const candidates = snapPoints.flatMap((point) => [point, point - originalDuration]);
+      const snapped = nearestTimelineSnap(originalStart + delta, candidates);
+      clip.start = Math.max(0, Math.min(snapped, project.settings.duration - originalDuration));
+      clip.duration = originalDuration;
+    } else if (mode === 'trim-start') {
+      const snapped = nearestTimelineSnap(originalStart + delta, snapPoints);
+      clip.start = Math.max(0, Math.min(snapped, originalEnd - 1));
+      clip.duration = originalEnd - clip.start;
+    } else {
+      const snapped = nearestTimelineSnap(originalEnd + delta, snapPoints);
+      const end = Math.max(originalStart + 1, Math.min(snapped, project.settings.duration));
+      clip.start = originalStart;
+      clip.duration = end - originalStart;
+    }
+    changed ||= clip.start !== originalStart || clip.duration !== originalDuration;
+    updateBlock();
+  }
+
+  function finishPointerEdit() {
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', finishPointerEdit);
+    window.removeEventListener('pointercancel', finishPointerEdit);
+    if (changed) {
+      renderTimeline();
+      setFrame(frame);
+      showMessage('Timeline clip updated');
+    }
+  }
+
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', finishPointerEdit, { once: true });
+  window.addEventListener('pointercancel', finishPointerEdit, { once: true });
+}
+
+function updateSelectedClip(mutator) {
+  const entry = selectedClipEntry();
+  if (!entry) return;
+  mutator(entry.clip);
+  renderTimeline();
+  setFrame(frame);
+  showMessage('Timeline clip updated');
+}
+
+function cloneProjectValue(value) {
+  return JSON.parse(JSON.stringify(value ?? {}));
+}
+
+function changeTimelineZoom(direction) {
+  const currentIndex = timelineZoomStops.indexOf(timelineScale);
+  const nextIndex = Math.max(0, Math.min(timelineZoomStops.length - 1, currentIndex + direction));
+  if (nextIndex === currentIndex) return;
+  const centerFrame = Math.max(0,
+    (timelineScroll.scrollLeft + timelineScroll.clientWidth / 2 - timelineLabelWidth) / timelineScale);
+  timelineScale = timelineZoomStops[nextIndex];
+  renderTimeline();
+  timelineScroll.scrollLeft = Math.max(0,
+    timelineLabelWidth + centerFrame * timelineScale - timelineScroll.clientWidth / 2);
+}
 
 function showMessage(message) {
   document.querySelector('#message').textContent = message;
 }
 
 function setFrame(nextFrame) {
-  frame = Math.max(0, Math.min(nextFrame, project.settings.duration - 1));
+  frame = Math.max(0, Math.min(Math.round(nextFrame), project.settings.duration - 1));
   document.querySelector('#timeline-slider').max = project.settings.duration - 1;
   document.querySelector('#timeline-slider').value = frame;
   document.querySelector('#timeline-frame').textContent = `${frame} / ${project.settings.duration - 1}`;
+  positionTimelinePlayhead();
   renderFrame({
     composition: project.composition,
     frame,
@@ -2700,6 +3045,104 @@ document.querySelector('#timeline-slider').addEventListener('input', (event) => 
   document.querySelector('#play-toggle').textContent = 'Play';
   setFrame(Number(event.currentTarget.value));
 });
+
+document.querySelector('#add-track').addEventListener('click', () => {
+  const tracks = projectTracks();
+  let trackNumber = tracks.length + 1;
+  while (tracks.some((track) => track.id === `Track ${trackNumber}`)) trackNumber += 1;
+  const track = { id: `Track ${trackNumber}`, clips: [] };
+  tracks.push(track);
+  selectedTrackId = track.id;
+  selectedClipId = null;
+  renderTimeline();
+  showMessage(`${track.id} added`);
+});
+
+document.querySelector('#add-clip').addEventListener('click', () => {
+  const tracks = projectTracks();
+  let track = tracks.find((item) => item.id === selectedTrackId) ?? tracks[0];
+  if (!track) {
+    let trackNumber = 1;
+    while (tracks.some((item) => item.id === `Track ${trackNumber}`)) trackNumber += 1;
+    track = { id: `Track ${trackNumber}`, clips: [] };
+    tracks.push(track);
+  }
+  if (!Array.isArray(track.clips)) track.clips = [];
+  const duration = Math.min(30, project.settings.duration);
+  const start = Math.min(frame, project.settings.duration - duration);
+  const clip = {
+    id: makeProjectId('clip'),
+    composition: project.composition,
+    start,
+    duration,
+    props: cloneProjectValue(project.props),
+  };
+  track.clips.push(clip);
+  selectedTrackId = track.id;
+  selectedClipId = clip.id;
+  renderTimeline();
+  setFrame(frame);
+  showMessage('Composition clip added');
+});
+
+document.querySelector('#duplicate-clip').addEventListener('click', () => {
+  const entry = selectedClipEntry();
+  if (!entry) return;
+  const { track, clip } = entry;
+  const duplicate = {
+    ...clip,
+    id: makeProjectId('clip'),
+    start: Math.min(clip.start + clip.duration, project.settings.duration - clip.duration),
+    props: cloneProjectValue(clip.props),
+  };
+  const index = track.clips.indexOf(clip);
+  track.clips.splice(index + 1, 0, duplicate);
+  selectedClipId = duplicate.id;
+  renderTimeline();
+  setFrame(frame);
+  showMessage('Composition clip duplicated');
+});
+
+document.querySelector('#remove-clip').addEventListener('click', () => {
+  const entry = selectedClipEntry();
+  if (!entry) return;
+  entry.track.clips = entry.track.clips.filter((clip) => clip !== entry.clip);
+  selectedClipId = null;
+  renderTimeline();
+  setFrame(frame);
+  showMessage('Composition clip removed');
+});
+
+document.querySelector('#clip-composition').addEventListener('change', (event) => {
+  const composition = event.currentTarget.value.trim();
+  if (!composition) {
+    updateClipInspector();
+    showMessage('Composition ID cannot be empty');
+    return;
+  }
+  updateSelectedClip((clip) => { clip.composition = composition; });
+});
+
+document.querySelector('#clip-start').addEventListener('change', (event) => {
+  const value = Number.parseInt(event.currentTarget.value, 10);
+  if (!Number.isFinite(value)) return updateClipInspector();
+  updateSelectedClip((clip) => {
+    clip.start = Math.max(0, Math.min(value, project.settings.duration - clip.duration));
+  });
+});
+
+document.querySelector('#clip-duration').addEventListener('change', (event) => {
+  const value = Number.parseInt(event.currentTarget.value, 10);
+  if (!Number.isFinite(value)) return updateClipInspector();
+  updateSelectedClip((clip) => {
+    clip.duration = Math.max(1, Math.min(value, project.settings.duration - clip.start));
+  });
+});
+
+document.querySelector('#zoom-out').addEventListener('click', () => changeTimelineZoom(-1));
+document.querySelector('#zoom-in').addEventListener('click', () => changeTimelineZoom(1));
+
+renderTimeline();
 
 function expectedOutputFrameCount(job) {
   const output = String(job.output ?? '').split(/[\\/]/).pop() ?? '';
@@ -2769,6 +3212,9 @@ document.querySelector('#load-project').addEventListener('click', async () => {
     if (!selected || Array.isArray(selected)) return;
     document.querySelector('#project-path').value = selected;
     project = await invoke('load_project', { path: selected });
+    selectedTrackId = project.tracks?.[0]?.id ?? null;
+    selectedClipId = null;
+    renderTimeline();
     playbackStartedAt = performance.now();
     lastPlaybackFrame = -1;
     showMessage(`loaded ${project.composition}`);
