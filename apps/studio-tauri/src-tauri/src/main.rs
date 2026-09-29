@@ -449,6 +449,18 @@ fn start_render_job(
                         .collect(),
                 )
                 .map_err(|error| error.to_string())?;
+            backend
+                .set_time_events(
+                    project
+                        .events
+                        .iter()
+                        .map(|event| dioxuscut_rasterizer::WebTimeEvent {
+                            id: event.id.clone(),
+                            frame: event.frame,
+                        })
+                        .collect(),
+                )
+                .map_err(|error| error.to_string())?;
             let state_for_progress = Arc::clone(&state_jobs);
             let progress_id = id.clone();
             let diagnostics_state = Arc::clone(&state_jobs);

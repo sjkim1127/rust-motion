@@ -26,6 +26,7 @@ The repository also contains Dioxus timeline, media, shape, transition, player, 
   persistent Chromium workers for Browser compositions.
 - Cached FFprobe metadata and persistent, bounded FFmpeg rawvideo decoder sessions.
 - Registry-based Rust compositions and optional sandboxed Rhai compositions, both with JSON props.
+- Named frame events for retiming compositions against voice-over audio in Studio; see the [time event guide](docs/time-events.md).
 - Shared native composition contract for CLI export and Dioxus Player/Studio preview.
 - Dioxus 0.6 `VirtualDom` mutation renderer with block, Flexbox, and Grid layout through Taffy.
 - Composable `SceneEmitter` adapters for media, procedural shapes, kinetic captions, fitted multiline text, fades, slides, sequences, freezes, and composited layers.
