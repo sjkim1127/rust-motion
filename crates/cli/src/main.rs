@@ -222,6 +222,7 @@ async fn main() -> anyhow::Result<()> {
                                     props: serde_json::json!({}),
                                     assets: Vec::new(),
                                     timeline: Vec::new(),
+                                    time_events: Vec::new(),
                                     image_format: None,
                                     jpeg_quality: None,
                                     transparent: true,

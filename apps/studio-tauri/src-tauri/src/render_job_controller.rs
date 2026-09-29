@@ -134,6 +134,8 @@ mod tests {
                 props: serde_json::json!({}),
                 assets: vec![],
                 tracks: vec![],
+                events: vec![],
+                voice_over_asset_id: None,
             })
             .unwrap();
         controller.update(&id, JobStatus::Preparing, 0).unwrap();
@@ -180,6 +182,8 @@ mod tests {
                 props: serde_json::json!({}),
                 assets: vec![],
                 tracks: vec![],
+                events: vec![],
+                voice_over_asset_id: None,
             })
             .unwrap();
         controller.update(&id, JobStatus::Preparing, 0).unwrap();
@@ -253,6 +257,7 @@ mod tests {
                     props: serde_json::json!({}),
                     assets: vec![],
                     timeline: vec![],
+                    time_events: vec![],
                     image_format: None,
                     jpeg_quality: None,
                     transparent: false,
