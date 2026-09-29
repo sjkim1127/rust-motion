@@ -85,8 +85,8 @@ pub use render::{
     RenderControl, RenderDiagnostics, RenderProgress, StillImageFormat, VideoCodec,
 };
 pub use web::{
-    WebFrameDriftReport, WebFrameRequest, WebFrameResponse, WebFrameTiming, WebTimelineClip,
-    WebWorkerMessage, WEB_WORKER_PROTOCOL_VERSION,
+    WebFrameDriftReport, WebFrameRequest, WebFrameResponse, WebFrameTiming, WebTimeEvent,
+    WebTimelineClip, WebWorkerMessage, WEB_WORKER_PROTOCOL_VERSION,
 };
 pub use web_backend::BrowserFrameBackend;
 

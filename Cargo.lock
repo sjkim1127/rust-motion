@@ -1948,6 +1948,7 @@ name = "dioxuscut-composition"
 version = "0.2.0"
 dependencies = [
  "dioxuscut-animation",
+ "dioxuscut-project",
  "dioxuscut-rasterizer",
  "serde",
  "serde_json",

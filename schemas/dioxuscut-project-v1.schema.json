@@ -39,6 +39,14 @@
     "tracks": {
       "type": "array",
       "items": { "$ref": "#/$defs/track" }
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/timeEvent" }
+    },
+    "voice_over_asset_id": {
+      "type": ["string", "null"],
+      "minLength": 1
     }
   },
   "$defs": {
@@ -71,6 +79,15 @@
         "start": { "type": "integer", "minimum": 0 },
         "duration": { "type": "integer", "minimum": 1 },
         "props": {}
+      },
+      "additionalProperties": false
+    },
+    "timeEvent": {
+      "type": "object",
+      "required": ["id", "frame"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "frame": { "type": "integer", "minimum": 0 }
       },
       "additionalProperties": false
     }

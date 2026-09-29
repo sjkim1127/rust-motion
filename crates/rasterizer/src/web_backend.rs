@@ -4,8 +4,8 @@ use crate::backend::{BackendCapabilities, FrameConfig, RasterError, RasterizerBa
 use crate::frame_cache::{CacheMetrics, FrameCacheConfig, FrameCacheKey, FrameCacheManager};
 use crate::scene::Scene;
 use crate::web::{
-    WebFrameRequest, WebFrameResponse, WebFrameTiming, WebTimelineClip, WebWorkerMessage,
-    WEB_WORKER_PROTOCOL_VERSION,
+    WebFrameRequest, WebFrameResponse, WebFrameTiming, WebTimeEvent, WebTimelineClip,
+    WebWorkerMessage, WEB_WORKER_PROTOCOL_VERSION,
 };
 use base64::Engine;
 use image::RgbaImage;
@@ -44,6 +44,7 @@ pub struct BrowserFrameBackend {
     composition: Mutex<Option<String>>,
     assets: Mutex<Vec<String>>,
     timeline: Mutex<Vec<WebTimelineClip>>,
+    time_events: Mutex<Vec<WebTimeEvent>>,
     image_format: Option<String>,
     jpeg_quality: Option<u8>,
     transparent: bool,
@@ -96,6 +97,12 @@ impl BrowserFrameBackend {
             ),
             timeline: Mutex::new(
                 std::env::var("DIOXUSCUT_BROWSER_TIMELINE")
+                    .ok()
+                    .and_then(|value| serde_json::from_str(&value).ok())
+                    .unwrap_or_default(),
+            ),
+            time_events: Mutex::new(
+                std::env::var("DIOXUSCUT_BROWSER_TIME_EVENTS")
                     .ok()
                     .and_then(|value| serde_json::from_str(&value).ok())
                     .unwrap_or_default(),
@@ -373,6 +380,16 @@ impl BrowserFrameBackend {
         Ok(())
     }
 
+    /// Configure named project frame markers forwarded to browser compositions.
+    pub fn set_time_events(&self, events: Vec<WebTimeEvent>) -> Result<(), RasterError> {
+        *self
+            .time_events
+            .lock()
+            .map_err(|_| RasterError::Init("browser time events lock poisoned".into()))? = events;
+        self.clear_frame_caches();
+        Ok(())
+    }
+
     /// Number of persistent browser workers available for frame rendering.
     pub fn worker_count(&self) -> usize {
         self.workers.len()
@@ -436,6 +453,7 @@ impl BrowserFrameBackend {
             "props": &request.props,
             "assets": &request.assets,
             "timeline": &request.timeline,
+            "time_events": &request.time_events,
             "image_format": &request.image_format,
             "jpeg_quality": request.jpeg_quality,
             "transparent": request.transparent,
@@ -769,6 +787,11 @@ impl RasterizerBackend for BrowserFrameBackend {
                 .lock()
                 .map_err(|_| RasterError::Init("browser timeline lock poisoned".into()))?
                 .clone(),
+            time_events: self
+                .time_events
+                .lock()
+                .map_err(|_| RasterError::Init("browser time events lock poisoned".into()))?
+                .clone(),
             image_format: self.image_format.clone(),
             jpeg_quality: self.jpeg_quality,
             transparent: self.transparent,
@@ -825,6 +848,7 @@ mod tests {
                 props: serde_json::json!({}),
                 assets: vec![],
                 timeline: vec![],
+                time_events: vec![],
                 image_format: None,
                 jpeg_quality: None,
                 transparent: false,
@@ -868,6 +892,7 @@ mod tests {
             props: serde_json::json!({}),
             assets: vec![],
             timeline: vec![],
+            time_events: vec![],
             image_format: None,
             jpeg_quality: None,
             transparent: false,
@@ -938,6 +963,7 @@ mod tests {
             props: serde_json::json!({}),
             assets: vec![],
             timeline: vec![],
+            time_events: vec![],
             image_format: None,
             jpeg_quality: None,
             transparent: false,
