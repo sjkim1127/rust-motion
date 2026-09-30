@@ -160,8 +160,9 @@ impl LottieCache {
         let frame_idx = (entry.animation.in_point + (effective_time as f32 * entry.frame_rate))
             .clamp(entry.animation.in_point, entry.animation.out_point);
 
-        let quant_frame = (frame_idx.round() as u32).min(entry.animation.out_point as u32);
-        let key = (canonical.clone(), quant_frame, target_w, target_h);
+        // `frame_idx` may be fractional when the composition and animation
+        // frame rates differ. Keep those requests distinct in the cache.
+        let key = (canonical.clone(), frame_idx.to_bits(), target_w, target_h);
 
         {
             let frame_cache = self
@@ -208,5 +209,86 @@ impl LottieCache {
         frame_cache.insert(key, Arc::clone(&arc_img));
 
         Ok(arc_img)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gif_cache::LoopBehavior;
+
+    const ANIMATED_LOTTIE: &str = r#"
+    {
+      "v":"5.7.6",
+      "fr":30,
+      "ip":0,
+      "op":2,
+      "w":100,
+      "h":100,
+      "layers":[{
+        "nm":"Shape Layer 1",
+        "ind":1,
+        "ty":4,
+        "shapes":[{
+          "ty":"gr",
+          "it":[
+            {"ty":"rc","p":{"a":1,"k":[
+              {"t":0,"s":[10,50],"e":[90,50],"i":{"x":[1,1],"y":[1,1]},"o":{"x":[0,0],"y":[0,0]}},
+              {"t":2,"s":[90,50]}
+            ]},"s":{"a":0,"k":[10,10]},"r":{"a":0,"k":0}},
+            {"ty":"fl","c":{"a":0,"k":[1,0,0,1]},"o":{"a":0,"k":100}},
+            {"ty":"tr","a":{"a":0,"k":[0,0]},"p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}
+          ]
+        }]
+      }]
+    }
+    "#;
+
+    fn direct_render(frame_idx: f32) -> RgbaImage {
+        let animation = Animation::from_json_str(ANIMATED_LOTTIE).unwrap();
+        let frame = Renderer::default()
+            .render_frame(&animation, frame_idx, RenderConfig::default())
+            .unwrap();
+        RgbaImage::from_raw(frame.width, frame.height, frame.pixels).unwrap()
+    }
+
+    #[test]
+    fn fractional_frame_cache_keys_preserve_frame_and_request_order() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let animation_path = temp_dir.path().join("fractional-frames.json");
+        std::fs::write(&animation_path, ANIMATED_LOTTIE).unwrap();
+        let animation_path = animation_path.to_str().unwrap();
+
+        // Both positions round to frame 0 in the old cache key, though they
+        // produce visibly different positions in this fast-moving animation.
+        let early_frame = 0.25_f32;
+        let late_frame = 0.49_f32;
+        let expected_early = direct_render(early_frame);
+        let expected_late = direct_render(late_frame);
+        assert_ne!(expected_early, expected_late);
+
+        let render = |cache: &LottieCache, frame: f32| {
+            cache
+                .render(
+                    animation_path,
+                    f64::from(frame) / 30.0,
+                    100,
+                    100,
+                    LoopBehavior::Pause,
+                )
+                .unwrap()
+        };
+
+        let forward_cache = LottieCache::default();
+        let forward_early = render(&forward_cache, early_frame);
+        let forward_late = render(&forward_cache, late_frame);
+        assert_eq!(forward_early.as_ref(), &expected_early);
+        assert_eq!(forward_late.as_ref(), &expected_late);
+
+        let reverse_cache = LottieCache::default();
+        let reverse_late = render(&reverse_cache, late_frame);
+        let reverse_early = render(&reverse_cache, early_frame);
+        assert_eq!(reverse_late.as_ref(), &expected_late);
+        assert_eq!(reverse_early.as_ref(), &expected_early);
     }
 }
