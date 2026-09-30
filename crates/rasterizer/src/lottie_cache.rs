@@ -149,7 +149,7 @@ impl LottieCache {
             }
             crate::gif_cache::LoopBehavior::Pause => time_secs.max(0.0).min(total_duration_secs),
             crate::gif_cache::LoopBehavior::Unmount => {
-                if time_secs > total_duration_secs {
+                if time_secs >= total_duration_secs {
                     return Ok(Arc::new(RgbaImage::new(1, 1)));
                 }
                 time_secs.max(0.0)
@@ -208,5 +208,58 @@ impl LottieCache {
         frame_cache.insert(key, Arc::clone(&arc_img));
 
         Ok(arc_img)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gif_cache::LoopBehavior;
+
+    const ONE_SECOND_LOTTIE: &str = r#"
+    {
+      "v":"5.7.6",
+      "fr":30,
+      "ip":0,
+      "op":30,
+      "w":100,
+      "h":100,
+      "layers":[{
+        "nm":"Shape Layer 1",
+        "ind":1,
+        "ty":4,
+        "shapes":[{
+          "ty":"gr",
+          "it":[
+            {"ty":"rc","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[10,10]},"r":{"a":0,"k":0}},
+            {"ty":"fl","c":{"a":0,"k":[1,0,0,1]},"o":{"a":0,"k":100}},
+            {"ty":"tr","a":{"a":0,"k":[0,0]},"p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}
+          ]
+        }]
+      }]
+    }
+    "#;
+
+    #[test]
+    fn unmount_uses_a_half_open_animation_duration() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let animation_path = temp_dir.path().join("unmount-boundary.json");
+        std::fs::write(&animation_path, ONE_SECOND_LOTTIE).unwrap();
+        let animation_path = animation_path.to_str().unwrap();
+        let cache = LottieCache::default();
+
+        let render = |time_secs| {
+            cache
+                .render(animation_path, time_secs, 100, 100, LoopBehavior::Unmount)
+                .unwrap()
+        };
+
+        let just_before_end = render(1.0 - 1e-6);
+        let at_end = render(1.0);
+        let just_after_end = render(1.0 + 1e-6);
+
+        assert_eq!(just_before_end.dimensions(), (100, 100));
+        assert_eq!(at_end.dimensions(), (1, 1));
+        assert_eq!(just_after_end.dimensions(), (1, 1));
     }
 }
