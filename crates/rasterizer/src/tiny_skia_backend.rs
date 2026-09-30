@@ -66,6 +66,15 @@ impl TinySkiaBackend {
         self
     }
 
+    /// Configure the rendered Lottie frame cache budget in bytes.
+    ///
+    /// The default cache budget is 512 MiB. Frames larger than the configured
+    /// budget are rendered but are not retained in the cache.
+    pub fn with_lottie_cache_bytes(mut self, max_bytes: usize) -> Self {
+        self.lotties = crate::lottie_cache::LottieCache::with_rendered_frame_cache_bytes(max_bytes);
+        self
+    }
+
     /// Create without loading a font (text will use placeholder blocks).
     pub fn headless() -> Self {
         Self::headless_with_policy(crate::security::MediaSecurityPolicy::default())

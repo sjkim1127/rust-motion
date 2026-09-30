@@ -1,10 +1,11 @@
 //! Thread-safe Lottie animation asset cache and headless rasterizer.
 
 use crate::backend::RasterError;
+use crate::frame_cache::{FrameCacheConfig, FrameCacheKey, FrameCacheManager};
 use image::RgbaImage;
 use rasterlottie::{Animation, RenderConfig, Renderer};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 /// Cached Lottie animation entry.
@@ -14,9 +15,8 @@ struct CachedLottie {
     height: f32,
     total_frames: f32,
     frame_rate: f32,
+    cache_id: String,
 }
-
-type LottieFrameKey = (PathBuf, u32, u32, u32);
 
 /// Basic metadata for a Lottie animation, equivalent to Remotion's
 /// `getLottieMetadata()` result.
@@ -54,13 +54,28 @@ pub fn get_lottie_metadata(
     })
 }
 
-#[derive(Default)]
 pub(crate) struct LottieCache {
     animations: Mutex<HashMap<PathBuf, Arc<CachedLottie>>>,
-    rendered_frames: Mutex<HashMap<LottieFrameKey, Arc<RgbaImage>>>,
+    rendered_frames: FrameCacheManager,
+}
+
+impl Default for LottieCache {
+    fn default() -> Self {
+        Self {
+            animations: Mutex::new(HashMap::new()),
+            rendered_frames: FrameCacheManager::default(),
+        }
+    }
 }
 
 impl LottieCache {
+    pub(crate) fn with_rendered_frame_cache_bytes(max_bytes: usize) -> Self {
+        Self {
+            animations: Mutex::new(HashMap::new()),
+            rendered_frames: FrameCacheManager::new(FrameCacheConfig::new(max_bytes)),
+        }
+    }
+
     /// Loads or retrieves a parsed Lottie animation.
     fn get_or_load(
         &self,
@@ -100,6 +115,7 @@ impl LottieCache {
             height,
             total_frames: total_frames.max(1.0),
             frame_rate: if frame_rate > 0.0 { frame_rate } else { 30.0 },
+            cache_id: encode_path_for_cache(&canonical),
         });
 
         cache.insert(canonical.clone(), Arc::clone(&entry));
@@ -161,16 +177,16 @@ impl LottieCache {
             .clamp(entry.animation.in_point, entry.animation.out_point);
 
         let quant_frame = (frame_idx.round() as u32).min(entry.animation.out_point as u32);
-        let key = (canonical.clone(), quant_frame, target_w, target_h);
+        let key = FrameCacheKey::new(
+            entry.cache_id.clone(),
+            u64::from(quant_frame),
+            target_w,
+            target_h,
+            0,
+        );
 
-        {
-            let frame_cache = self
-                .rendered_frames
-                .lock()
-                .expect("rendered frames lock poisoned");
-            if let Some(rendered) = frame_cache.get(&key) {
-                return Ok(Arc::clone(rendered));
-            }
+        if let Some(rendered) = self.rendered_frames.get(&key) {
+            return Ok(rendered);
         }
 
         let scale = if entry.width > 0.0 {
@@ -201,12 +217,93 @@ impl LottieCache {
             })?;
         let arc_img = Arc::new(img);
 
-        let mut frame_cache = self
-            .rendered_frames
-            .lock()
-            .expect("rendered frames lock poisoned");
-        frame_cache.insert(key, Arc::clone(&arc_img));
+        self.rendered_frames.insert(key, Arc::clone(&arc_img));
 
         Ok(arc_img)
+    }
+}
+
+fn encode_path_for_cache(path: &Path) -> String {
+    const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let bytes = path.as_os_str().as_encoded_bytes();
+    let mut encoded = String::with_capacity(bytes.len().saturating_mul(2));
+
+    for byte in bytes {
+        encoded.push(char::from(HEX_DIGITS[(byte >> 4) as usize]));
+        encoded.push(char::from(HEX_DIGITS[(byte & 0x0f) as usize]));
+    }
+
+    encoded
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gif_cache::LoopBehavior;
+
+    const ANIMATED_LOTTIE: &str = r#"
+    {
+      "v":"5.7.6",
+      "fr":30,
+      "ip":0,
+      "op":30,
+      "w":100,
+      "h":100,
+      "layers":[{
+        "nm":"Shape Layer 1",
+        "ind":1,
+        "ty":4,
+        "shapes":[{
+          "ty":"gr",
+          "it":[
+            {"ty":"rc","p":{"a":1,"k":[
+              {"t":0,"s":[10,50],"e":[90,50],"i":{"x":[1,1],"y":[1,1]},"o":{"x":[0,0],"y":[0,0]}},
+              {"t":2,"s":[90,50]}
+            ]},"s":{"a":0,"k":[10,10]},"r":{"a":0,"k":0}},
+            {"ty":"fl","c":{"a":0,"k":[1,0,0,1]},"o":{"a":0,"k":100}},
+            {"ty":"tr","a":{"a":0,"k":[0,0]},"p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}
+          ]
+        }]
+      }]
+    }
+    "#;
+
+    #[test]
+    fn rendered_frame_cache_evicts_lru_entries_within_byte_budget() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let animation_path = temp_dir.path().join("bounded-cache.json");
+        std::fs::write(&animation_path, ANIMATED_LOTTIE).unwrap();
+        let animation_path = animation_path.to_str().unwrap();
+        let frame_bytes = 100 * 100 * 4;
+        let max_bytes = frame_bytes * 2;
+        let cache = LottieCache::with_rendered_frame_cache_bytes(max_bytes);
+        let (entry, _) = cache
+            .get_or_load(
+                animation_path,
+                &crate::security::MediaSecurityPolicy::default(),
+            )
+            .unwrap();
+
+        let times = [3.0_f32, 6.0, 9.0].map(|frame| f64::from(frame) / 30.0);
+        let keys = times.map(|time_secs| {
+            let frame_idx = time_secs as f32 * entry.frame_rate;
+            let quant_frame = (frame_idx.round() as u32).min(entry.animation.out_point as u32);
+            FrameCacheKey::new(entry.cache_id.clone(), u64::from(quant_frame), 100, 100, 0)
+        });
+
+        for time_secs in times {
+            cache
+                .render(animation_path, time_secs, 100, 100, LoopBehavior::Pause)
+                .unwrap();
+        }
+
+        let metrics = cache.rendered_frames.metrics();
+        assert_eq!(metrics.max_bytes, max_bytes);
+        assert_eq!(metrics.entry_count, 2);
+        assert!(metrics.current_bytes <= max_bytes);
+        assert!(metrics.evictions >= 1);
+        assert!(!cache.rendered_frames.contains(&keys[0]));
+        assert!(cache.rendered_frames.contains(&keys[1]));
+        assert!(cache.rendered_frames.contains(&keys[2]));
     }
 }
