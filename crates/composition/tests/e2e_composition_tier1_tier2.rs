@@ -294,13 +294,16 @@ fn test_f17_t1_scene_stack_in_order_emission() {
 // ── Tier 2: Boundary & Corner Cases (≥5 tests) ────────────────────────────────
 
 #[test]
-fn test_f17_t2_scene_loop_zero_duration_fallback() {
+fn test_f17_t2_scene_loop_zero_duration_emits_nothing() {
     let loop_z = SceneLoop::new(0, test_rect(50.0, 50.0, Color::rgb(255, 0, 0)));
     let ctx = make_test_context(100, 100, 30);
-    let mut scene = Scene::new();
-    assert!(loop_z
-        .emit(SceneFrameContext::new(0, ctx), &Value::Null, &mut scene)
-        .is_ok());
+    for frame in [0, 1] {
+        let mut scene = Scene::new();
+        assert!(loop_z
+            .emit(SceneFrameContext::new(frame, ctx), &Value::Null, &mut scene)
+            .is_ok());
+        assert!(scene.nodes.is_empty());
+    }
 }
 
 #[test]
