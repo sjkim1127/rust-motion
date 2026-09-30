@@ -366,6 +366,33 @@ mod project_timeline_tests {
     }
 
     #[test]
+    fn nested_scene_audio_keeps_rebased_nonzero_start_during_cli_inference() {
+        let mut audio = dioxuscut_media::SceneAudio::new("voice.wav");
+        audio.track.timeline_start = 1.0;
+        let composition = dioxuscut_composition::SceneEmitterComposition::new(
+            "nested-audio",
+            dioxuscut_composition::SceneSequence::new(60, audio),
+        );
+        let context = NativeCompositionContext {
+            width: 320,
+            height: 240,
+            fps: 30.0,
+            duration_in_frames: 120,
+        };
+        let prepared = composition
+            .prepare(&serde_json::Value::Null, context)
+            .expect("native composition prepares");
+        let first_scene = prepared.render(0).expect("frame zero renders");
+
+        let tracks = collect_scene_audio_tracks(prepared.as_ref(), &first_scene, 120, 30.0)
+            .expect("nested scene audio is collected");
+
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].src, "voice.wav");
+        assert!((tracks[0].timeline_start - 3.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
     fn project_timelines_are_used_by_native_and_gpu_backends() {
         assert!(uses_project_timeline(RenderBackend::Native, true));
         assert!(uses_project_timeline(RenderBackend::Gpu, true));
