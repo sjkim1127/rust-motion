@@ -351,14 +351,14 @@ async fn poll_health_check(
 
     while start.elapsed() < timeout {
         if let Ok(resp) = client.get(&health_url).send().await {
-            if resp.status().is_success() || resp.status().as_u16() < 500 {
+            if resp.status().is_success() {
                 debug!("Health check succeeded at {}", health_url);
                 return Ok(());
             }
         }
 
         if let Ok(resp) = client.get(url).send().await {
-            if resp.status().is_success() || resp.status().as_u16() < 500 {
+            if resp.status().is_success() {
                 debug!("Health check succeeded at {}", url);
                 return Ok(());
             }
@@ -386,6 +386,44 @@ mod tests {
         ));
         let _ = fs::create_dir_all(&dir);
         dir
+    }
+
+    async fn spawn_status_server(
+        status: reqwest::StatusCode,
+    ) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let app = Router::new().fallback(move || async move { status });
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        (format!("http://{address}"), server)
+    }
+
+    #[tokio::test]
+    async fn health_check_requires_a_success_status_from_health_or_root() {
+        for status in [reqwest::StatusCode::OK, reqwest::StatusCode::NO_CONTENT] {
+            let (url, server) = spawn_status_server(status).await;
+            let result =
+                poll_health_check(&url, Duration::from_millis(500), Duration::from_millis(5)).await;
+            assert!(result.is_ok(), "expected HTTP {status} to pass readiness");
+            server.abort();
+        }
+
+        for status in [
+            reqwest::StatusCode::NOT_FOUND,
+            reqwest::StatusCode::UNAUTHORIZED,
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+        ] {
+            let (url, server) = spawn_status_server(status).await;
+            let result =
+                poll_health_check(&url, Duration::from_millis(50), Duration::from_millis(5)).await;
+            assert!(
+                matches!(result, Err(ServerError::HealthCheckTimeout(_, _))),
+                "expected HTTP {status} to fail readiness"
+            );
+            server.abort();
+        }
     }
 
     #[tokio::test]
