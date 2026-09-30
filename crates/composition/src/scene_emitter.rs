@@ -231,14 +231,17 @@ impl<E: SceneEmitter> SceneEmitter for SceneSeries<E> {
     ) -> Result<(), CompositionError> {
         let mut current_start: i64 = 0;
         for entry in &self.entries {
-            let from = (current_start + entry.offset as i64).max(0) as u32;
-            let end = from.saturating_add(entry.duration_in_frames);
-            if context.frame >= from && context.frame < end {
-                entry
-                    .emitter
-                    .emit(context.with_local_frame(context.frame - from), props, scene)?;
+            let from = current_start.saturating_add(i64::from(entry.offset)).max(0);
+            let end = from.saturating_add(i64::from(entry.duration_in_frames));
+            let frame = i64::from(context.frame);
+            if frame >= from && frame < end {
+                entry.emitter.emit(
+                    context.with_local_frame((frame - from) as u32),
+                    props,
+                    scene,
+                )?;
             }
-            current_start = from as i64 + entry.duration_in_frames as i64;
+            current_start = end;
         }
         Ok(())
     }
@@ -1452,6 +1455,69 @@ mod tests {
             SceneNode::Text { content, .. } if content == "2"
         ));
         assert!(inactive.nodes.is_empty());
+    }
+
+    #[test]
+    fn series_keeps_later_entries_outside_the_u32_frame_domain() {
+        let series = SceneSeries::new()
+            .sequence(u32::MAX, frame_text())
+            .sequence_with_offset(1, 1, frame_text())
+            .sequence_with_offset(1, -1, frame_text());
+        let mut scene = Scene::new();
+
+        series
+            .emit(
+                SceneFrameContext::new(0, context()),
+                &Value::Null,
+                &mut scene,
+            )
+            .unwrap();
+
+        assert_eq!(scene.nodes.len(), 1);
+        assert!(matches!(
+            &scene.nodes[0],
+            SceneNode::Text { content, .. } if content == "0"
+        ));
+    }
+
+    #[test]
+    fn series_does_not_wrap_after_large_positive_offset() {
+        let series = SceneSeries::new()
+            .sequence(i32::MAX as u32 + 2, frame_text())
+            .sequence_with_offset(1, i32::MAX, frame_text());
+        let mut scene = Scene::new();
+
+        series
+            .emit(
+                SceneFrameContext::new(0, context()),
+                &Value::Null,
+                &mut scene,
+            )
+            .unwrap();
+
+        assert_eq!(scene.nodes.len(), 1);
+    }
+
+    #[test]
+    fn series_can_render_a_one_frame_entry_at_u32_max() {
+        let series = SceneSeries::new()
+            .sequence(u32::MAX, frame_text())
+            .sequence_with_offset(1, 0, frame_text());
+        let mut scene = Scene::new();
+
+        series
+            .emit(
+                SceneFrameContext::new(u32::MAX, context()),
+                &Value::Null,
+                &mut scene,
+            )
+            .unwrap();
+
+        assert_eq!(scene.nodes.len(), 1);
+        assert!(matches!(
+            &scene.nodes[0],
+            SceneNode::Text { content, .. } if content == "0"
+        ));
     }
 
     #[test]
