@@ -93,8 +93,20 @@ struct AppState {
 #[derive(Clone)]
 struct CachedFrame {
     frame: u32,
-    source_stamp: u128,
+    source_stamp: SourceStamp,
     png: Arc<Vec<u8>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SourceStamp {
+    script: FileStamp,
+    props: Option<FileStamp>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct FileStamp {
+    modified_nanos: Option<u128>,
+    len: Option<u64>,
 }
 
 /// A rendered frame pushed to all connected WebSocket clients.
@@ -233,15 +245,25 @@ fn render_and_broadcast(
     }
 }
 
-fn source_stamp(config: &ServeConfig) -> u128 {
+fn source_stamp(config: &ServeConfig) -> SourceStamp {
     let stamp = |path: &PathBuf| {
-        std::fs::metadata(path)
-            .and_then(|metadata| metadata.modified())
+        let Ok(metadata) = std::fs::metadata(path) else {
+            return FileStamp::default();
+        };
+        let modified_nanos = metadata
+            .modified()
             .ok()
             .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-            .map_or(0, |duration| duration.as_nanos())
+            .map(|duration| duration.as_nanos());
+        FileStamp {
+            modified_nanos,
+            len: Some(metadata.len()),
+        }
     };
-    stamp(&config.script) ^ config.props.as_ref().map_or(0, stamp)
+    SourceStamp {
+        script: stamp(&config.script),
+        props: config.props.as_ref().map(stamp),
+    }
 }
 
 fn cached_frame(
@@ -718,4 +740,72 @@ fn player_html(port: u16, default_frame: u32, width: u32, height: u32) -> String
         height = height,
         default_frame = default_frame,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(feature = "rhai")]
+    use super::{cached_frame, source_stamp, ServeConfig};
+    #[cfg(feature = "rhai")]
+    use std::{collections::VecDeque, fs, sync::Mutex};
+
+    #[cfg(feature = "rhai")]
+    #[test]
+    fn changed_script_and_props_with_equal_mtimes_invalidate_cached_frame() {
+        let directory = tempfile::tempdir().unwrap();
+        let script = directory.path().join("composition.rhai");
+        let props = directory.path().join("props.json");
+        let config = ServeConfig {
+            script: script.clone(),
+            props: Some(props.clone()),
+            port: 7890,
+            default_frame: 0,
+            width: 16,
+            height: 16,
+            fps: 30.0,
+            duration: 1,
+        };
+        let cache = Mutex::new(VecDeque::new());
+        let source = |version: &str| {
+            format!(
+                "// version {version}\nfn render(ctx, props) {{ let output = scene(); output.rect(0.0, 0.0, ctx.width.to_float(), ctx.height.to_float(), props.color); output }}"
+            )
+        };
+
+        fs::write(&script, source("one")).unwrap();
+        fs::write(&props, r##"{"color":"#ff0000"}"##).unwrap();
+        let first_mtime = filetime::FileTime::from_unix_time(1_000, 0);
+        filetime::set_file_mtime(&script, first_mtime).unwrap();
+        filetime::set_file_mtime(&props, first_mtime).unwrap();
+        assert_eq!(
+            filetime::FileTime::from_last_modification_time(&fs::metadata(&script).unwrap()),
+            first_mtime
+        );
+        assert_eq!(
+            filetime::FileTime::from_last_modification_time(&fs::metadata(&props).unwrap()),
+            first_mtime
+        );
+        let initial_stamp = source_stamp(&config);
+        let initial_png = cached_frame(&config, 0, &cache).unwrap();
+
+        fs::write(&script, source("two")).unwrap();
+        fs::write(&props, r##"{"color":"#00ff00"}"##).unwrap();
+        let second_mtime = filetime::FileTime::from_unix_time(2_000, 0);
+        filetime::set_file_mtime(&script, second_mtime).unwrap();
+        filetime::set_file_mtime(&props, second_mtime).unwrap();
+        assert_eq!(
+            filetime::FileTime::from_last_modification_time(&fs::metadata(&script).unwrap()),
+            second_mtime
+        );
+        assert_eq!(
+            filetime::FileTime::from_last_modification_time(&fs::metadata(&props).unwrap()),
+            second_mtime
+        );
+
+        let updated_stamp = source_stamp(&config);
+        let updated_png = cached_frame(&config, 0, &cache).unwrap();
+
+        assert_ne!(initial_stamp, updated_stamp);
+        assert_ne!(initial_png.as_ref(), updated_png.as_ref());
+    }
 }
