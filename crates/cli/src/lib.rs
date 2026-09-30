@@ -54,13 +54,20 @@ pub fn project_audio_assets_from_dir(
         .collect()
 }
 
+struct InferredAudioTrack {
+    track_index: usize,
+    track: dioxuscut_rasterizer::AudioTrack,
+    has_explicit_volume_keyframes: bool,
+    last_sampled_volume: f64,
+}
+
 fn collect_scene_audio_tracks(
     prepared: &dyn PreparedComposition,
     first_scene: &dioxuscut_rasterizer::Scene,
     duration_in_frames: u32,
     fps: f64,
 ) -> Result<Vec<dioxuscut_rasterizer::AudioTrack>, CompositionError> {
-    let mut tracks: Vec<(usize, dioxuscut_rasterizer::AudioTrack)> = Vec::new();
+    let mut tracks: Vec<InferredAudioTrack> = Vec::new();
     for frame in 0..duration_in_frames {
         let scene;
         let frame_tracks = if frame == 0 {
@@ -70,31 +77,63 @@ fn collect_scene_audio_tracks(
             scene.audio_tracks()
         };
         for (index, mut candidate) in frame_tracks.into_iter().enumerate() {
+            let sample_time = frame as f64 / fps;
             if candidate.timeline_start == 0.0 && frame > 0 {
-                candidate.timeline_start = frame as f64 / fps;
+                candidate.timeline_start = sample_time;
             }
-            if let Some((_, existing)) = tracks.iter_mut().find(|(track_index, track)| {
-                *track_index == index && same_inferred_audio_track(track, &candidate)
+
+            if let Some(existing) = tracks.iter_mut().find(|existing| {
+                existing.track_index == index
+                    && same_inferred_audio_track(&existing.track, &candidate)
             }) {
-                if existing.duration.is_none() {
-                    existing.duration = candidate.duration;
-                } else if let Some(candidate_duration) = candidate.duration {
-                    existing.duration = Some(
+                match (existing.track.duration, candidate.duration) {
+                    (None, Some(duration)) => existing.track.duration = Some(duration),
+                    (Some(current), Some(candidate)) => {
+                        existing.track.duration = Some(current.max(candidate));
+                    }
+                    _ => {}
+                }
+
+                if !candidate.volume_keyframes.is_empty() {
+                    // An explicit curve is authoritative over inferred volume
+                    // samples, including when it first appears on a later frame.
+                    if !existing.has_explicit_volume_keyframes {
+                        existing.track.volume = candidate.volume;
+                        existing.track.volume_keyframes = candidate.volume_keyframes;
+                        existing.has_explicit_volume_keyframes = true;
+                    }
+                } else if !existing.has_explicit_volume_keyframes
+                    && candidate.volume != existing.last_sampled_volume
+                {
+                    if existing.track.volume_keyframes.is_empty() {
+                        // Keyframe values are multipliers of the base volume in
+                        // the FFmpeg path. Use a unity base and record absolute
+                        // sampled gains so zero-to-positive changes are preserved.
                         existing
-                            .duration
-                            .expect("duration was checked above")
-                            .max(candidate_duration),
-                    );
+                            .track
+                            .volume_keyframes
+                            .push((existing.track.timeline_start, existing.track.volume));
+                        existing.track.volume = 1.0;
+                    }
+                    existing
+                        .track
+                        .volume_keyframes
+                        .push((sample_time, candidate.volume));
                 }
-                if existing.volume_keyframes.is_empty() {
-                    existing.volume_keyframes = candidate.volume_keyframes;
-                }
+
+                existing.last_sampled_volume = candidate.volume;
                 continue;
             }
-            tracks.push((index, candidate));
+
+            tracks.push(InferredAudioTrack {
+                track_index: index,
+                has_explicit_volume_keyframes: !candidate.volume_keyframes.is_empty(),
+                last_sampled_volume: candidate.volume,
+                track: candidate,
+            });
         }
     }
-    Ok(tracks.into_iter().map(|(_, track)| track).collect())
+    Ok(tracks.into_iter().map(|inferred| inferred.track).collect())
 }
 
 fn same_inferred_audio_track(
@@ -243,6 +282,10 @@ mod project_timeline_tests {
 
     struct PreparedLateSceneAudio;
 
+    struct PreparedFrameVaryingAudio {
+        explicit_keyframes: bool,
+    }
+
     impl dioxuscut_composition::Composition for AudioOnlyComposition {
         fn id(&self) -> &str {
             "AudioOnly"
@@ -280,6 +323,19 @@ mod project_timeline_tests {
                     track: dioxuscut_rasterizer::AudioTrack::new("later.wav"),
                 });
             }
+            Ok(scene)
+        }
+    }
+
+    impl dioxuscut_composition::PreparedComposition for PreparedFrameVaryingAudio {
+        fn render(&self, frame: u32) -> Result<dioxuscut_rasterizer::Scene, CompositionError> {
+            let mut scene = dioxuscut_rasterizer::Scene::new();
+            let mut track = dioxuscut_rasterizer::AudioTrack::new("ducked.wav");
+            track.volume = if frame < 30 { 1.0 } else { 0.25 };
+            if self.explicit_keyframes {
+                track.volume_keyframes = vec![(0.0, 1.0), (1.0, 0.5)];
+            }
+            scene.push(dioxuscut_rasterizer::SceneNode::Audio { track });
             Ok(scene)
         }
     }
@@ -363,6 +419,36 @@ mod project_timeline_tests {
         assert_eq!(tracks.len(), 1);
         assert_eq!(tracks[0].src, "later.wav");
         assert!((tracks[0].timeline_start - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn legacy_audio_volume_changes_become_deduplicated_keyframes() {
+        let prepared = PreparedFrameVaryingAudio {
+            explicit_keyframes: false,
+        };
+        let first_scene = prepared.render(0).expect("frame zero renders");
+
+        let tracks = collect_scene_audio_tracks(&prepared, &first_scene, 60, 30.0)
+            .expect("scene audio is collected");
+
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].volume, 1.0);
+        assert_eq!(tracks[0].volume_keyframes, vec![(0.0, 1.0), (1.0, 0.25)]);
+    }
+
+    #[test]
+    fn explicit_audio_volume_keyframes_override_sampled_volume_changes() {
+        let prepared = PreparedFrameVaryingAudio {
+            explicit_keyframes: true,
+        };
+        let first_scene = prepared.render(0).expect("frame zero renders");
+
+        let tracks = collect_scene_audio_tracks(&prepared, &first_scene, 60, 30.0)
+            .expect("scene audio is collected");
+
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].volume, 1.0);
+        assert_eq!(tracks[0].volume_keyframes, vec![(0.0, 1.0), (1.0, 0.5)]);
     }
 
     #[test]
