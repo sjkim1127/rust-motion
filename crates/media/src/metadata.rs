@@ -209,7 +209,7 @@ pub fn get_video_metadata(path: impl AsRef<Path>) -> Result<VideoMetadata, Media
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=width,height,r_frame_rate,duration",
+            "stream=width,height,avg_frame_rate,r_frame_rate,duration",
             "-show_entries",
             "format=duration",
             "-of",
@@ -242,9 +242,15 @@ pub fn get_video_metadata(path: impl AsRef<Path>) -> Result<VideoMetadata, Media
         .unwrap_or(1080) as u32;
 
     let fps = stream
-        .get("r_frame_rate")
+        .get("avg_frame_rate")
         .and_then(|r| r.as_str())
-        .and_then(parse_r_frame_rate)
+        .and_then(parse_frame_rate)
+        .or_else(|| {
+            stream
+                .get("r_frame_rate")
+                .and_then(|r| r.as_str())
+                .and_then(parse_frame_rate)
+        })
         .unwrap_or(30.0);
 
     let duration_in_seconds = stream
@@ -369,18 +375,18 @@ pub fn get_audio_metadata(
     })
 }
 
-fn parse_r_frame_rate(s: &str) -> Option<f64> {
-    if let Some((num, den)) = s.split_once('/') {
+fn parse_frame_rate(s: &str) -> Option<f64> {
+    let rate = if let Some((num, den)) = s.split_once('/') {
         let n: f64 = num.parse().ok()?;
         let d: f64 = den.parse().ok()?;
-        if d > 0.0 {
-            Some(n / d)
-        } else {
-            None
+        if d <= 0.0 {
+            return None;
         }
+        n / d
     } else {
-        s.parse().ok()
-    }
+        s.parse().ok()?
+    };
+    (rate.is_finite() && rate > 0.0).then_some(rate)
 }
 
 #[cfg(test)]
@@ -388,10 +394,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_r_frame_rate() {
-        assert!((parse_r_frame_rate("30/1").unwrap() - 30.0).abs() < 1e-4);
-        assert!((parse_r_frame_rate("60000/1001").unwrap() - 59.94).abs() < 0.01);
-        assert!((parse_r_frame_rate("24").unwrap() - 24.0).abs() < 1e-4);
+    fn test_parse_frame_rate() {
+        assert!((parse_frame_rate("30/1").unwrap() - 30.0).abs() < 1e-4);
+        assert!((parse_frame_rate("60000/1001").unwrap() - 59.94).abs() < 0.01);
+        assert!((parse_frame_rate("24").unwrap() - 24.0).abs() < 1e-4);
+        assert_eq!(parse_frame_rate("0/0"), None);
+        assert_eq!(parse_frame_rate("-30/1"), None);
     }
 
     #[test]
@@ -454,6 +462,78 @@ mod tests {
             max_known_track_duration(Some(&video(f64::NAN)), Some(&audio(f64::INFINITY))),
             0.0
         );
+    }
+
+    #[test]
+    fn test_get_video_metadata_matches_rasterizer_for_vfr_input() {
+        if Command::new("ffmpeg").arg("-version").output().is_err()
+            || Command::new("ffprobe").arg("-version").output().is_err()
+        {
+            eprintln!("skipping VFR metadata test: FFmpeg or FFprobe is unavailable");
+            return;
+        }
+
+        let directory = std::env::temp_dir().join(format!(
+            "dioxuscut-media-vfr-metadata-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("vfr.mp4");
+        let generated = Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=16x16:rate=10:duration=1",
+                "-vf",
+                "select=eq(n\\,0)+eq(n\\,1)+eq(n\\,4)+eq(n\\,9)",
+                "-fps_mode",
+                "vfr",
+                "-c:v",
+                "mpeg4",
+            ])
+            .arg(&source)
+            .status()
+            .unwrap();
+        assert!(generated.success());
+
+        let ffprobe = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=avg_frame_rate,r_frame_rate",
+                "-of",
+                "json",
+            ])
+            .arg(&source)
+            .output()
+            .unwrap();
+        assert!(ffprobe.status.success());
+        let probe: serde_json::Value = serde_json::from_slice(&ffprobe.stdout).unwrap();
+        let stream = &probe["streams"][0];
+        let average_fps = parse_frame_rate(stream["avg_frame_rate"].as_str().unwrap()).unwrap();
+        let nominal_fps = parse_frame_rate(stream["r_frame_rate"].as_str().unwrap()).unwrap();
+        assert!((average_fps - nominal_fps).abs() > 0.01);
+
+        let media = get_video_metadata(&source).unwrap();
+        let rasterizer =
+            dioxuscut_rasterizer::probe_video_metadata(source.to_str().unwrap()).unwrap();
+        let rasterizer_fps = rasterizer.fps.unwrap();
+        assert!((media.fps - average_fps).abs() < 1e-6);
+        assert!((media.fps - rasterizer_fps).abs() < 1e-6);
+        assert_eq!(
+            media.duration_in_frames,
+            (media.duration_in_seconds * average_fps).round() as u32
+        );
+
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
