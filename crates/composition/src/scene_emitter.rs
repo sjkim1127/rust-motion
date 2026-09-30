@@ -686,7 +686,7 @@ pub struct SceneLinearGradient {
 /// Equivalent to Remotion's `<Loop durationInFrames={n} times={m}>` component.
 ///
 /// # Fields
-/// - `duration_in_frames`: length of one loop iteration in frames
+/// - `duration_in_frames`: length of one loop iteration in frames (0 emits no content)
 /// - `times`: number of repetitions (0 = infinite)
 /// - `child`: the emitter to loop
 #[derive(Debug, Clone, PartialEq)]
@@ -738,7 +738,11 @@ impl<E: SceneEmitter> SceneEmitter for SceneLoop<E> {
         props: &Value,
         scene: &mut Scene,
     ) -> Result<(), CompositionError> {
-        let duration = self.duration_in_frames.max(1);
+        if self.duration_in_frames == 0 {
+            return Ok(());
+        }
+
+        let duration = self.duration_in_frames;
         let frame = context.frame;
 
         // If times > 0, check if we've exceeded the total duration
@@ -1729,7 +1733,7 @@ mod tests {
     }
 
     #[test]
-    fn scene_loop_zero_duration_guard() {
+    fn scene_loop_zero_duration_emits_nothing_at_frames_zero_and_one() {
         let captured = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
         let captured_clone = captured.clone();
         let child = move |ctx: SceneFrameContext, _props: &Value, _scene: &mut Scene| {
@@ -1737,7 +1741,7 @@ mod tests {
             Ok(())
         };
         let looper = SceneLoop::new(0, child);
-        for frame in [0, 5, 10] {
+        for frame in [0, 1] {
             let ctx = SceneFrameContext {
                 frame,
                 global_frame: frame,
@@ -1745,9 +1749,9 @@ mod tests {
             };
             let mut scene = Scene::new();
             looper.emit(ctx, &Value::Null, &mut scene).unwrap();
+            assert!(scene.nodes.is_empty());
         }
-        // When duration is 0, duration is clamped to 1 so frame % 1 = 0
-        assert_eq!(*captured.lock().unwrap(), vec![0, 0, 0]);
+        assert!(captured.lock().unwrap().is_empty());
     }
 
     #[test]
