@@ -45,6 +45,8 @@ taffy              = { workspace = true }
 dioxuscut-renderer = { workspace = true }
 reqwest            = { workspace = true }
 serde_json         = { workspace = true }
+tempfile           = { workspace = true }
+filetime           = "0.2"
 
 [[test]]
 name    = "e2e_cli_subprocess"
