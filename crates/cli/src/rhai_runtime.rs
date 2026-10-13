@@ -538,14 +538,27 @@ impl SceneBuilder {
         validate_media_source(&src)?;
         let mut kfs = Vec::new();
         for item in keyframes {
-            if let Ok(arr) = item.into_typed_array::<FLOAT>() {
-                if arr.len() >= 2 {
-                    kfs.push((arr[0], arr[1]));
-                }
+            let arr = item.into_typed_array::<FLOAT>().map_err(|_| {
+                runtime_error("audio keyframes must be [time, volume] arrays".into())
+            })?;
+            if arr.len() != 2 {
+                return Err(runtime_error(
+                    "audio keyframes must contain exactly [time, volume]".into(),
+                ));
             }
+
+            let time = non_negative_f64("audio keyframe time", arr[0])?;
+            let volume = finite_f64("audio keyframe volume", arr[1])?;
+            if !(0.0..=1.0).contains(&volume) {
+                return Err(runtime_error(
+                    "audio keyframe volume must be between 0.0 and 1.0".into(),
+                ));
+            }
+            kfs.push((time, volume));
         }
+
         let mut track = AudioTrack::new(src.into_owned());
-        track.volume = volume.clamp(0.0, 2.0);
+        track.volume = f64::from(unit_f32("audio volume", volume)?);
         track.volume_keyframes = kfs;
         self.scene.push(SceneNode::Audio { track });
         Ok(())
@@ -2099,6 +2112,68 @@ mod tests {
         assert_eq!(tracks[0].src, "assets/clip.mp4");
         assert_eq!(tracks[0].duration, Some(2.0));
         assert!(tracks[0].looped);
+    }
+
+    #[test]
+    fn script_builds_a_valid_ducked_audio_track() {
+        let script = r#"
+            fn render(ctx, props) {
+                let output = scene();
+                output.audio_ducked("voice.wav", 0.8, [[0.0, 1.0], [0.5, 0.25]]);
+                output
+            }
+        "#;
+        let composition = RhaiComposition::from_source("valid-ducking", script).unwrap();
+        let prepared = composition
+            .prepare(&serde_json::json!({}), context())
+            .unwrap();
+        let scene = prepared.render(0).unwrap();
+        let tracks = scene.audio_tracks();
+
+        assert_eq!(tracks.len(), 1);
+        assert!((tracks[0].volume - 0.8).abs() < 1e-6);
+        assert_eq!(tracks[0].volume_keyframes, vec![(0.0, 1.0), (0.5, 0.25)]);
+    }
+
+    #[test]
+    fn script_rejects_invalid_ducked_audio_values_at_evaluation_time() {
+        let invalid_calls = [
+            (r#"audio_ducked("voice.wav", 1.5, [])"#, "audio volume"),
+            (
+                r#"audio_ducked("voice.wav", 0.5, [[-1.0, 0.5]])"#,
+                "audio keyframe time",
+            ),
+            (
+                r#"audio_ducked("voice.wav", 0.5, [[parse_float("NaN"), 0.5]])"#,
+                "audio keyframe time",
+            ),
+            (
+                r#"audio_ducked("voice.wav", 0.5, [[0.0, -0.1]])"#,
+                "audio keyframe volume",
+            ),
+            (
+                r#"audio_ducked("voice.wav", 0.5, [[0.0, 1.1]])"#,
+                "audio keyframe volume",
+            ),
+            (
+                r#"audio_ducked("voice.wav", 0.5, [[0.0, parse_float("NaN")]])"#,
+                "audio keyframe volume",
+            ),
+        ];
+
+        for (call, expected_error) in invalid_calls {
+            let script =
+                format!("fn render(ctx, props) {{ let output = scene(); output.{call}; output }}");
+            let composition = RhaiComposition::from_source("invalid-ducking", &script).unwrap();
+            let prepared = composition
+                .prepare(&serde_json::json!({}), context())
+                .unwrap();
+            let error = prepared.render(0).unwrap_err();
+            assert!(
+                error.to_string().contains(expected_error),
+                "expected '{expected_error}' for `{call}`, got: {error}"
+            );
+        }
     }
 
     #[test]
