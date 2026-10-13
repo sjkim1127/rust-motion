@@ -68,6 +68,7 @@ impl TransitionTiming for LinearTiming {
 }
 
 /// Damped harmonic oscillator timing, stretched to the requested duration.
+/// Falls back to linear progress if the spring parameters cannot be evaluated.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpringTiming {
     pub config: SpringConfig,
@@ -108,7 +109,7 @@ impl TransitionTiming for SpringTiming {
                 ..Default::default()
             },
         )
-        .expect("invalid spring transition parameters");
+        .unwrap_or_else(|_| frame as f64 / self.duration_in_frames as f64);
         val.clamp(0.0, 1.0) as f32
     }
 }
@@ -150,5 +151,33 @@ mod tests {
         assert_eq!(timing.duration_in_frames(), 30);
         assert!((timing.progress(0) - 0.0).abs() < 1e-5);
         assert!(timing.progress(15) > 0.5);
+    }
+
+    #[test]
+    fn invalid_spring_fps_falls_back_to_finite_linear_progress() {
+        for fps in [0.0, -30.0, f64::NAN, f64::INFINITY] {
+            let progress = SpringTiming::new(fps, 30).progress(10);
+            assert!((progress - (1.0 / 3.0)).abs() < 1e-6, "fps={fps}");
+        }
+    }
+
+    #[test]
+    fn invalid_spring_config_falls_back_to_finite_linear_progress() {
+        for invalid_value in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            for field in 0..3 {
+                let mut config = SpringConfig::default();
+                match field {
+                    0 => config.damping = invalid_value,
+                    1 => config.mass = invalid_value,
+                    _ => config.stiffness = invalid_value,
+                }
+
+                let progress = SpringTiming::new(30.0, 30).with_config(config).progress(10);
+                assert!(
+                    (progress - (1.0 / 3.0)).abs() < 1e-6,
+                    "field={field}, value={invalid_value}"
+                );
+            }
+        }
     }
 }
