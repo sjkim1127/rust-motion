@@ -20,7 +20,7 @@ import rust_motion
 def test_metadata():
     print("[*] Testing metadata and version...")
     version = rust_motion.__version__
-    assert version.startswith("0.2.") or version.startswith("0.1."), f"Unexpected version: {version}"
+    assert version.startswith("1.0.") or version.startswith("0.2.") or version.startswith("0.1."), f"Unexpected version: {version}"
     compositions = rust_motion.list_compositions()
     print(f"[+] Version: {version}")
     print(f"[+] Registered compositions: {compositions}")
