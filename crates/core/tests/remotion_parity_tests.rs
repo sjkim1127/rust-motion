@@ -51,6 +51,31 @@ fn test_loop_component_renders() {
 }
 
 #[test]
+fn zero_duration_loop_renders_nothing_at_frames_zero_and_one() {
+    for parent_frame in [0, 1] {
+        let mut dom = VirtualDom::new_with_props(
+            |parent_frame: u32| {
+                let timeline = TimelineContext::new(parent_frame);
+                use_context_provider(|| Signal::new(timeline));
+
+                rsx! {
+                    Loop {
+                        duration_in_frames: 0,
+                        times: None,
+                        layout: SequenceLayout::None,
+                        DummyChild {}
+                    }
+                }
+            },
+            parent_frame,
+        );
+
+        dom.rebuild_in_place();
+        assert!(dioxus_ssr::render(&dom).is_empty());
+    }
+}
+
+#[test]
 fn test_series_component_renders() {
     let mut dom = VirtualDom::new_with_props(
         |props: u32| {
