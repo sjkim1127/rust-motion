@@ -457,6 +457,14 @@ async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, tx, config, frame, frame_cache))
 }
 
+fn parse_ws_seek(value: &serde_json::Value) -> Result<Option<u32>, u64> {
+    let Some(frame) = value.get("seek").and_then(serde_json::Value::as_u64) else {
+        return Ok(None);
+    };
+
+    u32::try_from(frame).map(Some).map_err(|_| frame)
+}
+
 /// Handle an individual WebSocket connection.
 async fn handle_socket(
     mut socket: WebSocket,
@@ -515,8 +523,27 @@ async fn handle_socket(
                     Some(Ok(Message::Text(text))) => {
                         // Client may request a specific frame: {"seek": 42}
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
-                            if let Some(frame) = v.get("seek").and_then(|f| f.as_u64()) {
-                                render_and_broadcast(&tx, &config, frame as u32, &frame_cache);
+                            match parse_ws_seek(&v) {
+                                Ok(Some(frame)) => {
+                                    render_and_broadcast(&tx, &config, frame, &frame_cache);
+                                }
+                                Err(frame) => {
+                                    let payload = serde_json::json!({
+                                        "type": "error",
+                                        "code": "seek_out_of_range",
+                                        "frame": frame,
+                                        "max_frame": u32::MAX,
+                                        "message": format!(
+                                            "seek frame exceeds the supported maximum of {}",
+                                            u32::MAX
+                                        ),
+                                    })
+                                    .to_string();
+                                    if socket.send(Message::Text(payload)).await.is_err() {
+                                        break;
+                                    }
+                                }
+                                Ok(None) => {}
                             }
                         }
                     }
@@ -718,4 +745,27 @@ fn player_html(port: u16, default_frame: u32, width: u32, height: u32) -> String
         height = height,
         default_frame = default_frame,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_ws_seek;
+    use serde_json::json;
+
+    #[test]
+    fn websocket_seek_accepts_normal_and_maximum_u32_values() {
+        assert_eq!(parse_ws_seek(&json!({ "seek": 42 })), Ok(Some(42)));
+        assert_eq!(
+            parse_ws_seek(&json!({ "seek": u32::MAX })),
+            Ok(Some(u32::MAX))
+        );
+    }
+
+    #[test]
+    fn websocket_seek_rejects_values_above_u32_max() {
+        assert_eq!(
+            parse_ws_seek(&json!({ "seek": u64::from(u32::MAX) + 1 })),
+            Err(u64::from(u32::MAX) + 1)
+        );
+    }
 }
