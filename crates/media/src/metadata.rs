@@ -74,6 +74,21 @@ pub struct ParsedMediaMetadata {
     pub image: Option<ImageDimensions>,
 }
 
+fn max_known_track_duration(video: Option<&VideoMetadata>, audio: Option<&AudioMetadata>) -> f64 {
+    let video_duration = video
+        .map(|metadata| metadata.duration_in_seconds)
+        .filter(|duration| duration.is_finite() && *duration >= 0.0);
+    let audio_duration = audio
+        .map(|metadata| metadata.duration_in_seconds)
+        .filter(|duration| duration.is_finite() && *duration >= 0.0);
+
+    match (video_duration, audio_duration) {
+        (Some(video), Some(audio)) => video.max(audio),
+        (Some(duration), None) | (None, Some(duration)) => duration,
+        (None, None) => 0.0,
+    }
+}
+
 /// Maximum single range read used by media parsers to avoid accidental whole
 /// file allocations when inspecting untrusted assets.
 pub const MAX_MEDIA_RANGE_BYTES: u64 = 16 * 1024 * 1024;
@@ -137,11 +152,7 @@ pub fn parse_media(
             path_ref.display()
         )));
     }
-    let duration_in_seconds = video
-        .as_ref()
-        .map(|metadata| metadata.duration_in_seconds)
-        .or_else(|| audio.as_ref().map(|metadata| metadata.duration_in_seconds))
-        .unwrap_or(0.0);
+    let duration_in_seconds = max_known_track_duration(video.as_ref(), audio.as_ref());
     Ok(ParsedMediaMetadata {
         duration_in_seconds,
         video,
@@ -405,6 +416,44 @@ mod tests {
         assert!(parsed.video.is_none());
         assert!(parsed.audio.is_none());
         assert_eq!(parsed.duration_in_seconds, 0.0);
+    }
+
+    #[test]
+    fn test_parse_media_duration_uses_maximum_valid_track_duration() {
+        let video = |duration_in_seconds| VideoMetadata {
+            width: 1920,
+            height: 1080,
+            fps: 30.0,
+            duration_in_seconds,
+            duration_in_frames: 0,
+            aspect_ratio: 16.0 / 9.0,
+            is_landscape: true,
+        };
+        let audio = |duration_in_seconds| AudioMetadata {
+            channels: 2,
+            sample_rate: 48_000,
+            duration_in_seconds,
+            duration_in_frames: 0,
+        };
+
+        assert_eq!(max_known_track_duration(None, Some(&audio(3.0))), 3.0);
+        assert_eq!(max_known_track_duration(Some(&video(2.0)), None), 2.0);
+        assert_eq!(
+            max_known_track_duration(Some(&video(2.0)), Some(&audio(2.0))),
+            2.0
+        );
+        assert_eq!(
+            max_known_track_duration(Some(&video(2.0)), Some(&audio(3.0))),
+            3.0
+        );
+        assert_eq!(
+            max_known_track_duration(Some(&video(3.0)), Some(&audio(2.0))),
+            3.0
+        );
+        assert_eq!(
+            max_known_track_duration(Some(&video(f64::NAN)), Some(&audio(f64::INFINITY))),
+            0.0
+        );
     }
 
     #[test]
