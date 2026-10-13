@@ -201,6 +201,9 @@ impl SceneEmitter for SceneVideo {
 }
 
 /// Native counterpart of [`crate::Audio`].
+///
+/// `track.timeline_start` is relative to this emitter's local timeline and is
+/// rebased through enclosing timeline emitters such as [`SceneSequence`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct SceneAudio {
     pub track: AudioTrack,
@@ -217,13 +220,13 @@ impl SceneAudio {
 impl SceneEmitter for SceneAudio {
     fn emit(
         &self,
-        _context: SceneFrameContext,
+        context: SceneFrameContext,
         _props: &Value,
         scene: &mut Scene,
     ) -> Result<(), CompositionError> {
-        scene.push(SceneNode::Audio {
-            track: self.track.clone(),
-        });
+        let mut track = self.track.clone();
+        track.timeline_start += context.global_time_secs() - context.time_secs();
+        scene.push(SceneNode::Audio { track });
         Ok(())
     }
 }
@@ -232,7 +235,8 @@ impl SceneEmitter for SceneAudio {
 mod tests {
     use super::*;
     use dioxuscut_composition::{
-        NativeComposition, NativeCompositionContext, SceneEmitterComposition,
+        NativeComposition, NativeCompositionContext, SceneEmitterComposition, SceneSequence,
+        SceneStack,
     };
 
     fn context() -> NativeCompositionContext {
@@ -293,6 +297,37 @@ mod tests {
             )
             .unwrap();
         assert_eq!(audio_scene.audio_tracks()[0].src, "voice.wav");
+    }
+
+    #[test]
+    fn audio_and_video_share_nested_sequence_timeline_origin() {
+        let mut video = SceneVideo::new("clip.mp4", 320.0, 180.0);
+        video.timeline_start = 1.0;
+        let mut audio = SceneAudio::new("clip.mp4");
+        audio.track.timeline_start = 1.0;
+
+        let composition = SceneEmitterComposition::new(
+            "synchronized-media",
+            SceneSequence::new(60, SceneStack::new().with(video).with(audio)),
+        );
+        let mut timeline = context();
+        timeline.fps = 30.0;
+        timeline.duration_in_frames = 120;
+
+        let before_start = composition.render(89, &Value::Null, timeline).unwrap();
+        assert!(!before_start
+            .nodes
+            .iter()
+            .any(|node| matches!(node, SceneNode::Video { .. })));
+
+        let at_start = composition.render(90, &Value::Null, timeline).unwrap();
+        let video_time = at_start.nodes.iter().find_map(|node| match node {
+            SceneNode::Video { time, .. } => Some(*time),
+            _ => None,
+        });
+        assert_eq!(video_time, Some(0.0));
+        let audio_start = at_start.audio_tracks()[0].timeline_start;
+        assert!((audio_start - 3.0).abs() < f64::EPSILON);
     }
 
     #[test]
