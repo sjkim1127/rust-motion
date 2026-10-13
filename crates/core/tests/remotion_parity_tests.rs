@@ -51,6 +51,31 @@ fn test_loop_component_renders() {
 }
 
 #[test]
+fn zero_duration_loop_renders_nothing_at_frames_zero_and_one() {
+    for parent_frame in [0, 1] {
+        let mut dom = VirtualDom::new_with_props(
+            |parent_frame: u32| {
+                let timeline = TimelineContext::new(parent_frame);
+                use_context_provider(|| Signal::new(timeline));
+
+                rsx! {
+                    Loop {
+                        duration_in_frames: 0,
+                        times: None,
+                        layout: SequenceLayout::None,
+                        DummyChild {}
+                    }
+                }
+            },
+            parent_frame,
+        );
+
+        dom.rebuild_in_place();
+        assert!(dioxus_ssr::render(&dom).is_empty());
+    }
+}
+
+#[test]
 fn test_series_component_renders() {
     let mut dom = VirtualDom::new_with_props(
         |props: u32| {
@@ -81,6 +106,36 @@ fn test_series_component_renders() {
 }
 
 #[test]
+fn test_series_sequence_min_offset_saturates_without_panicking() {
+    let mut dom = VirtualDom::new_with_props(
+        |parent_frame: u32| {
+            let timeline = TimelineContext::new(parent_frame);
+            use_context_provider(|| Signal::new(timeline));
+
+            rsx! {
+                Series {
+                    layout: SequenceLayout::None,
+                    SeriesSequence {
+                        duration_in_frames: 30,
+                        DummyChild {}
+                    }
+                    SeriesSequence {
+                        duration_in_frames: 10,
+                        offset: i32::MIN,
+                        DummyChild {}
+                    }
+                }
+            }
+        },
+        0,
+    );
+
+    dom.rebuild_in_place();
+    let html = dioxus_ssr::render(&dom);
+    assert_eq!(html.matches("Frame: 0").count(), 2);
+}
+
+#[test]
 fn test_interpolate_colors_parity() {
     use dioxuscut_core::interpolate_colors_range;
 
@@ -95,4 +150,34 @@ fn test_interpolate_colors_parity() {
 
     let c30 = interpolate_colors_range(30.0, &frames, &colors);
     assert_eq!(c30, "rgba(0, 0, 255, 1.0000)");
+}
+
+#[test]
+fn test_series_sequence_saturates_positive_offset_at_frame_domain_end() {
+    let mut dom = VirtualDom::new_with_props(
+        |parent_frame: u32| {
+            let timeline = TimelineContext::new(parent_frame);
+            use_context_provider(|| Signal::new(timeline));
+
+            rsx! {
+                Series {
+                    layout: SequenceLayout::None,
+                    SeriesSequence {
+                        duration_in_frames: u32::MAX,
+                        DummyChild {}
+                    }
+                    SeriesSequence {
+                        duration_in_frames: 10,
+                        offset: 1,
+                        DummyChild {}
+                    }
+                }
+            }
+        },
+        0,
+    );
+
+    dom.rebuild_in_place();
+    let html = dioxus_ssr::render(&dom);
+    assert_eq!(html.matches("Frame: 0").count(), 1);
 }
