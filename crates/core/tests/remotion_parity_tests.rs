@@ -81,6 +81,36 @@ fn test_series_component_renders() {
 }
 
 #[test]
+fn test_series_sequence_min_offset_saturates_without_panicking() {
+    let mut dom = VirtualDom::new_with_props(
+        |parent_frame: u32| {
+            let timeline = TimelineContext::new(parent_frame);
+            use_context_provider(|| Signal::new(timeline));
+
+            rsx! {
+                Series {
+                    layout: SequenceLayout::None,
+                    SeriesSequence {
+                        duration_in_frames: 30,
+                        DummyChild {}
+                    }
+                    SeriesSequence {
+                        duration_in_frames: 10,
+                        offset: i32::MIN,
+                        DummyChild {}
+                    }
+                }
+            }
+        },
+        0,
+    );
+
+    dom.rebuild_in_place();
+    let html = dioxus_ssr::render(&dom);
+    assert_eq!(html.matches("Frame: 0").count(), 2);
+}
+
+#[test]
 fn test_interpolate_colors_parity() {
     use dioxuscut_core::interpolate_colors_range;
 
