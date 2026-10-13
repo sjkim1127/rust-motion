@@ -38,7 +38,6 @@ gpu = ["wgpu", "pollster", "lyon_tessellation"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-rust-motion-composition = { workspace = true }
 
 [[bench]]
 name = "render_bench"

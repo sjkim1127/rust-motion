@@ -212,7 +212,7 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             asset_name: rust-motion-cli-windows-x86_64.zip
-            binary_name: rust_motion.exe
+            binary_name: rust-motion.exe
 
     steps:
       - name: Checkout repository

@@ -6184,7 +6184,6 @@ dependencies = [
  "rasterlottie",
  "rayon",
  "resvg",
- "rust-motion-composition",
  "rustybuzz",
  "serde",
  "serde_json",
