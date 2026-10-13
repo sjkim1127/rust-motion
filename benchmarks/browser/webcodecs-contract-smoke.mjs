@@ -122,7 +122,7 @@ try {
   }));
   await page.addInitScript(() => { window.__RUST_MOTION_HEADLESS_RENDER__ = true; });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => typeof window.rust-motion?.createIsoBmffEncodedChunk === 'function');
+  await page.waitForFunction(() => typeof (window.rust_motion ?? window['rust-motion'])?.createIsoBmffEncodedChunk === 'function');
   const result = await page.evaluate(async () => {
     const sample = {
       data: new Uint8Array([0, 0, 0, 1]),

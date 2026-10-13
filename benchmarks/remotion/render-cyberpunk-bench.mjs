@@ -52,13 +52,13 @@ try {
   console.log(`[+] Remotion render completed in ${(remotionMs / 1000).toFixed(2)}s`);
 
   console.log('[*] Rendering Rust Motion Cyberpunk scene (1920x1080, 180 frames, concurrency: 4)...');
-  const rust-motionStart = performance.now();
+  const rustMotionStart = performance.now();
   const rawOutput = execFileSync(nativeBinary, [path.join(outputDir, 'rust-motion-cyberpunk.mp4'), '4'], {
     encoding: 'utf8',
   });
-  const rust-motionProcessMs = performance.now() - rust-motionStart;
+  const rustMotionProcessMs = performance.now() - rustMotionStart;
   const nativeStats = JSON.parse(rawOutput.trim());
-  console.log(`[+] Rust Motion render completed in ${(rust-motionProcessMs / 1000).toFixed(2)}s (internal render: ${(nativeStats.render_ms / 1000).toFixed(2)}s)`);
+  console.log(`[+] Rust Motion render completed in ${(rustMotionProcessMs / 1000).toFixed(2)}s (internal render: ${(nativeStats.render_ms / 1000).toFixed(2)}s)`);
 
   const nativeOutput = path.join(outputDir, 'rust-motion-cyberpunk.mp4');
   const remotionOutput = path.join(outputDir, 'remotion-cyberpunk.mp4');
@@ -106,7 +106,7 @@ try {
     background: cropSsim('background', 0, 0, 1920, 300),
   };
 
-  const speedup = remotionMs / rust-motionProcessMs;
+  const speedup = remotionMs / rustMotionProcessMs;
   console.log(`\n======================================================`);
   console.log(`🔥 1080p VFX Speedup: Rust Motion is ${speedup.toFixed(2)}x faster!`);
   console.log(`======================================================\n`);
@@ -123,10 +123,10 @@ try {
       render_ms: remotionMs,
       fps: 180 / (remotionMs / 1000),
     },
-    rust-motion: {
-      process_ms: rust-motionProcessMs,
+    'rust-motion': {
+      process_ms: rustMotionProcessMs,
       render_ms: nativeStats.render_ms,
-      fps: 180 / (rust-motionProcessMs / 1000),
+      fps: 180 / (rustMotionProcessMs / 1000),
     },
     speedup,
     validation: {probes, decoded_ssim: decodedSsim, parity_gate_passed: parityGatePassed, crop_ssim: cropValidation, ffmpeg: execFileSync('ffmpeg', ['-version'], {encoding: 'utf8'}).split('\n')[0]},

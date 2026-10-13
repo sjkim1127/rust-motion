@@ -20,7 +20,7 @@ const dioxusBrowser = await chromium.launch({executablePath: browserExecutable, 
 const page = await dioxusBrowser.newPage({viewport: {width: 640, height: 360}, deviceScaleFactor: 1});
 await page.addInitScript(() => { window.__RUST_MOTION_HEADLESS_RENDER__ = true; });
 await page.goto(url, {waitUntil: 'domcontentloaded'});
-await page.waitForFunction(() => typeof window.rust-motion?.renderFrame === 'function');
+await page.waitForFunction(() => typeof (window.rust_motion ?? window['rust-motion'])?.renderFrame === 'function');
 const dioxusTimings = new Map();
 try {
   for (const frame of frames) {

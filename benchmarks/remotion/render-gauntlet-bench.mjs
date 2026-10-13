@@ -109,15 +109,15 @@ try {
   console.log(`[+] Remotion Gauntlet render completed in ${(remotionMs / 1000).toFixed(2)}s (${(900 / (remotionMs / 1000)).toFixed(2)} FPS)`);
 
   console.log('[*] [ROUND 2] Rendering Rust Motion Gauntlet scene (1920x1080, 900 frames, concurrency: 4)...');
-  const rust-motionStart = performance.now();
+  const rustMotionStart = performance.now();
   const rawOutput = execFileSync(
     nativeBinary,
     [path.join(outputDir, 'rust-motion-gauntlet.mp4'), '4', '900'],
     {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit']}
   );
-  const rust-motionProcessMs = performance.now() - rust-motionStart;
+  const rustMotionProcessMs = performance.now() - rustMotionStart;
   const nativeStats = JSON.parse(rawOutput.trim());
-  console.log(`[+] Rust Motion Gauntlet render completed in ${(rust-motionProcessMs / 1000).toFixed(2)}s (internal render: ${(nativeStats.render_ms / 1000).toFixed(2)}s, ${(900 / (rust-motionProcessMs / 1000)).toFixed(2)} FPS)`);
+  console.log(`[+] Rust Motion Gauntlet render completed in ${(rustMotionProcessMs / 1000).toFixed(2)}s (internal render: ${(nativeStats.render_ms / 1000).toFixed(2)}s, ${(900 / (rustMotionProcessMs / 1000)).toFixed(2)} FPS)`);
 
   const ssimStatsPath = path.join(outputDir, 'gauntlet-ssim.log');
   execFileSync('ffmpeg', [
@@ -141,11 +141,11 @@ try {
 
   const videoSourceSsim = {
     remotion: measureVideoSourceSsim(path.join(outputDir, 'remotion-gauntlet.mp4'), 'remotion'),
-    rust-motion: measureVideoSourceSsim(path.join(outputDir, 'rust-motion-gauntlet.mp4'), 'rust-motion'),
+    'rust-motion': measureVideoSourceSsim(path.join(outputDir, 'rust-motion-gauntlet.mp4'), 'rust-motion'),
   };
-  console.log(`[+] Left video source SSIM: Remotion ${videoSourceSsim.remotion.mean.toFixed(6)}, Rust Motion ${videoSourceSsim.rust_motion.mean.toFixed(6)}`);
+  console.log(`[+] Left video source SSIM: Remotion ${videoSourceSsim.remotion.mean.toFixed(6)}, Rust Motion ${videoSourceSsim['rust-motion'].mean.toFixed(6)}`);
 
-  const speedup = remotionMs / rust-motionProcessMs;
+  const speedup = remotionMs / rustMotionProcessMs;
   console.log(`\n======================================================`);
   console.log(`🔥 THE GAUNTLET RESULT: Rust Motion is ${speedup.toFixed(2)}x faster!`);
   console.log(`======================================================\n`);
@@ -169,10 +169,10 @@ try {
       render_ms: remotionMs,
       fps: 900 / (remotionMs / 1000),
     },
-    rust-motion: {
-      process_ms: rust-motionProcessMs,
+    'rust-motion': {
+      process_ms: rustMotionProcessMs,
       render_ms: nativeStats.render_ms,
-      fps: 900 / (rust-motionProcessMs / 1000),
+      fps: 900 / (rustMotionProcessMs / 1000),
     },
     ssim,
     video_source_ssim: videoSourceSsim,

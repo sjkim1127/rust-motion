@@ -67,7 +67,7 @@ await page.goto(url, { waitUntil: 'domcontentloaded', timeout: frameTimeoutMs })
 if (compositionModule) {
   await page.evaluate(async (moduleUrl) => {
     const loadedModule = await eval('import(moduleUrl)');
-    const api = window.rust-motion;
+    const api = window.rust_motion ?? window['rust-motion'];
     if (typeof loadedModule.register === 'function') await loadedModule.register(api);
     const entries = loadedModule.compositions ?? loadedModule.default;
     if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
@@ -77,7 +77,7 @@ if (compositionModule) {
     }
   }, compositionModule);
 }
-await page.waitForFunction(() => typeof window.rust-motion?.renderFrame === 'function', {
+await page.waitForFunction(() => typeof (window.rust_motion ?? window['rust-motion'])?.renderFrame === 'function', {
   timeout: frameTimeoutMs,
 });
 const compositions = await page.evaluate(() => window.rust_motion.listCompositions?.() ?? []);

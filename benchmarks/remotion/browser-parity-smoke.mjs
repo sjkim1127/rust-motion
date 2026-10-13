@@ -26,7 +26,7 @@ const dioxusBrowser = await chromium.launch({executablePath: browserExecutable, 
 const page = await dioxusBrowser.newPage({viewport: {width: 320, height: 180}, deviceScaleFactor: 1});
 await page.addInitScript(() => { window.__RUST_MOTION_HEADLESS_RENDER__ = true; });
 await page.goto(url, {waitUntil: 'domcontentloaded'});
-await page.waitForFunction(() => typeof window.rust-motion?.renderFrame === 'function');
+await page.waitForFunction(() => typeof (window.rust_motion ?? window['rust-motion'])?.renderFrame === 'function');
 
 try {
   const comparisons = [];

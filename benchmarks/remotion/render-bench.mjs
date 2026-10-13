@@ -48,8 +48,8 @@ try {
     return {process_ms:performance.now() - start, ...result};
   };
   // Exclude one warmup render for both. Chromium is reused for every Remotion render.
-  const warmup = {rust-motion:rust('native-warmup'), remotion_ms:await remotion('remotion-warmup')};
-  const samples = {rust-motion:[], remotion:[]};
+  const warmup = {'rust-motion':rust('native-warmup'), remotion_ms:await remotion('remotion-warmup')};
+  const samples = {'rust-motion':[], remotion:[]};
   const repeats = Number(process.env.REPEATS ?? 3);
   const hostLoad = [];
   const nativeRenderMs = [];
@@ -92,8 +92,8 @@ try {
   if (scores.length !== 180 || Math.min(...scores) < 0.995) throw new Error('Decoded MP4 similarity gate failed');
   const validation = {pixel_checks:pixelChecks, probes, decoded_ssim:{normalized_to:'limited-range yuv420p',frames:scores.length, min:Math.min(...scores), mean:scores.reduce((a,b) => a+b,0)/scores.length}};
   const median = values => [...values].sort((a,b) => a-b)[Math.floor(values.length / 2)];
-  const medians = {rust-motion:median(samples.rust-motion), remotion:median(samples.remotion)};
-  const report = {scene:'32 opaque spring-animated rectangles, no fonts/media/effects', width:1280, height:720, fps:30, frames:180, concurrency:4, codec:'h264', crf:18, preset:'fast', imageFormat, repeats, platform:os.platform(), arch:os.arch(), cpu:os.cpus()[0].model, node:process.version, chrome:execFileSync(browserExecutable,['--version'],{encoding:'utf8'}).trim(), validation, ffmpeg_shared:execFileSync(ffmpeg,['-version'],{encoding:'utf8', env:nativeEnv}).split('\n')[0], bundle_ms:bundleMs, browser_ms:browserMs, warmup, samples_ms:samples, native_render_ms:nativeRenderMs, host_load_before_samples:hostLoad, median_ms:medians, speedup:medians.remotion/medians.rust-motion, scope:'warm render plus encoding; reused Chrome; native includes process startup; bundling/browser startup excluded; PNG pixels and all decoded MP4 frames verified'};
+  const medians = {'rust-motion':median(samples['rust-motion']), remotion:median(samples.remotion)};
+  const report = {scene:'32 opaque spring-animated rectangles, no fonts/media/effects', width:1280, height:720, fps:30, frames:180, concurrency:4, codec:'h264', crf:18, preset:'fast', imageFormat, repeats, platform:os.platform(), arch:os.arch(), cpu:os.cpus()[0].model, node:process.version, chrome:execFileSync(browserExecutable,['--version'],{encoding:'utf8'}).trim(), validation, ffmpeg_shared:execFileSync(ffmpeg,['-version'],{encoding:'utf8', env:nativeEnv}).split('\n')[0], bundle_ms:bundleMs, browser_ms:browserMs, warmup, samples_ms:samples, native_render_ms:nativeRenderMs, host_load_before_samples:hostLoad, median_ms:medians, speedup:medians.remotion/medians['rust-motion'], scope:'warm render plus encoding; reused Chrome; native includes process startup; bundling/browser startup excluded; PNG pixels and all decoded MP4 frames verified'};
   writeFileSync(path.join(root,`benchmarks/render-${imageFormat}.json`), JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report, null, 2));
   if (report.speedup <= 1) throw new Error('Performance gate failed: Rust Motion did not beat Remotion');

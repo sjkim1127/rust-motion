@@ -28,7 +28,7 @@ try {
   });
   await page.addInitScript(() => { window.__RUST_MOTION_HEADLESS_RENDER__ = true; });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => typeof window.rust-motion?.renderFrame === 'function');
+  await page.waitForFunction(() => typeof (window.rust_motion ?? window['rust-motion'])?.renderFrame === 'function');
 
   const result = await page.evaluate(async ({ jsonAsset, canvasAsset, retryAssetPath }) => {
     let compositionContext;
@@ -47,15 +47,15 @@ try {
       let media = document.querySelector('video[data-rust-motion-smoke]');
       if (!media) {
         media = document.createElement('video');
-        media.dataset.rust-motionSmoke = '1';
+        media.dataset.rustMotionSmoke = '1';
         document.body.append(media);
       }
 
       let retryCanvas = document.querySelector('[data-rust-motion-canvas-image-retry-smoke]');
       if (!retryCanvas) {
         retryCanvas = document.createElement('canvas');
-        retryCanvas.dataset.rust-motionCanvasImageRetrySmoke = '1';
-        retryCanvas.dataset.rust-motionCanvasImage = 'true';
+        retryCanvas.dataset.rustMotionCanvasImageRetrySmoke = '1';
+        retryCanvas.dataset.rustMotionCanvasImage = 'true';
         retryCanvas.dataset.src = new URL(retryAssetPath, location.href).toString();
         retryCanvas.dataset.fit = 'fill';
         retryCanvas.dataset.maxRetries = '1';
@@ -74,8 +74,8 @@ try {
       let lottie = document.querySelector('[data-rust-motion-lottie-smoke]');
       if (!lottie) {
         lottie = document.createElement('div');
-        lottie.dataset.rust-motionLottieSmoke = '1';
-        lottie.dataset.rust-motionLottie = `data:application/json,${encodeURIComponent(JSON.stringify({
+        lottie.dataset.rustMotionLottieSmoke = '1';
+        lottie.dataset.rustMotionLottie = `data:application/json,${encodeURIComponent(JSON.stringify({
           v: '5.5.7', fr: 30, ip: 0, op: 30, w: 16, h: 16, nm: 'smoke', ddd: 0,
           assets: [], layers: [],
         }))}`;
@@ -89,8 +89,8 @@ try {
       let canvasImage = document.querySelector('[data-rust-motion-canvas-image-smoke]');
       if (!canvasImage) {
         canvasImage = document.createElement('canvas');
-        canvasImage.dataset.rust-motionCanvasImageSmoke = '1';
-        canvasImage.dataset.rust-motionCanvasImage = 'true';
+        canvasImage.dataset.rustMotionCanvasImageSmoke = '1';
+        canvasImage.dataset.rustMotionCanvasImage = 'true';
         canvasImage.dataset.src = canvasAsset;
         canvasImage.dataset.fit = 'contain';
         canvasImage.dataset.maxRetries = '2';

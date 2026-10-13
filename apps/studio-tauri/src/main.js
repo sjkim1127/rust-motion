@@ -2487,7 +2487,7 @@ async function syncLottieElements({ frame: nextFrame, fps }) {
   const elements = document.querySelectorAll('[data-rust-motion-lottie]');
   await Promise.all([...elements].map(async (element) => {
     await lottieAdapter.render(element, {
-      src: element.dataset.rust-motionLottie,
+      src: element.dataset.rustMotionLottie ?? element.getAttribute('data-rust-motion-lottie'),
       frame: nextFrame,
       fps,
       time: Number(element.dataset.time ?? 0),
@@ -2701,7 +2701,7 @@ export async function renderFrame({ composition = 'three_preview', frame: nextFr
   await waitForRenderGates();
   return result;
 }
-window.rust-motion = {
+window.rust_motion = window['rust-motion'] = {
   renderFrame,
   registerComposition,
   registerThreeComposition,
