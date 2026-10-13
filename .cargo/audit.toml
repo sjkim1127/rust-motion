@@ -1,0 +1,9 @@
+[advisories]
+ignore = [
+    # RUSTSEC-2026-0257: webbrowser 0.8.15 argument injection.
+    # Reachability analysis: webbrowser is an indirect dependency of dioxus-desktop 0.6.3,
+    # used only if an external browser window is requested from Studio desktop UI.
+    # It is completely unreachable from the headless CLI, native CPU/GPU rasterizer,
+    # Python bindings, or server rendering pipeline. Upstream dioxus tracks upgrading webbrowser.
+    "RUSTSEC-2026-0257",
+]
