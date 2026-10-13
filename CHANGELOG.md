@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.3.0 - 2026-10-13
+
+### Added
+
+- Interactive multitrack timeline editor in Studio with clip track assignment, duration adjustments, and playback synchronization (#52).
+- Named time events (`TimeEvent`, `NamedTimeEvent`) and schema expansion in composition and project schemas.
+- Structured preview cache stamps (`SourceStamp`, `FileStamp`) in `dioxuscut serve` to prevent cache stamp collisions (#73).
+- Bounded LRU byte-budget frame cache (`FrameCacheManager`) for rendered Lottie frames (#80).
+- Precise fractional frame cache keys for Lottie rendering across differing composition/animation frame rates (#78).
+
+### Fixed
+
+- Isolated WebSocket seek and scrub state per connected client in `dioxuscut serve`, preventing multi-client cross-talk (#74, #58).
+- Rejected out-of-range WebSocket seek values exceeding `u32::MAX` in `dioxuscut serve` (#72).
+- Supported `i32::MIN` offsets in `SeriesSequence` calculations without integer overflow (#70).
+- Prevented frame index wrap in `SceneSeries` when sequence durations boundary-align (#71).
+- Enforced strict half-open duration interval (`time_secs >= total_duration_secs`) for Lottie unmount boundaries (#79).
+- Aligned zero-duration `SceneLoop` behavior to match Remotion semantics (#81).
+- Prevented panics when initializing spring animations with non-positive or invalid mass, damping, or stiffness (#82).
+- Validated ducked audio parameters immediately upon Rhai script evaluation (#83).
+- Preserved frame-varying volume keyframes during CLI native scene audio track inference (#84).
+- Rebased nested scene audio start times through enclosing sequence emitters (`SceneSequence`) (#85).
+- Parsed media metadata using the longest known track duration (#76).
+- Preferred average frame rate (`avg_frame_rate`) over nominal frame rate (`r_frame_rate`) for variable frame rate (VFR) video containers with automatic fallback (#77).
+- Renderer readiness check requires explicit successful health status before initiating render jobs (#75).
+
+### Security
+
+- Upgraded `rustls` to `0.23.45` to resolve TLS handshake message processing vulnerability RUSTSEC-2026-0285.
+
+### Known limitations
+
+- Remotion 4.0.495 compatibility gaps remain tracked in issues #4 and #5.
+- Rust dependency advisories involving the Tauri, GLib, and WebKit version graph remain tracked in issue #32.
+
 ## 0.2.0 - 2026-09-24
 
 ### Fixed
