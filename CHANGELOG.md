@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.0-rc.1 - 2026-10-13
+
+### Added
+
+- Frozen 1.0 public contracts, project schema specification (`.dioxuscut.json` v1), and SemVer 1.x stability guarantees (#88).
+- First-class CLI and autonomous AI agent interface with stable exit codes (0-5), machine-readable `--json` output, and `doctor`, `validate`, and `inspect` subcommands (#90).
+- Renderer conformance test suite verifying bit-exact deterministic frame evaluation across sequential, reverse, random-seek, repeated, and concurrent multi-threaded access (#89).
+- Documented backend capabilities matrix establishing native CPU rasterizer as the authoritative reference implementation (#89).
+- Security policy, untrusted input sandboxing boundaries, and dependency vulnerability reachability analysis (`docs/security.md`, #91, #32).
+- Release verification automation script (`scripts/verify-release.sh`) and reproducible release engineering runbook (`docs/release-runbook.md`, #91).
+- Comprehensive documentation suite including Quickstart, Hello World tutorial, CLI reference, Python guide, and 1.0 Migration Guide (#92).
+
 ## 0.3.0 - 2026-10-13
 
 ### Added

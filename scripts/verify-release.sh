@@ -39,8 +39,9 @@ echo "✓ All internal crate definitions in Cargo.toml match $WORKSPACE_VERSION"
 PYPROJECT_PATH="crates/python/pyproject.toml"
 if [ -f "$PYPROJECT_PATH" ]; then
     PY_VERSION=$(grep -m 1 '^version *= *' "$PYPROJECT_PATH" | sed -E 's/version *= *"([^"]+)".*/\1/')
-    if [ "$PY_VERSION" != "$WORKSPACE_VERSION" ]; then
-        echo "ERROR: $PYPROJECT_PATH has version '$PY_VERSION', expected '$WORKSPACE_VERSION'"
+    EXPECTED_PY_VERSION="${WORKSPACE_VERSION//-rc./rc}"
+    if [ "$PY_VERSION" != "$WORKSPACE_VERSION" ] && [ "$PY_VERSION" != "$EXPECTED_PY_VERSION" ]; then
+        echo "ERROR: $PYPROJECT_PATH has version '$PY_VERSION', expected '$WORKSPACE_VERSION' or '$EXPECTED_PY_VERSION'"
         exit 1
     fi
     echo "✓ Python pyproject.toml matches $WORKSPACE_VERSION"

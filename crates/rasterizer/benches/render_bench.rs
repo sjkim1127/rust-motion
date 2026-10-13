@@ -185,6 +185,7 @@ fn scene_image_fallback() -> Scene {
     }
 }
 
+#[allow(dead_code)]
 fn scene_image_source(src: String) -> Scene {
     let mut scene = scene_image_fallback();
     if let Some(SceneNode::Image { src: image_src, .. }) = scene.nodes.get_mut(1) {
@@ -209,6 +210,7 @@ fn scene_text_heavy() -> Scene {
     Scene { nodes }
 }
 
+#[allow(dead_code)]
 fn scene_text_variant(variant: u32) -> Scene {
     let mut scene = scene_text_heavy();
     for (index, node) in scene.nodes.iter_mut().enumerate() {
