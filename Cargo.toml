@@ -24,7 +24,7 @@ members = [
 ]
 
 [workspace.package]
-version      = "1.0.0-rc.1"
+version      = "1.0.0"
 edition      = "2021"
 
 authors      = ["Dioxuscut Contributors"]
@@ -89,22 +89,22 @@ tower-http        = { version = "0.5", features = ["fs", "trace", "cors"] }
 reqwest           = { version = "0.12", features = ["json", "blocking"] }
 
 # Internal crates
-dioxuscut-animation   = { version = "1.0.0-rc.1", path = "crates/animation" }
-dioxuscut-cli         = { version = "1.0.0-rc.1", path = "crates/cli" }
-dioxuscut-composition = { version = "1.0.0-rc.1", path = "crates/composition" }
-dioxuscut-core        = { version = "1.0.0-rc.1", path = "crates/core" }
-dioxuscut-media       = { version = "1.0.0-rc.1", path = "crates/media", default-features = false }
-dioxuscut-player      = { version = "1.0.0-rc.1", path = "crates/player" }
-dioxuscut-renderer    = { version = "1.0.0-rc.1", path = "crates/renderer" }
-dioxuscut-transitions = { version = "1.0.0-rc.1", path = "crates/transitions" }
-dioxuscut-shapes      = { version = "1.0.0-rc.1", path = "crates/shapes", default-features = false }
-dioxuscut-paths       = { version = "1.0.0-rc.1", path = "crates/paths" }
-dioxuscut-captions    = { version = "1.0.0-rc.1", path = "crates/captions", default-features = false }
-dioxuscut-noise       = { version = "1.0.0-rc.1", path = "crates/noise" }
-dioxuscut-rasterizer  = { version = "1.0.0-rc.1", path = "crates/rasterizer" }
-dioxuscut-vdom        = { version = "1.0.0-rc.1", path = "crates/vdom" }
-dioxuscut-charts      = { version = "1.0.0-rc.1", path = "crates/charts" }
-dioxuscut-project     = { version = "1.0.0-rc.1", path = "crates/project" }
+dioxuscut-animation   = { version = "1.0.0", path = "crates/animation" }
+dioxuscut-cli         = { version = "1.0.0", path = "crates/cli" }
+dioxuscut-composition = { version = "1.0.0", path = "crates/composition" }
+dioxuscut-core        = { version = "1.0.0", path = "crates/core" }
+dioxuscut-media       = { version = "1.0.0", path = "crates/media", default-features = false }
+dioxuscut-player      = { version = "1.0.0", path = "crates/player" }
+dioxuscut-renderer    = { version = "1.0.0", path = "crates/renderer" }
+dioxuscut-transitions = { version = "1.0.0", path = "crates/transitions" }
+dioxuscut-shapes      = { version = "1.0.0", path = "crates/shapes", default-features = false }
+dioxuscut-paths       = { version = "1.0.0", path = "crates/paths" }
+dioxuscut-captions    = { version = "1.0.0", path = "crates/captions", default-features = false }
+dioxuscut-noise       = { version = "1.0.0", path = "crates/noise" }
+dioxuscut-rasterizer  = { version = "1.0.0", path = "crates/rasterizer" }
+dioxuscut-vdom        = { version = "1.0.0", path = "crates/vdom" }
+dioxuscut-charts      = { version = "1.0.0", path = "crates/charts" }
+dioxuscut-project     = { version = "1.0.0", path = "crates/project" }
 
 
 
