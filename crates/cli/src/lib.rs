@@ -12,6 +12,7 @@ pub use composition::{
     CompositionRegistryError, CyberpunkGridComposition, HelloWorldComposition,
     KaraokeCaptionsComposition, NativeComposition, NativeCompositionContext,
     PodcastWaveformComposition, PreparedComposition, ShapesAndFiltersComposition,
+    TimeEventSchedule,
 };
 pub use dioxuscut_media::{
     get_audio_metadata, get_video_metadata, parse_media, static_file, AudioMetadata,
@@ -54,13 +55,20 @@ pub fn project_audio_assets_from_dir(
         .collect()
 }
 
+struct InferredAudioTrack {
+    track_index: usize,
+    track: dioxuscut_rasterizer::AudioTrack,
+    has_explicit_volume_keyframes: bool,
+    last_sampled_volume: f64,
+}
+
 fn collect_scene_audio_tracks(
     prepared: &dyn PreparedComposition,
     first_scene: &dioxuscut_rasterizer::Scene,
     duration_in_frames: u32,
     fps: f64,
 ) -> Result<Vec<dioxuscut_rasterizer::AudioTrack>, CompositionError> {
-    let mut tracks: Vec<(usize, dioxuscut_rasterizer::AudioTrack)> = Vec::new();
+    let mut tracks: Vec<InferredAudioTrack> = Vec::new();
     for frame in 0..duration_in_frames {
         let scene;
         let frame_tracks = if frame == 0 {
@@ -70,31 +78,63 @@ fn collect_scene_audio_tracks(
             scene.audio_tracks()
         };
         for (index, mut candidate) in frame_tracks.into_iter().enumerate() {
+            let sample_time = frame as f64 / fps;
             if candidate.timeline_start == 0.0 && frame > 0 {
-                candidate.timeline_start = frame as f64 / fps;
+                candidate.timeline_start = sample_time;
             }
-            if let Some((_, existing)) = tracks.iter_mut().find(|(track_index, track)| {
-                *track_index == index && same_inferred_audio_track(track, &candidate)
+
+            if let Some(existing) = tracks.iter_mut().find(|existing| {
+                existing.track_index == index
+                    && same_inferred_audio_track(&existing.track, &candidate)
             }) {
-                if existing.duration.is_none() {
-                    existing.duration = candidate.duration;
-                } else if let Some(candidate_duration) = candidate.duration {
-                    existing.duration = Some(
+                match (existing.track.duration, candidate.duration) {
+                    (None, Some(duration)) => existing.track.duration = Some(duration),
+                    (Some(current), Some(candidate)) => {
+                        existing.track.duration = Some(current.max(candidate));
+                    }
+                    _ => {}
+                }
+
+                if !candidate.volume_keyframes.is_empty() {
+                    // An explicit curve is authoritative over inferred volume
+                    // samples, including when it first appears on a later frame.
+                    if !existing.has_explicit_volume_keyframes {
+                        existing.track.volume = candidate.volume;
+                        existing.track.volume_keyframes = candidate.volume_keyframes;
+                        existing.has_explicit_volume_keyframes = true;
+                    }
+                } else if !existing.has_explicit_volume_keyframes
+                    && candidate.volume != existing.last_sampled_volume
+                {
+                    if existing.track.volume_keyframes.is_empty() {
+                        // Keyframe values are multipliers of the base volume in
+                        // the FFmpeg path. Use a unity base and record absolute
+                        // sampled gains so zero-to-positive changes are preserved.
                         existing
-                            .duration
-                            .expect("duration was checked above")
-                            .max(candidate_duration),
-                    );
+                            .track
+                            .volume_keyframes
+                            .push((existing.track.timeline_start, existing.track.volume));
+                        existing.track.volume = 1.0;
+                    }
+                    existing
+                        .track
+                        .volume_keyframes
+                        .push((sample_time, candidate.volume));
                 }
-                if existing.volume_keyframes.is_empty() {
-                    existing.volume_keyframes = candidate.volume_keyframes;
-                }
+
+                existing.last_sampled_volume = candidate.volume;
                 continue;
             }
-            tracks.push((index, candidate));
+
+            tracks.push(InferredAudioTrack {
+                track_index: index,
+                has_explicit_volume_keyframes: !candidate.volume_keyframes.is_empty(),
+                last_sampled_volume: candidate.volume,
+                track: candidate,
+            });
         }
     }
-    Ok(tracks.into_iter().map(|(_, track)| track).collect())
+    Ok(tracks.into_iter().map(|inferred| inferred.track).collect())
 }
 
 fn same_inferred_audio_track(
@@ -144,6 +184,8 @@ mod project_asset_tests {
             props: serde_json::json!({}),
             assets: vec![],
             tracks: vec![],
+            events: vec![],
+            voice_over_asset_id: None,
         }
     }
 
@@ -187,6 +229,8 @@ mod project_asset_tests {
                 },
             ],
             tracks: vec![],
+            events: vec![],
+            voice_over_asset_id: None,
         };
 
         assert_eq!(
@@ -243,6 +287,10 @@ mod project_timeline_tests {
 
     struct PreparedLateSceneAudio;
 
+    struct PreparedFrameVaryingAudio {
+        explicit_keyframes: bool,
+    }
+
     impl dioxuscut_composition::Composition for AudioOnlyComposition {
         fn id(&self) -> &str {
             "AudioOnly"
@@ -280,6 +328,19 @@ mod project_timeline_tests {
                     track: dioxuscut_rasterizer::AudioTrack::new("later.wav"),
                 });
             }
+            Ok(scene)
+        }
+    }
+
+    impl dioxuscut_composition::PreparedComposition for PreparedFrameVaryingAudio {
+        fn render(&self, frame: u32) -> Result<dioxuscut_rasterizer::Scene, CompositionError> {
+            let mut scene = dioxuscut_rasterizer::Scene::new();
+            let mut track = dioxuscut_rasterizer::AudioTrack::new("ducked.wav");
+            track.volume = if frame < 30 { 1.0 } else { 0.25 };
+            if self.explicit_keyframes {
+                track.volume_keyframes = vec![(0.0, 1.0), (1.0, 0.5)];
+            }
+            scene.push(dioxuscut_rasterizer::SceneNode::Audio { track });
             Ok(scene)
         }
     }
@@ -366,6 +427,36 @@ mod project_timeline_tests {
     }
 
     #[test]
+    fn legacy_audio_volume_changes_become_deduplicated_keyframes() {
+        let prepared = PreparedFrameVaryingAudio {
+            explicit_keyframes: false,
+        };
+        let first_scene = prepared.render(0).expect("frame zero renders");
+
+        let tracks = collect_scene_audio_tracks(&prepared, &first_scene, 60, 30.0)
+            .expect("scene audio is collected");
+
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].volume, 1.0);
+        assert_eq!(tracks[0].volume_keyframes, vec![(0.0, 1.0), (1.0, 0.25)]);
+    }
+
+    #[test]
+    fn explicit_audio_volume_keyframes_override_sampled_volume_changes() {
+        let prepared = PreparedFrameVaryingAudio {
+            explicit_keyframes: true,
+        };
+        let first_scene = prepared.render(0).expect("frame zero renders");
+
+        let tracks = collect_scene_audio_tracks(&prepared, &first_scene, 60, 30.0)
+            .expect("scene audio is collected");
+
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].volume, 1.0);
+        assert_eq!(tracks[0].volume_keyframes, vec![(0.0, 1.0), (1.0, 0.5)]);
+    }
+
+    #[test]
     fn project_timelines_are_used_by_native_and_gpu_backends() {
         assert!(uses_project_timeline(RenderBackend::Native, true));
         assert!(uses_project_timeline(RenderBackend::Gpu, true));
@@ -385,6 +476,7 @@ struct ProjectTimelineComposition {
 struct ProjectTimelinePrepared<'a> {
     composition: &'a ProjectTimelineComposition,
     context: NativeCompositionContext,
+    time_events: TimeEventSchedule,
 }
 
 impl dioxuscut_composition::PreparedComposition for ProjectTimelinePrepared<'_> {
@@ -403,8 +495,9 @@ impl dioxuscut_composition::PreparedComposition for ProjectTimelinePrepared<'_> 
                 duration_in_frames: clip.duration,
                 ..self.context
             };
+            let clip_events = self.time_events.within_clip(clip.start, clip.duration);
             let prepared = composition
-                .prepare(&clip.props, clip_context)
+                .prepare_with_time_events(&clip.props, clip_context, clip_events)
                 .map_err(|error| CompositionError::render(frame, error.to_string()))?;
             let clip_scene = prepared
                 .render(frame - clip.start)
@@ -428,8 +521,9 @@ impl dioxuscut_composition::PreparedComposition for ProjectTimelinePrepared<'_> 
                 duration_in_frames: clip.duration,
                 ..self.context
             };
+            let clip_events = self.time_events.within_clip(clip.start, clip.duration);
             let prepared = composition
-                .prepare(&clip.props, clip_context)
+                .prepare_with_time_events(&clip.props, clip_context, clip_events)
                 .map_err(|error| CompositionError::render(clip.start, error.to_string()))?;
             let clip_tracks = match prepared.audio_tracks()? {
                 Some(tracks) => tracks,
@@ -467,6 +561,20 @@ impl Composition for ProjectTimelineComposition {
         Ok(Box::new(ProjectTimelinePrepared {
             composition: self,
             context,
+            time_events: TimeEventSchedule::default(),
+        }))
+    }
+
+    fn prepare_with_time_events(
+        &self,
+        _props: &serde_json::Value,
+        context: NativeCompositionContext,
+        time_events: TimeEventSchedule,
+    ) -> Result<Box<dyn dioxuscut_composition::PreparedComposition + '_>, CompositionError> {
+        Ok(Box::new(ProjectTimelinePrepared {
+            composition: self,
+            context,
+            time_events,
         }))
     }
 }
@@ -1199,10 +1307,13 @@ pub async fn execute_project_render_command_with_control(
     project: &Project,
     control: dioxuscut_rasterizer::RenderControl,
 ) -> anyhow::Result<()> {
+    let time_events = TimeEventSchedule::new(project.events.clone())
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     if !uses_project_timeline(request.backend, !project.tracks.is_empty()) {
-        return execute_render_command_with_registry_and_control(
+        return execute_render_command_with_registry_and_time_events_and_control(
             request,
             &built_in_registry(),
+            time_events,
             control,
         )
         .await;
@@ -1217,7 +1328,13 @@ pub async fn execute_project_render_command_with_control(
             .collect(),
         registry: built_in_registry(),
     })?;
-    execute_render_command_with_registry_and_control(request, &registry, control).await
+    execute_render_command_with_registry_and_time_events_and_control(
+        request,
+        &registry,
+        time_events,
+        control,
+    )
+    .await
 }
 
 fn uses_project_timeline(backend: RenderBackend, has_tracks: bool) -> bool {
@@ -1288,6 +1405,21 @@ pub async fn execute_render_command_with_control(
 pub async fn execute_render_command_with_registry_and_control(
     request: &RenderRequest,
     registry: &CompositionRegistry,
+    control: dioxuscut_rasterizer::RenderControl,
+) -> anyhow::Result<()> {
+    execute_render_command_with_registry_and_time_events_and_control(
+        request,
+        registry,
+        TimeEventSchedule::default(),
+        control,
+    )
+    .await
+}
+
+async fn execute_render_command_with_registry_and_time_events_and_control(
+    request: &RenderRequest,
+    registry: &CompositionRegistry,
+    time_events: TimeEventSchedule,
     control: dioxuscut_rasterizer::RenderControl,
 ) -> anyhow::Result<()> {
     let render_started = std::time::Instant::now();
@@ -1387,7 +1519,7 @@ pub async fn execute_render_command_with_registry_and_control(
             })?
     };
 
-    let prepared = composition.prepare(&props, context)?;
+    let prepared = composition.prepare_with_time_events(&props, context, time_events.clone())?;
 
     // Validate the first frame before starting FFmpeg. Dynamic compositions
     // therefore report syntax, type, and API errors without creating an output.
@@ -1549,6 +1681,16 @@ pub async fn execute_render_command_with_registry_and_control(
                     .unwrap_or("BrowserComposition"),
             )?;
             rasterizer.set_props(props.clone())?;
+            rasterizer.set_time_events(
+                time_events
+                    .to_events()
+                    .into_iter()
+                    .map(|event| dioxuscut_rasterizer::WebTimeEvent {
+                        id: event.id,
+                        frame: event.frame,
+                    })
+                    .collect(),
+            )?;
             if let Some(format) = request.codec.still_format() {
                 render_still_fallible_scaled(
                     &rasterizer,

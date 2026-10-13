@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { join, tempDir } from '@tauri-apps/api/path';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import './style.css';
@@ -15,17 +15,70 @@ app.innerHTML = `
       <button id="cancel-render" disabled>Cancel</button>
       <span id="message"></span>
     </section>
+    <section class="preview"><canvas id="preview-canvas"></canvas></section>
     <section class="timeline">
       <button id="play-toggle">Pause</button>
       <input id="timeline-slider" type="range" min="0" max="149" value="0" aria-label="timeline frame" />
       <span id="timeline-frame">0 / 149</span>
     </section>
-    <section class="preview"><canvas id="preview-canvas"></canvas></section>
+    <section class="timeline-editor" aria-label="Project timeline editor">
+      <div class="timeline-editor-header">
+        <div class="timeline-title">
+          <h2>Timeline</h2>
+          <span id="timeline-summary">No tracks</span>
+        </div>
+        <div class="timeline-actions">
+          <button id="add-track" type="button">+ Track</button>
+          <button id="add-clip" type="button">+ Clip</button>
+          <button id="add-time-event" type="button">+ Event</button>
+          <label class="snap-control"><input id="timeline-snap" type="checkbox" checked /> Snap</label>
+          <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+          <span id="zoom-level">4 px/frame</span>
+          <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+        </div>
+      </div>
+      <div id="timeline-scroll" class="timeline-scroll" aria-label="Timeline tracks">
+        <div id="timeline-canvas" class="timeline-canvas"></div>
+      </div>
+      <div id="clip-inspector" class="clip-inspector" hidden>
+        <strong id="selected-clip-title">Selected clip</strong>
+        <label>Composition <input id="clip-composition" type="text" /></label>
+        <label>Start frame <input id="clip-start" type="number" min="0" step="1" /></label>
+        <label>Duration <input id="clip-duration" type="number" min="1" step="1" /></label>
+        <button id="duplicate-clip" type="button">Duplicate</button>
+        <button id="remove-clip" type="button" class="danger-button">Delete</button>
+      </div>
+      <div id="time-event-inspector" class="clip-inspector" hidden>
+        <strong id="selected-time-event-title">Selected event</strong>
+        <label>Name <input id="time-event-name" type="text" /></label>
+        <label>Frame <input id="time-event-frame" type="number" min="0" step="1" /></label>
+        <button id="remove-time-event" type="button" class="danger-button">Delete</button>
+        <small>Alt/Option-drag moves only this event; normal drag ripples later events.</small>
+      </div>
+      <div class="voice-over-controls">
+        <label for="voice-over-asset">Voice-over</label>
+        <select id="voice-over-asset" aria-label="Voice-over asset"></select>
+        <button id="import-voice-over" type="button">Import audio</button>
+        <audio id="voice-over-player" controls preload="metadata" hidden></audio>
+      </div>
+    </section>
     <section class="job-queue"><h2>Render queue</h2><div id="job-list">No jobs</div></section>
     <footer><span id="frame">frame 0</span><span id="protocol">worker protocol…</span><span id="job">job store…</span></footer>
   </main>`;
 
 const canvas = document.querySelector('#preview-canvas');
+const voiceOverPlayer = document.querySelector('#voice-over-player');
+voiceOverPlayer.addEventListener('loadedmetadata', () => {
+  const pendingSeek = Number(voiceOverPlayer.dataset.pendingSeek);
+  if (!Number.isFinite(pendingSeek)) return;
+  try {
+    voiceOverPlayer.currentTime = Math.min(
+      pendingSeek,
+      Number.isFinite(voiceOverPlayer.duration) ? voiceOverPlayer.duration : pendingSeek,
+    );
+  } catch { /* The media element can apply this seek after its first frame loads. */ }
+  delete voiceOverPlayer.dataset.pendingSeek;
+});
 let THREE;
 let renderer;
 let scene;
@@ -312,6 +365,42 @@ export function registerThreeComposition(id, { setup, render, dispose } = {}) {
     });
   });
 }
+
+registerThreeComposition('NamedTimeEventsDemo', {
+  setup({ THREE }) {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#0f172a');
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+    camera.position.z = 2;
+    camera.lookAt(0, 0, 0);
+
+    const rail = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.5, 0.16),
+      new THREE.MeshBasicMaterial({ color: '#1e293b' }),
+    );
+    const fill = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.5, 0.16),
+      new THREE.MeshBasicMaterial({ color: '#f9733e' }),
+    );
+    scene.add(rail, fill);
+    return { scene, camera, fill };
+  },
+  render({ frame: nextFrame, width = 1280, height = 720, scene, camera, fill, renderer }) {
+    const startFrame = waitUntil('voice_start');
+    const duration = getTimeEventDuration('voice_start', 'voice_end');
+    const progress = Math.max(0, Math.min(1,
+      (nextFrame - startFrame) / Math.max(1, duration)));
+    fill.scale.x = progress;
+    fill.position.x = -0.75 * (1 - progress);
+    renderer.setSize(width, height, false);
+    camera.left = -Math.max(1, width / height) / 2;
+    camera.right = Math.max(1, width / height) / 2;
+    camera.top = 0.5;
+    camera.bottom = -0.5;
+    camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+  },
+});
 
 export function unregisterThreeComposition(id) {
   const entry = threeCompositions.get(id);
@@ -2263,6 +2352,28 @@ export function useVideoConfig() {
   return { ...videoConfig };
 }
 
+export function getTimeEventFrame(name) {
+  if (typeof name !== 'string' || !name.trim()) {
+    throw new TypeError('getTimeEventFrame expects a non-empty event name');
+  }
+  const event = activeTimeEvents.find((item) => item.id === name);
+  if (!event) throw new Error(`missing time event "${name}"`);
+  return event.frame;
+}
+
+export function waitUntil(name) {
+  return getTimeEventFrame(name);
+}
+
+export function getTimeEventDuration(startName, endName) {
+  const startFrame = getTimeEventFrame(startName);
+  const endFrame = getTimeEventFrame(endName);
+  if (endFrame < startFrame) {
+    throw new Error(`time event "${endName}" precedes "${startName}"`);
+  }
+  return endFrame - startFrame;
+}
+
 // Small compatibility layer for Remotion's static-file helpers. The browser
 // host owns URL resolution, so compositions stay portable between Vite,
 // packaged Tauri assets, and a remote preview origin.
@@ -2435,11 +2546,14 @@ async function syncCanvasImages(nextFrame) {
   }));
 }
 
-export async function renderFrame({ composition = 'three_preview', frame: nextFrame, fps = 30, props: inputProps = {}, assets = [], timeline = [], width, height, durationInFrames }) {
+export async function renderFrame({ composition = 'three_preview', frame: nextFrame, fps = 30, props: inputProps = {}, assets = [], timeline = [], time_events: inputTimeEvents = [], width, height, durationInFrames }) {
   const props = inputProps && typeof inputProps === 'object' ? inputProps : {};
   frame = nextFrame;
   activeAssets = Array.isArray(assets) ? [...assets] : [];
   activeProps = props;
+  activeTimeEvents = Array.isArray(inputTimeEvents) ? inputTimeEvents.map((event) => ({
+    id: String(event?.id ?? ''), frame: Number(event?.frame),
+  })) : [];
   videoConfig = {
     ...videoConfig,
     fps,
@@ -2460,6 +2574,7 @@ export async function renderFrame({ composition = 'three_preview', frame: nextFr
       frame,
       activeAssets,
       activeProps,
+      activeTimeEvents,
       videoConfig,
     };
     const activeClips = timeline.filter((clip) =>
@@ -2501,6 +2616,9 @@ export async function renderFrame({ composition = 'three_preview', frame: nextFr
         const clipProps = clip.props && typeof clip.props === 'object' ? clip.props : {};
         frame = clipFrame;
         activeProps = clipProps;
+        activeTimeEvents = projectContext.activeTimeEvents
+          .filter((event) => event.frame >= clip.start && event.frame <= clip.start + clip.duration)
+          .map((event) => ({ ...event, frame: event.frame - clip.start }));
         videoConfig = {
           ...projectContext.videoConfig,
           fps,
@@ -2533,6 +2651,7 @@ export async function renderFrame({ composition = 'three_preview', frame: nextFr
             width,
             height,
             durationInFrames: clip.duration,
+            timeEvents: activeTimeEvents.map((event) => ({ ...event })),
           });
         } finally {
           if (isThreeLayer) {
@@ -2547,6 +2666,7 @@ export async function renderFrame({ composition = 'three_preview', frame: nextFr
       frame = projectContext.frame;
       activeAssets = projectContext.activeAssets;
       activeProps = projectContext.activeProps;
+      activeTimeEvents = projectContext.activeTimeEvents;
       videoConfig = projectContext.videoConfig;
     }
     await syncMediaElements({ frame: nextFrame, fps });
@@ -2566,6 +2686,7 @@ export async function renderFrame({ composition = 'three_preview', frame: nextFr
       width,
       height,
       durationInFrames,
+      timeEvents: activeTimeEvents.map((event) => ({ ...event })),
     });
     await syncMediaElements({ frame: nextFrame, fps });
     await syncLottieElements({ frame: nextFrame, fps });
@@ -2634,6 +2755,10 @@ window.dioxuscut = {
   clearMediaCaches,
   useCurrentFrame,
   useVideoConfig,
+  getTimeEvents: () => activeTimeEvents.map((event) => ({ ...event })),
+  getTimeEventFrame,
+  waitUntil,
+  getTimeEventDuration,
   staticFile,
   getStaticFiles,
   watchStaticFile,
@@ -2656,6 +2781,7 @@ let frame = 0;
 let videoConfig = { fps: 30, width: 1280, height: 720, durationInFrames: 150 };
 let activeAssets = [];
 let activeProps = {};
+let activeTimeEvents = [];
 let playing = true;
 let currentJobId = null;
 let playbackStartedAt = performance.now();
@@ -2665,17 +2791,546 @@ let project = {
   composition: 'three_preview',
   settings: { width: 1280, height: 720, fps: 30, duration: 150, backend: 'browser' },
   props: { color: '#6c63ff' }, assets: [], tracks: [],
+  events: [], voice_over_asset_id: null,
 };
+const timelineCanvas = document.querySelector('#timeline-canvas');
+const timelineScroll = document.querySelector('#timeline-scroll');
+const timelineLabelWidth = 138;
+const timelineZoomStops = [2, 3, 4, 6, 8, 12, 16];
+let timelineScale = 4;
+let selectedTrackId = null;
+let selectedClipId = null;
+let selectedTimeEventId = null;
+
+function makeProjectId(prefix) {
+  const suffix = globalThis.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}-${suffix}`;
+}
+
+function projectTracks() {
+  if (!Array.isArray(project.tracks)) project.tracks = [];
+  return project.tracks;
+}
+
+function selectedClipEntry() {
+  for (const track of projectTracks()) {
+    if (track.id !== selectedTrackId) continue;
+    const clip = track.clips?.find((item) => item.id === selectedClipId);
+    if (clip) return { track, clip };
+  }
+  return null;
+}
+
+function updateClipInspector() {
+  const inspector = document.querySelector('#clip-inspector');
+  const entry = selectedClipEntry();
+  document.querySelector('#duplicate-clip').disabled = !entry;
+  document.querySelector('#remove-clip').disabled = !entry;
+  if (!entry) {
+    inspector.hidden = true;
+    return;
+  }
+
+  const { track, clip } = entry;
+  inspector.hidden = false;
+  document.querySelector('#selected-clip-title').textContent = `${track.id} · ${clip.composition}`;
+  document.querySelector('#clip-composition').value = clip.composition;
+  document.querySelector('#clip-start').value = clip.start;
+  document.querySelector('#clip-start').max = Math.max(0, project.settings.duration - clip.duration);
+  document.querySelector('#clip-duration').value = clip.duration;
+  document.querySelector('#clip-duration').max = Math.max(1, project.settings.duration - clip.start);
+}
+
+function selectedTimeEvent() {
+  return (Array.isArray(project.events) ? project.events : [])
+    .find((event) => event.id === selectedTimeEventId) ?? null;
+}
+
+function updateTimeEventInspector() {
+  const inspector = document.querySelector('#time-event-inspector');
+  const event = selectedTimeEvent();
+  inspector.hidden = !event;
+  if (!event) return;
+  document.querySelector('#selected-time-event-title').textContent = `Event · ${event.id}`;
+  document.querySelector('#time-event-name').value = event.id;
+  document.querySelector('#time-event-frame').value = event.frame;
+  document.querySelector('#time-event-frame').max = Math.max(0, project.settings.duration - 1);
+}
+
+function voiceOverAsset() {
+  return project.assets?.find((asset) =>
+    asset.id === project.voice_over_asset_id && String(asset.kind).toLowerCase() === 'audio') ?? null;
+}
+
+function voiceOverSource(path) {
+  if (/^(https?:|data:|asset:)/i.test(path)) return path;
+  const localPath = path.replace(/^file:\/\//i, '');
+  return convertFileSrc(localPath);
+}
+
+function updateVoiceOverControls() {
+  const select = document.querySelector('#voice-over-asset');
+  const audio = document.querySelector('#voice-over-player');
+  const assets = (Array.isArray(project.assets) ? project.assets : [])
+    .filter((asset) => String(asset.kind).toLowerCase() === 'audio');
+  select.replaceChildren(new Option('No voice-over', ''));
+  for (const asset of assets) {
+    select.add(new Option(asset.id, asset.id));
+  }
+  select.value = project.voice_over_asset_id ?? '';
+  const asset = voiceOverAsset();
+  if (!asset) {
+    audio.pause();
+    audio.removeAttribute('src');
+    delete audio.dataset.pendingSeek;
+    audio.load();
+    audio.hidden = true;
+    delete audio.dataset.assetId;
+    return;
+  }
+  const source = voiceOverSource(asset.path);
+  if (audio.dataset.assetId !== asset.id || audio.dataset.assetPath !== asset.path) {
+    audio.pause();
+    audio.src = source;
+    audio.dataset.assetId = asset.id;
+    audio.dataset.assetPath = asset.path;
+    audio.load();
+    seekVoiceOver(frame);
+  }
+  audio.hidden = false;
+}
+
+function seekVoiceOver(frameNumber) {
+  const audio = document.querySelector('#voice-over-player');
+  if (!audio.src) return;
+  const target = frameNumber / project.settings.fps;
+  if (!Number.isFinite(target)) return;
+  if (audio.readyState < HTMLMediaElement.HAVE_METADATA) {
+    audio.dataset.pendingSeek = String(target);
+    return;
+  }
+  try { audio.currentTime = Math.min(target, Number.isFinite(audio.duration) ? audio.duration : target); }
+  catch { /* The browser applies the seek when media metadata becomes available. */ }
+}
+
+function updateTimelineSummary() {
+  const tracks = projectTracks();
+  const clipCount = tracks.reduce((total, track) => total + (track.clips?.length ?? 0), 0);
+  document.querySelector('#timeline-summary').textContent =
+    `${tracks.length} track${tracks.length === 1 ? '' : 's'} · ${clipCount} clip${clipCount === 1 ? '' : 's'} · ${(project.events ?? []).length} event${(project.events ?? []).length === 1 ? '' : 's'} · ${project.settings.duration} frames`;
+}
+
+function timelineClipLabel(clip) {
+  return `${clip.composition} · ${clip.start}–${clip.start + clip.duration}`;
+}
+
+function selectTimelineTrack(trackId) {
+  selectedTrackId = trackId;
+  selectedClipId = null;
+  selectedTimeEventId = null;
+  renderTimeline();
+}
+
+function selectTimelineClip(trackId, clipId) {
+  selectedTrackId = trackId;
+  selectedClipId = clipId;
+  selectedTimeEventId = null;
+  for (const block of timelineCanvas.querySelectorAll('.clip-block')) {
+    block.classList.toggle('selected',
+      block.dataset.trackId === trackId && block.dataset.clipId === clipId);
+  }
+  for (const label of timelineCanvas.querySelectorAll('.timeline-track-label')) {
+    label.classList.toggle('selected', label.dataset.trackId === trackId);
+  }
+  updateClipInspector();
+  updateTimeEventInspector();
+}
+
+function selectTimelineEvent(eventId) {
+  selectedTimeEventId = eventId;
+  selectedClipId = null;
+  for (const marker of timelineCanvas.querySelectorAll('.time-event-marker')) {
+    marker.classList.toggle('selected', marker.dataset.eventId === eventId);
+  }
+  updateClipInspector();
+  updateTimeEventInspector();
+}
+
+function positionTimelinePlayhead() {
+  const playhead = timelineCanvas.querySelector('.timeline-playhead');
+  if (!playhead) return;
+  playhead.style.left = `${timelineLabelWidth + frame * timelineScale}px`;
+}
+
+function timelineEventLabelLayout(events, timelineWidth) {
+  const rowEnds = [];
+  const placements = new Map();
+  const ordered = [...events].sort((left, right) => left.frame - right.frame);
+  for (const event of ordered) {
+    const width = Math.max(58, Math.min(170, event.id.length * 7 + 14));
+    const left = Math.min(event.frame * timelineScale, Math.max(0, timelineWidth - width));
+    let row = rowEnds.findIndex((end) => end + 6 <= left);
+    if (row < 0) row = rowEnds.length;
+    rowEnds[row] = left + width;
+    placements.set(event, { width, left, row });
+  }
+  return { placements, rowCount: Math.max(1, rowEnds.length) };
+}
+
+function createTimelineEventRow(timelineWidth) {
+  const events = Array.isArray(project.events) ? project.events : [];
+  const { placements, rowCount } = timelineEventLabelLayout(events, timelineWidth);
+  const height = Math.max(52, 8 + rowCount * 22);
+  const row = document.createElement('div');
+  row.className = 'timeline-row timeline-event-row';
+  row.style.height = `${height}px`;
+  const label = document.createElement('div');
+  label.className = 'timeline-sticky-label timeline-event-label';
+  label.textContent = 'Events';
+  const lane = document.createElement('div');
+  lane.className = 'timeline-event-lane';
+  lane.style.width = `${timelineWidth}px`;
+  lane.style.height = `${height}px`;
+  for (const event of events) {
+    const placement = placements.get(event);
+    const line = document.createElement('div');
+    line.className = 'time-event-line';
+    line.dataset.eventId = event.id;
+    line.style.left = `${event.frame * timelineScale}px`;
+    lane.append(line);
+    const marker = document.createElement('button');
+    marker.type = 'button';
+    marker.className = 'time-event-marker';
+    marker.classList.toggle('selected', event.id === selectedTimeEventId);
+    marker.dataset.eventId = event.id;
+    marker.style.left = `${placement.left}px`;
+    marker.style.top = `${4 + placement.row * 22}px`;
+    marker.style.width = `${placement.width}px`;
+    marker.title = `${event.id} · frame ${event.frame}`;
+    marker.setAttribute('aria-label', `Time event ${event.id}, frame ${event.frame}`);
+    const markerLabel = document.createElement('span');
+    markerLabel.textContent = event.id;
+    marker.append(markerLabel);
+    marker.addEventListener('pointerdown', (pointerEvent) =>
+      beginTimelineEventEdit(pointerEvent, lane, marker, event));
+    lane.append(marker);
+  }
+  row.append(label, lane);
+  return row;
+}
+
+function renderTimeline() {
+  const duration = Math.max(1, project.settings.duration);
+  const timelineWidth = duration * timelineScale;
+  const tracks = projectTracks();
+  timelineCanvas.style.setProperty('--timeline-width', `${timelineWidth}px`);
+  timelineCanvas.style.setProperty('--frame-width', `${timelineScale}px`);
+  timelineCanvas.replaceChildren();
+
+  const rulerRow = document.createElement('div');
+  rulerRow.className = 'timeline-row timeline-ruler-row';
+  const rulerLabel = document.createElement('div');
+  rulerLabel.className = 'timeline-sticky-label';
+  rulerLabel.textContent = 'Frame';
+  const ruler = document.createElement('div');
+  ruler.className = 'timeline-ruler-track';
+  const tickStep = timelineScale >= 12 ? 5 : timelineScale >= 6 ? 10 : timelineScale >= 3 ? 15 : 30;
+  const tickFrames = new Set([duration]);
+  for (let tick = 0; tick < duration; tick += tickStep) tickFrames.add(tick);
+  for (const tickFrame of [...tickFrames].sort((left, right) => left - right)) {
+    const tick = document.createElement('div');
+    tick.className = 'timeline-ruler-tick';
+    tick.style.left = `${tickFrame * timelineScale}px`;
+    const label = document.createElement('span');
+    label.textContent = String(tickFrame);
+    tick.append(label);
+    ruler.append(tick);
+  }
+  rulerRow.append(rulerLabel, ruler);
+  timelineCanvas.append(rulerRow);
+  timelineCanvas.append(createTimelineEventRow(timelineWidth));
+
+  if (tracks.length === 0) {
+    const emptyRow = document.createElement('div');
+    emptyRow.className = 'timeline-row timeline-track-row';
+    const emptyLabel = document.createElement('div');
+    emptyLabel.className = 'timeline-sticky-label';
+    emptyLabel.textContent = 'No tracks';
+    const emptyLane = document.createElement('div');
+    emptyLane.className = 'timeline-empty';
+    emptyLane.style.width = `${timelineWidth}px`;
+    emptyLane.textContent = 'Add a track, then add a composition clip.';
+    emptyRow.append(emptyLabel, emptyLane);
+    timelineCanvas.append(emptyRow);
+  }
+
+  for (const [trackIndex, track] of tracks.entries()) {
+    if (!Array.isArray(track.clips)) track.clips = [];
+    const clipRows = [];
+    const clipRowByClip = new Map();
+    for (const clip of track.clips) {
+      let rowIndex = clipRows.findIndex((row) => row.every((other) =>
+        clip.start + clip.duration <= other.start ||
+        clip.start >= other.start + other.duration));
+      if (rowIndex < 0) {
+        rowIndex = clipRows.length;
+        clipRows.push([]);
+      }
+      clipRows[rowIndex].push(clip);
+      clipRowByClip.set(clip, rowIndex);
+    }
+    const trackHeight = Math.max(54, 14 + clipRows.length * 40);
+    const row = document.createElement('div');
+    row.className = 'timeline-row timeline-track-row';
+    row.style.height = `${trackHeight}px`;
+    const label = document.createElement('button');
+    label.type = 'button';
+    label.className = 'timeline-sticky-label timeline-track-label';
+    label.classList.toggle('selected', track.id === selectedTrackId);
+    label.dataset.trackId = track.id;
+    label.setAttribute('aria-label', `Select track ${track.id}`);
+    const name = document.createElement('span');
+    name.textContent = track.id || `Track ${trackIndex + 1}`;
+    const count = document.createElement('small');
+    count.textContent = String(track.clips.length);
+    label.append(name, count);
+    label.addEventListener('click', () => selectTimelineTrack(track.id));
+
+    const lane = document.createElement('div');
+    lane.className = 'timeline-lane';
+    lane.dataset.trackId = track.id;
+    lane.style.width = `${timelineWidth}px`;
+    lane.style.height = `${trackHeight}px`;
+    for (const clip of track.clips) {
+      const block = document.createElement('button');
+      block.type = 'button';
+      block.className = 'clip-block';
+      block.classList.toggle('selected', track.id === selectedTrackId && clip.id === selectedClipId);
+      block.dataset.trackId = track.id;
+      block.dataset.clipId = clip.id;
+      block.style.left = `${clip.start * timelineScale}px`;
+      block.style.top = `${8 + clipRowByClip.get(clip) * 40}px`;
+      block.style.width = `${Math.max(timelineScale, clip.duration * timelineScale)}px`;
+      block.title = `${timelineClipLabel(clip)} frames`;
+      block.setAttribute('aria-label', `${clip.composition}, starts at frame ${clip.start}, duration ${clip.duration} frames`);
+      const labelText = document.createElement('span');
+      labelText.className = 'clip-block-label';
+      labelText.textContent = timelineClipLabel(clip);
+      const startHandle = document.createElement('span');
+      startHandle.className = 'clip-trim-handle clip-trim-start';
+      startHandle.dataset.trimEdge = 'start';
+      startHandle.setAttribute('aria-hidden', 'true');
+      const endHandle = document.createElement('span');
+      endHandle.className = 'clip-trim-handle clip-trim-end';
+      endHandle.dataset.trimEdge = 'end';
+      endHandle.setAttribute('aria-hidden', 'true');
+      block.append(labelText, startHandle, endHandle);
+      block.addEventListener('pointerdown', (event) => beginTimelineClipEdit(event, lane, block, track, clip));
+      lane.append(block);
+    }
+    row.append(label, lane);
+    timelineCanvas.append(row);
+  }
+
+  const playhead = document.createElement('div');
+  playhead.className = 'timeline-playhead';
+  timelineCanvas.append(playhead);
+  document.querySelector('#zoom-level').textContent = `${timelineScale} px/frame`;
+  document.querySelector('#zoom-out').disabled = timelineScale === timelineZoomStops[0];
+  document.querySelector('#zoom-in').disabled = timelineScale === timelineZoomStops[timelineZoomStops.length - 1];
+  updateTimelineSummary();
+  updateClipInspector();
+  updateTimeEventInspector();
+  updateVoiceOverControls();
+  positionTimelinePlayhead();
+}
+
+function timelineSnapPoints(excludedClip) {
+  const points = [0, frame, project.settings.duration];
+  for (const track of projectTracks()) {
+    for (const clip of track.clips ?? []) {
+      if (clip === excludedClip) continue;
+      points.push(clip.start, clip.start + clip.duration);
+    }
+  }
+  return points;
+}
+
+function nearestTimelineSnap(value, points) {
+  if (!document.querySelector('#timeline-snap').checked) return value;
+  const tolerance = Math.max(1, Math.ceil(8 / timelineScale));
+  let result = value;
+  let distance = tolerance + 1;
+  for (const point of points) {
+    const nextDistance = Math.abs(point - value);
+    if (nextDistance <= tolerance && nextDistance < distance) {
+      result = point;
+      distance = nextDistance;
+    }
+  }
+  return result;
+}
+
+function beginTimelineEventEdit(pointerEvent, lane, marker, selectedEvent) {
+  pointerEvent.preventDefault();
+  selectTimelineEvent(selectedEvent.id);
+  const events = project.events ?? (project.events = []);
+  const pointerFrame = Math.round((pointerEvent.clientX - lane.getBoundingClientRect().left) / timelineScale);
+  const originalFrames = events.map((event) => event.frame);
+  const originalFrame = selectedEvent.frame;
+  const snapPoints = [
+    ...timelineSnapPoints(null),
+    ...events.filter((event) => event !== selectedEvent).map((event) => event.frame),
+  ];
+  let changed = false;
+  let lastMoveOnly = pointerEvent.altKey;
+
+  function onPointerMove(moveEvent) {
+    const currentPointerFrame = Math.round((moveEvent.clientX - lane.getBoundingClientRect().left) / timelineScale);
+    const target = nearestTimelineSnap(originalFrame + currentPointerFrame - pointerFrame, snapPoints);
+    const onlySelected = pointerEvent.altKey || moveEvent.altKey;
+    lastMoveOnly = onlySelected;
+    if (onlySelected) {
+      selectedEvent.frame = Math.max(0, Math.min(target, project.settings.duration - 1));
+    } else {
+      const affectedIndexes = originalFrames
+        .map((original, index) => original >= originalFrame ? index : -1)
+        .filter((index) => index >= 0);
+      const affectedFrames = affectedIndexes.map((index) => originalFrames[index]);
+      const minDelta = Math.max(...affectedFrames.map((value) => -value));
+      const maxDelta = Math.min(...affectedFrames.map((value) => project.settings.duration - 1 - value));
+      const delta = Math.max(minDelta, Math.min(maxDelta, target - originalFrame));
+      for (const index of affectedIndexes) {
+        events[index].frame = originalFrames[index] + delta;
+      }
+    }
+    changed ||= events.some((event, index) => event.frame !== originalFrames[index]);
+    for (const event of events) {
+      const line = lane.querySelector(`.time-event-line[data-event-id="${CSS.escape(event.id)}"]`);
+      if (line) line.style.left = `${event.frame * timelineScale}px`;
+      const eventMarker = lane.querySelector(`.time-event-marker[data-event-id="${CSS.escape(event.id)}"]`);
+      if (eventMarker) {
+        eventMarker.style.left = `${Math.min(event.frame * timelineScale, Math.max(0, lane.clientWidth - eventMarker.offsetWidth))}px`;
+        eventMarker.title = `${event.id} · frame ${event.frame}`;
+        eventMarker.setAttribute('aria-label', `Time event ${event.id}, frame ${event.frame}`);
+      }
+    }
+    document.querySelector('#time-event-frame').value = selectedEvent.frame;
+  }
+
+  function finishPointerEdit() {
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', finishPointerEdit);
+    window.removeEventListener('pointercancel', finishPointerEdit);
+    if (changed) {
+      renderTimeline();
+      setFrame(frame);
+      showMessage(lastMoveOnly ? 'Time event moved independently' : 'Time event and later events retimed');
+    }
+  }
+
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', finishPointerEdit, { once: true });
+  window.addEventListener('pointercancel', finishPointerEdit, { once: true });
+}
+
+function beginTimelineClipEdit(event, lane, block, track, clip) {
+  event.preventDefault();
+  selectTimelineClip(track.id, clip.id);
+  const trimEdge = event.target.closest('.clip-trim-handle')?.dataset.trimEdge;
+  const mode = trimEdge === 'start' ? 'trim-start' : trimEdge === 'end' ? 'trim-end' : 'move';
+  const startPointerFrame = Math.round((event.clientX - lane.getBoundingClientRect().left) / timelineScale);
+  const originalStart = clip.start;
+  const originalDuration = clip.duration;
+  const originalEnd = originalStart + originalDuration;
+  const snapPoints = timelineSnapPoints(clip);
+  let changed = false;
+
+  function updateBlock() {
+    block.style.left = `${clip.start * timelineScale}px`;
+    block.style.width = `${Math.max(timelineScale, clip.duration * timelineScale)}px`;
+    block.title = `${timelineClipLabel(clip)} frames`;
+    block.setAttribute('aria-label', `${clip.composition}, starts at frame ${clip.start}, duration ${clip.duration} frames`);
+    block.querySelector('.clip-block-label').textContent = timelineClipLabel(clip);
+    updateClipInspector();
+    updateTimelineSummary();
+  }
+
+  function onPointerMove(moveEvent) {
+    const pointerFrame = Math.round((moveEvent.clientX - lane.getBoundingClientRect().left) / timelineScale);
+    const delta = pointerFrame - startPointerFrame;
+    if (mode === 'move') {
+      const candidates = snapPoints.flatMap((point) => [point, point - originalDuration]);
+      const snapped = nearestTimelineSnap(originalStart + delta, candidates);
+      clip.start = Math.max(0, Math.min(snapped, project.settings.duration - originalDuration));
+      clip.duration = originalDuration;
+    } else if (mode === 'trim-start') {
+      const snapped = nearestTimelineSnap(originalStart + delta, snapPoints);
+      clip.start = Math.max(0, Math.min(snapped, originalEnd - 1));
+      clip.duration = originalEnd - clip.start;
+    } else {
+      const snapped = nearestTimelineSnap(originalEnd + delta, snapPoints);
+      const end = Math.max(originalStart + 1, Math.min(snapped, project.settings.duration));
+      clip.start = originalStart;
+      clip.duration = end - originalStart;
+    }
+    changed ||= clip.start !== originalStart || clip.duration !== originalDuration;
+    updateBlock();
+  }
+
+  function finishPointerEdit() {
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', finishPointerEdit);
+    window.removeEventListener('pointercancel', finishPointerEdit);
+    if (changed) {
+      renderTimeline();
+      setFrame(frame);
+      showMessage('Timeline clip updated');
+    }
+  }
+
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', finishPointerEdit, { once: true });
+  window.addEventListener('pointercancel', finishPointerEdit, { once: true });
+}
+
+function updateSelectedClip(mutator) {
+  const entry = selectedClipEntry();
+  if (!entry) return;
+  mutator(entry.clip);
+  renderTimeline();
+  setFrame(frame);
+  showMessage('Timeline clip updated');
+}
+
+function cloneProjectValue(value) {
+  return JSON.parse(JSON.stringify(value ?? {}));
+}
+
+function changeTimelineZoom(direction) {
+  const currentIndex = timelineZoomStops.indexOf(timelineScale);
+  const nextIndex = Math.max(0, Math.min(timelineZoomStops.length - 1, currentIndex + direction));
+  if (nextIndex === currentIndex) return;
+  const centerFrame = Math.max(0,
+    (timelineScroll.scrollLeft + timelineScroll.clientWidth / 2 - timelineLabelWidth) / timelineScale);
+  timelineScale = timelineZoomStops[nextIndex];
+  renderTimeline();
+  timelineScroll.scrollLeft = Math.max(0,
+    timelineLabelWidth + centerFrame * timelineScale - timelineScroll.clientWidth / 2);
+}
 
 function showMessage(message) {
   document.querySelector('#message').textContent = message;
 }
 
 function setFrame(nextFrame) {
-  frame = Math.max(0, Math.min(nextFrame, project.settings.duration - 1));
+  frame = Math.max(0, Math.min(Math.round(nextFrame), project.settings.duration - 1));
   document.querySelector('#timeline-slider').max = project.settings.duration - 1;
   document.querySelector('#timeline-slider').value = frame;
   document.querySelector('#timeline-frame').textContent = `${frame} / ${project.settings.duration - 1}`;
+  positionTimelinePlayhead();
+  if (!playing) seekVoiceOver(frame);
   renderFrame({
     composition: project.composition,
     frame,
@@ -2686,20 +3341,211 @@ function setFrame(nextFrame) {
     props: project.props,
     assets: project.assets.map((asset) => asset.path),
     timeline: project.tracks.flatMap((track) => track.clips),
+    time_events: project.events ?? [],
   }).catch((error) => showMessage(`preview error: ${error}`));
 }
 
 document.querySelector('#play-toggle').addEventListener('click', (event) => {
   playing = !playing;
-  if (playing) playbackStartedAt = performance.now() - (frame * 1000 / project.settings.fps);
+  const audio = document.querySelector('#voice-over-player');
+  if (playing) {
+    playbackStartedAt = performance.now() - (frame * 1000 / project.settings.fps);
+    if (voiceOverAsset()) {
+      seekVoiceOver(frame);
+      audio.play().catch((error) => showMessage(`voice-over playback error: ${error.message}`));
+    }
+  } else {
+    audio.pause();
+  }
   event.currentTarget.textContent = playing ? 'Pause' : 'Play';
 });
 document.querySelector('#timeline-slider').addEventListener('input', (event) => {
   playing = false;
+  document.querySelector('#voice-over-player').pause();
   lastPlaybackFrame = -1;
   document.querySelector('#play-toggle').textContent = 'Play';
   setFrame(Number(event.currentTarget.value));
 });
+
+document.querySelector('#add-track').addEventListener('click', () => {
+  const tracks = projectTracks();
+  let trackNumber = tracks.length + 1;
+  while (tracks.some((track) => track.id === `Track ${trackNumber}`)) trackNumber += 1;
+  const track = { id: `Track ${trackNumber}`, clips: [] };
+  tracks.push(track);
+  selectedTrackId = track.id;
+  selectedClipId = null;
+  selectedTimeEventId = null;
+  renderTimeline();
+  showMessage(`${track.id} added`);
+});
+
+document.querySelector('#add-time-event').addEventListener('click', () => {
+  const events = Array.isArray(project.events) ? project.events : (project.events = []);
+  let number = events.length + 1;
+  while (events.some((event) => event.id === `event-${number}`)) number += 1;
+  const event = { id: `event-${number}`, frame };
+  events.push(event);
+  selectedTimeEventId = event.id;
+  selectedClipId = null;
+  renderTimeline();
+  setFrame(frame);
+  showMessage(`${event.id} added at frame ${frame}`);
+});
+
+document.querySelector('#time-event-name').addEventListener('change', (inputEvent) => {
+  const event = selectedTimeEvent();
+  if (!event) return;
+  const id = inputEvent.currentTarget.value.trim();
+  if (!id || project.events.some((item) => item !== event && item.id === id)) {
+    updateTimeEventInspector();
+    showMessage(!id ? 'Event name cannot be empty' : `Event "${id}" already exists`);
+    return;
+  }
+  event.id = id;
+  selectedTimeEventId = id;
+  renderTimeline();
+  setFrame(frame);
+  showMessage(`Event renamed to ${id}`);
+});
+
+document.querySelector('#time-event-frame').addEventListener('change', (inputEvent) => {
+  const event = selectedTimeEvent();
+  if (!event) return;
+  const value = Number.parseInt(inputEvent.currentTarget.value, 10);
+  if (!Number.isFinite(value)) return updateTimeEventInspector();
+  event.frame = Math.max(0, Math.min(value, project.settings.duration - 1));
+  renderTimeline();
+  setFrame(frame);
+  showMessage(`${event.id} moved to frame ${event.frame}`);
+});
+
+document.querySelector('#remove-time-event').addEventListener('click', () => {
+  const event = selectedTimeEvent();
+  if (!event) return;
+  project.events = project.events.filter((item) => item !== event);
+  selectedTimeEventId = null;
+  renderTimeline();
+  setFrame(frame);
+  showMessage(`${event.id} removed`);
+});
+
+document.querySelector('#voice-over-asset').addEventListener('change', (changeEvent) => {
+  project.voice_over_asset_id = changeEvent.currentTarget.value || null;
+  updateVoiceOverControls();
+  showMessage(project.voice_over_asset_id ? 'Voice-over selected' : 'Voice-over cleared');
+});
+
+document.querySelector('#import-voice-over').addEventListener('click', async () => {
+  try {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: 'Audio', extensions: ['aac', 'flac', 'm4a', 'mp3', 'ogg', 'wav', 'webm'] }],
+    });
+    if (!selected || Array.isArray(selected)) return;
+    if (!Array.isArray(project.assets)) project.assets = [];
+    const asset = {
+      id: makeProjectId('voice-over'),
+      path: selected,
+      kind: 'audio',
+      sha256: null,
+    };
+    project.assets.push(asset);
+    project.voice_over_asset_id = asset.id;
+    updateVoiceOverControls();
+    showMessage(`Voice-over imported: ${asset.id}`);
+  } catch (error) {
+    showMessage(`voice-over import error: ${error}`);
+  }
+});
+
+document.querySelector('#add-clip').addEventListener('click', () => {
+  const tracks = projectTracks();
+  let track = tracks.find((item) => item.id === selectedTrackId) ?? tracks[0];
+  if (!track) {
+    let trackNumber = 1;
+    while (tracks.some((item) => item.id === `Track ${trackNumber}`)) trackNumber += 1;
+    track = { id: `Track ${trackNumber}`, clips: [] };
+    tracks.push(track);
+  }
+  if (!Array.isArray(track.clips)) track.clips = [];
+  const duration = Math.min(30, project.settings.duration);
+  const start = Math.min(frame, project.settings.duration - duration);
+  const clip = {
+    id: makeProjectId('clip'),
+    composition: project.composition,
+    start,
+    duration,
+    props: cloneProjectValue(project.props),
+  };
+  track.clips.push(clip);
+  selectedTrackId = track.id;
+  selectedClipId = clip.id;
+  selectedTimeEventId = null;
+  renderTimeline();
+  setFrame(frame);
+  showMessage('Composition clip added');
+});
+
+document.querySelector('#duplicate-clip').addEventListener('click', () => {
+  const entry = selectedClipEntry();
+  if (!entry) return;
+  const { track, clip } = entry;
+  const duplicate = {
+    ...clip,
+    id: makeProjectId('clip'),
+    start: Math.min(clip.start + clip.duration, project.settings.duration - clip.duration),
+    props: cloneProjectValue(clip.props),
+  };
+  const index = track.clips.indexOf(clip);
+  track.clips.splice(index + 1, 0, duplicate);
+  selectedClipId = duplicate.id;
+  selectedTimeEventId = null;
+  renderTimeline();
+  setFrame(frame);
+  showMessage('Composition clip duplicated');
+});
+
+document.querySelector('#remove-clip').addEventListener('click', () => {
+  const entry = selectedClipEntry();
+  if (!entry) return;
+  entry.track.clips = entry.track.clips.filter((clip) => clip !== entry.clip);
+  selectedClipId = null;
+  renderTimeline();
+  setFrame(frame);
+  showMessage('Composition clip removed');
+});
+
+document.querySelector('#clip-composition').addEventListener('change', (event) => {
+  const composition = event.currentTarget.value.trim();
+  if (!composition) {
+    updateClipInspector();
+    showMessage('Composition ID cannot be empty');
+    return;
+  }
+  updateSelectedClip((clip) => { clip.composition = composition; });
+});
+
+document.querySelector('#clip-start').addEventListener('change', (event) => {
+  const value = Number.parseInt(event.currentTarget.value, 10);
+  if (!Number.isFinite(value)) return updateClipInspector();
+  updateSelectedClip((clip) => {
+    clip.start = Math.max(0, Math.min(value, project.settings.duration - clip.duration));
+  });
+});
+
+document.querySelector('#clip-duration').addEventListener('change', (event) => {
+  const value = Number.parseInt(event.currentTarget.value, 10);
+  if (!Number.isFinite(value)) return updateClipInspector();
+  updateSelectedClip((clip) => {
+    clip.duration = Math.max(1, Math.min(value, project.settings.duration - clip.start));
+  });
+});
+
+document.querySelector('#zoom-out').addEventListener('click', () => changeTimelineZoom(-1));
+document.querySelector('#zoom-in').addEventListener('click', () => changeTimelineZoom(1));
+
+renderTimeline();
 
 function expectedOutputFrameCount(job) {
   const output = String(job.output ?? '').split(/[\\/]/).pop() ?? '';
@@ -2769,6 +3615,13 @@ document.querySelector('#load-project').addEventListener('click', async () => {
     if (!selected || Array.isArray(selected)) return;
     document.querySelector('#project-path').value = selected;
     project = await invoke('load_project', { path: selected });
+    selectedTrackId = project.tracks?.[0]?.id ?? null;
+    selectedClipId = null;
+    selectedTimeEventId = null;
+    playing = false;
+    document.querySelector('#play-toggle').textContent = 'Play';
+    document.querySelector('#voice-over-player').pause();
+    renderTimeline();
     playbackStartedAt = performance.now();
     lastPlaybackFrame = -1;
     showMessage(`loaded ${project.composition}`);
