@@ -4,6 +4,30 @@ The `rust-motion` CLI is a first-class product surface in Rust Motion 1.0, engin
 
 ---
 
+## 0. Installation
+
+### Standalone Shell Installer (Recommended for AI Agents & CI)
+Downloads and extracts the pre-built binary for your OS and architecture (`linux-x86_64`, `macos-aarch64`, `macos-x86_64`):
+```bash
+curl -fsSL https://raw.githubusercontent.com/sjkim1127/rust-motion/main/scripts/install.sh | bash
+```
+Set `RUST_MOTION_INSTALL_DIR` to change the destination (default: `~/.local/bin`).
+
+### Homebrew (macOS)
+```bash
+brew tap sjkim1127/tap
+brew install rust-motion
+```
+
+### Python Package (PyPI)
+```bash
+pip install rust-motion
+# or via uv:
+uv tool install rust-motion
+```
+
+---
+
 ## 1. Exit Code Contract
 
 All invocations return stable, predictable exit codes:

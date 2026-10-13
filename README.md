@@ -28,6 +28,39 @@
 
 ---
 
+## 🚀 Installation
+
+### 🤖 For AI Coding Agents & Automated CI (Recommended)
+Installs the pre-compiled standalone binary in 1–2 seconds with zero external toolchain dependencies:
+```bash
+curl -fsSL https://raw.githubusercontent.com/sjkim1127/rust-motion/main/scripts/install.sh | bash
+```
+> Installs to `~/.local/bin/rust-motion` by default. Set `RUST_MOTION_INSTALL_DIR` to customize destination.
+
+### 🍺 Homebrew (macOS)
+```bash
+brew tap sjkim1127/tap
+brew install rust-motion
+```
+
+### 🐍 Python Package (PyPI)
+```bash
+pip install rust-motion
+# or using uv:
+uv tool install rust-motion
+```
+
+### 🦀 Cargo (Rust Developers)
+```bash
+# Fast binary install via cargo-binstall:
+cargo binstall rust-motion-cli
+
+# Or compile from source:
+cargo install rust-motion-cli --features rhai
+```
+
+---
+
 Rust Motion is a production-quality programmatic video rendering platform. Its native export path renders a registered `Composition` into a deterministic scene graph, rasterizes frames with `tiny-skia` or `wgpu`, and streams a bounded window of ordered RGBA frames to FFmpeg while rendering subsequent frames. Local video frames are decoded through FFmpeg, and declared audio tracks are mixed into the encoded output. The same native scene can be previewed in the Dioxus Player through `NativeCompositionPreview` or edited in the interactive Studio shell.
 
 The repository also contains Dioxus timeline, media, shape, transition, player, and Studio-preview components. The opt-in `rust-motion-vdom` adapter can translate ordinary Dioxus elements, a documented CSS subset, text, local media elements, and basic SVG shapes into the native scene graph. Existing explicit `Scene` and `SceneEmitter` APIs remain available for precise rendering control.
