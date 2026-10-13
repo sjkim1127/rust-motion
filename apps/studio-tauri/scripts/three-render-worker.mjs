@@ -11,16 +11,16 @@ const args = new Map(process.argv.slice(2).flatMap((arg) => {
   return key.startsWith('--') ? [[key.slice(2), value ?? '']] : [];
 }));
 const url = args.get('url') ?? 'http://localhost:1420';
-const compositionModule = args.get('composition-module') ?? process.env.DIOXUSCUT_BROWSER_COMPOSITION_MODULE;
+const compositionModule = args.get('composition-module') ?? process.env.RUST_MOTION_BROWSER_COMPOSITION_MODULE;
 const executablePath = args.get('browser') ?? process.env.CHROME_PATH ?? findBrowserExecutable();
-const configuredFrameTimeoutMs = Number(args.get('frame-timeout-ms') ?? process.env.DIOXUSCUT_BROWSER_FRAME_TIMEOUT_MS ?? 30000);
+const configuredFrameTimeoutMs = Number(args.get('frame-timeout-ms') ?? process.env.RUST_MOTION_BROWSER_FRAME_TIMEOUT_MS ?? 30000);
 const frameTimeoutMs = Number.isFinite(configuredFrameTimeoutMs) && configuredFrameTimeoutMs > 0
   ? configuredFrameTimeoutMs
   : 30000;
 const configuredFrameRetries = Number(
   args.get('frame-retries')
-    ?? process.env.DIOXUSCUT_BROWSER_TRANSPORT_RETRIES
-    ?? process.env.DIOXUSCUT_BROWSER_FRAME_RETRIES
+    ?? process.env.RUST_MOTION_BROWSER_TRANSPORT_RETRIES
+    ?? process.env.RUST_MOTION_BROWSER_FRAME_RETRIES
     ?? 1,
 );
 const frameRetries = Number.isInteger(configuredFrameRetries) && configuredFrameRetries >= 0
@@ -39,7 +39,7 @@ const renderFrame = (request) => new Promise((resolve, reject) => {
     () => reject(new Error(`renderFrame timed out after ${frameTimeoutMs}ms`)),
     frameTimeoutMs,
   );
-  page.evaluate((value) => window.dioxuscut.renderFrame(value), request)
+  page.evaluate((value) => window.rust_motion.renderFrame(value), request)
     .then(
       (value) => {
         clearTimeout(timer);
@@ -60,14 +60,14 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
 let viewportWidth = 1280;
 let viewportHeight = 720;
-await page.addInitScript(() => { window.__DIOXUSCUT_HEADLESS_RENDER__ = true; });
+await page.addInitScript(() => { window.__RUST_MOTION_HEADLESS_RENDER__ = true; });
 // Dev servers keep HMR/websocket connections open, so networkidle can never
 // settle. The explicit renderFrame readiness check below is the real gate.
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: frameTimeoutMs });
 if (compositionModule) {
   await page.evaluate(async (moduleUrl) => {
     const loadedModule = await eval('import(moduleUrl)');
-    const api = window.dioxuscut;
+    const api = window.rust-motion;
     if (typeof loadedModule.register === 'function') await loadedModule.register(api);
     const entries = loadedModule.compositions ?? loadedModule.default;
     if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
@@ -77,10 +77,10 @@ if (compositionModule) {
     }
   }, compositionModule);
 }
-await page.waitForFunction(() => typeof window.dioxuscut?.renderFrame === 'function', {
+await page.waitForFunction(() => typeof window.rust-motion?.renderFrame === 'function', {
   timeout: frameTimeoutMs,
 });
-const compositions = await page.evaluate(() => window.dioxuscut.listCompositions?.() ?? []);
+const compositions = await page.evaluate(() => window.rust_motion.listCompositions?.() ?? []);
 write({ type: 'ready', protocol: 1, compositions });
 
 const rl = createInterface({ input: process.stdin, terminal: false });
@@ -180,7 +180,7 @@ rl.on('line', (line) => { queue = queue.then(async () => {
       if (directRgba) {
         let videoFrame = directRgba;
         if (rgbaFileTransport) {
-          const path = `${tmpdir()}/dioxuscut-rgba-${process.pid}-${request.frame}-${Date.now()}.bin`;
+          const path = `${tmpdir()}/rust-motion-rgba-${process.pid}-${request.frame}-${Date.now()}.bin`;
           writeFileSync(path, Buffer.from(directRgba.rgba_base64, 'base64'));
           pendingFrameFiles.add(path);
           videoFrame = {width: directRgba.width, height: directRgba.height, file_path: path};
@@ -198,7 +198,7 @@ rl.on('line', (line) => { queue = queue.then(async () => {
       omitBackground: imageType === 'png' && request.transparent === true,
       quality: imageType === 'jpeg' ? (request.jpeg_quality ?? 90) : undefined });
     if (fileTransport) {
-      const path = `${tmpdir()}/dioxuscut-frame-${process.pid}-${request.frame}-${Date.now()}.${imageType}`;
+      const path = `${tmpdir()}/rust-motion-frame-${process.pid}-${request.frame}-${Date.now()}.${imageType}`;
       writeFileSync(path, screenshot);
       pendingFrameFiles.add(path);
       write({ type: 'frame', frame: request.frame, width: request.width, height: request.height, file_path: path });

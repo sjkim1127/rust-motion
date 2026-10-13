@@ -1,15 +1,15 @@
 //! Tier 4: Real-World Acceptance Scenario E2E Test
 //!
 //! Replicates real-world CLI invocation:
-//! `cargo run -p dioxuscut-cli -- render -c HelloWorld -p data.json -o output.mp4 --width 1280 --height 720 --fps 30 --duration 60`
+//! `cargo run -p rust-motion-cli -- render -c HelloWorld -p data.json -o output.mp4 --width 1280 --height 720 --fps 30 --duration 60`
 
-use dioxuscut_cli::{execute_render_command, RenderBackend, RenderRequest};
+use rust_motion_cli::{execute_render_command, RenderBackend, RenderRequest};
 use std::fs;
 
 #[tokio::test]
 async fn test_tier4_real_world_acceptance_scenario() {
     let temp_dir = std::env::temp_dir().join(format!(
-        "dioxuscut_tier4_acceptance_{}",
+        "rust_motion_tier4_acceptance_{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -21,7 +21,7 @@ async fn test_tier4_real_world_acceptance_scenario() {
     let props_path = temp_dir.join("data.json");
     let props_content = r#"{
         "title": "HelloWorld",
-        "author": "Dioxuscut E2E Suite",
+        "author": "Rust Motion E2E Suite",
         "fps": 30,
         "width": 1280,
         "height": 720
@@ -43,7 +43,7 @@ async fn test_tier4_real_world_acceptance_scenario() {
         fps: 30.0,
         duration: 60,
         backend: RenderBackend::Native,
-        codec: dioxuscut_cli::RenderCodec::H264,
+        codec: rust_motion_cli::RenderCodec::H264,
         frame_start: 0,
         frame_end: None,
         frame_step: 1,
@@ -51,7 +51,7 @@ async fn test_tier4_real_world_acceptance_scenario() {
         timeout_seconds: None,
         crf: 18,
         preset: "fast".into(),
-        hw_accel: dioxuscut_rasterizer::HwAccel::Disabled,
+        hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
         sandbox_roots: Vec::new(),
         permissive: false,
     };

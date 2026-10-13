@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use dioxuscut_core::{
+use rust_motion_core::{
     random, use_current_frame, Loop, SequenceLayout, Series, SeriesSequence, TimelineContext,
 };
 
@@ -137,7 +137,7 @@ fn test_series_sequence_min_offset_saturates_without_panicking() {
 
 #[test]
 fn test_interpolate_colors_parity() {
-    use dioxuscut_core::interpolate_colors_range;
+    use rust_motion_core::interpolate_colors_range;
 
     let frames = vec![0.0, 15.0, 30.0];
     let colors = vec!["#ff0000", "#00ff00", "#0000ff"];

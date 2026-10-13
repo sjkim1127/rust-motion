@@ -63,7 +63,7 @@ mod tests {
         let style = TextStyle::new(32.0);
 
         let layout = engine
-            .layout("Dioxuscut Engine", &style)
+            .layout("Rust Motion Engine", &style)
             .expect("layout should succeed");
         assert_eq!(layout.lines.len(), 1);
         assert!(layout.width > 50.0);

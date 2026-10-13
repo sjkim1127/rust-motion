@@ -8,15 +8,15 @@
 //! - Tier 3: Pairwise cross-feature combinations
 //! - Tier 4: Real-world video application scenario (Dynamic Presentation Deck)
 
-use dioxuscut_animation::{
+use rust_motion_animation::{
     bezier, interpolate, interpolate_colors, spring, ExtrapolateType, InterpolateOptions,
     SpringConfig,
 };
-use dioxuscut_composition::{
+use rust_motion_composition::{
     CompositionError, NativeCompositionContext, SceneEmitter, SceneFrameContext,
 };
-use dioxuscut_rasterizer::{Color, Scene, SceneNode};
-use dioxuscut_transitions::{SceneFade, SceneSlide, SlideDirection};
+use rust_motion_rasterizer::{Color, Scene, SceneNode};
+use rust_motion_transitions::{SceneFade, SceneSlide, SlideDirection};
 use serde_json::Value;
 
 fn make_test_context(w: u32, h: u32, duration: u32) -> NativeCompositionContext {

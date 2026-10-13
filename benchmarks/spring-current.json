@@ -11,7 +11,7 @@
       "calls": 300,
       "warmup_calls": 0,
       "samples_ns": {
-        "dioxuscut": [
+        "rust-motion": [
           106.11,
           26.94333333333333,
           21.803333333333335,
@@ -27,7 +27,7 @@
         ]
       },
       "median_ns": {
-        "dioxuscut": 21.803333333333335,
+        "rust-motion": 21.803333333333335,
         "remotion": 64518.75
       },
       "speedup": 2959.123222748815,
@@ -38,7 +38,7 @@
       "calls": 100000,
       "warmup_calls": 10000,
       "samples_ns": {
-        "dioxuscut": [
+        "rust-motion": [
           11.52208,
           12.14041,
           11.4325,
@@ -54,7 +54,7 @@
         ]
       },
       "median_ns": {
-        "dioxuscut": 11.62834,
+        "rust-motion": 11.62834,
         "remotion": 121.11958
       },
       "speedup": 10.415895992033256,
@@ -65,7 +65,7 @@
       "calls": 100000,
       "warmup_calls": 10000,
       "samples_ns": {
-        "dioxuscut": [
+        "rust-motion": [
           16.17875,
           16.14792,
           16.34834,
@@ -81,7 +81,7 @@
         ]
       },
       "median_ns": {
-        "dioxuscut": 16.14792,
+        "rust-motion": 16.14792,
         "remotion": 179.55833
       },
       "speedup": 11.11959496950691,
@@ -92,7 +92,7 @@
       "calls": 100000,
       "warmup_calls": 10000,
       "samples_ns": {
-        "dioxuscut": [
+        "rust-motion": [
           12.335,
           12.48459,
           11.8175,
@@ -108,7 +108,7 @@
         ]
       },
       "median_ns": {
-        "dioxuscut": 12.335,
+        "rust-motion": 12.335,
         "remotion": 203.38125
       },
       "speedup": 16.488143494122415,
@@ -119,7 +119,7 @@
       "calls": 100000,
       "warmup_calls": 10000,
       "samples_ns": {
-        "dioxuscut": [
+        "rust-motion": [
           14.96625,
           15.18084,
           15.11709,
@@ -135,7 +135,7 @@
         ]
       },
       "median_ns": {
-        "dioxuscut": 15.11709,
+        "rust-motion": 15.11709,
         "remotion": 231.82417
       },
       "speedup": 15.33523780039677,
@@ -146,7 +146,7 @@
       "calls": 100000,
       "warmup_calls": 10000,
       "samples_ns": {
-        "dioxuscut": [
+        "rust-motion": [
           7.41708,
           7.75791,
           8.01958,
@@ -162,7 +162,7 @@
         ]
       },
       "median_ns": {
-        "dioxuscut": 8.01958,
+        "rust-motion": 8.01958,
         "remotion": 126.20584
       },
       "speedup": 15.737213170764553,
@@ -173,7 +173,7 @@
       "calls": 100000,
       "warmup_calls": 10000,
       "samples_ns": {
-        "dioxuscut": [
+        "rust-motion": [
           34.47291,
           34.54541,
           34.44458,
@@ -189,7 +189,7 @@
         ]
       },
       "median_ns": {
-        "dioxuscut": 34.47291,
+        "rust-motion": 34.47291,
         "remotion": 472.90708
       },
       "speedup": 13.71822338178007,

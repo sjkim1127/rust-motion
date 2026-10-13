@@ -4,7 +4,7 @@
 //!
 //! # Usage
 //! ```rust,ignore
-//! use dioxuscut_core::hooks::use_video_config;
+//! use rust_motion_core::hooks::use_video_config;
 //!
 //! fn MyComponent() -> Element {
 //!     let config = use_video_config();

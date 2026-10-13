@@ -1,6 +1,6 @@
-//! # dioxuscut-animation
+//! # rust-motion-animation
 //!
-//! Remotion-compatible animation primitives for Dioxuscut.
+//! Remotion-compatible animation primitives for Rust Motion.
 //!
 //! Provides:
 //! - [`interpolate`] — maps a value from one range to another (Remotion `interpolate()`)

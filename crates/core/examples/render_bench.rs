@@ -1,6 +1,6 @@
 //! Native counterpart of benchmarks/remotion/scene.tsx.
-use dioxuscut_animation::{spring_with_options, SpringConfig, SpringOptions};
-use dioxuscut_rasterizer::{
+use rust_motion_animation::{spring_with_options, SpringConfig, SpringOptions};
+use rust_motion_rasterizer::{
     render_to_ffmpeg_pipe, Color, FrameConfig, PipeConfig, RasterizerBackend, Scene, SceneNode,
     TinySkiaBackend,
 };
@@ -63,7 +63,7 @@ fn main() {
     let config = PipeConfig::new(1280, 720, 30.0, 180, &args[1])
         .with_concurrency(concurrency)
         .with_quality(18, "fast")
-        .with_control(dioxuscut_rasterizer::RenderControl::new().with_stderr_render_stats());
+        .with_control(rust_motion_rasterizer::RenderControl::new().with_stderr_render_stats());
     let start = Instant::now();
     render_to_ffmpeg_pipe(&backend, &config, scene).unwrap();
     println!(

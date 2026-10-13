@@ -1,7 +1,7 @@
-use dioxuscut_cli::composition::{built_in_registry, NativeCompositionContext};
-use dioxuscut_cli::rhai_runtime::RhaiComposition;
-use dioxuscut_cli::Composition;
-use dioxuscut_rasterizer::SceneNode;
+use rust_motion_cli::composition::{built_in_registry, NativeCompositionContext};
+use rust_motion_cli::rhai_runtime::RhaiComposition;
+use rust_motion_cli::Composition;
+use rust_motion_rasterizer::SceneNode;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;

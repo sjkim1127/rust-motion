@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-pub use dioxuscut_rasterizer::scene::VisualizerStyle;
+pub use rust_motion_rasterizer::scene::VisualizerStyle;
 
 /// Props for the `<AudioVisualizer>` component.
 #[derive(Props, Clone, PartialEq)]

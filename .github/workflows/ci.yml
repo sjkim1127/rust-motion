@@ -31,7 +31,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check Dioxus Web core
-        run: cargo check --locked -p dioxuscut-core --features web --target wasm32-unknown-unknown
+        run: cargo check --locked -p rust-motion-core --features web --target wasm32-unknown-unknown
 
   platform_contracts:
     name: Dioxus and Tauri platform contracts
@@ -66,7 +66,7 @@ jobs:
         run: mkdir -p apps/studio-tauri/dist
 
       - name: Check Tauri host contract
-        run: cargo check --locked -p dioxuscut-studio-tauri
+        run: cargo check --locked -p rust-motion-studio-tauri
 
   # ── 1. Code Formatting & Clippy Lints ─────────────────────────────────────
   fmt_clippy:
@@ -152,21 +152,21 @@ jobs:
 
       - name: Run All Workspace Tests
         if: runner.os != 'Windows'
-        run: cargo test --locked --workspace --exclude dioxuscut-python
+        run: cargo test --locked --workspace --exclude rust-motion-python
 
       # FFmpeg-backed tests share process-level environment and temporary
       # resources on Windows. Keep the same coverage serial, but split the
       # targets so a stalled integration test cannot hide unit-test progress.
       - name: Run Workspace Unit Tests (Windows, serial)
         if: runner.os == 'Windows'
-        run: cargo test --locked --workspace --exclude dioxuscut-python --lib --bins -- --test-threads=1
+        run: cargo test --locked --workspace --exclude rust-motion-python --lib --bins -- --test-threads=1
 
       - name: Run Workspace Integration Tests (Windows, serial)
         if: runner.os == 'Windows'
-        run: cargo test --locked --workspace --exclude dioxuscut-python --tests -- --test-threads=1
+        run: cargo test --locked --workspace --exclude rust-motion-python --tests -- --test-threads=1
 
       - name: Test GPU scene compilation without device initialization
-        run: 'cargo test --locked -p dioxuscut-rasterizer --features gpu support_tests::'
+        run: 'cargo test --locked -p rust-motion-rasterizer --features gpu support_tests::'
 
   # ── 3. Tauri app bundle and bundled browser worker ────────────────────────
   tauri_app_bundle:
@@ -192,7 +192,7 @@ jobs:
         working-directory: apps/studio-tauri
 
       - name: Verify bundled browser worker
-        run: test -f "target/debug/bundle/macos/Dioxuscut Studio.app/Contents/Resources/_up_/scripts/three-render-worker.mjs"
+        run: test -f "target/debug/bundle/macos/Rust Motion Studio.app/Contents/Resources/_up_/scripts/three-render-worker.mjs"
 
   tauri_linux_bundle:
     name: Tauri Linux bundle
@@ -258,24 +258,24 @@ jobs:
 
       - name: Start Vite preview server
         run: |
-          npm run dev -- --port 1421 > /tmp/dioxuscut-vite.log 2>&1 &
+          npm run dev -- --port 1421 > /tmp/rust-motion-vite.log 2>&1 &
           for attempt in $(seq 1 30); do
             curl --fail --silent http://127.0.0.1:1421/ > /dev/null && exit 0
             sleep 1
           done
-          cat /tmp/dioxuscut-vite.log
+          cat /tmp/rust-motion-vite.log
           exit 1
         working-directory: apps/studio-tauri
 
       - name: Exercise Three.js lifecycle through worker
         env:
-          DIOXUSCUT_BROWSER_URL: http://127.0.0.1:1421
+          RUST_MOTION_BROWSER_URL: http://127.0.0.1:1421
           CHROME_PATH: /usr/bin/google-chrome
         run: node benchmarks/browser/three-lifecycle-smoke.mjs
 
       - name: Exercise WebCodecs contract
         env:
-          DIOXUSCUT_BROWSER_URL: http://127.0.0.1:1421
+          RUST_MOTION_BROWSER_URL: http://127.0.0.1:1421
           CHROME_PATH: /usr/bin/google-chrome
         run: node benchmarks/browser/webcodecs-contract-smoke.mjs
 

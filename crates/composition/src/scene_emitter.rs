@@ -1,7 +1,7 @@
 //! Composable browser-free scene emitters.
 
 use crate::{CompositionError, NativeComposition, NativeCompositionContext};
-use dioxuscut_rasterizer::{
+use rust_motion_rasterizer::{
     layout_text_box, BlendMode, ClipRegion, Color, GradientStop, MaskMode, Scene, SceneFilter,
     SceneNode, SceneShadow, TextBox, TextHorizontalAlign, TextOverflow, TextVerticalAlign,
     Transform2D,
@@ -122,7 +122,7 @@ impl SceneEmitter for SceneStack {
     }
 }
 
-/// Native equivalent of Dioxuscut's `<Sequence>` timeline boundary.
+/// Native equivalent of Rust Motion's `<Sequence>` timeline boundary.
 pub struct SceneSequence<E> {
     pub from: u32,
     pub duration_in_frames: Option<u32>,
@@ -1419,7 +1419,7 @@ impl<E: SceneEmitter> SceneEmitter for SceneTrail<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dioxuscut_rasterizer::{Color, ImageFit};
+    use rust_motion_rasterizer::{Color, ImageFit};
 
     fn context() -> NativeCompositionContext {
         NativeCompositionContext {
@@ -1597,7 +1597,7 @@ mod tests {
 
     #[test]
     fn text_block_resolves_wrapping_fitting_and_alignment() {
-        let font_cache = dioxuscut_rasterizer::FontCache::load();
+        let font_cache = rust_motion_rasterizer::FontCache::load();
         let Some(font) = font_cache.font_path() else {
             return;
         };
@@ -1680,7 +1680,7 @@ mod tests {
 
     #[test]
     fn scene_linear_gradient_emits_correct_gradient_node() {
-        use dioxuscut_rasterizer::GradientStop;
+        use rust_motion_rasterizer::GradientStop;
         let gradient = SceneLinearGradient::new(
             0.0,
             0.0,

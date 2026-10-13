@@ -3,11 +3,11 @@ requires = ["maturin>=1.5,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "dioxuscut"
+name = "rust-motion"
 version = "1.0.0"
 description = "High-performance browser-free programmatic video rendering engine for Python"
 readme = "README.md"
-authors = [{ name = "Dioxuscut Contributors" }]
+authors = [{ name = "Rust Motion Contributors" }]
 license = { text = "MIT OR Apache-2.0" }
 requires-python = ">=3.10"
 keywords = [
@@ -39,4 +39,4 @@ Issues = "https://github.com/sjkim1127/rust-motion/issues"
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "python"
-module-name = "dioxuscut._dioxuscut"
+module-name = "rust_motion._rust_motion"

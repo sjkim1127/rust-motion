@@ -92,10 +92,12 @@ fn gpu_disjoint_texture_layer_matches_cpu_pixels() {
         println!("GPU backend unavailable; skipping disjoint texture parity test");
         return;
     };
-    let red_path =
-        std::env::temp_dir().join(format!("dioxuscut-disjoint-red-{}.png", std::process::id()));
+    let red_path = std::env::temp_dir().join(format!(
+        "rust-motion-disjoint-red-{}.png",
+        std::process::id()
+    ));
     let blue_path = std::env::temp_dir().join(format!(
-        "dioxuscut-disjoint-blue-{}.png",
+        "rust-motion-disjoint-blue-{}.png",
         std::process::id()
     ));
     image::RgbaImage::from_pixel(2, 2, image::Rgba([240, 32, 24, 255]))
@@ -174,10 +176,14 @@ fn gpu_overlapping_texture_layer_composites_on_gpu() {
         println!("GPU backend unavailable; skipping overlapping texture parity test");
         return;
     };
-    let red_path =
-        std::env::temp_dir().join(format!("dioxuscut-overlap-red-{}.png", std::process::id()));
-    let blue_path =
-        std::env::temp_dir().join(format!("dioxuscut-overlap-blue-{}.png", std::process::id()));
+    let red_path = std::env::temp_dir().join(format!(
+        "rust-motion-overlap-red-{}.png",
+        std::process::id()
+    ));
+    let blue_path = std::env::temp_dir().join(format!(
+        "rust-motion-overlap-blue-{}.png",
+        std::process::id()
+    ));
     image::RgbaImage::from_pixel(2, 2, image::Rgba([240, 32, 24, 255]))
         .save(&red_path)
         .unwrap();
@@ -364,7 +370,8 @@ fn gpu_image_fits_match_cpu_for_all_modes() {
         println!("GPU backend unavailable; skipping image fit parity test");
         return;
     };
-    let path = std::env::temp_dir().join(format!("dioxuscut-image-fit-{}.png", std::process::id()));
+    let path =
+        std::env::temp_dir().join(format!("rust-motion-image-fit-{}.png", std::process::id()));
     let mut source = image::RgbaImage::new(2, 1);
     source.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
     source.put_pixel(1, 0, image::Rgba([0, 0, 255, 255]));
@@ -414,7 +421,7 @@ fn gpu_image_fits_match_cpu_for_all_modes() {
     // the destination box. This exercises target clipping and catches a
     // top-left crop masquerading as a centered natural-size draw.
     let oversized_path = std::env::temp_dir().join(format!(
-        "dioxuscut-image-fit-oversized-{}.png",
+        "rust-motion-image-fit-oversized-{}.png",
         std::process::id()
     ));
     let mut oversized = image::RgbaImage::new(80, 40);
@@ -472,7 +479,7 @@ fn gpu_image_transform_and_opacity_match_cpu() {
         return;
     };
     let path = std::env::temp_dir().join(format!(
-        "dioxuscut-image-transform-{}.png",
+        "rust-motion-image-transform-{}.png",
         std::process::id()
     ));
     let mut source = image::RgbaImage::new(2, 2);
@@ -1215,7 +1222,7 @@ fn gpu_lottie_frame_is_uploaded_and_composited_as_a_texture() {
         println!("GPU backend unavailable; skipping Lottie GPU test");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("dioxuscut-wgpu-lottie-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("rust-motion-wgpu-lottie-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&dir);
     let source = dir.join("pulse.json");
     std::fs::write(
@@ -2471,7 +2478,8 @@ fn gpu_gif_frame_uses_texture_path_and_matches_cpu() {
         println!("GPU backend unavailable; skipping GIF texture test");
         return;
     };
-    let path = std::env::temp_dir().join(format!("dioxuscut-wgpu-gif-{}.gif", std::process::id()));
+    let path =
+        std::env::temp_dir().join(format!("rust-motion-wgpu-gif-{}.gif", std::process::id()));
     let file = std::fs::File::create(&path).unwrap();
     let mut encoder = GifEncoder::new(file);
     encoder.set_repeat(Repeat::Infinite).unwrap();
@@ -2534,7 +2542,7 @@ fn gpu_gif_playback_rate_and_loop_behavior_parity_with_cpu() {
         return;
     };
     let path = std::env::temp_dir().join(format!(
-        "dioxuscut-test-rate-{}.gif",
+        "rust-motion-test-rate-{}.gif",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -2646,7 +2654,7 @@ fn gpu_gif_frame_index_cache_hit_across_timestamps() {
         return;
     };
     let path = std::env::temp_dir().join(format!(
-        "dioxuscut-test-gif-cache-{}.gif",
+        "rust-motion-test-gif-cache-{}.gif",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -2817,7 +2825,7 @@ fn gpu_native_video_stream_delivers_ordered_frames_without_readback() {
         return;
     };
     let dir = std::env::temp_dir().join(format!(
-        "dioxuscut-wgpu-video-stream-{}",
+        "rust-motion-wgpu-video-stream-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);
@@ -2883,7 +2891,7 @@ fn gpu_video_frame_uses_decoded_texture_path() {
         println!("GPU backend unavailable; skipping GPU video test");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("dioxuscut-wgpu-video-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("rust-motion-wgpu-video-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let source = dir.join("red.mkv");
@@ -3002,7 +3010,8 @@ fn gpu_video_fits_match_cpu_for_all_modes() {
         println!("GPU backend unavailable; skipping GPU video fit test");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("dioxuscut-wgpu-video-fit-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("rust-motion-wgpu-video-fit-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let source = dir.join("rectangular.mkv");
@@ -3083,7 +3092,7 @@ fn gpu_video_rotation_matches_cpu_display_orientation() {
         return;
     };
     let dir = std::env::temp_dir().join(format!(
-        "dioxuscut-wgpu-rotated-video-{}",
+        "rust-motion-wgpu-rotated-video-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);
@@ -3157,7 +3166,7 @@ fn gpu_vfr_video_rotation_matches_cpu_across_timeline() {
         return;
     };
     let dir = std::env::temp_dir().join(format!(
-        "dioxuscut-wgpu-vfr-rotation-{}",
+        "rust-motion-wgpu-vfr-rotation-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);

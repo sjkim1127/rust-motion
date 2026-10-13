@@ -120,7 +120,7 @@ jobs:
       - name: Smoke test wheel (x86_64 native)
         if: matrix.platform.target == 'x86_64-unknown-linux-gnu'
         env:
-          DIOXUSCUT_TEST_OUTPUT_DIR: ${{ runner.temp }}/dioxuscut-python-smoke
+          RUST_MOTION_TEST_OUTPUT_DIR: ${{ runner.temp }}/rust-motion-python-smoke
         run: |
           pip install dist/*.whl
           python3 smoke-tests/crates/python/tests/test_binding.py
@@ -166,7 +166,7 @@ jobs:
       - name: Smoke test wheel (Apple Silicon native)
         if: matrix.platform.target == 'aarch64-apple-darwin'
         env:
-          DIOXUSCUT_TEST_OUTPUT_DIR: ${{ runner.temp }}/dioxuscut-python-smoke
+          RUST_MOTION_TEST_OUTPUT_DIR: ${{ runner.temp }}/rust-motion-python-smoke
         run: |
           pip install dist/*.whl
           python3 smoke-tests/crates/python/tests/test_binding.py
@@ -209,7 +209,7 @@ jobs:
         shell: bash
         env:
           PYTHONUTF8: '1'
-          DIOXUSCUT_TEST_OUTPUT_DIR: ${{ runner.temp }}/dioxuscut-python-smoke
+          RUST_MOTION_TEST_OUTPUT_DIR: ${{ runner.temp }}/rust-motion-python-smoke
         run: |
           pip install dist/*.whl
           python smoke-tests/crates/python/tests/test_binding.py

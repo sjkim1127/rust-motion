@@ -1,6 +1,6 @@
 //! Integration tests for NoiseBackground component and procedural SVG generation.
 
-use dioxuscut_noise::{
+use rust_motion_noise::{
     generate_noise_svg_data_url, generate_noise_wave_path, NoiseBackgroundProps, NoisePatternKind,
     WavePathOptions,
 };

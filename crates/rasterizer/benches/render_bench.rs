@@ -1,16 +1,16 @@
 //! Criterion benchmarks: CPU (`TinySkiaBackend`) vs GPU (`WgpuBackend`).
 //!
 //! Run all benchmarks:
-//!   cargo bench -p dioxuscut-rasterizer --features gpu
+//!   cargo bench -p rust-motion-rasterizer --features gpu
 //!
 //! Run as unit-test smoke checks (no timing, just assert no panic):
-//!   cargo bench -p dioxuscut-rasterizer --features gpu -- --test
+//!   cargo bench -p rust-motion-rasterizer --features gpu -- --test
 //!
 //! CPU-only (no GPU feature):
-//!   cargo bench -p dioxuscut-rasterizer
+//!   cargo bench -p rust-motion-rasterizer
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use dioxuscut_rasterizer::{
+use rust_motion_rasterizer::{
     backend::{FrameConfig, RasterizerBackend},
     scene::{Color, GradientStop, Scene, SceneNode},
     tiny_skia_backend::TinySkiaBackend,
@@ -178,7 +178,7 @@ fn scene_image_fallback() -> Scene {
                 y: 120.0,
                 w: 1600.0,
                 h: 840.0,
-                fit: dioxuscut_rasterizer::scene::ImageFit::Cover,
+                fit: rust_motion_rasterizer::scene::ImageFit::Cover,
                 opacity: 0.9,
             },
         ],
@@ -284,7 +284,7 @@ fn bench_cpu_resolutions(c: &mut Criterion) {
 
 #[cfg(feature = "gpu")]
 fn bench_gpu_scenes(c: &mut Criterion) {
-    use dioxuscut_rasterizer::wgpu_backend::WgpuBackend;
+    use rust_motion_rasterizer::wgpu_backend::WgpuBackend;
 
     let backend = match WgpuBackend::new() {
         Ok(b) => b,
@@ -315,7 +315,7 @@ fn bench_gpu_scenes(c: &mut Criterion) {
 
 #[cfg(feature = "gpu")]
 fn bench_gpu_image_cache(c: &mut Criterion) {
-    use dioxuscut_rasterizer::wgpu_backend::WgpuBackend;
+    use rust_motion_rasterizer::wgpu_backend::WgpuBackend;
 
     let Ok(warm_backend) = WgpuBackend::new() else {
         eprintln!("GPU backend unavailable, skipping image cache benchmark");
@@ -353,7 +353,7 @@ fn bench_gpu_image_cache(c: &mut Criterion) {
 
 #[cfg(feature = "gpu")]
 fn bench_gpu_video_frames(c: &mut Criterion) {
-    use dioxuscut_rasterizer::wgpu_backend::WgpuBackend;
+    use rust_motion_rasterizer::wgpu_backend::WgpuBackend;
 
     if std::process::Command::new("ffmpeg")
         .arg("-version")
@@ -372,7 +372,7 @@ fn bench_gpu_video_frames(c: &mut Criterion) {
         return;
     };
     let external_source =
-        std::env::var_os("DIOXUSCUT_VIDEO_BENCH_SOURCE").map(std::path::PathBuf::from);
+        std::env::var_os("RUST_MOTION_VIDEO_BENCH_SOURCE").map(std::path::PathBuf::from);
     let (source, temporary_dir) = if let Some(source) = external_source {
         if !source.is_file() {
             eprintln!(
@@ -383,8 +383,10 @@ fn bench_gpu_video_frames(c: &mut Criterion) {
         }
         (source, None)
     } else {
-        let dir =
-            std::env::temp_dir().join(format!("dioxuscut-gpu-video-bench-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "rust-motion-gpu-video-bench-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let source = dir.join("gradient.mkv");
@@ -423,7 +425,7 @@ fn bench_gpu_video_frames(c: &mut Criterion) {
             y: 0.0,
             w: 1920.0,
             h: 1080.0,
-            fit: dioxuscut_rasterizer::scene::ImageFit::Cover,
+            fit: rust_motion_rasterizer::scene::ImageFit::Cover,
             opacity: 1.0,
         }],
     };
@@ -451,7 +453,7 @@ fn bench_gpu_video_frames(c: &mut Criterion) {
                         y: 0.0,
                         w: 1920.0,
                         h: 1080.0,
-                        fit: dioxuscut_rasterizer::scene::ImageFit::Cover,
+                        fit: rust_motion_rasterizer::scene::ImageFit::Cover,
                         opacity: 1.0,
                     }],
                 };
@@ -478,7 +480,7 @@ fn bench_gpu_video_frames(c: &mut Criterion) {
                                 y: 0.0,
                                 w: 1920.0,
                                 h: 1080.0,
-                                fit: dioxuscut_rasterizer::scene::ImageFit::Cover,
+                                fit: rust_motion_rasterizer::scene::ImageFit::Cover,
                                 opacity: 1.0,
                             }],
                         })
@@ -522,7 +524,7 @@ fn bench_gpu_video_frames(c: &mut Criterion) {
 
 #[cfg(feature = "gpu")]
 fn bench_gpu_resolutions(c: &mut Criterion) {
-    use dioxuscut_rasterizer::wgpu_backend::WgpuBackend;
+    use rust_motion_rasterizer::wgpu_backend::WgpuBackend;
 
     let backend = match WgpuBackend::new() {
         Ok(b) => b,
@@ -554,7 +556,7 @@ fn bench_gpu_resolutions(c: &mut Criterion) {
 
 #[cfg(feature = "gpu")]
 fn bench_gpu_streaming(c: &mut Criterion) {
-    use dioxuscut_rasterizer::wgpu_backend::WgpuBackend;
+    use rust_motion_rasterizer::wgpu_backend::WgpuBackend;
 
     let backend = match WgpuBackend::new() {
         Ok(b) => b,
@@ -610,7 +612,7 @@ fn bench_gpu_streaming(c: &mut Criterion) {
 
 #[cfg(feature = "gpu")]
 fn bench_gpu_concurrent_resolutions(c: &mut Criterion) {
-    use dioxuscut_rasterizer::wgpu_backend::WgpuBackend;
+    use rust_motion_rasterizer::wgpu_backend::WgpuBackend;
     use std::sync::Arc;
 
     let backend = match WgpuBackend::new() {
@@ -648,7 +650,7 @@ fn bench_gpu_concurrent_resolutions(c: &mut Criterion) {
 
 #[cfg(feature = "gpu")]
 fn bench_gpu_text_atlas(c: &mut Criterion) {
-    use dioxuscut_rasterizer::wgpu_backend::WgpuBackend;
+    use rust_motion_rasterizer::wgpu_backend::WgpuBackend;
     use std::time::Instant;
     let backend = match WgpuBackend::new() {
         Ok(b) => b,
@@ -712,12 +714,12 @@ fn bench_gpu_text_atlas(c: &mut Criterion) {
 
 #[cfg(feature = "gpu")]
 fn bench_gpu_lottie(c: &mut Criterion) {
-    use dioxuscut_rasterizer::gif_cache::LoopBehavior;
-    use dioxuscut_rasterizer::wgpu_backend::WgpuBackend;
+    use rust_motion_rasterizer::gif_cache::LoopBehavior;
+    use rust_motion_rasterizer::wgpu_backend::WgpuBackend;
     use std::time::Instant;
 
     let source = std::env::temp_dir().join(format!(
-        "dioxuscut-bench-lottie-{}.json",
+        "rust-motion-bench-lottie-{}.json",
         std::process::id()
     ));
     std::fs::write(

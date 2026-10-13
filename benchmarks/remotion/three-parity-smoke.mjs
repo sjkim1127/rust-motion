@@ -11,21 +11,21 @@ const require = createRequire(new URL('../../apps/studio-tauri/package.json', im
 const {chromium} = require('playwright-core');
 const {PNG} = require('pngjs');
 const browserExecutable = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const url = process.env.DIOXUSCUT_BROWSER_URL ?? 'http://127.0.0.1:1420';
+const url = process.env.RUST_MOTION_BROWSER_URL ?? 'http://127.0.0.1:1420';
 const frames = [0, 1, 15, 30, 59];
 const output = path.join(root, 'target/browser-three-parity-smoke');
 mkdirSync(output, {recursive: true});
 const serveUrl = await bundle({entryPoint: path.join(root, 'benchmarks/remotion/three-parity-scene.tsx'), outDir: path.join(output, 'bundle')});
 const dioxusBrowser = await chromium.launch({executablePath: browserExecutable, headless: true});
 const page = await dioxusBrowser.newPage({viewport: {width: 640, height: 360}, deviceScaleFactor: 1});
-await page.addInitScript(() => { window.__DIOXUSCUT_HEADLESS_RENDER__ = true; });
+await page.addInitScript(() => { window.__RUST_MOTION_HEADLESS_RENDER__ = true; });
 await page.goto(url, {waitUntil: 'domcontentloaded'});
-await page.waitForFunction(() => typeof window.dioxuscut?.renderFrame === 'function');
+await page.waitForFunction(() => typeof window.rust-motion?.renderFrame === 'function');
 const dioxusTimings = new Map();
 try {
   for (const frame of frames) {
     const dioxusStart = performance.now();
-    await page.evaluate((nextFrame) => window.dioxuscut.renderFrame({composition: 'three_lifecycle_preview', frame: nextFrame, fps: 30, width: 640, height: 360, props: {}}), frame);
+    await page.evaluate((nextFrame) => window.rust_motion.renderFrame({composition: 'three_lifecycle_preview', frame: nextFrame, fps: 30, width: 640, height: 360, props: {}}), frame);
     const dioxusData = await page.evaluate(() => document.querySelector('#preview-canvas').toDataURL('image/png'));
     dioxusTimings.set(frame, performance.now() - dioxusStart);
     const dioxusPath = path.join(output, `dioxus-${frame}.png`);

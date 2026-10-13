@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
-use dioxuscut_rasterizer::{Color, SceneNode};
-use dioxuscut_vdom::{render_virtual_dom, Stylesheet};
+use rust_motion_rasterizer::{Color, SceneNode};
+use rust_motion_vdom::{render_virtual_dom, Stylesheet};
 
 #[test]
 fn test_tailwind_flexbox_and_colors() {
@@ -222,7 +222,7 @@ fn test_tailwind_utility_overrides_stylesheet_class() {
 
 #[test]
 fn test_direct_apply_utility_class() {
-    use dioxuscut_vdom::{apply_utility_class, ResolvedStyle};
+    use rust_motion_vdom::{apply_utility_class, ResolvedStyle};
     use taffy::prelude::Display;
 
     let mut style = ResolvedStyle::default();

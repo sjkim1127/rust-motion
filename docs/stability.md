@@ -18,13 +18,13 @@ Changes to these surfaces will be strictly backward-compatible across minor and 
 
 | Surface | Modules / Crates | Scope |
 |---|---|---|
-| **Core Types** | `dioxuscut-core` | `Scene`, `SceneNode`, `SceneFilter`, `Transform2D`, `Color`, composition contexts, and lifecycle hooks (`use_current_frame`, `use_video_config`). |
-| **Composition** | `dioxuscut-composition` | Composition emitters (`SceneEmitter`), temporal containers (`SceneSequence`, `SceneSeries`, `SceneLoop`, `SceneTransitionSeries`), and named markers (`TimeEvent`, `NamedTimeEvent`). |
-| **Media Emitters** | `dioxuscut-media` | Native media nodes (`SceneVideo`, `SceneAudio`, `SceneImage`, `SceneGif`), and media metadata probing. |
-| **Project Schema** | `dioxuscut-project` | `Project`, `ProjectSettings`, `Track`, `Clip`, `Asset`, `NamedTimeEvent`, project file loading, editing, saving, and local asset resolution. |
-| **Renderer** | `dioxuscut-renderer` | Headless render invocation, render options, frame progress callbacks, and cancellation signals. |
-| **CLI** | `dioxuscut-cli` (`dioxuscut`) | Stable commands: `render`, `render-project`, `validate`, `inspect`, `doctor`, `probe`, `serve`. Stable JSON modes and exit codes. |
-| **Python Bindings** | `dioxuscut` (PyPI) | Python module exports, composition contexts, project rendering functions, and CLI invocation. |
+| **Core Types** | `rust-motion-core` | `Scene`, `SceneNode`, `SceneFilter`, `Transform2D`, `Color`, composition contexts, and lifecycle hooks (`use_current_frame`, `use_video_config`). |
+| **Composition** | `rust-motion-composition` | Composition emitters (`SceneEmitter`), temporal containers (`SceneSequence`, `SceneSeries`, `SceneLoop`, `SceneTransitionSeries`), and named markers (`TimeEvent`, `NamedTimeEvent`). |
+| **Media Emitters** | `rust-motion-media` | Native media nodes (`SceneVideo`, `SceneAudio`, `SceneImage`, `SceneGif`), and media metadata probing. |
+| **Project Schema** | `rust-motion-project` | `Project`, `ProjectSettings`, `Track`, `Clip`, `Asset`, `NamedTimeEvent`, project file loading, editing, saving, and local asset resolution. |
+| **Renderer** | `rust-motion-renderer` | Headless render invocation, render options, frame progress callbacks, and cancellation signals. |
+| **CLI** | `rust-motion-cli` (`rust-motion`) | Stable commands: `render`, `render-project`, `validate`, `inspect`, `doctor`, `probe`, `serve`. Stable JSON modes and exit codes. |
+| **Python Bindings** | `rust-motion` (PyPI) | Python module exports, composition contexts, project rendering functions, and CLI invocation. |
 
 ### 2.2 Experimental Capabilities
 
@@ -32,7 +32,7 @@ Features marked experimental may evolve across minor releases based on community
 
 - **GPU Renderer (`wgpu_backend`)**: Hardware-accelerated texture rasterization and pipeline passes are operational but subject to driver variation. The native CPU rasterizer remains the reference implementation for 1.x.
 - **Browser Worker Transport (`web_backend`)**: Headless WebCodecs execution via external browser workers.
-- **Remotion Transpiler (`dioxuscut migrate`)**: Heuristic migration scaffolding for Remotion `.tsx` files.
+- **Remotion Transpiler (`rust-motion migrate`)**: Heuristic migration scaffolding for Remotion `.tsx` files.
 - **Experimental CLI flags**: Any argument prefixed or documented with `[EXPERIMENTAL]`.
 
 ### 2.3 Internal Implementation Details

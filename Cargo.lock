@@ -1875,292 +1875,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dioxuscut-animation"
-version = "1.0.0"
-dependencies = [
- "approx",
- "num-traits",
- "ordered-float",
- "serde",
-]
-
-[[package]]
-name = "dioxuscut-captions"
-version = "1.0.0"
-dependencies = [
- "dioxus",
- "dioxuscut-composition",
- "dioxuscut-core",
- "dioxuscut-rasterizer",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "dioxuscut-charts"
-version = "1.0.0"
-dependencies = [
- "dioxuscut-composition",
- "dioxuscut-paths",
- "dioxuscut-rasterizer",
- "quick-xml 0.42.0",
- "rquickjs",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tracing",
-]
-
-[[package]]
-name = "dioxuscut-cli"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "axum",
- "base64 0.22.1",
- "clap",
- "dioxuscut-animation",
- "dioxuscut-charts",
- "dioxuscut-composition",
- "dioxuscut-media",
- "dioxuscut-paths",
- "dioxuscut-project",
- "dioxuscut-rasterizer",
- "dioxuscut-renderer",
- "dioxuscut-shapes",
- "filetime",
- "futures-util",
- "image",
- "notify",
- "reqwest",
- "rhai",
- "serde",
- "serde_json",
- "taffy",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tokio-tungstenite",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "dioxuscut-composition"
-version = "1.0.0"
-dependencies = [
- "dioxuscut-animation",
- "dioxuscut-project",
- "dioxuscut-rasterizer",
- "serde",
- "serde_json",
- "taffy",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "dioxuscut-core"
-version = "1.0.0"
-dependencies = [
- "dioxus",
- "dioxus-ssr",
- "dioxuscut-animation",
- "dioxuscut-composition",
- "dioxuscut-rasterizer",
- "js-sys",
- "serde",
- "serde_json",
- "tracing",
- "web-sys",
-]
-
-[[package]]
-name = "dioxuscut-media"
-version = "1.0.0"
-dependencies = [
- "dioxus",
- "dioxuscut-composition",
- "dioxuscut-core",
- "dioxuscut-rasterizer",
- "hound",
- "image",
- "serde",
- "serde_json",
- "symphonia",
- "thiserror 1.0.69",
- "tracing",
-]
-
-[[package]]
-name = "dioxuscut-noise"
-version = "1.0.0"
-dependencies = [
- "dioxus",
- "dioxuscut-core",
- "serde",
-]
-
-[[package]]
-name = "dioxuscut-paths"
-version = "1.0.0"
-dependencies = [
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "dioxuscut-player"
-version = "1.0.0"
-dependencies = [
- "dioxus",
- "dioxuscut-animation",
- "dioxuscut-composition",
- "dioxuscut-core",
- "dioxuscut-rasterizer",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "dioxuscut-project"
-version = "1.0.0"
-dependencies = [
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "dioxuscut-python"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "dioxuscut-animation",
- "dioxuscut-captions",
- "dioxuscut-cli",
- "dioxuscut-composition",
- "dioxuscut-media",
- "dioxuscut-paths",
- "dioxuscut-rasterizer",
- "dioxuscut-shapes",
- "pyo3",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "dioxuscut-rasterizer"
-version = "1.0.0"
-dependencies = [
- "ab_glyph",
- "base64 0.22.1",
- "criterion",
- "dioxuscut-composition",
- "image",
- "lyon_tessellation",
- "pollster 0.4.0",
- "rasterlottie",
- "rayon",
- "resvg",
- "rustybuzz",
- "serde",
- "serde_json",
- "symphonia",
- "tempfile",
- "thiserror 1.0.69",
- "tiny-skia 0.11.4",
- "tracing",
- "unicode-bidi",
- "unicode-linebreak",
- "unicode-segmentation",
- "urlencoding",
- "wgpu",
-]
-
-[[package]]
-name = "dioxuscut-renderer"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "axum",
- "bytes",
- "futures",
- "image",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "tower-http 0.5.2",
- "tracing",
-]
-
-[[package]]
-name = "dioxuscut-shapes"
-version = "1.0.0"
-dependencies = [
- "dioxus",
- "dioxuscut-animation",
- "dioxuscut-composition",
- "dioxuscut-paths",
- "dioxuscut-rasterizer",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "dioxuscut-studio-tauri"
-version = "1.0.0"
-dependencies = [
- "dioxuscut-cli",
- "dioxuscut-composition",
- "dioxuscut-project",
- "dioxuscut-rasterizer",
- "dioxuscut-renderer",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "dioxuscut-transitions"
-version = "1.0.0"
-dependencies = [
- "dioxus",
- "dioxuscut-animation",
- "dioxuscut-composition",
- "dioxuscut-core",
- "dioxuscut-rasterizer",
- "serde_json",
-]
-
-[[package]]
-name = "dioxuscut-vdom"
-version = "1.0.0"
-dependencies = [
- "dioxus",
- "dioxus-core",
- "dioxuscut-composition",
- "dioxuscut-rasterizer",
- "serde_json",
- "taffy",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "dirs"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2460,11 +2174,11 @@ version = "1.0.0"
 dependencies = [
  "dioxus",
  "dioxus-web",
- "dioxuscut-animation",
- "dioxuscut-core",
- "dioxuscut-player",
- "dioxuscut-shapes",
- "dioxuscut-transitions",
+ "rust-motion-animation",
+ "rust-motion-core",
+ "rust-motion-player",
+ "rust-motion-shapes",
+ "rust-motion-transitions",
  "serde",
  "serde_json",
  "tracing-subscriber",
@@ -6276,6 +5990,292 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-animation"
+version = "1.0.0"
+dependencies = [
+ "approx",
+ "num-traits",
+ "ordered-float",
+ "serde",
+]
+
+[[package]]
+name = "rust-motion-captions"
+version = "1.0.0"
+dependencies = [
+ "dioxus",
+ "rust-motion-composition",
+ "rust-motion-core",
+ "rust-motion-rasterizer",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "rust-motion-charts"
+version = "1.0.0"
+dependencies = [
+ "quick-xml 0.42.0",
+ "rquickjs",
+ "rust-motion-composition",
+ "rust-motion-paths",
+ "rust-motion-rasterizer",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "rust-motion-cli"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "clap",
+ "filetime",
+ "futures-util",
+ "image",
+ "notify",
+ "reqwest",
+ "rhai",
+ "rust-motion-animation",
+ "rust-motion-charts",
+ "rust-motion-composition",
+ "rust-motion-media",
+ "rust-motion-paths",
+ "rust-motion-project",
+ "rust-motion-rasterizer",
+ "rust-motion-renderer",
+ "rust-motion-shapes",
+ "serde",
+ "serde_json",
+ "taffy",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-tungstenite",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "rust-motion-composition"
+version = "1.0.0"
+dependencies = [
+ "rust-motion-animation",
+ "rust-motion-project",
+ "rust-motion-rasterizer",
+ "serde",
+ "serde_json",
+ "taffy",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "rust-motion-core"
+version = "1.0.0"
+dependencies = [
+ "dioxus",
+ "dioxus-ssr",
+ "js-sys",
+ "rust-motion-animation",
+ "rust-motion-composition",
+ "rust-motion-rasterizer",
+ "serde",
+ "serde_json",
+ "tracing",
+ "web-sys",
+]
+
+[[package]]
+name = "rust-motion-media"
+version = "1.0.0"
+dependencies = [
+ "dioxus",
+ "hound",
+ "image",
+ "rust-motion-composition",
+ "rust-motion-core",
+ "rust-motion-rasterizer",
+ "serde",
+ "serde_json",
+ "symphonia",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "rust-motion-noise"
+version = "1.0.0"
+dependencies = [
+ "dioxus",
+ "rust-motion-core",
+ "serde",
+]
+
+[[package]]
+name = "rust-motion-paths"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "rust-motion-player"
+version = "1.0.0"
+dependencies = [
+ "dioxus",
+ "rust-motion-animation",
+ "rust-motion-composition",
+ "rust-motion-core",
+ "rust-motion-rasterizer",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "rust-motion-project"
+version = "1.0.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "rust-motion-python"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "pyo3",
+ "rust-motion-animation",
+ "rust-motion-captions",
+ "rust-motion-cli",
+ "rust-motion-composition",
+ "rust-motion-media",
+ "rust-motion-paths",
+ "rust-motion-rasterizer",
+ "rust-motion-shapes",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "rust-motion-rasterizer"
+version = "1.0.0"
+dependencies = [
+ "ab_glyph",
+ "base64 0.22.1",
+ "criterion",
+ "image",
+ "lyon_tessellation",
+ "pollster 0.4.0",
+ "rasterlottie",
+ "rayon",
+ "resvg",
+ "rust-motion-composition",
+ "rustybuzz",
+ "serde",
+ "serde_json",
+ "symphonia",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tiny-skia 0.11.4",
+ "tracing",
+ "unicode-bidi",
+ "unicode-linebreak",
+ "unicode-segmentation",
+ "urlencoding",
+ "wgpu",
+]
+
+[[package]]
+name = "rust-motion-renderer"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "bytes",
+ "futures",
+ "image",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tower-http 0.5.2",
+ "tracing",
+]
+
+[[package]]
+name = "rust-motion-shapes"
+version = "1.0.0"
+dependencies = [
+ "dioxus",
+ "rust-motion-animation",
+ "rust-motion-composition",
+ "rust-motion-paths",
+ "rust-motion-rasterizer",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rust-motion-studio-tauri"
+version = "1.0.0"
+dependencies = [
+ "rust-motion-cli",
+ "rust-motion-composition",
+ "rust-motion-project",
+ "rust-motion-rasterizer",
+ "rust-motion-renderer",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "rust-motion-transitions"
+version = "1.0.0"
+dependencies = [
+ "dioxus",
+ "rust-motion-animation",
+ "rust-motion-composition",
+ "rust-motion-core",
+ "rust-motion-rasterizer",
+ "serde_json",
+]
+
+[[package]]
+name = "rust-motion-vdom"
+version = "1.0.0"
+dependencies = [
+ "dioxus",
+ "dioxus-core",
+ "rust-motion-composition",
+ "rust-motion-rasterizer",
+ "serde_json",
+ "taffy",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7064,13 +7064,13 @@ dependencies = [
  "anyhow",
  "dioxus",
  "dioxus-desktop",
- "dioxuscut-animation",
- "dioxuscut-cli",
- "dioxuscut-composition",
- "dioxuscut-core",
- "dioxuscut-player",
- "dioxuscut-rasterizer",
- "dioxuscut-renderer",
+ "rust-motion-animation",
+ "rust-motion-cli",
+ "rust-motion-composition",
+ "rust-motion-core",
+ "rust-motion-player",
+ "rust-motion-rasterizer",
+ "rust-motion-renderer",
  "serde",
  "serde_json",
  "tokio",

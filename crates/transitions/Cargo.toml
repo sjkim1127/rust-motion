@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-transitions"
-description = "Transition components for Dioxuscut — Fade, Slide, Wipe, etc."
+name        = "rust-motion-transitions"
+description = "Transition components for Rust Motion — Fade, Slide, Wipe, etc."
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -10,8 +10,8 @@ readme.workspace      = true
 
 [dependencies]
 dioxus              = { workspace = true }
-dioxuscut-core      = { workspace = true }
-dioxuscut-animation = { workspace = true }
-dioxuscut-composition = { workspace = true }
-dioxuscut-rasterizer  = { workspace = true }
+rust-motion-core      = { workspace = true }
+rust-motion-animation = { workspace = true }
+rust-motion-composition = { workspace = true }
+rust-motion-rasterizer  = { workspace = true }
 serde_json            = { workspace = true }

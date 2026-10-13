@@ -2,7 +2,7 @@ use crate::css::Stylesheet;
 use dioxus_core::{
     AttributeValue, ElementId, Template, TemplateAttribute, TemplateNode, WriteMutations,
 };
-use dioxuscut_rasterizer::Scene;
+use rust_motion_rasterizer::Scene;
 use std::collections::HashMap;
 use thiserror::Error;
 

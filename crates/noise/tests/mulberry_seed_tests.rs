@@ -1,6 +1,6 @@
 //! Integration tests for Mulberry32 PRNG and Java-compatible hashCode string seeding.
 
-use dioxuscut_noise::{hash_code, hash_seed, mulberry32, random, seed_to_float, NoiseSeed};
+use rust_motion_noise::{hash_code, hash_seed, mulberry32, random, seed_to_float, NoiseSeed};
 
 #[test]
 fn test_hash_code_utf16_parity() {

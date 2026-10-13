@@ -1,5 +1,5 @@
 """
-Dioxuscut Python SDK — High-Performance Browser-Free Video Rendering Engine.
+Rust Motion Python SDK — High-Performance Browser-Free Video Rendering Engine.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
 # Import native PyO3 module
-from ._dioxuscut import (
+from ._rust_motion import (
     calculate_ducking,
     fit_text,
     get_audio_spectrum,

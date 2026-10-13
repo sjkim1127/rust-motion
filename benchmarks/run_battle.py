@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Master Orchestrator for the Remotion vs Dioxuscut 3-Axis Battle Benchmark.
+Master Orchestrator for the Remotion vs Rust Motion 3-Axis Battle Benchmark.
 Generates comprehensive results and writes BATTLE_REPORT.md.
 """
 
@@ -33,7 +33,7 @@ def measured_render_baseline():
     with report_path.open(encoding="utf-8") as f:
         report = json.load(f)
     medians = report.get("median_ms", {})
-    native_ms = medians.get("dioxuscut")
+    native_ms = medians.get("rust-motion")
     remotion_ms = medians.get("remotion")
     if not isinstance(native_ms, (int, float)) or not isinstance(remotion_ms, (int, float)):
         return None
@@ -41,13 +41,13 @@ def measured_render_baseline():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Remotion vs Dioxuscut 3-Axis Benchmark Battle")
+    parser = argparse.ArgumentParser(description="Remotion vs Rust Motion 3-Axis Benchmark Battle")
     parser.add_argument("--skip-build", action="store_true", help="Skip cargo build")
     parser.add_argument("--quick", action="store_true", help="Quick mode (single run)")
     args = parser.parse_args()
 
     print("\n" + "="*70)
-    print("⚔️   REMOTION VS DIOXUSCUT: THE 3-AXIS BENCHMARK BATTLE   ⚔️")
+    print("⚔️   REMOTION VS RUST_MOTION: THE 3-AXIS BENCHMARK BATTLE   ⚔️")
     print("="*70 + "\n")
 
     # 1. Build release binaries
@@ -55,7 +55,7 @@ def main():
         print("[*] Ensuring release binaries are built...")
         subprocess.run([
             "cargo", "build", "--release",
-            "-p", "dioxuscut-core",
+            "-p", "rust-motion-core",
             "--example", "render_bench",
             "--example", "cyberpunk_bench"
         ], cwd=ROOT, check=True)
@@ -65,7 +65,7 @@ def main():
     print("--- [ROUND 1: Memory Footprint (RSS) & 720p Render Speed] ---")
     native_bench_bin = ROOT / "target/release/examples/render_bench"
     output_mp4 = TARGET_DIR / "native_bench.mp4"
-    native_mem_json = BENCH_DIR / "memory_dioxuscut_720p.json"
+    native_mem_json = BENCH_DIR / "memory_rust_motion_720p.json"
 
     subprocess.run([
         sys.executable, str(BENCH_DIR / "profile_memory.py"),
@@ -74,7 +74,7 @@ def main():
     ], check=True)
 
     with open(native_mem_json, "r") as f:
-        dioxuscut_720p_mem = json.load(f)
+        rust_motion_720p_mem = json.load(f)
 
     # Load previous 720p Remotion render results if available
     remotion_render_file = BENCH_DIR / "render-png-first.json"
@@ -85,8 +85,8 @@ def main():
 
     print("\n--- [ROUND 2: 1080p Cyberpunk VFX & Text Auto-Fitting Battle] ---")
     cyberpunk_bin = ROOT / "target/release/examples/cyberpunk_bench"
-    cyberpunk_mp4 = TARGET_DIR / "dioxuscut_cyberpunk.mp4"
-    cyberpunk_mem_json = BENCH_DIR / "memory_dioxuscut_cyberpunk.json"
+    cyberpunk_mp4 = TARGET_DIR / "rust_motion_cyberpunk.mp4"
+    cyberpunk_mem_json = BENCH_DIR / "memory_rust_motion_cyberpunk.json"
 
     subprocess.run([
         sys.executable, str(BENCH_DIR / "profile_memory.py"),
@@ -95,7 +95,7 @@ def main():
     ], check=True)
 
     with open(cyberpunk_mem_json, "r") as f:
-        dioxuscut_cyberpunk_mem = json.load(f)
+        rust_motion_cyberpunk_mem = json.load(f)
 
     print("\n--- [ROUND 3: Cloud / Serverless Cost & Container Size Battle] ---")
     cost_res = subprocess.run([
@@ -110,10 +110,10 @@ def main():
     scenario_10k = cost_data["scenario_10k"]
     scenario_100k = cost_data["scenario_100k"]
 
-    d_720p_peak = dioxuscut_720p_mem["peak_rss_mb"]
-    d_720p_time = dioxuscut_720p_mem["duration_sec"]
-    d_cyber_peak = dioxuscut_cyberpunk_mem["peak_rss_mb"]
-    d_cyber_time = dioxuscut_cyberpunk_mem["duration_sec"]
+    d_720p_peak = rust_motion_720p_mem["peak_rss_mb"]
+    d_720p_time = rust_motion_720p_mem["duration_sec"]
+    d_cyber_peak = rust_motion_cyberpunk_mem["peak_rss_mb"]
+    d_cyber_time = rust_motion_cyberpunk_mem["duration_sec"]
     paired_render = measured_render_baseline()
     paired_remotion_time = (
         f"{paired_render['remotion_sec']:.3f} s" if paired_render else "not measured"
@@ -126,18 +126,18 @@ def main():
     remotion_memory_note = "not measured"
     remotion_concurrency_note = "not measured"
 
-    report_content = f"""# ⚔️ Remotion vs Dioxuscut: 3-Axis Benchmark Battle Report
+    report_content = f"""# ⚔️ Remotion vs Rust Motion: 3-Axis Benchmark Battle Report
 
 **Generated**: {time.strftime('%Y-%m-%d %H:%M:%S')}
-**Platform**: {dioxuscut_720p_mem.get('platform', 'macOS')} ({dioxuscut_cyberpunk_mem.get('cpu', 'Apple Silicon')})
+**Platform**: {rust_motion_720p_mem.get('platform', 'macOS')} ({rust_motion_cyberpunk_mem.get('cpu', 'Apple Silicon')})
 
 ---
 
 ## 🥊 Round 1: Memory Footprint (Peak RSS) & Server Concurrency
 
-Remotion requires Node.js and Chromium renderer/GPU child processes, while Dioxuscut operates as a single multithreaded native binary with zero browser overhead.
+Remotion requires Node.js and Chromium renderer/GPU child processes, while Rust Motion operates as a single multithreaded native binary with zero browser overhead.
 
-| Workload | Remotion (Chromium 4 Workers) | **Dioxuscut (tiny-skia 4 Threads)** | Difference / Advantage |
+| Workload | Remotion (Chromium 4 Workers) | **Rust Motion (tiny-skia 4 Threads)** | Difference / Advantage |
 |:---|:---:|:---:|:---:|
 | **720p Spring Scene Peak RAM** | {remotion_memory_note} | **{d_720p_peak} MB** | **no memory ratio claim** |
 | **1080p Cyberpunk VFX Peak RAM**| {remotion_memory_note} | **{d_cyber_peak} MB** | **no memory ratio claim** |
@@ -148,11 +148,11 @@ Remotion requires Node.js and Chromium renderer/GPU child processes, while Dioxu
 
 How many video renders can run concurrently on a single standard server before crashing out of memory (OOM)?
 
-| Server Specs | Remotion Concurrency | **Dioxuscut Concurrency** | Scale Multiplier |
+| Server Specs | Remotion Concurrency | **Rust Motion Concurrency** | Scale Multiplier |
 |:---|:---:|:---:|:---:|
-| **4GB RAM Server** (Usable: 3GB) | {remotion_concurrency_note} | **{dioxuscut_720p_mem['concurrency_capacity']['server_4gb_ram']} concurrent renders** | **not comparable** |
-| **8GB RAM Server** (Usable: 7GB) | {remotion_concurrency_note} | **{dioxuscut_720p_mem['concurrency_capacity']['server_8gb_ram']} concurrent renders** | **not comparable** |
-| **16GB RAM Server** (Usable: 15GB) | {remotion_concurrency_note} | **{dioxuscut_720p_mem['concurrency_capacity']['server_16gb_ram']} concurrent renders** | **not comparable** |
+| **4GB RAM Server** (Usable: 3GB) | {remotion_concurrency_note} | **{rust_motion_720p_mem['concurrency_capacity']['server_4gb_ram']} concurrent renders** | **not comparable** |
+| **8GB RAM Server** (Usable: 7GB) | {remotion_concurrency_note} | **{rust_motion_720p_mem['concurrency_capacity']['server_8gb_ram']} concurrent renders** | **not comparable** |
+| **16GB RAM Server** (Usable: 15GB) | {remotion_concurrency_note} | **{rust_motion_720p_mem['concurrency_capacity']['server_16gb_ram']} concurrent renders** | **not comparable** |
 
 ---
 
@@ -165,7 +165,7 @@ Features exercised:
 - Fullscreen vignette edge falloff (`SceneFilter::Vignette`)
 - Animated procedural neon laser grid
 
-**Dioxuscut 1080p Result**:
+**Rust Motion 1080p Result**:
 - Duration: **{d_cyber_time}s** (180 frames @ 30fps)
 - Average Throughput: **{round(180 / max(0.1, d_cyber_time), 1)} FPS**
 - Peak Memory: **{d_cyber_peak} MB** (Completely immune to browser GC spikes)
@@ -176,19 +176,19 @@ Features exercised:
 
 Calculated using official AWS Lambda pricing ($0.0000133334/GB-s on ARM64 Graviton) across batch production runs:
 
-| Metric | Remotion model | **Dioxuscut model** | Status |
+| Metric | Remotion model | **Rust Motion model** | Status |
 |:---|:---:|:---:|:---:|
 | **Allocated memory / render time** | configured inputs | **configured inputs** | model input, not measured infrastructure |
-| **10,000 Videos Cost** | **${scenario_10k['remotion']['total_cost_usd']}** | **${scenario_10k['dioxuscut']['total_cost_usd']}** | model output only |
-| **10,000 Videos Wallclock** | {scenario_10k['remotion']['wallclock_hours']} hrs | **{scenario_10k['dioxuscut']['wallclock_hours']} hrs** | model output only |
-| **100,000 Videos Cost** | **${scenario_100k['remotion']['total_cost_usd']}** | **${scenario_100k['dioxuscut']['total_cost_usd']}** | model output only |
-| **100,000 Videos Wallclock** | {scenario_100k['remotion']['wallclock_hours']} hrs | **{scenario_100k['dioxuscut']['wallclock_hours']} hrs** | model output only |
+| **10,000 Videos Cost** | **${scenario_10k['remotion']['total_cost_usd']}** | **${scenario_10k['rust-motion']['total_cost_usd']}** | model output only |
+| **10,000 Videos Wallclock** | {scenario_10k['remotion']['wallclock_hours']} hrs | **{scenario_10k['rust-motion']['wallclock_hours']} hrs** | model output only |
+| **100,000 Videos Cost** | **${scenario_100k['remotion']['total_cost_usd']}** | **${scenario_100k['rust-motion']['total_cost_usd']}** | model output only |
+| **100,000 Videos Wallclock** | {scenario_100k['remotion']['wallclock_hours']} hrs | **{scenario_100k['rust-motion']['wallclock_hours']} hrs** | model output only |
 
 ---
 
 ## 🏆 Final Verdict
 
-1. **Efficiency**: Dioxuscut's native RSS is measured here; Remotion RSS requires a matching profile before a memory multiplier can be claimed.
+1. **Efficiency**: Rust Motion's native RSS is measured here; Remotion RSS requires a matching profile before a memory multiplier can be claimed.
 2. **Speed**: only paired workloads with recorded timings receive a speedup claim; the 1080p VFX result is reported without an unsupported Remotion comparison.
 3. **Economics**: cost figures remain model assumptions from `cost_calculator.py`; container size, cold start, and Remotion infrastructure RSS are not measured by this harness.
 """

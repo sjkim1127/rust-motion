@@ -4,7 +4,7 @@
 //!
 //! # Example
 //! ```rust,ignore
-//! use dioxuscut_transitions::Fade;
+//! use rust_motion_transitions::Fade;
 //!
 //! fn MyScene() -> Element {
 //!     rsx! {
@@ -18,8 +18,8 @@
 
 use crate::presentation::{PresentationVisual, TransitionContext, TransitionPresentation};
 use dioxus::prelude::*;
-use dioxuscut_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
-use dioxuscut_core::hooks::use_current_frame;
+use rust_motion_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
+use rust_motion_core::hooks::use_current_frame;
 
 /// Presentation parameters for a fade transition.
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -1,6 +1,6 @@
-//! Adversarial and degenerate stress tests for `dioxuscut-paths`.
+//! Adversarial and degenerate stress tests for `rust-motion-paths`.
 
-use dioxuscut_paths::*;
+use rust_motion_paths::*;
 use std::f64::consts::PI;
 
 // ===========================================================================

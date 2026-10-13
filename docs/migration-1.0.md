@@ -8,7 +8,7 @@ This document assists developers migrating from pre-1.0 versions (0.1.x, 0.2.x, 
 
 Rust Motion 1.0 marks the transition from rapid experimentation to a stable, long-term supported programmatic video rendering platform. Under SemVer 1.0:
 - **No breaking changes** will be introduced within the 1.x line for stable public APIs.
-- The project format `.dioxuscut.json` (schema v1) is guaranteed to remain readable across all 1.x releases.
+- The project format `.rust_motion.json` (schema v1) is guaranteed to remain readable across all 1.x releases.
 - The CLI command structure and exit codes are frozen.
 
 ---
@@ -26,29 +26,29 @@ Rust Motion 1.0 marks the transition from rapid experimentation to a stable, lon
   - `4`: Preflight schema/script/asset validation failure (`EXIT_VALIDATION_ERROR`)
   - `5`: Timeout or cancellation (`EXIT_TIMEOUT_OR_CANCELLED`)
 
-**Action**: If your CI/CD or agent scripts checked exit codes or scraped stdout, switch to `--json` or `DIOXUSCUT_JSON=1` to consume structured JSON.
+**Action**: If your CI/CD or agent scripts checked exit codes or scraped stdout, switch to `--json` or `RUST_MOTION_JSON=1` to consume structured JSON.
 
 ---
 
 ### 2.2 New Preflight Commands: `validate`, `doctor`, `inspect`
 
-- Instead of attempting a full render to verify a template, use `dioxuscut validate`:
+- Instead of attempting a full render to verify a template, use `rust-motion validate`:
   ```bash
-  dioxuscut validate --script video.rhai --props props.json
+  rust-motion validate --script video.rhai --props props.json
   ```
-- Instead of manual environment checks, use `dioxuscut doctor`:
+- Instead of manual environment checks, use `rust-motion doctor`:
   ```bash
-  dioxuscut doctor
+  rust-motion doctor
   ```
-- Use `dioxuscut inspect` for discovering backends and codecs:
+- Use `rust-motion inspect` for discovering backends and codecs:
   ```bash
-  dioxuscut inspect --backends
-  dioxuscut inspect --codecs
+  rust-motion inspect --backends
+  rust-motion inspect --codecs
   ```
 
 ---
 
-### 2.3 Project Format (`.dioxuscut.json`) Schema v1
+### 2.3 Project Format (`.rust_motion.json`) Schema v1
 
 - **Pre-1.0**: Schema version was loosely typed.
 - **1.0**: `version` is strictly an integer (`u32`), e.g. `"version": 1`. Unknown fields are rejected to prevent subtle typos.
@@ -71,10 +71,10 @@ If you have existing Remotion TypeScript projects, you can use the built-in migr
 
 ```bash
 # Transpile Remotion TypeScript component to Rhai script
-dioxuscut migrate -i RemotionComp.tsx -t rhai -o comp.rhai
+rust-motion migrate -i RemotionComp.tsx -t rhai -o comp.rhai
 
 # Transpile Remotion TypeScript component to Rust template
-dioxuscut migrate -i RemotionComp.tsx -t rust -o comp.rs
+rust-motion migrate -i RemotionComp.tsx -t rust -o comp.rs
 ```
 
 The migration tool automatically converts:

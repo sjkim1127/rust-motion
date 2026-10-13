@@ -1,8 +1,8 @@
-use dioxuscut_composition::{
+use rust_motion_composition::{
     NativeCompositionContext, SceneEmitter, SceneFrameContext, SceneGroup, SceneLayer, SceneLoop,
     SceneRect, SceneSequence,
 };
-use dioxuscut_rasterizer::{Color, Scene, SceneNode, Transform2D};
+use rust_motion_rasterizer::{Color, Scene, SceneNode, Transform2D};
 use serde_json::Value;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};

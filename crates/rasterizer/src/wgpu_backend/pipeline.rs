@@ -550,7 +550,7 @@ pub(crate) fn shader_source_with_opacity(source: &str, opacity: f32) -> String {
     let semicolon = expression_start + semicolon_offset;
     let expression = &source[expression_start..semicolon];
     format!(
-        "{}let dioxuscut_color = {}; return vec4<f32>(dioxuscut_color.rgb, dioxuscut_color.a * {:.9});{}",
+        "{}let rust_motion_color = {}; return vec4<f32>(rust_motion_color.rgb, rust_motion_color.a * {:.9});{}",
         &source[..return_start],
         expression,
         opacity,

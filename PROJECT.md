@@ -1,7 +1,7 @@
-# Project: Dioxuscut Remotion Native Porting
+# Project: Rust Motion Remotion Native Porting
 
 ## Architecture
-Dioxuscut is a high-performance programmatic video composition and rendering engine built with Rust and Dioxus. The project replaces Remotion TypeScript/WebGL packages with 100% pure Rust implementations, integrating directly into the Dioxuscut core timeline, scene graph, tiny-skia CPU rasterizer, and Dioxus reactive UI components with zero runtime dependency on `vendor/`.
+Rust Motion is a high-performance programmatic video composition and rendering engine built with Rust and Dioxus. The project replaces Remotion TypeScript/WebGL packages with 100% pure Rust implementations, integrating directly into the Rust Motion core timeline, scene graph, tiny-skia CPU rasterizer, and Dioxus reactive UI components with zero runtime dependency on `vendor/`.
 
 ```
                     ┌─────────────────────────┐

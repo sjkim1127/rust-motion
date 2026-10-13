@@ -2,9 +2,9 @@
 
 use crate::player::PlayerPlaybackState;
 use dioxus::prelude::*;
-use dioxuscut_composition::{Composition, CompositionError, NativeCompositionContext};
-use dioxuscut_core::use_current_frame;
-use dioxuscut_rasterizer::{
+use rust_motion_composition::{Composition, CompositionError, NativeCompositionContext};
+use rust_motion_core::use_current_frame;
+use rust_motion_rasterizer::{
     AudioTrack, BlendMode, ClipRegion, Color, GradientStop, ImageFit, MaskMode, Scene, SceneFilter,
     SceneNode, SceneShadow, Transform2D,
 };
@@ -94,7 +94,7 @@ pub fn NativeCompositionPreview(props: NativeCompositionPreviewProps) -> Element
         },
         Err(error) => rsx! {
             div {
-                class: "dioxuscut-native-preview-error",
+                class: "rust-motion-native-preview-error",
                 style: "box-sizing: border-box; width: 100%; height: 100%; padding: 24px; background: #220d16; color: #fecdd3; font-family: monospace; white-space: pre-wrap;",
                 "Failed to preview composition '{props.composition.id()}' at frame {frame}: {error}"
             }
@@ -123,7 +123,7 @@ pub fn SceneView(props: SceneViewProps) -> Element {
     let instance_id = use_hook(|| NEXT_SCENE_VIEW_ID.fetch_add(1, Ordering::Relaxed));
     let media_status = use_context_provider(|| Signal::new(MediaPreviewStatus::default()));
     let view_box = format!("0 0 {} {}", props.width, props.height);
-    let root_id = format!("dioxuscut-scene-{instance_id}");
+    let root_id = format!("rust-motion-scene-{instance_id}");
     let safe_fps = safe_fps(props.fps);
     let timeline_time = f64::from(props.frame) / safe_fps;
     let scene_signature = media_signature(&props.scene);
@@ -146,13 +146,13 @@ pub fn SceneView(props: SceneViewProps) -> Element {
 
     rsx! {
         div {
-            class: "dioxuscut-scene-view-container",
+            class: "rust-motion-scene-view-container",
             width: "100%",
             height: "100%",
             style: "position: relative; display: block; overflow: hidden;",
             svg {
                 id: root_id,
-                class: "dioxuscut-scene-view",
+                class: "rust-motion-scene-view",
                 view_box,
                 width: "100%",
                 height: "100%",
@@ -170,14 +170,14 @@ pub fn SceneView(props: SceneViewProps) -> Element {
             }
             if buffering_count > 0 && props.playing {
                 div {
-                    class: "dioxuscut-media-buffering",
+                    class: "rust-motion-media-buffering",
                     style: "position: absolute; left: 12px; bottom: 12px; padding: 5px 8px; border-radius: 5px; background: rgba(0,0,0,0.72); color: white; font: 12px sans-serif; pointer-events: none;",
                     "Buffering {buffering_count} media source(s)…"
                 }
             }
             if !errors.is_empty() {
                 div {
-                    class: "dioxuscut-media-error",
+                    class: "rust-motion-media-error",
                     style: "position: absolute; inset: auto 12px 12px 12px; padding: 8px 10px; border-radius: 5px; background: rgba(69,10,10,0.92); color: #fecaca; font: 12px monospace; white-space: pre-wrap; pointer-events: none;",
                     for error in errors {
                         div { "{error}" }
@@ -314,7 +314,7 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
             fit,
             opacity,
         } => {
-            let media_id = format!("dioxuscut-media-{}", props.node_path);
+            let media_id = format!("rust-motion-media-{}", props.node_path);
             let style = format!(
                 "display:block;width:100%;height:100%;object-fit:{};opacity:{};",
                 media_object_fit(fit),
@@ -338,12 +338,12 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
                         muted: true,
                         r#loop: looped,
                         preload: "auto",
-                        "data-dioxuscut-media": "video",
-                        "data-dioxuscut-time": time,
-                        "data-dioxuscut-active": "true",
-                        "data-dioxuscut-volume": "0",
-                        "data-dioxuscut-rate": "1",
-                        "data-dioxuscut-loop": looped,
+                        "data-rust-motion-media": "video",
+                        "data-rust-motion-time": time,
+                        "data-rust-motion-active": "true",
+                        "data-rust-motion-volume": "0",
+                        "data-rust-motion-rate": "1",
+                        "data-rust-motion-loop": looped,
                         onloadstart: move |_| mark_media_loading(loading_status, &loading_id),
                         onwaiting: move |_| mark_media_loading(waiting_status, &waiting_id),
                         oncanplay: move |_| mark_media_ready(ready_status, &ready_id),
@@ -353,7 +353,7 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
             }
         }
         SceneNode::Audio { track } => {
-            let media_id = format!("dioxuscut-media-{}", props.node_path);
+            let media_id = format!("rust-motion-media-{}", props.node_path);
             let (time, active) = audio_preview_timing(&track, props.timeline_time);
             let volume = (track.volume * props.inherited_volume).clamp(0.0, 1.0);
             let loading_id = media_id.clone();
@@ -372,12 +372,12 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
                         src: track.src,
                         preload: "auto",
                         style: "display:none;",
-                        "data-dioxuscut-media": "audio",
-                        "data-dioxuscut-time": time,
-                        "data-dioxuscut-active": active,
-                        "data-dioxuscut-volume": volume,
-                        "data-dioxuscut-rate": track.playback_rate,
-                        "data-dioxuscut-loop": track.looped,
+                        "data-rust-motion-media": "audio",
+                        "data-rust-motion-time": time,
+                        "data-rust-motion-active": active,
+                        "data-rust-motion-volume": volume,
+                        "data-rust-motion-rate": track.playback_rate,
+                        "data-rust-motion-loop": track.looped,
                         onloadstart: move |_| mark_media_loading(loading_status, &loading_id),
                         onwaiting: move |_| mark_media_loading(waiting_status, &waiting_id),
                         oncanplay: move |_| mark_media_ready(ready_status, &ready_id),
@@ -394,7 +394,7 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
             angle_deg,
             stops,
         } => {
-            let gradient_id = format!("dioxuscut-linear-{}", props.node_path);
+            let gradient_id = format!("rust-motion-linear-{}", props.node_path);
             let center_x = x + w / 2.0;
             let center_y = y + h / 2.0;
             let gradient_transform = format!("rotate({angle_deg} {center_x} {center_y})");
@@ -418,7 +418,7 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
             }
         }
         SceneNode::RadialGradient { cx, cy, r, stops } => {
-            let gradient_id = format!("dioxuscut-radial-{}", props.node_path);
+            let gradient_id = format!("rust-motion-radial-{}", props.node_path);
             let fill = format!("url(#{gradient_id})");
             rsx! {
                 defs {
@@ -469,8 +469,8 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
             shadow,
             children,
         } => {
-            let clip_id = format!("dioxuscut-clip-{}", props.node_path);
-            let mask_id = format!("dioxuscut-mask-{}", props.node_path);
+            let clip_id = format!("rust-motion-clip-{}", props.node_path);
+            let mask_id = format!("rust-motion-mask-{}", props.node_path);
             let mut style = format!("mix-blend-mode:{};", blend_mode_css(blend_mode));
             if clip.is_some() {
                 style.push_str(&format!("clip-path:url(#{clip_id});"));
@@ -605,7 +605,7 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
                 }
             }
         }
-        dioxuscut_rasterizer::SceneNode::Shader {
+        rust_motion_rasterizer::SceneNode::Shader {
             x,
             y,
             w,
@@ -720,7 +720,7 @@ fn text_font_css(node_path: &str, sources: &[String], font_weight: u16) -> (Stri
     let mut declarations = String::new();
     let mut families = Vec::with_capacity(sources.len() + 1);
     for (index, source) in sources.iter().enumerate() {
-        let family = format!("dioxuscut-font-{node_path}-{index}");
+        let family = format!("rust-motion-font-{node_path}-{index}");
         let url = browser_font_url(source)
             .replace('\\', "\\\\")
             .replace('\'', "\\'")
@@ -955,13 +955,13 @@ fn build_media_sync_script(
   const mediaEventRevision = {media_event_revision};
   void mediaEventRevision;
   const driftThreshold = {drift_threshold:.9};
-  for (const media of root.querySelectorAll('[data-dioxuscut-media]')) {{
-    let expected = Number(media.dataset.dioxuscutTime);
+  for (const media of root.querySelectorAll('[data-rust-motion-media]')) {{
+    let expected = Number(media.dataset.rust-motionTime);
     if (!Number.isFinite(expected)) continue;
-    const active = media.dataset.dioxuscutActive === 'true';
-    const looped = media.dataset.dioxuscutLoop === 'true';
-    const rate = Number(media.dataset.dioxuscutRate);
-    const volume = Number(media.dataset.dioxuscutVolume);
+    const active = media.dataset.rust-motionActive === 'true';
+    const looped = media.dataset.rust-motionLoop === 'true';
+    const rate = Number(media.dataset.rust-motionRate);
+    const volume = Number(media.dataset.rust-motionVolume);
     media.loop = looped;
     media.playbackRate = Number.isFinite(rate) && rate > 0 ? rate : 1;
     media.volume = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1;
@@ -970,17 +970,17 @@ fn build_media_sync_script(
         ? ((expected % media.duration) + media.duration) % media.duration
         : Math.min(expected, Math.max(0, media.duration - 0.001));
     }}
-    const hardSeek = !playing || media.dataset.dioxuscutRevision !== revision;
+    const hardSeek = !playing || media.dataset.rust-motionRevision !== revision;
     const drifted = !Number.isFinite(media.currentTime)
       || Math.abs(media.currentTime - expected) > driftThreshold;
     if ((hardSeek || drifted) && Number.isFinite(expected)) {{
       try {{ media.currentTime = Math.max(0, expected); }} catch (_) {{}}
     }}
-    media.dataset.dioxuscutRevision = revision;
+    media.dataset.rust-motionRevision = revision;
     if (playing && active && media.readyState >= 2) {{
       const promise = media.play();
       if (promise) promise.catch((error) => {{
-        media.dataset.dioxuscutPlayError = String(error);
+        media.dataset.rust-motionPlayError = String(error);
       }});
     }} else {{
       media.pause();
@@ -993,7 +993,7 @@ fn build_media_sync_script(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dioxuscut_composition::HelloWorldComposition;
+    use rust_motion_composition::HelloWorldComposition;
 
     #[test]
     fn composition_handle_renders_the_shared_scene() {
@@ -1127,7 +1127,7 @@ mod tests {
         assert!(declarations.contains("font-weight:700"));
         assert_eq!(
             family,
-            "'dioxuscut-font-node-2-0', 'dioxuscut-font-node-2-1', sans-serif"
+            "'rust-motion-font-node-2-0', 'rust-motion-font-node-2-1', sans-serif"
         );
     }
 

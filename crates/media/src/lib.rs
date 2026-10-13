@@ -1,4 +1,4 @@
-//! # dioxuscut-media
+//! # rust-motion-media
 //!
 //! Native media helpers and scene emitters, with optional Dioxus media components.
 //!

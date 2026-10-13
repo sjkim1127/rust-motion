@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 
 const require = createRequire(new URL('../../apps/studio-tauri/package.json', import.meta.url));
 const { chromium } = require('playwright-core');
-const url = process.env.DIOXUSCUT_BROWSER_URL ?? 'http://127.0.0.1:1421';
+const url = process.env.RUST_MOTION_BROWSER_URL ?? 'http://127.0.0.1:1421';
 
 function findBrowserExecutable() {
   const candidates = process.platform === 'darwin'
@@ -34,12 +34,12 @@ function findBrowserExecutable() {
 
 const executablePath = process.env.CHROME_PATH ?? findBrowserExecutable();
 const run = promisify(execFile);
-const audioFixturePath = `/tmp/dioxuscut-webcodecs-audio-${process.pid}.m4a`;
-const webmFixturePath = `/tmp/dioxuscut-webcodecs-video-${process.pid}.webm`;
-const webmVp8FixturePath = `/tmp/dioxuscut-webcodecs-vp8-${process.pid}.webm`;
-const webmAv1FixturePath = `/tmp/dioxuscut-webcodecs-av1-${process.pid}.webm`;
-const webmAudioFixturePath = `/tmp/dioxuscut-webcodecs-audio-${process.pid}.webm`;
-const webmAvFixturePath = `/tmp/dioxuscut-webcodecs-av-${process.pid}.webm`;
+const audioFixturePath = `/tmp/rust-motion-webcodecs-audio-${process.pid}.m4a`;
+const webmFixturePath = `/tmp/rust-motion-webcodecs-video-${process.pid}.webm`;
+const webmVp8FixturePath = `/tmp/rust-motion-webcodecs-vp8-${process.pid}.webm`;
+const webmAv1FixturePath = `/tmp/rust-motion-webcodecs-av1-${process.pid}.webm`;
+const webmAudioFixturePath = `/tmp/rust-motion-webcodecs-audio-${process.pid}.webm`;
+const webmAvFixturePath = `/tmp/rust-motion-webcodecs-av-${process.pid}.webm`;
 await run(process.env.FFMPEG_PATH ?? 'ffmpeg', [
   '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1',
   '-c:a', 'aac', '-b:a', '96k', '-ar', '48000', '-ac', '1', '-f', 'ipod', '-y', audioFixturePath,
@@ -120,9 +120,9 @@ try {
   await page.route('**/assets/webm-av-fixture.webm', (route) => route.fulfill({
     status: 200, contentType: 'video/webm', body: webmAvFixture,
   }));
-  await page.addInitScript(() => { window.__DIOXUSCUT_HEADLESS_RENDER__ = true; });
+  await page.addInitScript(() => { window.__RUST_MOTION_HEADLESS_RENDER__ = true; });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => typeof window.dioxuscut?.createIsoBmffEncodedChunk === 'function');
+  await page.waitForFunction(() => typeof window.rust-motion?.createIsoBmffEncodedChunk === 'function');
   const result = await page.evaluate(async () => {
     const sample = {
       data: new Uint8Array([0, 0, 0, 1]),
@@ -130,65 +130,65 @@ try {
       duration: 1 / 30,
       keyframe: true,
     };
-    const chunk = window.dioxuscut.createIsoBmffEncodedChunk(sample);
-    const config = window.dioxuscut.makeIsoBmffWebCodecsConfig({
+    const chunk = window.rust_motion.createIsoBmffEncodedChunk(sample);
+    const config = window.rust_motion.makeIsoBmffWebCodecsConfig({
       codecConfig: { type: 'avcC', data: new Uint8Array([1, 0x64, 0x00, 0x1f]) },
     });
-    const annexB = window.dioxuscut.avccToAnnexB(new Uint8Array([0, 0, 0, 2, 0x65, 0x88]));
+    const annexB = window.rust_motion.avccToAnnexB(new Uint8Array([0, 0, 0, 2, 0x65, 0x88]));
     const support = await VideoDecoder.isConfigSupported({ codec: 'avc1.42E01E' });
-    const audio = window.dioxuscut.createIsoBmffEncodedChunk({
+    const audio = window.rust_motion.createIsoBmffEncodedChunk({
       data: new Uint8Array([0xff, 0xf1, 0x50, 0x80]), timestamp: 2, duration: 0.02,
     }, 'audio');
     const audioSupport = await AudioDecoder.isConfigSupported({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 48000 });
-    const parsed = await window.dioxuscut.parseIsoBmffMovieHeader('/assets/showcase.mp4');
+    const parsed = await window.rust_motion.parseIsoBmffMovieHeader('/assets/showcase.mp4');
     const webmEvents = [];
-    const webmMetadata = await window.dioxuscut.parseMedia({
+    const webmMetadata = await window.rust_motion.parseMedia({
       src: '/assets/webm-fixture.webm',
       onVideoCodec: (value) => webmEvents.push(['videoCodec', value]),
       onKeyframes: (value) => webmEvents.push(['keyframes', value[0]?.positionInBytes]),
     });
-    const webmSamples = await window.dioxuscut.readWebmSamples('/assets/webm-fixture.webm', 1);
-    const webm416Samples = await window.dioxuscut.readWebmSamples('/assets/webm-416-fixture.webm', 1, { maxSamples: 1 });
+    const webmSamples = await window.rust_motion.readWebmSamples('/assets/webm-fixture.webm', 1);
+    const webm416Samples = await window.rust_motion.readWebmSamples('/assets/webm-416-fixture.webm', 1, { maxSamples: 1 });
     const webmChunks = webmSamples.slice(0, 2).map((sample) =>
-      window.dioxuscut.createWebmEncodedVideoChunk(sample, 1 / 24));
-    const webmFrames = await window.dioxuscut.decodeWebmVideo('/assets/webm-fixture.webm', {
+      window.rust_motion.createWebmEncodedVideoChunk(sample, 1 / 24));
+    const webmFrames = await window.rust_motion.decodeWebmVideo('/assets/webm-fixture.webm', {
       trackNumber: 1, maxSamples: 3, codec: 'vp09.00.10.08',
     });
     const webmDecodedDimensions = webmFrames.map(({ displayWidth, displayHeight }) => [displayWidth, displayHeight]);
-    const webmRgba = await window.dioxuscut.videoFrameToRgba(webmFrames[0]);
+    const webmRgba = await window.rust_motion.videoFrameToRgba(webmFrames[0]);
     if (webmRgba.rgba.byteLength !== webmRgba.width * webmRgba.height * 4
       || webmRgba.width !== 160 || webmRgba.height !== 90) {
       throw new Error(`VideoFrame RGBA transport contract failed: ${webmRgba.width}x${webmRgba.height}/${webmRgba.rgba.byteLength}`);
     }
     for (const frame of webmFrames) frame.close();
-    const webmAudioSamples = await window.dioxuscut.readWebmSamples('/assets/webm-audio-fixture.webm', 1);
-    const webmVp8Metadata = await window.dioxuscut.parseMedia({ src: '/assets/webm-vp8-fixture.webm' });
-    const webmVp8Frames = await window.dioxuscut.decodeWebmVideo('/assets/webm-vp8-fixture.webm', { maxSamples: 1 });
+    const webmAudioSamples = await window.rust_motion.readWebmSamples('/assets/webm-audio-fixture.webm', 1);
+    const webmVp8Metadata = await window.rust_motion.parseMedia({ src: '/assets/webm-vp8-fixture.webm' });
+    const webmVp8Frames = await window.rust_motion.decodeWebmVideo('/assets/webm-vp8-fixture.webm', { maxSamples: 1 });
     const webmVp8Dimensions = webmVp8Frames.map(({ displayWidth, displayHeight }) => [displayWidth, displayHeight]);
     for (const frame of webmVp8Frames) frame.close();
-    const webmAv1Metadata = await window.dioxuscut.parseMedia({ src: '/assets/webm-av1-fixture.webm' });
-    const webmAv1Frames = await window.dioxuscut.decodeWebmVideo('/assets/webm-av1-fixture.webm', { maxSamples: 1 });
+    const webmAv1Metadata = await window.rust_motion.parseMedia({ src: '/assets/webm-av1-fixture.webm' });
+    const webmAv1Frames = await window.rust_motion.decodeWebmVideo('/assets/webm-av1-fixture.webm', { maxSamples: 1 });
     const webmAv1Dimensions = webmAv1Frames.map(({ displayWidth, displayHeight }) => [displayWidth, displayHeight]);
     for (const frame of webmAv1Frames) frame.close();
-    const webmAudioMetadata = await window.dioxuscut.parseMedia({ src: '/assets/webm-audio-fixture.webm' });
-    const webmAvMetadata = await window.dioxuscut.parseMedia({ src: '/assets/webm-av-fixture.webm' });
-    const webmAvVideo = await window.dioxuscut.decodeWebmVideo('/assets/webm-av-fixture.webm', { maxSamples: 1 });
+    const webmAudioMetadata = await window.rust_motion.parseMedia({ src: '/assets/webm-audio-fixture.webm' });
+    const webmAvMetadata = await window.rust_motion.parseMedia({ src: '/assets/webm-av-fixture.webm' });
+    const webmAvVideo = await window.rust_motion.decodeWebmVideo('/assets/webm-av-fixture.webm', { maxSamples: 1 });
     for (const frame of webmAvVideo) frame.close();
-    const webmAvAudio = await window.dioxuscut.decodeWebmAudio('/assets/webm-av-fixture.webm', { maxSamples: 1 });
+    const webmAvAudio = await window.rust_motion.decodeWebmAudio('/assets/webm-av-fixture.webm', { maxSamples: 1 });
     const webmAvAudioFrames = webmAvAudio.map(({ numberOfFrames }) => numberOfFrames);
     for (const audio of webmAvAudio) audio.close();
-    const webmAudioData = await window.dioxuscut.decodeWebmAudio('/assets/webm-audio-fixture.webm', {
+    const webmAudioData = await window.rust_motion.decodeWebmAudio('/assets/webm-audio-fixture.webm', {
       trackNumber: 1, maxSamples: 3,
     });
     const webmAudioFrames = webmAudioData.map(({ numberOfFrames }) => numberOfFrames);
     for (const audio of webmAudioData) audio.close();
     let streamedWebmFrames = 0;
-    const streamedWebmResult = await window.dioxuscut.decodeWebmVideo('/assets/webm-fixture.webm', {
+    const streamedWebmResult = await window.rust_motion.decodeWebmVideo('/assets/webm-fixture.webm', {
       trackNumber: 1, maxSamples: 3, codec: 'vp09.00.10.08',
       onFrame: (frame) => { streamedWebmFrames += 1; frame.close(); },
     });
     const parseEvents = [];
-    const partialMetadata = await window.dioxuscut.parseMedia({
+    const partialMetadata = await window.rust_motion.parseMedia({
       src: '/assets/showcase.mp4',
       fields: { dimensions: true, durationInSeconds: true },
       onDimensions: (value) => parseEvents.push(['dimensions', value?.width ?? null]),
@@ -207,13 +207,13 @@ try {
       || !parseEvents.some(([name, value, trackId]) => name === 'keyframes' && value === 3012 && trackId === 1)) {
       throw new Error(`parseMedia object fields selection failed: ${JSON.stringify({ partialMetadata, parseEvents })}`);
     }
-    const ranged = await window.dioxuscut.readMediaRange('/range.bin', 2, 6);
-    const samples = await window.dioxuscut.readIsoBmffSamples('/assets/showcase.mp4', 0, [0, 1, 2], {
+    const ranged = await window.rust_motion.readMediaRange('/range.bin', 2, 6);
+    const samples = await window.rust_motion.readIsoBmffSamples('/assets/showcase.mp4', 0, [0, 1, 2], {
       parsed, concurrency: 2,
     });
-    const codecConfig = window.dioxuscut.makeIsoBmffWebCodecsConfig(parsed.tracks[0]);
+    const codecConfig = window.rust_motion.makeIsoBmffWebCodecsConfig(parsed.tracks[0]);
     const decodeStarted = performance.now();
-    const frames = await window.dioxuscut.decodeIsoBmffVideo('/assets/showcase.mp4', {
+    const frames = await window.rust_motion.decodeIsoBmffVideo('/assets/showcase.mp4', {
       trackIndex: 0, startSample: 0, endSample: 3, maxSamples: 3,
       codec: codecConfig.codec, description: codecConfig.description, options: { parsed },
     });
@@ -221,7 +221,7 @@ try {
     const decoded = frames.map((frame) => ({ width: frame.displayWidth, height: frame.displayHeight, timestamp: frame.timestamp }));
     for (const frame of frames) frame.close();
     const thirtyFrameDecodeStarted = performance.now();
-    const thirtyFrameVideo = await window.dioxuscut.decodeIsoBmffVideo('/assets/showcase.mp4', {
+    const thirtyFrameVideo = await window.rust_motion.decodeIsoBmffVideo('/assets/showcase.mp4', {
       trackIndex: 0, startSample: 0, endSample: 30, maxSamples: 30,
       codec: codecConfig.codec, description: codecConfig.description, options: { parsed },
     });
@@ -422,20 +422,20 @@ try {
     const thirtyFrameRgbaStarted = performance.now();
     let thirtyFrameRgbaBytes = 0;
     for (const frame of thirtyFrameVideo) {
-      const rgba = await window.dioxuscut.videoFrameToRgba(frame);
+      const rgba = await window.rust_motion.videoFrameToRgba(frame);
       thirtyFrameRgbaBytes += rgba.rgba.byteLength;
       frame.close();
     }
     const thirtyFrameRgbaMs = performance.now() - thirtyFrameRgbaStarted;
     const streamedVideo = [];
-    const streamedVideoResult = await window.dioxuscut.decodeIsoBmffVideo('/assets/showcase.mp4', {
+    const streamedVideoResult = await window.rust_motion.decodeIsoBmffVideo('/assets/showcase.mp4', {
       trackIndex: 0, startSample: 0, endSample: 3, maxSamples: 3,
       codec: codecConfig.codec, description: codecConfig.description, options: { parsed },
       onFrame: (frame) => { streamedVideo.push(frame.timestamp); frame.close(); },
     });
-    const audioParsed = await window.dioxuscut.parseIsoBmffMovieHeader('/assets/audio-fixture.m4a');
+    const audioParsed = await window.rust_motion.parseIsoBmffMovieHeader('/assets/audio-fixture.m4a');
     const audioMetadataEvents = [];
-    await window.dioxuscut.parseMedia({
+    await window.rust_motion.parseMedia({
       src: '/assets/audio-fixture.m4a',
       onSampleRate: (value) => audioMetadataEvents.push(['rate', value]),
       onNumberOfAudioChannels: (value) => audioMetadataEvents.push(['channels', value]),
@@ -444,9 +444,9 @@ try {
       || !audioMetadataEvents.some(([name, value]) => name === 'channels' && value === 1)) {
       throw new Error(`AAC metadata callbacks failed: ${JSON.stringify(audioParsed.tracks?.[0]?.codecConfig)}`);
     }
-    const audioConfig = window.dioxuscut.makeIsoBmffWebCodecsConfig(audioParsed.tracks[0]);
+    const audioConfig = window.rust_motion.makeIsoBmffWebCodecsConfig(audioParsed.tracks[0]);
     const audioDecodeStarted = performance.now();
-    const audioData = await window.dioxuscut.decodeIsoBmffAudio('/assets/audio-fixture.m4a', {
+    const audioData = await window.rust_motion.decodeIsoBmffAudio('/assets/audio-fixture.m4a', {
       trackIndex: 0, startSample: 0, endSample: 3, maxSamples: 3,
       codec: audioConfig.codec, description: audioConfig.description,
       numberOfChannels: 1, sampleRate: 48000, options: { parsed: audioParsed },
@@ -455,7 +455,7 @@ try {
     const decodedAudio = audioData.map((audio) => ({ frames: audio.numberOfFrames, timestamp: audio.timestamp }));
     for (const audio of audioData) audio.close();
     const streamedAudio = [];
-    const streamedAudioResult = await window.dioxuscut.decodeIsoBmffAudio('/assets/audio-fixture.m4a', {
+    const streamedAudioResult = await window.rust_motion.decodeIsoBmffAudio('/assets/audio-fixture.m4a', {
       trackIndex: 0, startSample: 0, endSample: 3, maxSamples: 3,
       codec: audioConfig.codec, description: audioConfig.description,
       numberOfChannels: 1, sampleRate: 48000, options: { parsed: audioParsed },

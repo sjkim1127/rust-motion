@@ -25,7 +25,7 @@ Rust Motion is designed to be executed headlessly in untrusted environments (e.g
 - Downloaded assets are hashed (SHA-256) and cached locally in a dedicated, isolated cache directory.
 
 ### 1.4 Versioned Project JSON Schema Validation
-- Project JSON schemas (`.dioxuscut.json`) use strict serde deserialization (`deny_unknown_fields`).
+- Project JSON schemas (`.rust_motion.json`) use strict serde deserialization (`deny_unknown_fields`).
 - Frame dimensions (`width`, `height`), `fps`, and `duration` are bounds-checked before rendering starts. Zero or negative values fail preflight validation.
 
 ---
@@ -43,7 +43,7 @@ Rust Motion is designed to be executed headlessly in untrusted environments (e.g
 - **Origin**: Transitive dependency pulled in by `dioxus-desktop 0.6.3` (which pins `webbrowser = "^0.8"`).
 - **Reachability Assessment**: **UNREACHABLE in headless & server paths.**
   - `webbrowser` is only used by desktop GUI frameworks to launch the user's default browser when clicking external hyperlinks inside the Studio UI.
-  - The core rasterizer (`dioxuscut-rasterizer`), CLI binary (`dioxuscut`), server pipeline (`dioxuscut-cli serve`), and Python package (`dioxuscut`) do not call `webbrowser::open`.
+  - The core rasterizer (`rust-motion-rasterizer`), CLI binary (`rust-motion`), server pipeline (`rust-motion-cli serve`), and Python package (`rust-motion`) do not call `webbrowser::open`.
   - In automated agent and server environments, Studio GUI is not spawned.
 - **Remediation Plan**: Upstream Dioxus is tracking the upgrade to `webbrowser >= 1.2.2`. Tracked in `.cargo/audit.toml`.
 

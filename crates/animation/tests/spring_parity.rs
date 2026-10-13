@@ -1,4 +1,4 @@
-use dioxuscut_animation::{
+use rust_motion_animation::{
     measure_spring, spring, spring_with_options, SpringConfig, SpringError, SpringOptions,
 };
 

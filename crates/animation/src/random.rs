@@ -117,7 +117,7 @@ pub fn mulberry32(a: i64) -> f64 {
 ///
 /// # Example
 /// ```rust
-/// use dioxuscut_animation::random;
+/// use rust_motion_animation::random;
 ///
 /// let r1 = random("seed-1");
 /// let r2 = random("seed-1");

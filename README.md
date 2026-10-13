@@ -20,7 +20,7 @@
 - [CLI & Agent Reference](docs/cli.md) — Complete CLI reference, exit codes, and JSON automation.
 - [Python Guide](docs/python.md) — Python bindings, NumPy buffer exports, and usage.
 - [Backend Capabilities](docs/backends.md) — Determinism guarantees, native CPU reference, GPU, and browser tiers.
-- [Project Format](docs/project-format.md) — `.dioxuscut.json` schema v1 specification.
+- [Project Format](docs/project-format.md) — `.rust_motion.json` schema v1 specification.
 - [API Stability](docs/stability.md) — SemVer 1.x policy, MSRV, and OS support matrix.
 - [Security & Advisories](docs/security.md) — Threat model, sandboxing, and reachability analysis.
 - [1.0 Migration Guide](docs/migration-1.0.md) — Migration steps from pre-1.0 and Remotion.
@@ -30,7 +30,7 @@
 
 Rust Motion is a production-quality programmatic video rendering platform. Its native export path renders a registered `Composition` into a deterministic scene graph, rasterizes frames with `tiny-skia` or `wgpu`, and streams a bounded window of ordered RGBA frames to FFmpeg while rendering subsequent frames. Local video frames are decoded through FFmpeg, and declared audio tracks are mixed into the encoded output. The same native scene can be previewed in the Dioxus Player through `NativeCompositionPreview` or edited in the interactive Studio shell.
 
-The repository also contains Dioxus timeline, media, shape, transition, player, and Studio-preview components. The opt-in `dioxuscut-vdom` adapter can translate ordinary Dioxus elements, a documented CSS subset, text, local media elements, and basic SVG shapes into the native scene graph. Existing explicit `Scene` and `SceneEmitter` APIs remain available for precise rendering control.
+The repository also contains Dioxus timeline, media, shape, transition, player, and Studio-preview components. The opt-in `rust-motion-vdom` adapter can translate ordinary Dioxus elements, a documented CSS subset, text, local media elements, and basic SVG shapes into the native scene graph. Existing explicit `Scene` and `SceneEmitter` APIs remain available for precise rendering control.
 
 ## What works today
 
@@ -85,20 +85,20 @@ Native compositions share one `Scene` contract between preview and export. `Vdom
 
 | Package | Purpose |
 |---|---|
-| `dioxuscut-animation` | Interpolation, easing, springs, and color interpolation |
-| `dioxuscut-composition` | Shared native composition contract, registry, and built-in composition |
-| `dioxuscut-core` | Dioxus composition timeline, sequence, freeze, Lottie, and hooks |
-| `dioxuscut-media` | Native media helpers and scene emitters, with optional Dioxus image, video, and audio components |
-| `dioxuscut-player` | Interactive player, controls, and native Scene preview adapter |
-| `dioxuscut-shapes` | Procedural SVG paths and optional Dioxus components |
-| `dioxuscut-paths` | SVG path parsing, metrics, and transforms |
-| `dioxuscut-captions` | Subtitle parsing, native scene captions, and optional Dioxus components |
-| `dioxuscut-noise` | Deterministic simplex noise helpers |
-| `dioxuscut-transitions` | Dioxus fade and slide transitions |
-| `dioxuscut-rasterizer` | Scene IR, CPU renderer, experimental GPU renderer, FFmpeg pipe |
-| `dioxuscut-vdom` | Dioxus VDOM mutation renderer, CSS cascade, Taffy layout, and Scene conversion |
-| `dioxuscut-renderer` | Static server and PNG-sequence encoding utilities |
-| `dioxuscut-cli` | Render command and Rhai composition runtime |
+| `rust-motion-animation` | Interpolation, easing, springs, and color interpolation |
+| `rust-motion-composition` | Shared native composition contract, registry, and built-in composition |
+| `rust-motion-core` | Dioxus composition timeline, sequence, freeze, Lottie, and hooks |
+| `rust-motion-media` | Native media helpers and scene emitters, with optional Dioxus image, video, and audio components |
+| `rust-motion-player` | Interactive player, controls, and native Scene preview adapter |
+| `rust-motion-shapes` | Procedural SVG paths and optional Dioxus components |
+| `rust-motion-paths` | SVG path parsing, metrics, and transforms |
+| `rust-motion-captions` | Subtitle parsing, native scene captions, and optional Dioxus components |
+| `rust-motion-noise` | Deterministic simplex noise helpers |
+| `rust-motion-transitions` | Dioxus fade and slide transitions |
+| `rust-motion-rasterizer` | Scene IR, CPU renderer, experimental GPU renderer, FFmpeg pipe |
+| `rust-motion-vdom` | Dioxus VDOM mutation renderer, CSS cascade, Taffy layout, and Scene conversion |
+| `rust-motion-renderer` | Static server and PNG-sequence encoding utilities |
+| `rust-motion-cli` | Render command and Rhai composition runtime |
 | `apps/example` | Dioxus web composition preview |
 | `apps/studio` | Dioxus desktop preview shell |
 
@@ -147,7 +147,7 @@ printf '%s\n' '{
   "accent_color": "#6c63ff"
 }' > props.json
 
-cargo run -p dioxuscut-cli -- render \
+cargo run -p rust-motion-cli -- render \
   --composition HelloWorld \
   --props props.json \
   --output output.mp4 \
@@ -166,7 +166,7 @@ JSON as the external data contract. Scripts are compiled once per render job,
 receive `ctx` and `props`, and return a restricted native scene builder:
 
 ```bash
-cargo run -p dioxuscut-cli --features rhai -- render \
+cargo run -p rust-motion-cli --features rhai -- render \
   --script examples/hello.rhai \
   --props examples/hello-props.json \
   --output rhai-output.mp4 \
@@ -208,11 +208,11 @@ parallel rendering does not share mutable script state.
 Applications can implement the shared composition contract and pass the same composition to CLI export or `NativeCompositionPreview`:
 
 ```rust,ignore
-use dioxuscut_cli::{execute_render_command_with_registry, RenderRequest};
-use dioxuscut_composition::{
+use rust_motion_cli::{execute_render_command_with_registry, RenderRequest};
+use rust_motion_composition::{
     CompositionError, CompositionRegistry, NativeComposition, NativeCompositionContext,
 };
-use dioxuscut_rasterizer::{Color, Scene, SceneNode};
+use rust_motion_rasterizer::{Color, Scene, SceneNode};
 use serde_json::Value;
 
 struct TitleCard;
@@ -256,8 +256,8 @@ keeps parallel frame rendering isolated:
 ```rust,ignore
 use dioxus::prelude::*;
 use dioxus_core::VirtualDom;
-use dioxuscut_composition::{CompositionRegistry, NativeCompositionContext};
-use dioxuscut_vdom::VdomComposition;
+use rust_motion_composition::{CompositionRegistry, NativeCompositionContext};
+use rust_motion_vdom::VdomComposition;
 
 #[derive(Clone, PartialEq, Props)]
 struct CardProps {
@@ -308,10 +308,10 @@ painting model are intentionally outside this adapter.
 ## Spring playback controls
 
 The vendored Remotion 4.0.495 spring timing behavior is available as native Rust
-through `dioxuscut_animation` and the `dioxuscut_core` re-exports:
+through `rust_motion_animation` and the `rust_motion_core` re-exports:
 
 ```rust
-use dioxuscut_animation::{measure_spring, spring_with_options, SpringConfig, SpringOptions};
+use rust_motion_animation::{measure_spring, spring_with_options, SpringConfig, SpringOptions};
 
 let config = SpringConfig::default();
 assert_eq!(measure_spring(30.0, &config, 0.005).unwrap(), 28.0);
@@ -344,12 +344,12 @@ There is no runtime dependency on Node or `vendor`.
 Parity fixtures cover 810 spring values and 48 settling durations generated by
 executing the vendored TypeScript. Regenerate them from the repository root with
 Node 24 using `node crates/animation/tests/fixtures/generate-spring-reference.mjs`;
-run them with `cargo test --locked -p dioxuscut-animation --test spring_parity`.
+run them with `cargo test --locked -p rust-motion-animation --test spring_parity`.
 
 ## CLI reference
 
 ```text
-dioxuscut render [OPTIONS] (--composition <ID> | --script <PATH>)
+rust-motion render [OPTIONS] (--composition <ID> | --script <PATH>)
 
   -c, --composition <ID>       Registered composition ID
       --script <PATH>          Rhai composition file; requires feature `rhai`
@@ -376,21 +376,21 @@ Still codecs render `--frame-start` only; omit `--frame-end` or set it to the
 same frame. GIF and still outputs do not accept audio tracks. AV1 selects
 `libsvtav1` when available and otherwise uses `libaom-av1`.
 
-## Python SDK (`dioxuscut-py`)
+## Python SDK (`rust-motion-py`)
 
 Native high-performance video rendering for Python with zero Chromium/Puppeteer overhead:
 
 The native extension uses PyO3 0.29 with the stable Python 3.10 ABI3 target.
 
 ```bash
-pip install dioxuscut
+pip install rust-motion
 ```
 
 ```python
-import dioxuscut
+import rust_motion
 
 # 1. Render dynamic Rhai motion graphics template (4K / 60 FPS)
-dioxuscut.render_script(
+rust_motion.render_script(
     "templates/motion.rhai",
     "output.mp4",
     props={"title": "Hello World", "theme": "cyberpunk"},
@@ -402,7 +402,7 @@ dioxuscut.render_script(
 )
 
 # 2. Render registered Rust composition
-dioxuscut.render(
+rust_motion.render(
     "HelloWorld",
     "clip.mp4",
     width=1920,
@@ -412,13 +412,13 @@ dioxuscut.render(
 )
 
 # 3. Export still frame thumbnail
-dioxuscut.render_still("HelloWorld", frame=30, output="thumbnail.png")
+rust_motion.render_still("HelloWorld", frame=30, output="thumbnail.png")
 ```
 
 Build GPU support explicitly:
 
 ```bash
-cargo build -p dioxuscut-cli --features gpu
+cargo build -p rust-motion-cli --features gpu
 ```
 
 Build Rhai and GPU support together with `--features rhai,gpu`.
@@ -451,7 +451,7 @@ JPEG, and WebP still outputs.
 
 Releases are driven by a version tag such as `v0.2.0`. The release workflow
 validates the tag against the Cargo workspace version, tests the complete
-workspace, publishes all public `dioxuscut-*` packages to crates.io in dependency
+workspace, publishes all public `rust-motion-*` packages to crates.io in dependency
 order, builds Rhai-enabled CLI archives for Linux, macOS, and Windows, and then
 creates one GitHub Release with SHA-256 checksums.
 
@@ -464,7 +464,7 @@ Tokens must never be committed, placed in a tag, or written into workflow files.
 
 ## Current limitations
 
-- `dioxuscut-vdom` translates an explicit DOM/CSS subset, not a browser engine. Complex selectors, intrinsic browser layout, general DOM APIs, events, animations, and advanced paint effects still require direct Scene APIs or further adapter work. Basic CSS linear/radial gradients, translate/scale/rotate transforms, borders, non-inset `box-shadow`, common pixel filters (including `drop-shadow`), `mix-blend-mode`, and the cross-backend `CanvasImage` source fallback are supported; arbitrary canvas/WebGL drawing remains a Browser/Three.js concern.
+- `rust-motion-vdom` translates an explicit DOM/CSS subset, not a browser engine. Complex selectors, intrinsic browser layout, general DOM APIs, events, animations, and advanced paint effects still require direct Scene APIs or further adapter work. Basic CSS linear/radial gradients, translate/scale/rotate transforms, borders, non-inset `box-shadow`, common pixel filters (including `drop-shadow`), `mix-blend-mode`, and the cross-backend `CanvasImage` source fallback are supported; arbitrary canvas/WebGL drawing remains a Browser/Three.js concern.
 - Native video and audio sources are local files, while image nodes additionally accept local SVG files and base64 `data:image/png`, `data:image/jpeg`, `data:image/webp`, and `data:image/svg+xml` sources up to 32 MiB. SVG assets are rasterized through the same bounded image cache. Project renders can opt into downloading HTTP(S) assets with `--asset-cache-dir`; the CLI caps each asset at 256 MiB and the project at 1 GiB by default (`--max-total-asset-bytes` changes the total). Direct remote URLs are still not opened by the rasterizer itself.
 - Video frames use cached FFprobe stream metadata, up to four persistent FFmpeg decoder sources, fixed-output-FPS sampling for VFR input, and a 128 MiB frame LRU. Backward or large forward seeks restart only the affected decoder.
 - Audio declarations may be supplied by `PreparedComposition::audio_tracks()` as

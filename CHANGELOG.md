@@ -4,7 +4,7 @@
 
 ### Added
 
-- Frozen 1.0 public contracts, project schema specification (`.dioxuscut.json` v1), and SemVer 1.x stability guarantees (#88).
+- Frozen 1.0 public contracts, project schema specification (`.rust_motion.json` v1), and SemVer 1.x stability guarantees (#88).
 - First-class CLI and autonomous AI agent interface with stable exit codes (0-5), machine-readable `--json` output, and `doctor`, `validate`, and `inspect` subcommands (#90).
 - Renderer conformance test suite verifying bit-exact deterministic frame evaluation across sequential, reverse, random-seek, repeated, and concurrent multi-threaded access (#89).
 - Documented backend capabilities matrix establishing native CPU rasterizer as the authoritative reference implementation (#89).
@@ -18,14 +18,14 @@
 
 - Interactive multitrack timeline editor in Studio with clip track assignment, duration adjustments, and playback synchronization (#52).
 - Named time events (`TimeEvent`, `NamedTimeEvent`) and schema expansion in composition and project schemas.
-- Structured preview cache stamps (`SourceStamp`, `FileStamp`) in `dioxuscut serve` to prevent cache stamp collisions (#73).
+- Structured preview cache stamps (`SourceStamp`, `FileStamp`) in `rust-motion serve` to prevent cache stamp collisions (#73).
 - Bounded LRU byte-budget frame cache (`FrameCacheManager`) for rendered Lottie frames (#80).
 - Precise fractional frame cache keys for Lottie rendering across differing composition/animation frame rates (#78).
 
 ### Fixed
 
-- Isolated WebSocket seek and scrub state per connected client in `dioxuscut serve`, preventing multi-client cross-talk (#74, #58).
-- Rejected out-of-range WebSocket seek values exceeding `u32::MAX` in `dioxuscut serve` (#72).
+- Isolated WebSocket seek and scrub state per connected client in `rust-motion serve`, preventing multi-client cross-talk (#74, #58).
+- Rejected out-of-range WebSocket seek values exceeding `u32::MAX` in `rust-motion serve` (#72).
 - Supported `i32::MIN` offsets in `SeriesSequence` calculations without integer overflow (#70).
 - Prevented frame index wrap in `SceneSeries` when sequence durations boundary-align (#71).
 - Enforced strict half-open duration interval (`time_secs >= total_duration_secs`) for Lottie unmount boundaries (#79).
@@ -60,7 +60,7 @@
 
 ### Release
 
-- Publish `dioxuscut-project` and `dioxuscut-charts` with the crates.io package graph. The release workflow checks its ordered package list against Cargo metadata.
+- Publish `rust-motion-project` and `rust-motion-charts` with the crates.io package graph. The release workflow checks its ordered package list against Cargo metadata.
 - Build and publish Python wheels and the source distribution to PyPI from the same version tag.
 
 ### Known limitations

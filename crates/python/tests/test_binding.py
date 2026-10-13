@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive tests for Dioxuscut Python SDK bindings.
+Comprehensive tests for Rust Motion Python SDK bindings.
 """
 
 import json
@@ -10,18 +10,18 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
-TEST_OUTPUT_DIR = os.environ.get("DIOXUSCUT_TEST_OUTPUT_DIR")
+TEST_OUTPUT_DIR = os.environ.get("RUST_MOTION_TEST_OUTPUT_DIR")
 TARGET_DIR = Path(TEST_OUTPUT_DIR) if TEST_OUTPUT_DIR else ROOT / "target/python_test_output"
 TARGET_DIR.mkdir(parents=True, exist_ok=True)
 
-import dioxuscut
+import rust_motion
 
 
 def test_metadata():
     print("[*] Testing metadata and version...")
-    version = dioxuscut.__version__
+    version = rust_motion.__version__
     assert version.startswith("0.2.") or version.startswith("0.1."), f"Unexpected version: {version}"
-    compositions = dioxuscut.list_compositions()
+    compositions = rust_motion.list_compositions()
     print(f"[+] Version: {version}")
     print(f"[+] Registered compositions: {compositions}")
     assert "HelloWorld" in compositions, "HelloWorld should be registered"
@@ -32,43 +32,43 @@ def test_animation_primitives():
     print("\n[*] Testing Remotion-compatible animation primitives...")
 
     # 1. random()
-    r1 = dioxuscut.random("remotion-test")
-    r2 = dioxuscut.random("remotion-test")
+    r1 = rust_motion.random("remotion-test")
+    r2 = rust_motion.random("remotion-test")
     assert r1 == r2, f"random('remotion-test') should be deterministic: {r1} vs {r2}"
     assert 0.0 <= r1 <= 1.0, f"random() output out of [0, 1]: {r1}"
 
     # numeric seed
-    r_num = dioxuscut.random(42)
+    r_num = rust_motion.random(42)
     assert 0.0 <= r_num <= 1.0
 
     # 2. interpolate()
-    val = dioxuscut.interpolate(10.0, [0.0, 20.0], [0.0, 100.0])
+    val = rust_motion.interpolate(10.0, [0.0, 20.0], [0.0, 100.0])
     assert abs(val - 50.0) < 1e-5, f"interpolate midpoint failed: {val}"
 
-    val_clamped = dioxuscut.interpolate(
+    val_clamped = rust_motion.interpolate(
         30.0, [0.0, 20.0], [0.0, 100.0], extrapolate_right="clamp"
     )
     assert abs(val_clamped - 100.0) < 1e-5
 
     # 3. interpolate_colors()
     # shorthand 2-color
-    c1 = dioxuscut.interpolate_colors("#000000", "#ffffff", 0.5)
+    c1 = rust_motion.interpolate_colors("#000000", "#ffffff", 0.5)
     assert "128" in c1, f"interpolate_colors midpoint failed: {c1}"
 
     # Remotion multi-range
-    c2 = dioxuscut.interpolate_colors(
+    c2 = rust_motion.interpolate_colors(
         10.0, [0.0, 10.0, 20.0], ["#000000", "#ff0000", "#ffffff"]
     )
     assert "255, 0, 0" in c2, f"interpolate_colors multi-range failed: {c2}"
 
     # 4. spring()
-    s0 = dioxuscut.spring(0.0, fps=30.0)
-    s_end = dioxuscut.spring(60.0, fps=30.0)
+    s0 = rust_motion.spring(0.0, fps=30.0)
+    s_end = rust_motion.spring(60.0, fps=30.0)
     assert abs(s0 - 0.0) < 1e-4, f"spring(0) should start near 0: {s0}"
     assert abs(s_end - 1.0) < 0.05, f"spring(60) should settle near 1: {s_end}"
 
     # 5. static_file()
-    resolved = dioxuscut.static_file("Cargo.toml")
+    resolved = rust_motion.static_file("Cargo.toml")
     assert "Cargo.toml" in resolved
 
     print("[✓] Animation primitives test passed.")
@@ -80,7 +80,7 @@ def test_render_still():
     if out_png.exists():
         out_png.unlink()
 
-    dioxuscut.render_still(
+    rust_motion.render_still(
         composition="HelloWorld",
         frame=15,
         output=out_png,
@@ -102,7 +102,7 @@ def test_render_video():
     if out_mp4.exists():
         out_mp4.unlink()
 
-    dioxuscut.render(
+    rust_motion.render(
         composition="HelloWorld",
         output=out_mp4,
         props={"title": "Python AI Video", "subtitle": "Ultra Fast Native"},
@@ -119,7 +119,7 @@ def test_render_video():
     print(f"[+] Rendered MP4 size: {file_size} bytes")
     assert file_size > 5000, "MP4 file is suspiciously small"
 
-    meta = dioxuscut.get_video_metadata(str(out_mp4))
+    meta = rust_motion.get_video_metadata(str(out_mp4))
     print(f"[+] Probed video metadata: {meta}")
     assert meta["width"] == 640
     assert meta["height"] == 360
@@ -140,7 +140,7 @@ def test_render_script():
     if out_rhai_mp4.exists():
         out_rhai_mp4.unlink()
 
-    dioxuscut.render_script(
+    rust_motion.render_script(
         script_path=rhai_script,
         output=out_rhai_mp4,
         props={
@@ -167,7 +167,7 @@ def test_composition_class():
     if out_comp.exists():
         out_comp.unlink()
 
-    comp = dioxuscut.Composition("HelloWorld", width=640, height=360, duration=30)
+    comp = rust_motion.Composition("HelloWorld", width=640, height=360, duration=30)
     print(f"[+] Initialized {comp}")
     comp.render(out_comp, props={"title": "OOP API"}, hw_accel="disabled")
 
@@ -182,7 +182,7 @@ def test_shorts_ai_video():
         {"word": "Awesome", "start": 0.0, "end": 0.5},
         {"word": "Shorts 🔥", "start": 0.5, "end": 1.0},
     ])
-    tokens = dioxuscut.parse_whisper(whisper_json)
+    tokens = rust_motion.parse_whisper(whisper_json)
     assert len(tokens) == 2
     assert tokens[0]["text"] == "Awesome"
 
@@ -190,7 +190,7 @@ def test_shorts_ai_video():
     if out_shorts.exists():
         out_shorts.unlink()
 
-    short = dioxuscut.ShortsVideo(
+    short = rust_motion.ShortsVideo(
         width=720,
         height=1280,
         fps=30.0,
@@ -199,7 +199,7 @@ def test_shorts_ai_video():
     )
     short.add_subtitles(
         tokens,
-        style=dioxuscut.CaptionStyle.HORMOZI,
+        style=rust_motion.CaptionStyle.HORMOZI,
         active_color="#ffe600",
         font_size=48.0,
     )
@@ -207,7 +207,7 @@ def test_shorts_ai_video():
     short.render(out_shorts, hw_accel="disabled")
 
     assert out_shorts.exists() and out_shorts.stat().st_size > 1000
-    meta = dioxuscut.get_video_metadata(str(out_shorts))
+    meta = rust_motion.get_video_metadata(str(out_shorts))
     assert meta["width"] == 720
     assert meta["height"] == 1280
     assert not meta["is_landscape"]
@@ -235,14 +235,14 @@ def test_audio_visualizer_and_ducking():
         wf.writeframes(data)
 
     # 1. Test spectrum calculation
-    spectrum = dioxuscut.get_audio_spectrum(str(wav_path), time_secs=0.5, n_bars=32)
+    spectrum = rust_motion.get_audio_spectrum(str(wav_path), time_secs=0.5, n_bars=32)
     assert len(spectrum) == 32, "Spectrum must return 32 bins"
     assert any(b > 0.05 for b in spectrum), "Spectrum should detect sine signal"
     print(f"[+] Computed audio spectrum: max bin = {max(spectrum):.4f}")
 
     # 2. Test ducking keyframes calculation
     speech_ivs = [(0.5, 1.2)]
-    duck_kfs = dioxuscut.calculate_ducking(speech_ivs, total_duration=2.0, base_volume=0.8, duck_volume=0.15)
+    duck_kfs = rust_motion.calculate_ducking(speech_ivs, total_duration=2.0, base_volume=0.8, duck_volume=0.15)
     assert len(duck_kfs) >= 4, "Ducking keyframes must have attack/hold/release points"
     assert duck_kfs[0][1] == 0.8, "Initial volume must be base volume"
     print(f"[+] Calculated {len(duck_kfs)} auto-ducking keyframes: {duck_kfs}")
@@ -252,7 +252,7 @@ def test_audio_visualizer_and_ducking():
     if out_audio_mp4.exists():
         out_audio_mp4.unlink()
 
-    short = dioxuscut.ShortsVideo(
+    short = rust_motion.ShortsVideo(
         width=720,
         height=1280,
         fps=30.0,
@@ -275,50 +275,50 @@ def test_remotion_paths_shapes_and_layout():
 
     # 1. Bounding box & Path transformations
     path = "M 10 20 L 110 20 L 110 70 L 10 70 Z"
-    bbox = dioxuscut.get_bounding_box(path)
+    bbox = rust_motion.get_bounding_box(path)
     assert bbox is not None, "Bounding box must be computed"
     assert bbox["x"] == 10.0 and bbox["y"] == 20.0
     assert bbox["width"] == 100.0 and bbox["height"] == 50.0
     print(f"[+] Computed path bbox: {bbox}")
 
-    rev = dioxuscut.reverse_path("M 0 0 L 10 10 L 20 20")
+    rev = rust_motion.reverse_path("M 0 0 L 10 10 L 20 20")
     assert "M 20.0000 20.0000" in rev
     print(f"[+] Reversed path: {rev}")
 
-    rot = dioxuscut.rotate_path("M 10 0 L 20 0", math.pi / 2, 0.0, 0.0)
+    rot = rust_motion.rotate_path("M 10 0 L 20 0", math.pi / 2, 0.0, 0.0)
     assert "M 0.0000 10.0000" in rot
     print(f"[+] Rotated path: {rot}")
 
-    tangent = dioxuscut.get_tangent_at_length("M 0 0 L 100 0", 50.0)
+    tangent = rust_motion.get_tangent_at_length("M 0 0 L 100 0", 50.0)
     assert tangent is not None and abs(tangent[0] - 1.0) < 1e-4 and abs(tangent[1]) < 1e-4
     print(f"[+] Path tangent vector at length 50: {tangent}")
 
     # 2. Shape generators
-    ellipse = dioxuscut.make_ellipse(80.0, 40.0)
+    ellipse = rust_motion.make_ellipse(80.0, 40.0)
     assert "M 80 0" in ellipse and "A 80 40" in ellipse
     print(f"[+] Generated Ellipse SVG: {ellipse[:40]}...")
 
     # 3. Safe area & Layout
-    safe_tiktok = dioxuscut.get_safe_area_insets("tiktok", 1080.0, 1920.0)
+    safe_tiktok = rust_motion.get_safe_area_insets("tiktok", 1080.0, 1920.0)
     assert safe_tiktok["top"] == 120.0 and safe_tiktok["bottom"] == 340.0
     assert safe_tiktok["safe_width"] == 1080.0 - 40.0 - 120.0
     print(f"[+] TikTok Safe Area: {safe_tiktok}")
 
-    short = dioxuscut.ShortsVideo(width=720, height=1280)
+    short = rust_motion.ShortsVideo(width=720, height=1280)
     short_safe = short.get_safe_area("reels")
     assert short_safe["top"] > 50.0
     print(f"[+] ShortsVideo.get_safe_area('reels'): {short_safe}")
 
-    optimal_font_size = dioxuscut.fit_text("BIG VIRAL HEADLINE", max_width=400.0, max_height=80.0)
+    optimal_font_size = rust_motion.fit_text("BIG VIRAL HEADLINE", max_width=400.0, max_height=80.0)
     assert 12.0 <= optimal_font_size <= 120.0
     print(f"[+] fit_text optimal font size: {optimal_font_size:.2f}px")
 
     # 4. Kinetic Typography
-    typed = dioxuscut.typewriter_text("Hello World", progress=0.5, show_cursor=True)
+    typed = rust_motion.typewriter_text("Hello World", progress=0.5, show_cursor=True)
     assert typed.startswith("Hello") and typed.endswith("|")
     print(f"[+] Typewriter progress 0.5: '{typed}'")
 
-    scrambled = dioxuscut.scramble_text("TOP SECRET", progress=0.5, seed=123)
+    scrambled = rust_motion.scramble_text("TOP SECRET", progress=0.5, seed=123)
     assert scrambled.startswith("TOP S")
     assert len(scrambled) == len("TOP SECRET")
     print(f"[+] Scrambled text progress 0.5: '{scrambled}'")
@@ -328,7 +328,7 @@ def test_remotion_paths_shapes_and_layout():
 
 def main():
     print("=" * 60)
-    print("🚀 Running Dioxuscut Python SDK Test Suite")
+    print("🚀 Running Rust Motion Python SDK Test Suite")
     print("=" * 60)
     test_metadata()
     test_animation_primitives()

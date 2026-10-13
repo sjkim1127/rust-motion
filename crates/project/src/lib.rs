@@ -1390,11 +1390,11 @@ mod tests {
     #[test]
     fn project_asset_files_verify_sha256_relative_to_base_dir() {
         let base =
-            std::env::temp_dir().join(format!("dioxuscut-project-assets-{}", std::process::id()));
+            std::env::temp_dir().join(format!("rust-motion-project-assets-{}", std::process::id()));
         std::fs::create_dir_all(&base).unwrap();
         let asset_path = base.join("logo.bin");
-        std::fs::write(&asset_path, b"dioxuscut asset").unwrap();
-        let digest = format!("{:x}", Sha256::digest(b"dioxuscut asset"));
+        std::fs::write(&asset_path, b"rust-motion asset").unwrap();
+        let digest = format!("{:x}", Sha256::digest(b"rust-motion asset"));
         let mut p = project();
         p.assets = vec![AssetRef {
             id: "logo".into(),
@@ -1594,7 +1594,7 @@ mod tests {
         });
 
         let cache =
-            std::env::temp_dir().join(format!("dioxuscut-remote-assets-{}", std::process::id()));
+            std::env::temp_dir().join(format!("rust-motion-remote-assets-{}", std::process::id()));
         let url = format!("http://asset.test:{}/poster.png", address.port());
         let digest = format!("{:x}", Sha256::digest(&payload));
         let mut p = project();
@@ -1654,7 +1654,7 @@ mod tests {
             sha256: None,
         }];
         let cache =
-            std::env::temp_dir().join(format!("dioxuscut-remote-limit-{}", std::process::id()));
+            std::env::temp_dir().join(format!("rust-motion-remote-limit-{}", std::process::id()));
         let resolver = |_: &reqwest::Url| Ok(vec![address]);
         assert!(matches!(
             p.materialize_remote_assets_with_resolver(&cache, 1024, 2048, &resolver),
@@ -1760,10 +1760,12 @@ mod tests {
     #[test]
     fn project_asset_files_reject_symlink_escape() {
         use std::os::unix::fs::symlink;
-        let base =
-            std::env::temp_dir().join(format!("dioxuscut-project-symlink-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!(
+            "rust-motion-project-symlink-{}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&base).unwrap();
-        let outside = base.with_file_name(format!("dioxuscut-outside-{}", std::process::id()));
+        let outside = base.with_file_name(format!("rust-motion-outside-{}", std::process::id()));
         std::fs::write(&outside, b"outside").unwrap();
         symlink(&outside, base.join("linked.bin")).unwrap();
         let mut p = project();

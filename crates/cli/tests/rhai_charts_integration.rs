@@ -1,8 +1,8 @@
 #![cfg(feature = "rhai")]
 
-use dioxuscut_cli::rhai_runtime::RhaiComposition;
-use dioxuscut_composition::{Composition, NativeCompositionContext};
-use dioxuscut_rasterizer::SceneNode;
+use rust_motion_cli::rhai_runtime::RhaiComposition;
+use rust_motion_composition::{Composition, NativeCompositionContext};
+use rust_motion_rasterizer::SceneNode;
 use serde_json::json;
 
 #[test]

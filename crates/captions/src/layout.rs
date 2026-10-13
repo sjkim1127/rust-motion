@@ -1,7 +1,7 @@
 //! Caption token layout and pixel-width multi-line wrapping.
 
 use crate::types::CaptionToken;
-use dioxuscut_rasterizer::measure_text_width;
+use rust_motion_rasterizer::measure_text_width;
 
 /// A laid-out line of caption tokens with measured dimensions.
 #[derive(Debug, Clone, PartialEq)]

@@ -2735,7 +2735,7 @@ mod tests {
                 font_size: 16.0,
                 color: Color::WHITE,
                 font_weight: 400,
-                font_sources: vec!["/dioxuscut/does-not-exist.ttf".into()],
+                font_sources: vec!["/rust-motion/does-not-exist.ttf".into()],
             }],
         };
         let error = TinySkiaBackend::headless()
@@ -2749,7 +2749,7 @@ mod tests {
     #[test]
     fn local_image_is_fitted_and_decoded_once() {
         let path = std::env::temp_dir().join(format!(
-            "dioxuscut-rasterizer-image-{}.png",
+            "rust-motion-rasterizer-image-{}.png",
             std::process::id()
         ));
         RgbaImage::from_pixel(4, 2, Rgba([255, 0, 0, 255]))
@@ -2782,7 +2782,7 @@ mod tests {
     #[test]
     fn missing_image_returns_an_asset_error() {
         let path = std::env::temp_dir().join(format!(
-            "dioxuscut-missing-image-{}.png",
+            "rust-motion-missing-image-{}.png",
             std::process::id()
         ));
         let scene = Scene {
@@ -2801,7 +2801,7 @@ mod tests {
             .unwrap_err();
 
         assert!(error.to_string().contains("Image asset error"));
-        assert!(error.to_string().contains("dioxuscut-missing-image"));
+        assert!(error.to_string().contains("rust-motion-missing-image"));
     }
 
     #[test]
@@ -2815,8 +2815,10 @@ mod tests {
             return;
         }
 
-        let dir =
-            std::env::temp_dir().join(format!("dioxuscut-video-frame-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "rust-motion-video-frame-test-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let source = dir.join("red.mkv");

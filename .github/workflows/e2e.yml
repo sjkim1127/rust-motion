@@ -46,13 +46,13 @@ jobs:
             librsvg2-dev
 
       # ── 4. Build CLI binary ────────────────────────────────────────────────
-      - name: Build dioxuscut CLI binary
-        run: cargo build -p dioxuscut-cli --locked
+      - name: Build rust-motion CLI binary
+        run: cargo build -p rust-motion-cli --locked
 
       # ── 5. E2E tests ───────────────────────────────────────────────────────
       - name: Run E2E CLI subprocess tests
         run: |
-          cargo test -p dioxuscut-cli --locked --test e2e_cli_subprocess -- \
+          cargo test -p rust-motion-cli --locked --test e2e_cli_subprocess -- \
             --nocapture \
             2>&1 | tee /tmp/e2e_output.log
 
@@ -62,7 +62,7 @@ jobs:
           # Run a quick standalone ffprobe check on a freshly rendered file
           # to double-verify outside the Rust test harness.
           TMPDIR=$(mktemp -d)
-          ./target/debug/dioxuscut render \
+          ./target/debug/rust-motion render \
             --composition HelloWorld \
             --output "$TMPDIR/ci_check.mp4" \
             --width 640 --height 360 \

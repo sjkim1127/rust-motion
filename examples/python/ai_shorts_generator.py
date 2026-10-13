@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-AI Shorts & Reels Generator with Dioxuscut Python SDK.
+AI Shorts & Reels Generator with Rust Motion Python SDK.
 Generates vertical 9:16 (1080x1920) videos with zero browser overhead in ~1-2 seconds.
 """
 
 import argparse
 import time
 from pathlib import Path
-import dioxuscut
+import rust_motion
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 TEMPLATE_PATH = ROOT / "examples/templates/shorts_caption.rhai"
@@ -43,7 +43,7 @@ def generate_short(
 
     start_time = time.time()
 
-    dioxuscut.render_script(
+    rust_motion.render_script(
         script_path=TEMPLATE_PATH,
         output=output_path,
         props=props,

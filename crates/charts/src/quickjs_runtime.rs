@@ -371,7 +371,7 @@ impl Default for QuickJsEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dioxuscut_rasterizer::SceneNode;
+    use rust_motion_rasterizer::SceneNode;
 
     #[test]
     fn test_quickjs_d3_chart_generation() {

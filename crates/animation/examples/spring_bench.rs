@@ -1,5 +1,5 @@
 //! Shared workload with benchmarks/spring-remotion.mjs; build in release mode.
-use dioxuscut_animation::{measure_spring, spring_with_options, SpringConfig, SpringOptions};
+use rust_motion_animation::{measure_spring, spring_with_options, SpringConfig, SpringOptions};
 use std::{hint::black_box, time::Instant};
 
 fn sample(index: u32, scenario: &str) -> f64 {

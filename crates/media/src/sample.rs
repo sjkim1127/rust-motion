@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn reads_ordered_sample_batch() {
         let path =
-            std::env::temp_dir().join(format!("dioxuscut-sample-{}.bin", std::process::id()));
+            std::env::temp_dir().join(format!("rust-motion-sample-{}.bin", std::process::id()));
         std::fs::write(&path, [1_u8, 2, 3, 4, 5]).unwrap();
         let samples = [
             EncodedSample {

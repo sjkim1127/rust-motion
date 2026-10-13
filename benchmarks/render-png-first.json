@@ -86,14 +86,14 @@
   "bundle_ms": 919.8704169999999,
   "browser_ms": 1456.185709,
   "warmup": {
-    "dioxuscut": {
+    "rust-motion": {
       "process_ms": 1528.841,
       "render_ms": 1516.000791
     },
     "remotion_ms": 11425.990167
   },
   "samples_ms": {
-    "dioxuscut": [
+    "rust-motion": [
       2717.4518340000013,
       2022.612000000001,
       2191.539417
@@ -105,7 +105,7 @@
     ]
   },
   "median_ms": {
-    "dioxuscut": 2191.539417,
+    "rust-motion": 2191.539417,
     "remotion": 11041.082750000001
   },
   "speedup": 5.038048900399952,

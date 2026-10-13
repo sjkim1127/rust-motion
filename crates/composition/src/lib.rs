@@ -19,8 +19,8 @@ pub use scene_emitter::{
 };
 pub use time_events::{TimeEventError, TimeEventSchedule};
 
-use dioxuscut_animation::{spring_with_options, SpringConfig, SpringOptions};
-use dioxuscut_rasterizer::{
+use rust_motion_animation::{spring_with_options, SpringConfig, SpringOptions};
+use rust_motion_rasterizer::{
     AudioTrack, BlendMode, Color, GradientStop, MaskMode, Scene, SceneFilter, SceneNode,
     SceneShadow, Transform2D,
 };
@@ -237,7 +237,7 @@ impl CompositionRegistry {
     }
 }
 
-/// Registry shipped by the standalone `dioxuscut` binary.
+/// Registry shipped by the standalone `rust-motion` binary.
 pub fn built_in_registry() -> CompositionRegistry {
     let mut registry = CompositionRegistry::new();
     registry
@@ -416,7 +416,7 @@ impl NativeComposition for HelloWorldComposition {
         let bg_start = color_prop(props, "background_start", Color::rgb(15, 23, 42));
         let bg_end = color_prop(props, "background_end", Color::rgb(30, 27, 75));
         let accent = color_prop(props, "accent_color", Color::rgb(108, 99, 255));
-        let title = string_prop(props, "title", "Hello Dioxuscut");
+        let title = string_prop(props, "title", "Hello Rust Motion");
         let subtitle = string_prop(props, "subtitle", "Declarative programmatic video in Rust");
 
         let mut scene = Scene::new();
@@ -1144,7 +1144,7 @@ impl NativeComposition for KaraokeCaptionsComposition {
 
         // 4. Karaoke timed sentence
         let words = [
-            ("Dioxuscut", 0.00, 0.20),
+            ("Rust Motion", 0.00, 0.20),
             ("builds", 0.20, 0.40),
             ("native", 0.40, 0.60),
             ("video", 0.60, 0.80),
@@ -1445,7 +1445,7 @@ impl NativeComposition for CodeTerminalComposition {
         let t = context.progress(frame);
 
         let bg_color = color_prop(props, "bg", Color::rgb(15, 17, 26));
-        let term_title = string_prop(props, "terminal_title", "dioxuscut — bash — 80x24");
+        let term_title = string_prop(props, "terminal_title", "rust-motion — bash — 80x24");
 
         let mut scene = Scene::new();
 
@@ -1538,7 +1538,7 @@ impl NativeComposition for CodeTerminalComposition {
         scene.push(SceneNode::Text {
             x: content_x,
             y: line_y,
-            content: "➜  dioxuscut git:(main) ".to_string(),
+            content: "➜  rust-motion git:(main) ".to_string(),
             font_size,
             color: Color::rgb(166, 227, 161),
             font_weight: 700,
@@ -1546,7 +1546,7 @@ impl NativeComposition for CodeTerminalComposition {
         });
 
         // 4. Command typing animation
-        let full_command = "cargo run --release --bin dioxuscut";
+        let full_command = "cargo run --release --bin rust-motion";
         let typing_progress = (t * 2.2).min(1.0);
         let char_count = (typing_progress * full_command.len() as f32).round() as usize;
         let typed_str = &full_command[..char_count.min(full_command.len())];

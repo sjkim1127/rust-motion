@@ -1,6 +1,6 @@
 //! Immutable named frame markers for deterministic, random-access compositions.
 
-use dioxuscut_project::TimeEvent;
+use rust_motion_project::TimeEvent;
 use std::collections::BTreeMap;
 use thiserror::Error;
 

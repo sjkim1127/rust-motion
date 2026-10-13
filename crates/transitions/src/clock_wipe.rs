@@ -2,10 +2,10 @@
 
 use crate::presentation::{PresentationVisual, TransitionContext, TransitionPresentation};
 use dioxus::prelude::*;
-use dioxuscut_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
-use dioxuscut_composition::{CompositionError, SceneEmitter, SceneFrameContext};
-use dioxuscut_core::hooks::use_current_frame;
-use dioxuscut_rasterizer::{ClipRegion, Scene, SceneNode};
+use rust_motion_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
+use rust_motion_composition::{CompositionError, SceneEmitter, SceneFrameContext};
+use rust_motion_core::hooks::use_current_frame;
+use rust_motion_rasterizer::{ClipRegion, Scene, SceneNode};
 use serde_json::Value;
 
 /// Clock wipe transition revealing the entering scene in a circular clock sweep.
@@ -146,10 +146,10 @@ impl<E: SceneEmitter> SceneEmitter for SceneClockWipe<E> {
         if !child_scene.nodes.is_empty() {
             scene.push(SceneNode::Layer {
                 opacity: 1.0,
-                blend_mode: dioxuscut_rasterizer::BlendMode::Normal,
+                blend_mode: rust_motion_rasterizer::BlendMode::Normal,
                 clip: Some(ClipRegion::Path { d: path }),
                 mask: None,
-                mask_mode: dioxuscut_rasterizer::MaskMode::Alpha,
+                mask_mode: rust_motion_rasterizer::MaskMode::Alpha,
                 filters: Vec::new(),
                 shadow: None,
                 children: child_scene.nodes,

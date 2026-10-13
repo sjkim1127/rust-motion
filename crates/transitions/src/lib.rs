@@ -1,4 +1,4 @@
-//! # dioxuscut-transitions
+//! # rust-motion-transitions
 //!
 //! Transition components and presentations — wrap children in animated reveal/exit effects.
 //!

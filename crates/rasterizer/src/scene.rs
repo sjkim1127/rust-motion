@@ -48,7 +48,7 @@ impl Color {
         }
     }
 
-    /// Parse common CSS color forms used by Dioxuscut primitives.
+    /// Parse common CSS color forms used by Rust Motion primitives.
     pub fn from_css(value: &str) -> Option<Self> {
         let value = value.trim();
         if let Some(color) = Self::from_hex(value) {

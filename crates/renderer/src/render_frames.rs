@@ -1,6 +1,6 @@
 //! Frame rendering configuration and error types.
 //!
-//! Frame rasterization is handled natively by `dioxuscut-rasterizer` via CPU (tiny-skia) or GPU (wgpu).
+//! Frame rasterization is handled natively by `rust-motion-rasterizer` via CPU (tiny-skia) or GPU (wgpu).
 
 use thiserror::Error;
 

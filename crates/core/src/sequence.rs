@@ -8,7 +8,7 @@
 //!
 //! # Example
 //! ```rust,ignore
-//! use dioxuscut_core::Sequence;
+//! use rust_motion_core::Sequence;
 //!
 //! fn MyVideo() -> Element {
 //!     rsx! {

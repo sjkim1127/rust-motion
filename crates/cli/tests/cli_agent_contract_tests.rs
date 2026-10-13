@@ -4,11 +4,11 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn cli_bin() -> PathBuf {
-    std::env::var("CARGO_BIN_EXE_dioxuscut")
+    std::env::var("CARGO_BIN_EXE_rust_motion")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
             let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            manifest.join("../../target/debug/dioxuscut")
+            manifest.join("../../target/debug/rust-motion")
         })
 }
 
@@ -17,7 +17,7 @@ fn tmp_dir(label: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!("dioxuscut_contract_{}_{}", label, nanos));
+    let dir = std::env::temp_dir().join(format!("rust_motion_contract_{}_{}", label, nanos));
     fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -47,14 +47,14 @@ fn test_cli_doctor_json_output() {
 fn test_cli_doctor_env_json() {
     let output = Command::new(cli_bin())
         .arg("doctor")
-        .env("DIOXUSCUT_JSON", "1")
+        .env("RUST_MOTION_JSON", "1")
         .output()
         .expect("doctor command executes");
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     let val: serde_json::Value =
-        serde_json::from_str(&stdout).expect("DIOXUSCUT_JSON=1 must output valid JSON");
+        serde_json::from_str(&stdout).expect("RUST_MOTION_JSON=1 must output valid JSON");
     assert!(val.get("ok").is_some());
 }
 
@@ -162,7 +162,7 @@ fn test_cli_validate_composition_failure_exit_code_4() {
 #[test]
 fn test_cli_validate_project_file_roundtrip() {
     let dir = tmp_dir("validate_proj");
-    let proj_path = dir.join("test.dioxuscut.json");
+    let proj_path = dir.join("test.rust_motion.json");
     let proj_json = serde_json::json!({
         "version": 1,
         "composition": "HelloWorld",
@@ -204,7 +204,7 @@ fn test_cli_validate_project_file_roundtrip() {
 #[test]
 fn test_cli_validate_invalid_project_fails_with_exit_code_4() {
     let dir = tmp_dir("validate_invalid_proj");
-    let proj_path = dir.join("invalid.dioxuscut.json");
+    let proj_path = dir.join("invalid.rust_motion.json");
     fs::write(&proj_path, "not a json").unwrap();
 
     let output = Command::new(cli_bin())
@@ -230,7 +230,7 @@ fn test_cli_validate_invalid_project_fails_with_exit_code_4() {
 #[test]
 fn test_cli_inspect_project_file() {
     let dir = tmp_dir("inspect_proj");
-    let proj_path = dir.join("project.dioxuscut.json");
+    let proj_path = dir.join("project.rust_motion.json");
     let proj_json = serde_json::json!({
         "version": 1,
         "composition": "HelloWorld",

@@ -108,22 +108,22 @@ try {
   const remotionMs = performance.now() - remotionStart;
   console.log(`[+] Remotion Gauntlet render completed in ${(remotionMs / 1000).toFixed(2)}s (${(900 / (remotionMs / 1000)).toFixed(2)} FPS)`);
 
-  console.log('[*] [ROUND 2] Rendering Dioxuscut Gauntlet scene (1920x1080, 900 frames, concurrency: 4)...');
-  const dioxuscutStart = performance.now();
+  console.log('[*] [ROUND 2] Rendering Rust Motion Gauntlet scene (1920x1080, 900 frames, concurrency: 4)...');
+  const rust-motionStart = performance.now();
   const rawOutput = execFileSync(
     nativeBinary,
-    [path.join(outputDir, 'dioxuscut-gauntlet.mp4'), '4', '900'],
+    [path.join(outputDir, 'rust-motion-gauntlet.mp4'), '4', '900'],
     {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit']}
   );
-  const dioxuscutProcessMs = performance.now() - dioxuscutStart;
+  const rust-motionProcessMs = performance.now() - rust-motionStart;
   const nativeStats = JSON.parse(rawOutput.trim());
-  console.log(`[+] Dioxuscut Gauntlet render completed in ${(dioxuscutProcessMs / 1000).toFixed(2)}s (internal render: ${(nativeStats.render_ms / 1000).toFixed(2)}s, ${(900 / (dioxuscutProcessMs / 1000)).toFixed(2)} FPS)`);
+  console.log(`[+] Rust Motion Gauntlet render completed in ${(rust-motionProcessMs / 1000).toFixed(2)}s (internal render: ${(nativeStats.render_ms / 1000).toFixed(2)}s, ${(900 / (rust-motionProcessMs / 1000)).toFixed(2)} FPS)`);
 
   const ssimStatsPath = path.join(outputDir, 'gauntlet-ssim.log');
   execFileSync('ffmpeg', [
     '-hide_banner', '-loglevel', 'error',
     '-i', path.join(outputDir, 'remotion-gauntlet.mp4'),
-    '-i', path.join(outputDir, 'dioxuscut-gauntlet.mp4'),
+    '-i', path.join(outputDir, 'rust-motion-gauntlet.mp4'),
     '-lavfi', `ssim=stats_file=${ssimStatsPath}`,
     '-f', 'null', '-',
   ], {stdio: 'inherit'});
@@ -141,13 +141,13 @@ try {
 
   const videoSourceSsim = {
     remotion: measureVideoSourceSsim(path.join(outputDir, 'remotion-gauntlet.mp4'), 'remotion'),
-    dioxuscut: measureVideoSourceSsim(path.join(outputDir, 'dioxuscut-gauntlet.mp4'), 'dioxuscut'),
+    rust-motion: measureVideoSourceSsim(path.join(outputDir, 'rust-motion-gauntlet.mp4'), 'rust-motion'),
   };
-  console.log(`[+] Left video source SSIM: Remotion ${videoSourceSsim.remotion.mean.toFixed(6)}, Dioxuscut ${videoSourceSsim.dioxuscut.mean.toFixed(6)}`);
+  console.log(`[+] Left video source SSIM: Remotion ${videoSourceSsim.remotion.mean.toFixed(6)}, Rust Motion ${videoSourceSsim.rust_motion.mean.toFixed(6)}`);
 
-  const speedup = remotionMs / dioxuscutProcessMs;
+  const speedup = remotionMs / rust-motionProcessMs;
   console.log(`\n======================================================`);
-  console.log(`🔥 THE GAUNTLET RESULT: Dioxuscut is ${speedup.toFixed(2)}x faster!`);
+  console.log(`🔥 THE GAUNTLET RESULT: Rust Motion is ${speedup.toFixed(2)}x faster!`);
   console.log(`======================================================\n`);
 
   const report = {
@@ -169,10 +169,10 @@ try {
       render_ms: remotionMs,
       fps: 900 / (remotionMs / 1000),
     },
-    dioxuscut: {
-      process_ms: dioxuscutProcessMs,
+    rust-motion: {
+      process_ms: rust-motionProcessMs,
       render_ms: nativeStats.render_ms,
-      fps: 900 / (dioxuscutProcessMs / 1000),
+      fps: 900 / (rust-motionProcessMs / 1000),
     },
     ssim,
     video_source_ssim: videoSourceSsim,

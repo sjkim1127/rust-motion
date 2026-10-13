@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-IMAGE=${IMAGE:-dioxuscut:latest}
+IMAGE=${IMAGE:-rust-motion:latest}
 PLATFORM=${PLATFORM:-linux/arm64}
 OUT_DIR=${OUT_DIR:-target/container-smoke}
 OUTPUT="$OUT_DIR/hello-world.mp4"

@@ -5,8 +5,8 @@ pub use crate::iris::SceneIris;
 pub use crate::linear_wipe::{SceneLinearWipe, SceneLinearWipe as SceneWipe};
 pub use crate::slide::SlideDirection;
 pub use crate::zoom::SceneZoom;
-use dioxuscut_composition::{CompositionError, SceneEmitter, SceneFrameContext};
-use dioxuscut_rasterizer::{Scene, SceneNode, Transform2D};
+use rust_motion_composition::{CompositionError, SceneEmitter, SceneFrameContext};
+use rust_motion_rasterizer::{Scene, SceneNode, Transform2D};
 use serde_json::Value;
 
 /// Native fade-in/fade-out wrapper.
@@ -162,10 +162,10 @@ fn emit_group<E: SceneEmitter>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dioxuscut_composition::{
+    use rust_motion_composition::{
         NativeComposition, NativeCompositionContext, SceneEmitterComposition,
     };
-    use dioxuscut_rasterizer::Color;
+    use rust_motion_rasterizer::Color;
 
     fn context() -> NativeCompositionContext {
         NativeCompositionContext {

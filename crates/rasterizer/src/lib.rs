@@ -1,4 +1,4 @@
-//! Dioxuscut Rasterizer — Native browser-free frame rendering.
+//! Rust Motion Rasterizer — Native browser-free frame rendering.
 //!
 //! Replaces Headless Chrome with a pure-Rust rasterizer pipeline.
 //!
@@ -9,8 +9,8 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use dioxuscut_rasterizer::{TinySkiaBackend, Scene, SceneNode, Color};
-//! use dioxuscut_rasterizer::backend::{FrameConfig, RasterizerBackend};
+//! use rust_motion_rasterizer::{TinySkiaBackend, Scene, SceneNode, Color};
+//! use rust_motion_rasterizer::backend::{FrameConfig, RasterizerBackend};
 //!
 //! let backend = TinySkiaBackend::new();
 //! let mut scene = Scene::new();

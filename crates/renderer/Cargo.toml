@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-renderer"
-description = "Headless frame renderer and video encoder for Dioxuscut"
+name        = "rust-motion-renderer"
+description = "Headless frame renderer and video encoder for Rust Motion"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true

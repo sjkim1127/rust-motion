@@ -1,6 +1,6 @@
 use crate::css::{ResolvedStyle, Stylesheet};
 use crate::dom::{NativeDom, NativeDomError, NativeElement, NativeNodeKind, NodeKey};
-use dioxuscut_rasterizer::{
+use rust_motion_rasterizer::{
     layout_text_box, measure_text_width, AudioTrack, BlendMode, ClipRegion, Color, MaskMode, Scene,
     SceneNode, TextBox, Transform2D,
 };

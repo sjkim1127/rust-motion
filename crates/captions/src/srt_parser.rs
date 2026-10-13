@@ -151,17 +151,17 @@ mod tests {
     fn test_parse_and_serialize_srt() {
         let srt = r#"1
 00:00:01,000 --> 00:00:03,000
-Hello Dioxuscut
+Hello Rust-Motion
 
 2
 00:00:04,500 --> 00:00:06,000
 Fast video rendering"#;
 
         let tokens = parse_srt(srt).expect("SRT parse failed");
-        assert_eq!(tokens.len(), 5); // ["Hello", "Dioxuscut", "Fast", "video", "rendering"]
+        assert_eq!(tokens.len(), 5); // ["Hello", "Rust-Motion", "Fast", "video", "rendering"]
         assert_eq!(tokens[0].text, "Hello");
         assert_eq!(tokens[0].start_ms, 1000);
-        assert_eq!(tokens[1].text, "Dioxuscut");
+        assert_eq!(tokens[1].text, "Rust-Motion");
 
         let serialized = serialize_srt(&tokens[0..2]);
         assert!(serialized.contains("00:00:01,000 --> 00:00:02,000\nHello"));

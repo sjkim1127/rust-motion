@@ -4,7 +4,7 @@
 //!
 //! # Example
 //! ```rust,ignore
-//! use dioxuscut_player::Player;
+//! use rust_motion_player::Player;
 //!
 //! fn App() -> Element {
 //!     rsx! {
@@ -21,7 +21,7 @@
 //! ```
 
 use dioxus::prelude::*;
-use dioxuscut_core::Composition;
+use rust_motion_core::Composition;
 use std::time::{Duration, Instant};
 
 use crate::controls::Controls;
@@ -165,7 +165,7 @@ pub fn Player(props: PlayerProps) -> Element {
 
     rsx! {
         div {
-            class: "dioxuscut-player",
+            class: "rust-motion-player",
             style: "display: flex; flex-direction: column; align-items: center; gap: 8px; font-family: sans-serif;",
 
             // Composition viewport

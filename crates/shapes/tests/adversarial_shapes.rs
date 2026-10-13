@@ -1,6 +1,6 @@
-//! Adversarial and degenerate stress tests for `dioxuscut-shapes`.
+//! Adversarial and degenerate stress tests for `rust-motion-shapes`.
 
-use dioxuscut_shapes::*;
+use rust_motion_shapes::*;
 use std::f64::consts::PI;
 
 // ===========================================================================
@@ -278,7 +278,7 @@ fn test_all_shapes_boundary_values() {
 
 #[test]
 fn test_cross_crate_parametric_fuzzing() {
-    use dioxuscut_paths::{approximate_path_length, evolve_path, get_length, parse_path};
+    use rust_motion_paths::{approximate_path_length, evolve_path, get_length, parse_path};
 
     // Heart sweep
     let test_dims = [-50.0, 0.0, 0.001, 1.0, 10.0, 50.0, 100.0, 1000.0];

@@ -1,6 +1,6 @@
-//! # dioxuscut-renderer
+//! # rust-motion-renderer
 //!
-//! Video encoding and web server management for Dioxuscut.
+//! Video encoding and web server management for Rust Motion.
 //!
 //! Equivalent to `@remotion/renderer`.
 //!

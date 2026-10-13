@@ -1,6 +1,6 @@
 # Performance acceptance
 
-Dioxuscut should beat Remotion on the corresponding workload while preserving
+Rust Motion should beat Remotion on the corresponding workload while preserving
 output. These benchmarks run the real Remotion implementation with its caches
 enabled. Each script saves raw samples and exits unsuccessfully if output checks
 fail or the measured median does not beat Remotion. Performance gates belong on
@@ -39,7 +39,7 @@ frame rates, and fractional steps, with a 1e-9 tolerance.
 
 ```sh
 npm ci --prefix benchmarks/remotion --ignore-scripts --no-audit --no-fund
-cargo build --locked --release -p dioxuscut-core --example render_bench
+cargo build --locked --release -p rust-motion-core --example render_bench
 IMAGE_FORMAT=png node benchmarks/remotion/render-bench.mjs
 IMAGE_FORMAT=jpeg node benchmarks/remotion/render-bench.mjs
 ```
@@ -48,7 +48,7 @@ The default Chrome path is the macOS application path. Set `CHROME_PATH` to use
 another Chrome installation. Set `REPEATS` to change the default three measured
 renders. Output media and browser bundles go under `target/remotion-benchmark-*`.
 Pinned npm versions and their lockfile are isolated under `benchmarks/remotion`;
-production Dioxuscut gains no Node dependency.
+production Rust Motion gains no Node dependency.
 
 ### Three.js lifecycle smoke test
 
@@ -65,13 +65,13 @@ The native 3D emission path can be measured independently of rasterization
 and FFmpeg with:
 
 ```sh
-cargo run --locked --release -p dioxuscut-composition --example mesh3d_bench
+cargo run --locked --release -p rust-motion-composition --example mesh3d_bench
 ```
 
 Both scene definitions render 32 opaque moving rectangles at 1280x720, 30 fps,
 180 frames, using the same spring parameters. Each uses four render workers,
 H.264, CRF 18, and the fast x264 preset. Both use the same system FFmpeg binary;
-Remotion's bundled FFmpeg lacks the rawvideo demuxer required by Dioxuscut's pipe.
+Remotion's bundled FFmpeg lacks the rawvideo demuxer required by Rust Motion's pipe.
 Remotion keeps its own compositor libraries via `binariesDirectory`.
 
 One warmup render per engine is excluded. Chromium is reused, and bundling and
@@ -92,7 +92,7 @@ all product features, browser startup, or compile/bundle time.
 ## Interpretation
 
 The currently recorded lossless PNG batch (`render-png.json`) was taken on an
-Apple M4 Pro and measured a 0.543s Dioxuscut median versus 10.125s for Remotion
+Apple M4 Pro and measured a 0.543s Rust Motion median versus 10.125s for Remotion
 (18.66x). This file contains one measured sample per engine, so it is a
 directional snapshot rather than a production latency budget. Earlier batches
 in this repository report different absolute timings; always use a fresh run
@@ -123,18 +123,18 @@ the composition or host.
 Set `WORKERS=2` or `WORKERS=4` to measure persistent Chromium worker scaling;
 each worker owns an isolated page and receives a different frame in each batch.
 
-For transport comparisons, set `DIOXUSCUT_BROWSER_IMAGE_FORMAT=jpeg` and
-optionally `DIOXUSCUT_BROWSER_JPEG_QUALITY=90`. On the reference M4 Pro
+For transport comparisons, set `RUST_MOTION_BROWSER_IMAGE_FORMAT=jpeg` and
+optionally `RUST_MOTION_BROWSER_JPEG_QUALITY=90`. On the reference M4 Pro
 Three.js scene, JPEG quality 90 measured about 2x the PNG throughput (roughly
 60 FPS versus 30 FPS), but remains opt-in because it is lossy.
 
 To keep encoded frame bytes out of the JSON/base64 channel, set
-`DIOXUSCUT_BROWSER_TRANSPORT=file`. The worker writes a process-scoped
+`RUST_MOTION_BROWSER_TRANSPORT=file`. The worker writes a process-scoped
 temporary PNG/JPEG and the Rust backend removes it after decoding. This mode is
 useful for local Tauri/CLI jobs; the default remains JSON/base64 for maximum
 portability.
 
-For raw WebGL/Canvas RGBA frames, set `DIOXUSCUT_BROWSER_TRANSPORT=rgba_file`.
+For raw WebGL/Canvas RGBA frames, set `RUST_MOTION_BROWSER_TRANSPORT=rgba_file`.
 The worker writes tightly packed RGBA8 bytes to a process-scoped temporary file
 and returns only its path, avoiding base64 expansion while preserving lossless
 pixel transport. The Rust backend removes the file after reading it.
@@ -155,13 +155,13 @@ These numbers measure Chromium transport/render behavior only; they are not a
 Remotion end-to-end comparison and should be re-run after renderer changes.
 
 For browser compositions that intentionally render transparency, set
-`DIOXUSCUT_BROWSER_TRANSPARENT=1`. This forwards Remotion's `omitBackground`
+`RUST_MOTION_BROWSER_TRANSPARENT=1`. This forwards Remotion's `omitBackground`
 behavior to Playwright for PNG frames; JPEG transport remains opaque by
 definition.
 
 Both native and browser backends expose bounded frame-resource caches. Set
-`DIOXUSCUT_IMAGE_CACHE_BYTES` for decoded native images (default 256 MiB) and
-`DIOXUSCUT_FRAME_CACHE_BYTES` for browser-rendered RGBA frames (default 512
+`RUST_MOTION_IMAGE_CACHE_BYTES` for decoded native images (default 256 MiB) and
+`RUST_MOTION_FRAME_CACHE_BYTES` for browser-rendered RGBA frames (default 512
 MiB). These limits are useful when a Tauri window, Dioxus preview, and export
 job share one process or machine; invalid and non-positive values use the
 default.
@@ -197,7 +197,7 @@ python3 benchmarks/profile_memory.py -o mem_result.json -- target/release/exampl
 
 ### 2. 1080p Cyberpunk VFX & Typography Benchmark
 ```sh
-# Dioxuscut native 1080p VFX:
+# Rust Motion native 1080p VFX:
 target/release/examples/cyberpunk_bench target/cyberpunk.mp4 4
 
 # Remotion 1080p VFX (Node.js + Chrome required):
@@ -215,12 +215,12 @@ See `benchmarks/BATTLE_REPORT.md` for the latest comprehensive battle report.
 ### OrbStack/Linux container validation
 
 The native Docker image must be built with the Linux multi-stage Dockerfile;
-do not copy `target/release/dioxuscut` from macOS or Windows into the image.
+do not copy `target/release/rust-motion` from macOS or Windows into the image.
 
 Build and run a functional Linux smoke test from the repository root:
 
 ```sh
-docker build --platform linux/arm64 -f benchmarks/docker/Dockerfile.dioxuscut -t dioxuscut:latest .
+docker build --platform linux/arm64 -f benchmarks/docker/Dockerfile.rust-motion -t rust-motion:latest .
 sh benchmarks/docker/smoke.sh
 ```
 
@@ -230,11 +230,11 @@ test another image, architecture, or output directory.
 From the repository root, OrbStack or Docker can build and execute it with:
 
 ```sh
-docker build -f benchmarks/docker/Dockerfile.dioxuscut -t dioxuscut:local .
-docker run --rm dioxuscut:local render --help
+docker build -f benchmarks/docker/Dockerfile.rust-motion -t rust-motion:local .
+docker run --rm rust-motion:local render --help
 ```
 
-The builder compiles `dioxuscut-cli` against musl inside Linux and the Alpine
+The builder compiles `rust-motion-cli` against musl inside Linux and the Alpine
 runtime keeps FFmpeg and CA certificates available for native exports.
 
 
@@ -248,8 +248,8 @@ and the 1080p Cyberpunk export. Compile time and validation are excluded.
 Before changing the renderer, build and save the three examples:
 
 ```sh
-cargo build --locked --release -p dioxuscut-rasterizer --example raster_bench \
-  -p dioxuscut-core --example render_bench --example cyberpunk_bench
+cargo build --locked --release -p rust-motion-rasterizer --example raster_bench \
+  -p rust-motion-core --example render_bench --example cyberpunk_bench
 mkdir -p target/render-speed/before
 cp target/release/examples/{raster_bench,render_bench,cyberpunk_bench} target/render-speed/before/
 ```

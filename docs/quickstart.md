@@ -17,18 +17,18 @@ Get up and running with Rust Motion in under 5 minutes.
 ### Option A: Cargo CLI (Recommended for Rust & Agents)
 
 ```bash
-cargo install --locked dioxuscut-cli
+cargo install --locked rust-motion-cli
 ```
 
 Verify your installation:
 ```bash
-dioxuscut --version
+rust-motion --version
 ```
 
 ### Option B: Python Package
 
 ```bash
-pip install dioxuscut
+pip install rust-motion
 ```
 
 ---
@@ -38,12 +38,12 @@ pip install dioxuscut
 Rust Motion includes an environment doctor to inspect dependencies and hardware encoding capabilities:
 
 ```bash
-dioxuscut doctor
+rust-motion doctor
 ```
 
 For AI agents and automated scripts, pass `--json`:
 ```bash
-dioxuscut doctor --json
+rust-motion doctor --json
 ```
 
 Example output:
@@ -72,20 +72,20 @@ Example output:
 Render the built-in `HelloWorld` composition to MP4:
 
 ```bash
-dioxuscut render --composition HelloWorld -o output.mp4
+rust-motion render --composition HelloWorld -o output.mp4
 ```
 
 Render a high-resolution still frame to PNG:
 
 ```bash
-dioxuscut render --composition HelloWorld --codec png -o frame.png
+rust-motion render --composition HelloWorld --codec png -o frame.png
 ```
 
 Inspect supported backends and capabilities:
 
 ```bash
-dioxuscut inspect --backends
-dioxuscut inspect --codecs
+rust-motion inspect --backends
+rust-motion inspect --codecs
 ```
 
 ---

@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-media"
-description = "Media components for Dioxuscut — Img, Video, Audio"
+name        = "rust-motion-media"
+description = "Media components for Rust Motion — Img, Video, Audio"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -10,9 +10,9 @@ readme.workspace      = true
 
 [dependencies]
 dioxus             = { workspace = true, optional = true }
-dioxuscut-core     = { workspace = true, optional = true }
-dioxuscut-composition = { workspace = true }
-dioxuscut-rasterizer  = { workspace = true }
+rust-motion-core     = { workspace = true, optional = true }
+rust-motion-composition = { workspace = true }
+rust-motion-rasterizer  = { workspace = true }
 serde              = { workspace = true }
 serde_json         = { workspace = true }
 tracing            = { workspace = true }
@@ -23,4 +23,4 @@ thiserror          = { workspace = true }
 
 [features]
 default = ["dioxus"]
-dioxus = ["dep:dioxus", "dep:dioxuscut-core"]
+dioxus = ["dep:dioxus", "dep:rust-motion-core"]

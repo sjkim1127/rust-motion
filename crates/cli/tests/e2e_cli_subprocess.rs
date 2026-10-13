@@ -1,10 +1,10 @@
 //! E2E Subprocess Tests
 //!
-//! These tests build and invoke the real `dioxuscut` CLI binary as a child process,
+//! These tests build and invoke the real `rust-motion` CLI binary as a child process,
 //! verifying end-to-end output correctness without calling any internal library functions.
 //!
 //! Each test:
-//!   1. Spawns `dioxuscut render …` as a subprocess via `std::process::Command`
+//!   1. Spawns `rust-motion render …` as a subprocess via `std::process::Command`
 //!   2. Asserts the process exit code
 //!   3. Inspects the produced file's byte headers and/or runs `ffprobe` for codec metadata
 
@@ -15,17 +15,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/// Returns the path to the compiled `dioxuscut` CLI binary.
+/// Returns the path to the compiled `rust-motion` CLI binary.
 ///
-/// Cargo injects `CARGO_BIN_EXE_dioxuscut` automatically when the `[[bin]]` target
-/// is declared in the same package's `Cargo.toml`. Falls back to `target/debug/dioxuscut`
+/// Cargo injects `CARGO_BIN_EXE_rust_motion` automatically when the `[[bin]]` target
+/// is declared in the same package's `Cargo.toml`. Falls back to `target/debug/rust-motion`
 /// for manual runs outside the test harness.
 fn cli_bin() -> PathBuf {
-    std::env::var("CARGO_BIN_EXE_dioxuscut")
+    std::env::var("CARGO_BIN_EXE_rust_motion")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
             let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            manifest.join("../..").join("target/debug/dioxuscut")
+            manifest.join("../..").join("target/debug/rust-motion")
         })
 }
 
@@ -35,7 +35,7 @@ fn tmp_dir(label: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!("dioxuscut_e2e_{}_{}", label, nanos));
+    let dir = std::env::temp_dir().join(format!("rust_motion_e2e_{}_{}", label, nanos));
     fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -81,11 +81,11 @@ fn e2e_hello_world_mp4() {
             "28",
         ])
         .status()
-        .expect("Failed to spawn dioxuscut CLI");
+        .expect("Failed to spawn rust-motion CLI");
 
     assert!(
         status.success(),
-        "dioxuscut render exited with non-zero status: {status}"
+        "rust-motion render exited with non-zero status: {status}"
     );
     assert!(output.exists(), "Output MP4 was not created at {output:?}");
 
@@ -129,11 +129,11 @@ fn e2e_gif_output() {
             "gif",
         ])
         .status()
-        .expect("Failed to spawn dioxuscut CLI");
+        .expect("Failed to spawn rust-motion CLI");
 
     assert!(
         status.success(),
-        "dioxuscut gif render exited with non-zero status: {status}"
+        "rust-motion gif render exited with non-zero status: {status}"
     );
     assert!(output.exists(), "Output GIF was not created at {output:?}");
 
@@ -176,11 +176,11 @@ fn e2e_still_png_output() {
             "0",
         ])
         .status()
-        .expect("Failed to spawn dioxuscut CLI");
+        .expect("Failed to spawn rust-motion CLI");
 
     assert!(
         status.success(),
-        "dioxuscut png render exited with non-zero status: {status}"
+        "rust-motion png render exited with non-zero status: {status}"
     );
     assert!(output.exists(), "Output PNG was not created at {output:?}");
 
@@ -234,11 +234,11 @@ fn e2e_ffprobe_video_stream_metadata() {
             "28",
         ])
         .status()
-        .expect("Failed to spawn dioxuscut CLI for ffprobe test");
+        .expect("Failed to spawn rust-motion CLI for ffprobe test");
 
     assert!(
         render_status.success(),
-        "dioxuscut render failed before ffprobe could run: {render_status}"
+        "rust-motion render failed before ffprobe could run: {render_status}"
     );
 
     let ffprobe_out = Command::new("ffprobe")
@@ -326,7 +326,7 @@ fn e2e_invalid_codec_extension_fails() {
             "h264",
         ])
         .status()
-        .expect("Failed to spawn dioxuscut CLI");
+        .expect("Failed to spawn rust-motion CLI");
 
     assert!(
         !status.success(),
@@ -359,7 +359,7 @@ fn e2e_zero_duration_fails() {
             "0",
         ])
         .status()
-        .expect("Failed to spawn dioxuscut CLI");
+        .expect("Failed to spawn rust-motion CLI");
 
     assert!(
         !status.success(),
@@ -392,7 +392,7 @@ fn e2e_unknown_composition_fails() {
             "30",
         ])
         .status()
-        .expect("Failed to spawn dioxuscut CLI");
+        .expect("Failed to spawn rust-motion CLI");
 
     assert!(
         !status.success(),
@@ -427,7 +427,7 @@ fn e2e_odd_resolution_fails() {
             "h264",
         ])
         .status()
-        .expect("Failed to spawn dioxuscut CLI");
+        .expect("Failed to spawn rust-motion CLI");
 
     assert!(
         !status.success(),

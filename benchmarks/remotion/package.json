@@ -1,5 +1,5 @@
 {
-  "name": "dioxuscut-remotion-benchmark",
+  "name": "rust-motion-remotion-benchmark",
   "private": true,
   "type": "module",
   "dependencies": {

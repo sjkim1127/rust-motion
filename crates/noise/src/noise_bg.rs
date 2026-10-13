@@ -1,7 +1,7 @@
 //! Dioxus component and utilities for procedural organic noise background and SVG pattern rendering.
 
 use dioxus::prelude::*;
-use dioxuscut_core::hooks::use_current_frame;
+use rust_motion_core::hooks::use_current_frame;
 
 use crate::fbm::{fbm_3d, FbmOptions};
 use crate::seed::NoiseSeed;

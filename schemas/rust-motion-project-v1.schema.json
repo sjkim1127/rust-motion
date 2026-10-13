@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dioxuscut.dev/schema/project/v1.json",
-  "title": "Dioxuscut Project v1",
+  "$id": "https://rust_motion.dev/schema/project/v1.json",
+  "title": "Rust Motion Project v1",
   "type": "object",
   "required": ["version", "composition", "settings"],
   "properties": {

@@ -4,8 +4,8 @@ use crate::{
     make_arrow, make_callout, make_circle, make_ellipse, make_heart, make_pie, make_polygon,
     make_rect, make_spark, make_star, make_triangle, CalloutDirection,
 };
-use dioxuscut_composition::{CompositionError, SceneEmitter, SceneFrameContext};
-use dioxuscut_rasterizer::{Color, Scene, SceneNode, Transform2D};
+use rust_motion_composition::{CompositionError, SceneEmitter, SceneFrameContext};
+use rust_motion_rasterizer::{Color, Scene, SceneNode, Transform2D};
 use serde_json::Value;
 
 /// A procedural shape primitive shared with native preview and export.
@@ -179,10 +179,10 @@ fn parse_optional_color(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dioxuscut_composition::{
+    use rust_motion_composition::{
         NativeComposition, NativeCompositionContext, SceneEmitterComposition,
     };
-    use dioxuscut_rasterizer::{FrameConfig, RasterizerBackend, TinySkiaBackend};
+    use rust_motion_rasterizer::{FrameConfig, RasterizerBackend, TinySkiaBackend};
 
     fn context() -> NativeCompositionContext {
         NativeCompositionContext {

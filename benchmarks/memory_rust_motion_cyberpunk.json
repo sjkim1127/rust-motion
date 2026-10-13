@@ -1,7 +1,7 @@
 {
   "command": [
-    "/Users/sjkim1127/Dioxuscut/target/release/examples/cyberpunk_bench",
-    "/Users/sjkim1127/Dioxuscut/target/dioxuscut_cyberpunk.mp4",
+    "/Users/sjkim1127/Rust Motion/target/release/examples/cyberpunk_bench",
+    "/Users/sjkim1127/Rust Motion/target/rust_motion_cyberpunk.mp4",
     "4"
   ],
   "exit_code": 0,

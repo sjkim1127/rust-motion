@@ -1,5 +1,5 @@
 """
-Dioxuscut Shorts & Reels Video Builder.
+Rust Motion Shorts & Reels Video Builder.
 
 Provides a high-level, AI-friendly Python API to generate 9:16 vertical videos
 (TikTok, Instagram Reels, YouTube Shorts) with word-by-word kinetic highlight subtitles,

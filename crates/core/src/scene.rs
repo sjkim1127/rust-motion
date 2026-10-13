@@ -1,4 +1,4 @@
-//! Native Scene emitter adapters re-exported from `dioxuscut-composition`.
+//! Native Scene emitter adapters re-exported from `rust-motion-composition`.
 //!
 //! Provides a single import path for `NativeComposition` authors who need
 //! timeline primitives (`SceneSequence`, `SceneFreeze`) alongside the core
@@ -7,11 +7,11 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use dioxuscut_core::scene::{
+//! use rust_motion_core::scene::{
 //!     SceneAbsoluteFill, SceneEmitter, SceneEmitterComposition,
 //!     SceneFrameContext, SceneRect, SceneSequence,
 //! };
-//! use dioxuscut_rasterizer::Color;
+//! use rust_motion_rasterizer::Color;
 //!
 //! fn make_scene() -> impl SceneEmitter {
 //!     SceneAbsoluteFill::new(SceneRect::new(
@@ -20,12 +20,12 @@
 //! }
 //! ```
 
-use dioxuscut_composition::CompositionError;
-use dioxuscut_rasterizer::{BlendMode, ClipRegion, MaskMode, Scene, SceneNode};
+use rust_motion_composition::CompositionError;
+use rust_motion_rasterizer::{BlendMode, ClipRegion, MaskMode, Scene, SceneNode};
 use serde_json::Value;
 
-// ── Re-exports from dioxuscut-composition ────────────────────────────────────
-pub use dioxuscut_composition::{
+// ── Re-exports from rust-motion-composition ────────────────────────────────────
+pub use rust_motion_composition::{
     SceneEmitter, SceneEmitterComposition, SceneFrameContext, SceneFreeze, SceneGroup, SceneLayer,
     SceneLinearGradient, SceneRect, SceneSequence, SceneStack, SceneText, SceneTextBlock,
 };
@@ -83,10 +83,10 @@ impl<E: SceneEmitter> SceneEmitter for SceneAbsoluteFill<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dioxuscut_composition::{
+    use rust_motion_composition::{
         NativeComposition, NativeCompositionContext, SceneEmitterComposition,
     };
-    use dioxuscut_rasterizer::{Color, SceneNode};
+    use rust_motion_rasterizer::{Color, SceneNode};
 
     fn context() -> NativeCompositionContext {
         NativeCompositionContext {

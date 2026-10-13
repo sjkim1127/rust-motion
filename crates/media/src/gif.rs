@@ -4,8 +4,8 @@
 
 use crate::img::ImageFit;
 use dioxus::prelude::*;
-use dioxuscut_core::hooks::{use_current_frame, use_video_config};
-use dioxuscut_rasterizer::gif_cache::LoopBehavior;
+use rust_motion_core::hooks::{use_current_frame, use_video_config};
+use rust_motion_rasterizer::gif_cache::LoopBehavior;
 
 /// Props for the [`Gif`] component.
 #[derive(Props, Clone, PartialEq)]
@@ -33,7 +33,7 @@ pub struct GifProps {
     pub y: f32,
 }
 
-/// Animated GIF component synced to the Dioxuscut composition timeline.
+/// Animated GIF component synced to the Rust Motion composition timeline.
 ///
 /// In web/preview mode the browser's native GIF rendering is used; in native
 /// headless rendering the rasterizer selects the correct frame via

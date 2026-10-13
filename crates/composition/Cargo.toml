@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-composition"
-description = "Shared native composition contract and registry for Dioxuscut preview and export"
+name        = "rust-motion-composition"
+description = "Shared native composition contract and registry for Rust Motion preview and export"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -9,9 +9,9 @@ repository.workspace  = true
 readme.workspace      = true
 
 [dependencies]
-dioxuscut-animation  = { workspace = true }
-dioxuscut-project    = { workspace = true }
-dioxuscut-rasterizer = { workspace = true }
+rust-motion-animation  = { workspace = true }
+rust-motion-project    = { workspace = true }
+rust-motion-rasterizer = { workspace = true }
 serde                = { workspace = true }
 serde_json           = { workspace = true }
 thiserror            = { workspace = true }

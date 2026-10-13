@@ -30,7 +30,7 @@ pub fn Emoji(props: EmojiProps) -> Element {
         span {
             class: "{props.class}",
             style: "{combined_style}",
-            "data-dioxuscut-emoji": "{props.name}",
+            "data-rust-motion-emoji": "{props.name}",
             "{props.name}"
         }
     }

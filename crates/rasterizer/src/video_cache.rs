@@ -723,7 +723,7 @@ mod tests {
         }
 
         let dir =
-            std::env::temp_dir().join(format!("dioxuscut-vfr-video-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("rust-motion-vfr-video-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let source = dir.join("vfr.mkv");
@@ -770,7 +770,7 @@ mod tests {
         }
 
         let dir = std::env::temp_dir().join(format!(
-            "dioxuscut-rotated-video-test-{}",
+            "rust-motion-rotated-video-test-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -848,7 +848,7 @@ mod tests {
         }
 
         let dir = std::env::temp_dir().join(format!(
-            "dioxuscut-vfr-display-rotation-test-{}",
+            "rust-motion-vfr-display-rotation-test-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);

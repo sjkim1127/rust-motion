@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-charts"
-description = "Native D3 and Mermaid chart and diagram generator for Dioxuscut using QuickJS"
+name        = "rust-motion-charts"
+description = "Native D3 and Mermaid chart and diagram generator for Rust Motion using QuickJS"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -9,13 +9,13 @@ repository.workspace  = true
 readme.workspace      = true
 
 [lib]
-name = "dioxuscut_charts"
+name = "rust_motion_charts"
 path = "src/lib.rs"
 
 [dependencies]
-dioxuscut-paths       = { workspace = true }
-dioxuscut-rasterizer  = { workspace = true }
-dioxuscut-composition = { workspace = true }
+rust-motion-paths       = { workspace = true }
+rust-motion-rasterizer  = { workspace = true }
+rust-motion-composition = { workspace = true }
 rquickjs              = "0.13"
 serde                 = { workspace = true }
 serde_json            = { workspace = true }

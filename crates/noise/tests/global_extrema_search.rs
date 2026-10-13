@@ -1,6 +1,6 @@
 //! Optimization harness to find the theoretical global extrema of Simplex noise.
 
-use dioxuscut_noise::SimplexNoise;
+use rust_motion_noise::SimplexNoise;
 
 #[test]
 fn test_find_global_extrema_2d() {

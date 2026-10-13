@@ -6,9 +6,9 @@
 //! - Tier 3: Pairwise cross-feature combinations (Shapes + Filters + Transitions)
 //! - Tier 4: Real-world video application scenario (Streaming Caption Box with Speech Callout)
 
-use dioxuscut_composition::{NativeCompositionContext, SceneEmitter, SceneFrameContext};
-use dioxuscut_rasterizer::{Color, Scene, SceneNode};
-use dioxuscut_shapes::{
+use rust_motion_composition::{NativeCompositionContext, SceneEmitter, SceneFrameContext};
+use rust_motion_rasterizer::{Color, Scene, SceneNode};
+use rust_motion_shapes::{
     make_arrow, make_callout, make_circle, make_heart, make_pie, make_polygon, make_rect,
     make_spark, make_star, make_triangle, CalloutDirection, SceneShape,
 };
@@ -206,12 +206,12 @@ fn test_pairwise_spark_shape_inside_layer_with_filter() {
 
     let layer = SceneNode::Layer {
         opacity: 1.0,
-        blend_mode: dioxuscut_rasterizer::scene::BlendMode::Normal,
+        blend_mode: rust_motion_rasterizer::scene::BlendMode::Normal,
         clip: None,
         mask: None,
-        mask_mode: dioxuscut_rasterizer::scene::MaskMode::Alpha,
-        filters: vec![dioxuscut_rasterizer::scene::SceneFilter::Brightness { amount: 1.3 }],
-        shadow: Some(dioxuscut_rasterizer::scene::SceneShadow {
+        mask_mode: rust_motion_rasterizer::scene::MaskMode::Alpha,
+        filters: vec![rust_motion_rasterizer::scene::SceneFilter::Brightness { amount: 1.3 }],
+        shadow: Some(rust_motion_rasterizer::scene::SceneShadow {
             offset_x: 0.0,
             offset_y: 0.0,
             blur_sigma: 6.0,

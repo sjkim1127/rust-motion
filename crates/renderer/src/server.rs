@@ -1,4 +1,4 @@
-//! Automated Web Server Lifecycle for Dioxuscut.
+//! Automated Web Server Lifecycle for Rust Motion.
 //!
 //! Provides spawning, health checking, dynamic port allocation,
 //! and clean termination for Dioxus web app rendering.
@@ -377,7 +377,7 @@ mod tests {
 
     fn create_temp_test_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "dioxuscut_server_test_{}_{}",
+            "rust_motion_server_test_{}_{}",
             name,
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

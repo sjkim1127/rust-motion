@@ -1,11 +1,11 @@
-use dioxuscut_rasterizer::{
+use rust_motion_rasterizer::{
     render_to_ffmpeg_pipe, AudioTrack, ImageFit, PipeConfig, Scene, SceneNode, TinySkiaBackend,
 };
 use std::fs;
 use std::process::Command;
 
 #[cfg(feature = "rhai")]
-use dioxuscut_cli::{execute_render_command, RenderBackend, RenderRequest};
+use rust_motion_cli::{execute_render_command, RenderBackend, RenderRequest};
 
 fn command_available(name: &str) -> bool {
     Command::new(name)
@@ -22,7 +22,7 @@ fn native_video_frames_and_audio_are_encoded_together() {
     }
 
     let temp_dir = std::env::temp_dir().join(format!(
-        "dioxuscut_native_media_{}_{}",
+        "rust_motion_native_media_{}_{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -131,7 +131,7 @@ async fn rhai_media_nodes_flow_through_the_cli_renderer() {
     }
 
     let temp_dir = std::env::temp_dir().join(format!(
-        "dioxuscut_rhai_media_{}_{}",
+        "rust_motion_rhai_media_{}_{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -200,7 +200,7 @@ async fn rhai_media_nodes_flow_through_the_cli_renderer() {
         fps: 5.0,
         duration: 5,
         backend: RenderBackend::Native,
-        codec: dioxuscut_cli::RenderCodec::H264,
+        codec: rust_motion_cli::RenderCodec::H264,
         frame_start: 0,
         frame_end: None,
         frame_step: 1,
@@ -208,7 +208,7 @@ async fn rhai_media_nodes_flow_through_the_cli_renderer() {
         timeout_seconds: None,
         crf: 18,
         preset: "fast".into(),
-        hw_accel: dioxuscut_rasterizer::HwAccel::Disabled,
+        hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
         sandbox_roots: Vec::new(),
         permissive: false,
     })

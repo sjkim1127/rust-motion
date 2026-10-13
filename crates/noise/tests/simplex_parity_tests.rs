@@ -1,6 +1,6 @@
 //! Comprehensive mathematical parity and determinism integration tests for Simplex noise.
 
-use dioxuscut_noise::{
+use rust_motion_noise::{
     noise2d, noise3d, noise4d, noise_2d, noise_3d, noise_4d, NoiseSeed, SimplexNoise,
 };
 

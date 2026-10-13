@@ -1,4 +1,4 @@
-use dioxuscut_project::{
+use rust_motion_project::{
     AssetKind, AssetRef, BackendKind, Clip, Project, ProjectSettings, TimeEvent, Track,
 };
 use std::fs;
@@ -12,7 +12,7 @@ fn test_roundtrip_named_time_events_example() {
         .unwrap()
         .parent()
         .unwrap()
-        .join("examples/named-time-events.dioxuscut.json");
+        .join("examples/named-time-events.rust_motion.json");
 
     assert!(example_path.exists(), "Example project file must exist");
 
@@ -43,7 +43,7 @@ fn test_roundtrip_named_time_events_example() {
 #[test]
 fn test_roundtrip_mutations_and_file_save() {
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-    let project_path = temp_dir.path().join("test_project.dioxuscut.json");
+    let project_path = temp_dir.path().join("test_project.rust_motion.json");
 
     let project = Project {
         version: 1,

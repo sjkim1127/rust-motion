@@ -27,7 +27,7 @@ members = [
 version      = "1.0.0"
 edition      = "2021"
 
-authors      = ["Dioxuscut Contributors"]
+authors      = ["Rust Motion Contributors"]
 license      = "MIT OR Apache-2.0"
 repository   = "https://github.com/sjkim1127/rust-motion"
 readme       = "README.md"
@@ -89,22 +89,22 @@ tower-http        = { version = "0.5", features = ["fs", "trace", "cors"] }
 reqwest           = { version = "0.12", features = ["json", "blocking"] }
 
 # Internal crates
-dioxuscut-animation   = { version = "1.0.0", path = "crates/animation" }
-dioxuscut-cli         = { version = "1.0.0", path = "crates/cli" }
-dioxuscut-composition = { version = "1.0.0", path = "crates/composition" }
-dioxuscut-core        = { version = "1.0.0", path = "crates/core" }
-dioxuscut-media       = { version = "1.0.0", path = "crates/media", default-features = false }
-dioxuscut-player      = { version = "1.0.0", path = "crates/player" }
-dioxuscut-renderer    = { version = "1.0.0", path = "crates/renderer" }
-dioxuscut-transitions = { version = "1.0.0", path = "crates/transitions" }
-dioxuscut-shapes      = { version = "1.0.0", path = "crates/shapes", default-features = false }
-dioxuscut-paths       = { version = "1.0.0", path = "crates/paths" }
-dioxuscut-captions    = { version = "1.0.0", path = "crates/captions", default-features = false }
-dioxuscut-noise       = { version = "1.0.0", path = "crates/noise" }
-dioxuscut-rasterizer  = { version = "1.0.0", path = "crates/rasterizer" }
-dioxuscut-vdom        = { version = "1.0.0", path = "crates/vdom" }
-dioxuscut-charts      = { version = "1.0.0", path = "crates/charts" }
-dioxuscut-project     = { version = "1.0.0", path = "crates/project" }
+rust-motion-animation   = { version = "1.0.0", path = "crates/animation" }
+rust-motion-cli         = { version = "1.0.0", path = "crates/cli" }
+rust-motion-composition = { version = "1.0.0", path = "crates/composition" }
+rust-motion-core        = { version = "1.0.0", path = "crates/core" }
+rust-motion-media       = { version = "1.0.0", path = "crates/media", default-features = false }
+rust-motion-player      = { version = "1.0.0", path = "crates/player" }
+rust-motion-renderer    = { version = "1.0.0", path = "crates/renderer" }
+rust-motion-transitions = { version = "1.0.0", path = "crates/transitions" }
+rust-motion-shapes      = { version = "1.0.0", path = "crates/shapes", default-features = false }
+rust-motion-paths       = { version = "1.0.0", path = "crates/paths" }
+rust-motion-captions    = { version = "1.0.0", path = "crates/captions", default-features = false }
+rust-motion-noise       = { version = "1.0.0", path = "crates/noise" }
+rust-motion-rasterizer  = { version = "1.0.0", path = "crates/rasterizer" }
+rust-motion-vdom        = { version = "1.0.0", path = "crates/vdom" }
+rust-motion-charts      = { version = "1.0.0", path = "crates/charts" }
+rust-motion-project     = { version = "1.0.0", path = "crates/project" }
 
 
 

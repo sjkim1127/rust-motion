@@ -7,7 +7,7 @@ Rust Motion provides official Python bindings powered by PyO3, allowing Python a
 ## 1. Installation
 
 ```bash
-pip install dioxuscut
+pip install rust-motion
 ```
 
 ### Supported Environments:
@@ -19,10 +19,10 @@ pip install dioxuscut
 ## 2. Basic Video Rendering
 
 ```python
-import dioxuscut
+import rust_motion
 
 # Render a registered composition
-dioxuscut.render(
+rust_motion.render(
     composition="HelloWorld",
     output="hello_from_python.mp4",
     props={"title": "Generated via Python"},
@@ -39,7 +39,7 @@ print("Video successfully rendered!")
 ## 3. Rendering Rhai Scripts with Dynamic Data
 
 ```python
-import dioxuscut
+import rust_motion
 
 # Pass complex nested JSON/dict props to a Rhai template
 props = {
@@ -51,7 +51,7 @@ props = {
     "theme": {"primary": "#3B82F6", "background": "#0F172A"}
 }
 
-dioxuscut.render(
+rust_motion.render(
     script="charts.rhai",
     output="report.mp4",
     props=props,
@@ -68,10 +68,10 @@ For computer vision or ML training datasets, you can render individual frames di
 
 ```python
 import numpy as np
-import dioxuscut
+import rust_motion
 
 # Render frame 15 as an RGBA byte buffer
-raw_bytes = dioxuscut.render_frame_bytes(
+raw_bytes = rust_motion.render_frame_bytes(
     composition="HelloWorld",
     frame=15,
     width=640,
@@ -87,4 +87,4 @@ print(f"Frame shape: {frame_array.shape}")
 
 ## 5. Version Synchronization
 
-The Python package versions remain strictly synchronized with the Rust workspace releases. Rust Motion 1.0.0 corresponds directly to `dioxuscut == 1.0.0` on PyPI.
+The Python package versions remain strictly synchronized with the Rust workspace releases. Rust Motion 1.0.0 corresponds directly to `rust-motion == 1.0.0` on PyPI.

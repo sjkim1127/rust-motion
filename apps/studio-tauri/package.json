@@ -1,5 +1,5 @@
 {
-  "name": "dioxuscut-studio-tauri",
+  "name": "rust-motion-studio-tauri",
   "private": true,
   "type": "module",
   "scripts": {

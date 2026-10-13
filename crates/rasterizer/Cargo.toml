@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-rasterizer"
-description = "Native CPU/GPU rasterizer for browser-free Dioxuscut frame rendering"
+name        = "rust-motion-rasterizer"
+description = "Native CPU/GPU rasterizer for browser-free Rust Motion frame rendering"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -38,7 +38,7 @@ gpu = ["wgpu", "pollster", "lyon_tessellation"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-dioxuscut-composition = { workspace = true }
+rust-motion-composition = { workspace = true }
 
 [[bench]]
 name = "render_bench"

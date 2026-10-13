@@ -1,8 +1,8 @@
 use crate::presentation::{PresentationVisual, TransitionContext, TransitionPresentation};
 use dioxus::prelude::*;
-use dioxuscut_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
-use dioxuscut_core::hooks::use_current_frame;
-use dioxuscut_rasterizer::Transform2D;
+use rust_motion_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
+use rust_motion_core::hooks::use_current_frame;
+use rust_motion_rasterizer::Transform2D;
 
 /// Direction the content slides in from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

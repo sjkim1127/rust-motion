@@ -47,8 +47,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
-      - name: Build dioxuscut-cli (release)
-        run: cargo build --locked -p dioxuscut-cli --release
+      - name: Build rust-motion-cli (release)
+        run: cargo build --locked -p rust-motion-cli --release
 
       - name: Create snapshots directory
         run: mkdir -p snapshots
@@ -56,55 +56,55 @@ jobs:
       # Render multi-scene golden gallery (9 frames across 4 compositions)
       - name: Render snapshots
         run: |
-          ./target/release/dioxuscut render \
+          ./target/release/rust-motion render \
             --composition HelloWorld \
             --frame-start 0 --frame-end 0 \
             --output snapshots/hello_world_0000.png \
             --codec png --width 960 --height 540
 
-          ./target/release/dioxuscut render \
+          ./target/release/rust-motion render \
             --composition HelloWorld \
             --frame-start 30 --frame-end 30 \
             --output snapshots/hello_world_0030.png \
             --codec png --width 960 --height 540
 
-          ./target/release/dioxuscut render \
+          ./target/release/rust-motion render \
             --composition HelloWorld \
             --frame-start 90 --frame-end 90 \
             --output snapshots/hello_world_0090.png \
             --codec png --width 960 --height 540
 
-          ./target/release/dioxuscut render \
+          ./target/release/rust-motion render \
             --composition ShapesAndFilters \
             --frame-start 0 --frame-end 0 \
             --output snapshots/shapes_filters_0000.png \
             --codec png --width 960 --height 540
 
-          ./target/release/dioxuscut render \
+          ./target/release/rust-motion render \
             --composition ShapesAndFilters \
             --frame-start 30 --frame-end 30 \
             --output snapshots/shapes_filters_0030.png \
             --codec png --width 960 --height 540
 
-          ./target/release/dioxuscut render \
+          ./target/release/rust-motion render \
             --composition CyberpunkGrid \
             --frame-start 0 --frame-end 0 \
             --output snapshots/cyberpunk_grid_0000.png \
             --codec png --width 960 --height 540
 
-          ./target/release/dioxuscut render \
+          ./target/release/rust-motion render \
             --composition CyberpunkGrid \
             --frame-start 30 --frame-end 30 \
             --output snapshots/cyberpunk_grid_0030.png \
             --codec png --width 960 --height 540
 
-          ./target/release/dioxuscut render \
+          ./target/release/rust-motion render \
             --composition ComplexGradients \
             --frame-start 0 --frame-end 0 \
             --output snapshots/complex_gradients_0000.png \
             --codec png --width 960 --height 540
 
-          ./target/release/dioxuscut render \
+          ./target/release/rust-motion render \
             --composition ComplexGradients \
             --frame-start 30 --frame-end 30 \
             --output snapshots/complex_gradients_0030.png \
@@ -152,7 +152,7 @@ jobs:
             let version = '0.2.0';
             try {
               version = execSync(
-                "cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == \"dioxuscut-cli\") | .version'",
+                "cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == \"rust-motion-cli\") | .version'",
                 { encoding: 'utf8' }
               ).trim();
             } catch (_) {}
@@ -178,7 +178,7 @@ jobs:
               `> Artifact: \`visual-snapshots-${context.sha}\` · login required to download`,
               '',
               `🔗 [View full CI run](${runUrl})`,
-              `_Rendered on Ubuntu 22.04 · dioxuscut-cli v${version}_`,
+              `_Rendered on Ubuntu 22.04 · rust-motion-cli v${version}_`,
             ].join('\n');
 
             // Upsert — find an existing bot comment and update it, or create a new one
@@ -219,5 +219,5 @@ jobs:
           name: visual-failure-logs-${{ github.sha }}
           path: |
             snapshots/
-            /tmp/dioxuscut-render-*.log
+            /tmp/rust-motion-render-*.log
           retention-days: 7

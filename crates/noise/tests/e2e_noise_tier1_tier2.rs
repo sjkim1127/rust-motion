@@ -9,7 +9,7 @@
 //! - Tier 3: Pairwise cross-feature combinations
 //! - Tier 4: Real-world video application scenario (Organic flow graphic animation)
 
-use dioxuscut_noise::{
+use rust_motion_noise::{
     domain_warp_2d, fbm_2d, fbm_3d, generate_noise_svg_data_url, generate_noise_wave_path,
     hash_code, mulberry32, noise2d, noise3d, noise4d, random, turbulence_2d, turbulence_warp_2d,
     warp_points_2d, FbmOptions, NoiseBackgroundProps, NoisePatternKind, WavePathOptions,

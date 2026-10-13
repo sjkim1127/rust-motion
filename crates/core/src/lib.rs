@@ -1,6 +1,6 @@
-//! # dioxuscut-core
+//! # rust-motion-core
 //!
-//! Core Dioxus components and hooks for Dioxuscut.
+//! Core Dioxus components and hooks for Rust Motion.
 //!
 //! Provides a Rust/Dioxus equivalent of `remotion/core`:
 //!
@@ -15,7 +15,7 @@
 //! - [`use_video_config`]  — returns [`VideoConfig`] for the composition
 //!
 //! ## Re-exports
-//! - Animation primitives from [`dioxuscut_animation`]
+//! - Animation primitives from [`rust_motion_animation`]
 
 pub mod absolute_fill;
 pub mod audio_visualizer_component;
@@ -47,12 +47,12 @@ pub use timeline::context::{TimelineContext, VideoConfigContext};
 pub use types::VideoConfig;
 
 // Re-export sibling crates
-pub use dioxuscut_animation as animation;
-pub use dioxuscut_composition as native_composition;
-pub use dioxuscut_rasterizer as rasterizer;
+pub use rust_motion_animation as animation;
+pub use rust_motion_composition as native_composition;
+pub use rust_motion_rasterizer as rasterizer;
 
 // Core animation & TouchDesigner-style CHOP primitives
-pub use dioxuscut_animation::{
+pub use rust_motion_animation::{
     bezier, interpolate, interpolate_colors, interpolate_colors_range, interpolate_styles,
     make_transform, matrix, matrix3d, measure_spring, perspective, random, rotate, rotate3d,
     rotate_x, rotate_y, rotate_z, scale, scale3d, scale_x, scale_y, scale_z, skew, skew_x, skew_y,
@@ -63,14 +63,14 @@ pub use dioxuscut_animation::{
 };
 
 // Composition primitives & emitters
-pub use dioxuscut_composition::{
+pub use rust_motion_composition::{
     CompositionError, Mesh3DPrimitive, NativeComposition, NativeCompositionContext, SceneEmitter,
     SceneFrameContext, SceneLoop, SceneMesh3D, SceneSequence, SceneSeries, SceneSeriesEntry,
     SceneStack, SceneTransitionSeries,
 };
 
 // Typography, layout & rasterizer primitives
-pub use dioxuscut_rasterizer::{
+pub use rust_motion_rasterizer::{
     create_rounded_text_box, create_rounded_text_box_from_measurements, fill_text_box, fit_text,
     fit_text_on_n_lines, get_lottie_metadata, layout_text_box, make_cancel_signal,
     measure_text_width, measure_text_width_with_font, AudioTrack, BlendMode, CancelSignal,

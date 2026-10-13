@@ -4,7 +4,7 @@
 
 use crate::hooks::{use_current_frame, use_video_config};
 use dioxus::prelude::*;
-use dioxuscut_rasterizer::LoopBehavior;
+use rust_motion_rasterizer::LoopBehavior;
 
 /// Props for the `<Lottie>` component.
 #[derive(Props, Clone, PartialEq)]
@@ -46,7 +46,7 @@ pub fn Lottie(props: LottieProps) -> Element {
         div {
             class: "{props.class}",
             style: "{combined_style}",
-            "data-dioxuscut-lottie": "{props.src}",
+            "data-rust-motion-lottie": "{props.src}",
             "data-frame": "{frame}",
             "data-time": "{time_secs:.4}",
             "data-playback-rate": "{props.playback_rate}",

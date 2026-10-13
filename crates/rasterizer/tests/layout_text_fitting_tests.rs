@@ -1,7 +1,7 @@
 //! Integration & boundary tests for Milestone 3 Advanced Layout & Text Fitting Utilities.
 
 use ab_glyph::FontVec;
-use dioxuscut_rasterizer::font::{
+use rust_motion_rasterizer::font::{
     create_rounded_text_box, create_rounded_text_box_from_measurements, fill_text_box,
     fit_text_on_n_lines, measure_text_width_with_font, FitTextOnNLinesOptions,
     RoundedTextBoxOptions, TextAlign, TextLineDimension,
@@ -48,7 +48,7 @@ fn test_fit_text_on_n_lines_exact_and_multiline() {
         min_font_size: 12.0,
         max_font_size: 100.0,
     };
-    let res_1 = fit_text_on_n_lines("Hello Dioxuscut", &font, &opt_1).unwrap();
+    let res_1 = fit_text_on_n_lines("Hello Rust Motion", &font, &opt_1).unwrap();
     assert_eq!(res_1.lines.len(), 1);
     assert!(res_1.max_line_width <= 250.0);
 
@@ -61,7 +61,7 @@ fn test_fit_text_on_n_lines_exact_and_multiline() {
         max_font_size: 100.0,
     };
     let res_3 =
-        fit_text_on_n_lines("Hello Dioxuscut Video Engine Layout Test", &font, &opt_3).unwrap();
+        fit_text_on_n_lines("Hello Rust Motion Video Engine Layout Test", &font, &opt_3).unwrap();
     assert!(res_3.lines.len() <= 3);
     assert!(res_3.max_line_width <= 250.0);
 }

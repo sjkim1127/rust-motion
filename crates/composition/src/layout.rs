@@ -5,7 +5,7 @@
 //! [`SceneNode`] and nested layout hierarchies.
 
 use crate::{CompositionError, SceneEmitter, SceneFrameContext};
-use dioxuscut_rasterizer::{Color, Scene, SceneNode, Transform2D};
+use rust_motion_rasterizer::{Color, Scene, SceneNode, Transform2D};
 use serde_json::Value;
 use taffy::geometry::{Point, Rect, Size};
 use taffy::prelude::{

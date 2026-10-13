@@ -1,6 +1,6 @@
 //! Base presentation contract and context for video transitions.
 
-use dioxuscut_rasterizer::{ClipRegion, Transform2D};
+use rust_motion_rasterizer::{ClipRegion, Transform2D};
 
 /// Contextual data provided to a transition presentation during evaluation.
 #[derive(Debug, Clone, Copy, PartialEq)]

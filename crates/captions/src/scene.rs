@@ -2,8 +2,8 @@
 
 use crate::layout::wrap_caption_tokens_to_lines;
 use crate::{create_tiktok_style_captions, CaptionToken};
-use dioxuscut_composition::{CompositionError, SceneEmitter, SceneFrameContext};
-use dioxuscut_rasterizer::{measure_text_width, Color, Scene, SceneNode};
+use rust_motion_composition::{CompositionError, SceneEmitter, SceneFrameContext};
+use rust_motion_rasterizer::{measure_text_width, Color, Scene, SceneNode};
 use serde_json::Value;
 
 /// Native counterpart of [`crate::TikTokCaptions`].
@@ -197,7 +197,7 @@ fn parse_color(value: &str, context: SceneFrameContext) -> Result<Color, Composi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dioxuscut_composition::{
+    use rust_motion_composition::{
         NativeComposition, NativeCompositionContext, SceneEmitterComposition,
     };
 

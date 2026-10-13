@@ -7,7 +7,7 @@
 //!
 //! # Example
 //! ```rust,ignore
-//! use dioxuscut_core::Freeze;
+//! use rust_motion_core::Freeze;
 //!
 //! fn FrozenSection() -> Element {
 //!     rsx! {

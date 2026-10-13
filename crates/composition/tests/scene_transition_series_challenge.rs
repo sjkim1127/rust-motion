@@ -1,8 +1,8 @@
-use dioxuscut_composition::{
+use rust_motion_composition::{
     NativeCompositionContext, SceneEmitter, SceneFrameContext, SceneRect, SceneTransitionSeries,
     TransitionKind, TransitionTiming,
 };
-use dioxuscut_rasterizer::{Color, Scene, SceneNode};
+use rust_motion_rasterizer::{Color, Scene, SceneNode};
 use serde_json::Value;
 
 fn test_ctx(w: u32, h: u32) -> NativeCompositionContext {

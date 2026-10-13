@@ -1,11 +1,11 @@
 //! Easing curves, cubic Bézier, and physics-based spring timing for transitions.
 
-pub use dioxuscut_animation::easing::{
+pub use rust_motion_animation::easing::{
     bezier, ease, ease_in, ease_in_cubic, ease_in_out, ease_in_out_cubic, ease_in_out_quad,
     ease_in_out_sine, ease_in_quad, ease_in_sine, ease_out, ease_out_cubic, ease_out_quad,
     ease_out_sine, linear, EasingFn,
 };
-pub use dioxuscut_animation::spring::{
+pub use rust_motion_animation::spring::{
     measure_spring, spring, spring_with_options, SpringConfig, SpringError, SpringOptions,
 };
 

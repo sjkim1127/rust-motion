@@ -1,4 +1,4 @@
-# E2E Test Infra: Dioxuscut Remotion Native Porting
+# E2E Test Infra: Rust Motion Remotion Native Porting
 
 ## Test Philosophy
 - Opaque-box, requirement-driven. Zero dependency on `vendor/` or implementation internals.

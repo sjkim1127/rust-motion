@@ -1,22 +1,22 @@
-//! # Dioxuscut Studio
+//! # Rust Motion Studio
 //!
 //! Desktop video editor application — Remotion Studio equivalent.
 //!
 //! Provides:
 //! - Shared native composition preview with the `<Player>` component
 //! - Composition selection from the built-in registry
-//! - Render queue with real async rendering via `dioxuscut-cli`
+//! - Render queue with real async rendering via `rust-motion-cli`
 //! - Properties panel showing live composition metadata
 
 use dioxus::prelude::*;
 use dioxus_desktop::{Config, LogicalSize, WindowBuilder};
-use dioxuscut_cli::{
+use rust_motion_cli::{
     built_in_registry, execute_render_command_with_registry_and_control, RenderBackend,
     RenderCodec, RenderRequest,
 };
-use dioxuscut_composition::HelloWorldComposition;
-use dioxuscut_player::{CompositionHandle, NativeCompositionPreview, Player};
-use dioxuscut_rasterizer::RenderControl;
+use rust_motion_composition::HelloWorldComposition;
+use rust_motion_player::{CompositionHandle, NativeCompositionPreview, Player};
+use rust_motion_rasterizer::RenderControl;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -83,7 +83,7 @@ struct RenderJob {
     output: PathBuf,
     status: RenderStatus,
     queued_at: Instant,
-    cancellation_token: dioxuscut_rasterizer::RenderCancellationToken,
+    cancellation_token: rust_motion_rasterizer::RenderCancellationToken,
 }
 
 impl PartialEq for RenderJob {
@@ -105,7 +105,7 @@ impl RenderJob {
         id: u64,
         meta: &CompositionMeta,
         output: PathBuf,
-        cancellation_token: dioxuscut_rasterizer::RenderCancellationToken,
+        cancellation_token: rust_motion_rasterizer::RenderCancellationToken,
     ) -> Self {
         Self {
             id,
@@ -165,7 +165,7 @@ fn main() {
         .init();
 
     let window = WindowBuilder::new()
-        .with_title("Dioxuscut Preview Studio")
+        .with_title("Rust Motion Preview Studio")
         .with_inner_size(LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT))
         .with_resizable(true);
 
@@ -345,13 +345,13 @@ fn TopBar(mut props: TopBarProps) -> Element {
         let job_id = *props.next_job_id.read();
         props.next_job_id += 1;
 
-        // Derive output path: ~/Desktop/Dioxuscut_<id>_<timestamp>.mp4
+        // Derive output path: ~/Desktop/Rust Motion_<id>_<timestamp>.mp4
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
         let output = PathBuf::from(format!(
-            "{}/Desktop/Dioxuscut_{}_{}_{}.mp4",
+            "{}/Desktop/Rust Motion_{}_{}_{}.mp4",
             std::env::var("HOME").unwrap_or_default(),
             meta.id,
             meta.width,
@@ -395,7 +395,7 @@ fn TopBar(mut props: TopBarProps) -> Element {
             timeout_seconds: Some(300),
             crf: 18,
             preset: "fast".into(),
-            hw_accel: dioxuscut_rasterizer::HwAccel::Auto,
+            hw_accel: rust_motion_rasterizer::HwAccel::Auto,
             sandbox_roots: vec![],
             permissive: false,
         });
@@ -465,7 +465,7 @@ fn TopBar(mut props: TopBarProps) -> Element {
             style: "background: #16161f; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 16px; padding: 0 20px; grid-column-start: 1; grid-column-end: -1;",
             span {
                 style: "font-size: 15px; font-weight: 700; color: #6c63ff; letter-spacing: -0.02em;",
-                "🦀 Dioxuscut Studio"
+                "🦀 Rust Motion Studio"
             }
             span { style: "color: rgba(255,255,255,0.2);", "│" }
             span {
@@ -760,7 +760,7 @@ fn TimelinePanel(props: TimelinePanelProps) -> Element {
 fn PreviewComposition() -> Element {
     let composition = use_hook(|| CompositionHandle::new(HelloWorldComposition));
     let input_props = serde_json::json!({
-        "title": "Dioxuscut",
+        "title": "Rust Motion",
         "subtitle": "One scene contract for preview and export",
         "background_start": "#1a0533",
         "background_end": "#001a33",

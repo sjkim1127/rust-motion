@@ -1,4 +1,4 @@
-//! Dioxuscut Paths — SVG path parsing, metrics, and stroke evolution utilities.
+//! Rust Motion Paths — SVG path parsing, metrics, and stroke evolution utilities.
 //!
 //! Ported from `@remotion/paths`:
 //! - [`parse_path`] / [`serialize_instructions`]

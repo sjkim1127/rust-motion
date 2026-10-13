@@ -79,7 +79,7 @@ impl GpuContext {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    label: Some("dioxuscut-rasterizer"),
+                    label: Some("rust-motion-rasterizer"),
                     required_features,
                     required_limits: limits,
                     memory_hints: Default::default(),
@@ -96,7 +96,7 @@ impl GpuContext {
         };
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("dioxuscut_shader"),
+            label: Some("rust_motion_shader"),
             source: wgpu::ShaderSource::Wgsl(SHADER_SRC.into()),
         });
 
@@ -248,33 +248,37 @@ impl GpuContext {
             alpha: wgpu::BlendComponent::OVER,
         };
         let multiply_pipeline =
-            make_blend_pipeline("dioxuscut_multiply_pipeline", "fs_main", false, multiply);
+            make_blend_pipeline("rust_motion_multiply_pipeline", "fs_main", false, multiply);
         let multiply_mesh_pipeline = make_blend_pipeline(
-            "dioxuscut_multiply_mesh_pipeline",
+            "rust_motion_multiply_mesh_pipeline",
             "fs_solid",
             true,
             multiply,
         );
         let multiply_image_pipeline = make_blend_pipeline(
-            "dioxuscut_multiply_image_pipeline",
+            "rust_motion_multiply_image_pipeline",
             "fs_image",
             false,
             multiply,
         );
         let multiply_text_pipeline = make_blend_pipeline(
-            "dioxuscut_multiply_text_pipeline",
+            "rust_motion_multiply_text_pipeline",
             "fs_text",
             false,
             multiply,
         );
         let screen_pipeline =
-            make_blend_pipeline("dioxuscut_screen_pipeline", "fs_main", false, screen);
+            make_blend_pipeline("rust_motion_screen_pipeline", "fs_main", false, screen);
         let screen_mesh_pipeline =
-            make_blend_pipeline("dioxuscut_screen_mesh_pipeline", "fs_solid", true, screen);
-        let screen_image_pipeline =
-            make_blend_pipeline("dioxuscut_screen_image_pipeline", "fs_image", false, screen);
+            make_blend_pipeline("rust_motion_screen_mesh_pipeline", "fs_solid", true, screen);
+        let screen_image_pipeline = make_blend_pipeline(
+            "rust_motion_screen_image_pipeline",
+            "fs_image",
+            false,
+            screen,
+        );
         let screen_text_pipeline =
-            make_blend_pipeline("dioxuscut_screen_text_pipeline", "fs_text", false, screen);
+            make_blend_pipeline("rust_motion_screen_text_pipeline", "fs_text", false, screen);
         let darken = wgpu::BlendState {
             color: wgpu::BlendComponent {
                 src_factor: wgpu::BlendFactor::One,
@@ -292,28 +296,40 @@ impl GpuContext {
             alpha: wgpu::BlendComponent::OVER,
         };
         let darken_pipeline =
-            make_blend_pipeline("dioxuscut_darken_pipeline", "fs_main", false, darken);
+            make_blend_pipeline("rust_motion_darken_pipeline", "fs_main", false, darken);
         let darken_mesh_pipeline =
-            make_blend_pipeline("dioxuscut_darken_mesh_pipeline", "fs_solid", true, darken);
-        let darken_image_pipeline =
-            make_blend_pipeline("dioxuscut_darken_image_pipeline", "fs_image", false, darken);
+            make_blend_pipeline("rust_motion_darken_mesh_pipeline", "fs_solid", true, darken);
+        let darken_image_pipeline = make_blend_pipeline(
+            "rust_motion_darken_image_pipeline",
+            "fs_image",
+            false,
+            darken,
+        );
         let darken_text_pipeline =
-            make_blend_pipeline("dioxuscut_darken_text_pipeline", "fs_text", false, darken);
+            make_blend_pipeline("rust_motion_darken_text_pipeline", "fs_text", false, darken);
         let lighten_pipeline =
-            make_blend_pipeline("dioxuscut_lighten_pipeline", "fs_main", false, lighten);
-        let lighten_mesh_pipeline =
-            make_blend_pipeline("dioxuscut_lighten_mesh_pipeline", "fs_solid", true, lighten);
+            make_blend_pipeline("rust_motion_lighten_pipeline", "fs_main", false, lighten);
+        let lighten_mesh_pipeline = make_blend_pipeline(
+            "rust_motion_lighten_mesh_pipeline",
+            "fs_solid",
+            true,
+            lighten,
+        );
         let lighten_image_pipeline = make_blend_pipeline(
-            "dioxuscut_lighten_image_pipeline",
+            "rust_motion_lighten_image_pipeline",
             "fs_image",
             false,
             lighten,
         );
-        let lighten_text_pipeline =
-            make_blend_pipeline("dioxuscut_lighten_text_pipeline", "fs_text", false, lighten);
+        let lighten_text_pipeline = make_blend_pipeline(
+            "rust_motion_lighten_text_pipeline",
+            "fs_text",
+            false,
+            lighten,
+        );
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("dioxuscut_pipeline"),
+            label: Some("rust_motion_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -345,7 +361,7 @@ impl GpuContext {
         });
 
         let mesh_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("dioxuscut_mesh_pipeline"),
+            label: Some("rust_motion_mesh_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -381,7 +397,7 @@ impl GpuContext {
         });
 
         let image_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("dioxuscut_image_pipeline"),
+            label: Some("rust_motion_image_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -411,7 +427,7 @@ impl GpuContext {
 
         let image_composite_pipeline =
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("dioxuscut_image_composite_pipeline"),
+                label: Some("rust_motion_image_composite_pipeline"),
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
@@ -437,7 +453,7 @@ impl GpuContext {
             });
 
         let path_mask_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("dioxuscut_path_mask_pipeline"),
+            label: Some("rust_motion_path_mask_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -470,7 +486,7 @@ impl GpuContext {
         });
 
         let text_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("dioxuscut_text_pipeline"),
+            label: Some("rust_motion_text_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,

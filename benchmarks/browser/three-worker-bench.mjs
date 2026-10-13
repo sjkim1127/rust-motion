@@ -6,19 +6,19 @@ import {writeFileSync} from 'node:fs';
 
 const root = new URL('../../', import.meta.url);
 const worker = new URL('../../apps/studio-tauri/scripts/three-render-worker.mjs', import.meta.url);
-const url = process.env.DIOXUSCUT_BROWSER_URL ?? 'http://127.0.0.1:1421';
+const url = process.env.RUST_MOTION_BROWSER_URL ?? 'http://127.0.0.1:1421';
 const frames = Number(process.env.FRAMES ?? 180);
 const repeats = Number(process.env.REPEATS ?? 3);
 const concurrency = Math.max(1, Number(process.env.WORKERS ?? 1));
 const output = process.env.OUTPUT;
-const node = process.env.DIOXUSCUT_BROWSER_NODE ?? process.execPath;
+const node = process.env.RUST_MOTION_BROWSER_NODE ?? process.execPath;
 const browser = process.env.CHROME_PATH;
-const imageFormat = process.env.DIOXUSCUT_BROWSER_IMAGE_FORMAT;
-const jpegQuality = Number(process.env.DIOXUSCUT_BROWSER_JPEG_QUALITY ?? 90);
+const imageFormat = process.env.RUST_MOTION_BROWSER_IMAGE_FORMAT;
+const jpegQuality = Number(process.env.RUST_MOTION_BROWSER_JPEG_QUALITY ?? 90);
 const transparent = ['1', 'true', 'yes'].includes(
-  (process.env.DIOXUSCUT_BROWSER_TRANSPARENT ?? '').trim().toLowerCase(),
+  (process.env.RUST_MOTION_BROWSER_TRANSPARENT ?? '').trim().toLowerCase(),
 );
-const transport = process.env.DIOXUSCUT_BROWSER_TRANSPORT;
+const transport = process.env.RUST_MOTION_BROWSER_TRANSPORT;
 
 function spawnWorker() {
   return new Promise((resolve, reject) => {

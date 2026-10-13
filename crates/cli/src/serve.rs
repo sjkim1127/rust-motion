@@ -1,4 +1,4 @@
-//! `dioxuscut serve` — embedded hot-reloading web studio with WebSocket frame preview.
+//! `rust-motion serve` — embedded hot-reloading web studio with WebSocket frame preview.
 //!
 //! Architecture
 //! ────────────
@@ -33,8 +33,8 @@ use axum::{
     Json, Router,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use dioxuscut_rasterizer::{MediaSecurityPolicy, TinySkiaBackend};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use rust_motion_rasterizer::{MediaSecurityPolicy, TinySkiaBackend};
 use serde::Deserialize;
 use std::{
     collections::VecDeque,
@@ -57,7 +57,7 @@ const DEBOUNCE_MS: u64 = 150;
 // Public configuration type
 // ──────────────────────────────────────────────────────────────
 
-/// Configuration for the `dioxuscut serve` subcommand.
+/// Configuration for the `rust-motion serve` subcommand.
 #[derive(Debug, Clone)]
 pub struct ServeConfig {
     /// Path to the Rhai composition script.
@@ -138,7 +138,7 @@ pub async fn run(config: ServeConfig) -> anyhow::Result<()> {
     info!(
         port = config.port,
         script = %config.script.display(),
-        "dioxuscut serve — open http://localhost:{} in your browser",
+        "rust-motion serve — open http://localhost:{} in your browser",
         config.port
     );
 
@@ -159,7 +159,7 @@ fn serve_router(state: AppState) -> Router {
 async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
     Json(serde_json::json!({
         "ok": true,
-        "service": "dioxuscut-serve",
+        "service": "rust-motion-serve",
         "protocol": 1,
         "composition": state.config.script.display().to_string(),
         "frame": state.config.default_frame,
@@ -301,8 +301,8 @@ fn render_frame(config: &ServeConfig, frame: u32) -> anyhow::Result<Vec<u8>> {
     #[cfg(feature = "rhai")]
     {
         use crate::rhai_runtime::RhaiComposition;
-        use dioxuscut_composition::{Composition, NativeCompositionContext};
-        use dioxuscut_rasterizer::{FrameConfig, RasterizerBackend};
+        use rust_motion_composition::{Composition, NativeCompositionContext};
+        use rust_motion_rasterizer::{FrameConfig, RasterizerBackend};
 
         let script_dir = config
             .script
@@ -311,11 +311,11 @@ fn render_frame(config: &ServeConfig, frame: u32) -> anyhow::Result<Vec<u8>> {
             .unwrap_or_else(|| config.script.clone());
 
         let policy = MediaSecurityPolicy::sandboxed(vec![script_dir]);
-        let cache_bytes = std::env::var("DIOXUSCUT_IMAGE_CACHE_BYTES")
+        let cache_bytes = std::env::var("RUST_MOTION_IMAGE_CACHE_BYTES")
             .ok()
             .and_then(|value| value.parse::<usize>().ok())
             .filter(|value| *value > 0)
-            .unwrap_or(dioxuscut_rasterizer::DEFAULT_IMAGE_CACHE_BYTES);
+            .unwrap_or(rust_motion_rasterizer::DEFAULT_IMAGE_CACHE_BYTES);
         let backend = TinySkiaBackend::new()
             .with_image_cache_bytes(cache_bytes)
             .with_security_policy(policy);
@@ -350,7 +350,7 @@ fn render_frame(config: &ServeConfig, frame: u32) -> anyhow::Result<Vec<u8>> {
     {
         let _ = (config, frame);
         anyhow::bail!(
-            "`dioxuscut serve` requires the `rhai` feature. \
+            "`rust-motion serve` requires the `rhai` feature. \
              Rebuild with `--features rhai`."
         )
     }
@@ -567,7 +567,7 @@ fn player_html(port: u16, default_frame: u32, width: u32, height: u32) -> String
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Dioxuscut Studio — Live Preview</title>
+  <title>Rust Motion Studio — Live Preview</title>
   <style>
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
@@ -666,7 +666,7 @@ fn player_html(port: u16, default_frame: u32, width: u32, height: u32) -> String
 </head>
 <body>
   <header>
-    <h1>🎬 Dioxuscut Studio</h1>
+    <h1>🎬 Rust Motion Studio</h1>
     <span class="badge">Live Preview</span>
     <span id="status" class="disconnected">⬤ Disconnected</span>
   </header>

@@ -21,13 +21,13 @@ fi
 # 2. Verify all internal crates in Cargo.toml match this version
 MISMATCHES=0
 while IFS= read -r line; do
-    CRATE_NAME=$(echo "$line" | sed -E 's/^(dioxuscut-[a-z0-9_-]+) *=.*/\1/')
+    CRATE_NAME=$(echo "$line" | sed -E 's/^(rust-motion-[a-z0-9_-]+) *=.*/\1/')
     CRATE_VER=$(echo "$line" | sed -E 's/.*version *= *"([^"]+)".*/\1/')
     if [ "$CRATE_VER" != "$WORKSPACE_VERSION" ]; then
         echo "ERROR: Internal crate $CRATE_NAME has version '$CRATE_VER', expected '$WORKSPACE_VERSION'"
         MISMATCHES=$((MISMATCHES + 1))
     fi
-done < <(grep -E '^dioxuscut-[a-z0-9_-]+ *= *\{.*version *= *"' Cargo.toml)
+done < <(grep -E '^rust-motion-[a-z0-9_-]+ *= *\{.*version *= *"' Cargo.toml)
 
 if [ "$MISMATCHES" -gt 0 ]; then
     echo "ERROR: Found $MISMATCHES internal crate version mismatch(es) in root Cargo.toml"

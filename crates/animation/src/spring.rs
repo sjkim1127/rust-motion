@@ -6,7 +6,7 @@
 //!
 //! # Example
 //! ```rust
-//! use dioxuscut_animation::spring::{spring, SpringConfig};
+//! use rust_motion_animation::spring::{spring, SpringConfig};
 //!
 //! let config = SpringConfig::default(); // damping=10, mass=1, stiffness=100
 //! let value = spring(15, 30.0, config);
@@ -355,7 +355,7 @@ fn measure_uncached(fps: f64, config: &SpringConfig, threshold: f64) -> Result<f
 /// The supported adjusted frame range remains capped at 100,000 frames.
 ///
 /// ```
-/// use dioxuscut_animation::{spring_with_options, SpringConfig, SpringOptions};
+/// use rust_motion_animation::{spring_with_options, SpringConfig, SpringOptions};
 /// let options = SpringOptions {
 ///     from: 100.0,
 ///     to: 0.0,
@@ -364,7 +364,7 @@ fn measure_uncached(fps: f64, config: &SpringConfig, threshold: f64) -> Result<f
 ///     ..Default::default()
 /// };
 /// assert_eq!(spring_with_options(10.0, 30.0, SpringConfig::default(), options)?, 100.0);
-/// # Ok::<(), dioxuscut_animation::SpringError>(())
+/// # Ok::<(), rust_motion_animation::SpringError>(())
 /// ```
 pub fn spring_with_options(
     frame: f64,

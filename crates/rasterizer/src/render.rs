@@ -306,7 +306,7 @@ impl RenderControl {
     pub fn with_stderr_render_stats(self) -> Self {
         self.with_diagnostics(|diagnostics| {
             eprintln!(
-                "{{\"dioxuscut_render\":true,\"backend\":\"{}\",\"elapsed_ms\":{:.3},\"encoded_frames\":{},\"encoded_fps\":{:.3},\"resolution\":\"{}x{}\",\"gpu_frames\":{},\"cpu_fallback_frames\":{},\"texture_cache_hits\":{},\"texture_cache_misses\":{},\"video_decode_ms\":{:.3},\"texture_upload_ms\":{:.3},\"gpu_submit_readback_ms\":{:.3},\"browser_frame_ms\":{:.3},\"fallback_reason\":{}}}",
+                "{{\"rust_motion_render\":true,\"backend\":\"{}\",\"elapsed_ms\":{:.3},\"encoded_frames\":{},\"encoded_fps\":{:.3},\"resolution\":\"{}x{}\",\"gpu_frames\":{},\"cpu_fallback_frames\":{},\"texture_cache_hits\":{},\"texture_cache_misses\":{},\"video_decode_ms\":{:.3},\"texture_upload_ms\":{:.3},\"gpu_submit_readback_ms\":{:.3},\"browser_frame_ms\":{:.3},\"fallback_reason\":{}}}",
                 diagnostics.backend,
                 diagnostics.elapsed_ms,
                 diagnostics.encoded_frames,
@@ -352,7 +352,7 @@ impl RenderControl {
                     progress.completed_frames as f64 * 100.0 / progress.total_frames as f64
                 };
                 eprintln!(
-                    "[*] [Dioxuscut Progress] {} / {} frames ({percent:.1}%)...",
+                    "[*] [Rust Motion Progress] {} / {} frames ({percent:.1}%)...",
                     progress.completed_frames, progress.total_frames,
                 );
             }
@@ -366,7 +366,7 @@ impl RenderControl {
                     progress.encoded_frames as f64 * 100.0 / progress.total_frames as f64
                 };
                 eprintln!(
-                    "[*] [Dioxuscut Encoding] {} / {} frames ({percent:.1}%)...",
+                    "[*] [Rust Motion Encoding] {} / {} frames ({percent:.1}%)...",
                     progress.encoded_frames, progress.total_frames,
                 );
             }
@@ -761,7 +761,7 @@ where
         .map(|extension| format!(".{extension}"))
         .unwrap_or_default();
     let temporary_output = tempfile::Builder::new()
-        .prefix(".dioxuscut-render-")
+        .prefix(".rust-motion-render-")
         .suffix(&suffix)
         .tempfile_in(parent)
         .map_err(|error| {
@@ -1735,7 +1735,7 @@ mod tests {
             .expect("system clock before Unix epoch")
             .as_nanos();
         std::env::temp_dir().join(format!(
-            "dioxuscut_{label}_{}_{}",
+            "rust_motion_{label}_{}_{}",
             std::process::id(),
             nonce
         ))

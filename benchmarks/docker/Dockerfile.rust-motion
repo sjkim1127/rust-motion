@@ -1,11 +1,11 @@
-# Dioxuscut Linux image. The build stage is intentional: a macOS or Windows
+# Rust Motion Linux image. The build stage is intentional: a macOS or Windows
 # host must never copy its native executable into a Linux image.
 FROM rust:1.97-alpine AS builder
 
 WORKDIR /src
 RUN apk add --no-cache build-base pkgconf openssl-dev openssl-libs-static
 COPY . .
-RUN cargo build --locked --release -p dioxuscut-cli --bin dioxuscut
+RUN cargo build --locked --release -p rust-motion-cli --bin rust-motion
 
 FROM alpine:3.20
 
@@ -14,7 +14,7 @@ WORKDIR /app
 # FFmpeg and CA certificates are the only runtime packages required.
 RUN apk add --no-cache ffmpeg ca-certificates libgcc libstdc++
 
-COPY --from=builder /src/target/release/dioxuscut /usr/local/bin/dioxuscut
+COPY --from=builder /src/target/release/rust-motion /usr/local/bin/rust-motion
 
-ENTRYPOINT ["dioxuscut"]
+ENTRYPOINT ["rust-motion"]
 CMD ["render", "--help"]

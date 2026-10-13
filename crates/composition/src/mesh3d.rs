@@ -1,7 +1,7 @@
 //! Native 3D primitive emitters shared by Dioxus, Tauri, and CLI compositions.
 
 use crate::{CompositionError, SceneEmitter, SceneFrameContext};
-use dioxuscut_rasterizer::{Color, Mesh3D, Scene, Vec3};
+use rust_motion_rasterizer::{Color, Mesh3D, Scene, Vec3};
 use serde_json::Value;
 use std::sync::Arc;
 

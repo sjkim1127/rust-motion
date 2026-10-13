@@ -1,9 +1,9 @@
 #![cfg(feature = "rhai")]
 
 use base64::Engine;
-use dioxuscut_cli::rhai_runtime::RhaiComposition;
-use dioxuscut_composition::{Composition, NativeCompositionContext};
-use dioxuscut_rasterizer::SceneNode;
+use rust_motion_cli::rhai_runtime::RhaiComposition;
+use rust_motion_composition::{Composition, NativeCompositionContext};
+use rust_motion_rasterizer::SceneNode;
 use serde_json::json;
 
 #[test]
@@ -451,14 +451,14 @@ fn test_rhai_shader_pass() {
     }
 
     // Verify rasterization succeeds without errors
-    let backend = dioxuscut_rasterizer::tiny_skia_backend::TinySkiaBackend::new();
-    let cfg = dioxuscut_rasterizer::FrameConfig {
+    let backend = rust_motion_rasterizer::tiny_skia_backend::TinySkiaBackend::new();
+    let cfg = rust_motion_rasterizer::FrameConfig {
         width: 1920,
         height: 1080,
         frame: 0,
         fps: 30.0,
     };
-    let img = dioxuscut_rasterizer::RasterizerBackend::render_frame(&backend, &scene, &cfg)
+    let img = rust_motion_rasterizer::RasterizerBackend::render_frame(&backend, &scene, &cfg)
         .expect("rasterize shader pass");
     assert_eq!(img.width(), 1920);
     assert_eq!(img.height(), 1080);

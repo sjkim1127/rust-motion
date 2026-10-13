@@ -1,13 +1,13 @@
 # AI-first rendering contract
 
-Dioxuscut treats the project file and render-job API as the primary interface.
+Rust Motion treats the project file and render-job API as the primary interface.
 The desktop preview is optional; an agent can run the same workflow through the
 CLI or Tauri commands.
 
 ## Project input
 
-Projects use the versioned `.dioxuscut.json` schema. A language-neutral JSON
-Schema is available at `schemas/dioxuscut-project-v1.schema.json`.
+Projects use the versioned `.rust_motion.json` schema. A language-neutral JSON
+Schema is available at `schemas/rust-motion-project-v1.schema.json`.
 
 ```json
 {
@@ -51,13 +51,13 @@ Tauri's embedded Chromium backend and validated before submission.
 Discover Native composition IDs without starting a UI:
 
 ```sh
-DIOXUSCUT_JSON=1 dioxuscut list-compositions
+RUST_MOTION_JSON=1 rust-motion list-compositions
 ```
 
 Validate a project before submitting it:
 
 ```sh
-dioxuscut validate-project project.dioxuscut.json
+rust-motion validate-project project.rust_motion.json
 ```
 
 This performs the same strict Rust validation used by Tauri, including schema
@@ -72,20 +72,20 @@ treated as local Native/GPU files.
 Render the validated project directly:
 
 ```sh
-DIOXUSCUT_JSON=1 dioxuscut render-project project.dioxuscut.json --output out.mp4
+RUST_MOTION_JSON=1 rust-motion render-project project.rust_motion.json --output out.mp4
 ```
 
 Native/GPU hosts can opt into downloading HTTP(S) assets before rendering:
 
 ```bash
-dioxuscut render-project project.dioxuscut.json --asset-cache-dir .dioxuscut-assets
+rust-motion render-project project.rust_motion.json --asset-cache-dir .rust-motion-assets
 ```
 
 The materializer applies a 256 MiB per-asset limit and a configurable 1 GiB
 project total by default. Use `--max-total-asset-bytes` to change the project
 limit. It verifies a declared `sha256` and rewrites `asset://<id>` references
 to the cached local file. Studio uses the same per-asset limit and reads its
-project total from `DIOXUSCUT_MAX_TOTAL_REMOTE_ASSET_BYTES` (1 GiB by default).
+project total from `RUST_MOTION_MAX_TOTAL_REMOTE_ASSET_BYTES` (1 GiB by default).
 Without this option, remote assets remain Browser-backend URLs and are not
 fetched by the CLI.
 
@@ -132,23 +132,23 @@ Valid progress states are `queued`, `preparing`, `rendering`, `encoding`,
 The CLI and Tauri host use a persistent worker pool. Configure the pool with:
 
 ```sh
-export DIOXUSCUT_BROWSER_WORKER=$PWD/apps/studio-tauri/scripts/three-render-worker.mjs
+export RUST_MOTION_BROWSER_WORKER=$PWD/apps/studio-tauri/scripts/three-render-worker.mjs
 # Optional: use a bundled or platform-specific Node.js executable.
-export DIOXUSCUT_BROWSER_NODE=node
+export RUST_MOTION_BROWSER_NODE=node
 # Optional: load an AI-generated/browser composition module after the app loads.
-export DIOXUSCUT_BROWSER_COMPOSITION_MODULE=http://localhost:1420/src/compositions/demo.js
+export RUST_MOTION_BROWSER_COMPOSITION_MODULE=http://localhost:1420/src/compositions/demo.js
 # Optional during development: use an already-running composition server.
-export DIOXUSCUT_BROWSER_URL=http://localhost:1420
-export DIOXUSCUT_BROWSER_CONCURRENCY=4
+export RUST_MOTION_BROWSER_URL=http://localhost:1420
+export RUST_MOTION_BROWSER_CONCURRENCY=4
 # Optional: fail readiness or an async renderFrame() that exceeds this limit.
-export DIOXUSCUT_BROWSER_FRAME_TIMEOUT_MS=30000
+export RUST_MOTION_BROWSER_FRAME_TIMEOUT_MS=30000
 # Optional: retry a failed frame (default: 1 retry).
-export DIOXUSCUT_BROWSER_TRANSPORT_RETRIES=1
+export RUST_MOTION_BROWSER_TRANSPORT_RETRIES=1
 # Optional: lower-latency lossy browser capture for opaque video workloads.
-export DIOXUSCUT_BROWSER_IMAGE_FORMAT=jpeg
-export DIOXUSCUT_BROWSER_JPEG_QUALITY=90
+export RUST_MOTION_BROWSER_IMAGE_FORMAT=jpeg
+export RUST_MOTION_BROWSER_JPEG_QUALITY=90
 # Optional: keep encoded frame bytes out of JSON/base64 transport.
-export DIOXUSCUT_BROWSER_TRANSPORT=file
+export RUST_MOTION_BROWSER_TRANSPORT=file
 ```
 
 Rust embedders such as Tauri can configure the same capture policy on an
@@ -181,13 +181,13 @@ The packaged Tauri renderer automatically selects PNG/file transport when a
 project does not specify `browser_transport`; set it to `base64` to force the
 portable JSON transport.
 
-When the packaged Tauri app runs without `DIOXUSCUT_BROWSER_URL`, the host
+When the packaged Tauri app runs without `RUST_MOTION_BROWSER_URL`, the host
 serves its bundled `dist` directory from a dynamic loopback port and points the
 Chromium workers at that server. Production browser rendering therefore does
 not require a separately running Vite or Dioxus development server.
 
-The browser host exposes `window.dioxuscut.registerComposition(id, render)` and
-`window.dioxuscut.listCompositions()`;
+The browser host exposes `window.rust_motion.registerComposition(id, render)` and
+`window.rust_motion.listCompositions()`;
 Three.js or React Three Fiber adapters can register composition-specific frame
 functions without changing the Rust protocol. The function receives
 `{composition, frame, fps, props, assets, width, height, durationInFrames}` and
@@ -195,26 +195,26 @@ may return a Promise for asynchronous asset loading. `frame` is the local frame
 when the composition is used inside a timeline clip; `width`, `height`, and
 `durationInFrames` let Three.js/R3F code configure its camera and responsive
 scene deterministically for both Studio preview and headless export.
-When `DIOXUSCUT_BROWSER_COMPOSITION_MODULE` is set, the worker also discovers
+When `RUST_MOTION_BROWSER_COMPOSITION_MODULE` is set, the worker also discovers
 module exports automatically: an optional `register(api)` function is called,
 then functions in `compositions` (or the default export object) are registered
 under their object keys. This lets an AI-generated entrypoint expose multiple
 Three.js scenes without a separate bootstrap file.
 For adapters that expect Remotion's hook-shaped API, the same host exposes
-`window.dioxuscut.useCurrentFrame()` and
-`window.dioxuscut.useVideoConfig()`. These return the current explicit frame and
+`window.rust_motion.useCurrentFrame()` and
+`window.rust_motion.useVideoConfig()`. These return the current explicit frame and
 the synchronized `{fps, width, height, durationInFrames}` for the active
 request; they do not introduce React or a browser render loop.
-`window.dioxuscut.staticFile(path)` resolves a portable asset URL against the
+`window.rust_motion.staticFile(path)` resolves a portable asset URL against the
 active Vite/Tauri origin, and `getStaticFiles()` returns the asset paths declared
 on the current project render request.
-`window.dioxuscut.getInputProps()` returns a cloned snapshot of the active
+`window.rust_motion.getInputProps()` returns a cloned snapshot of the active
 project props, matching the non-hook Remotion API while preventing a
 composition from mutating the host-owned request object.
 `getRemotionEnvironment()` (and its hook-shaped alias
 `useRemotionEnvironment()`) reports `{isRendering, isStudio, isPlayer}` so a
 composition can distinguish headless export from interactive preview.
-For non-React Three.js compositions, `window.dioxuscut.useVideoTexture(src,
+For non-React Three.js compositions, `window.rust_motion.useVideoTexture(src,
 {frame, fps})` (also available as `getVideoTexture`) returns a cached
 `THREE.VideoTexture` after `loadeddata` and
 seeks it to the requested composition frame; call
@@ -222,13 +222,13 @@ seeks it to the requested composition frame; call
 Browser host equivalent of vendor `useVideoTexture` and avoids creating a new
 GPU texture on every frame.
 For Remotion-style asynchronous readiness, a composition may call
-`window.dioxuscut.delayRender(reason)` and later
-`window.dioxuscut.continueRender(handle)`. Calling
-`window.dioxuscut.cancelRender(handle, reason)` fails the current frame and
+`window.rust_motion.delayRender(reason)` and later
+`window.rust_motion.continueRender(handle)`. Calling
+`window.rust_motion.cancelRender(handle, reason)` fails the current frame and
 propagates the reason to the CLI/Tauri job. A cancelled render is not captured
 as a partially prepared frame.
 
-Browser hosts also expose `window.dioxuscut.registerLottieAdapter(adapter)`.
+Browser hosts also expose `window.rust_motion.registerLottieAdapter(adapter)`.
 An adapter implements `render(element, state)` and may use `lottie-web` or
 another renderer; `state` includes the source, frame, FPS, time, playback rate,
 and loop behavior. This keeps the Rust protocol independent of a particular
@@ -236,24 +236,24 @@ JavaScript animation library while allowing Dioxus Lottie elements to render
 in the Chromium compatibility backend.
 
 `CanvasImage` follows the same boundary. Dioxus emits a stable
-`data-dioxuscut-canvas-image` marker with `data-src` and `data-fit`, and the
+`data-rust-motion-canvas-image` marker with `data-src` and `data-fit`, and the
 browser host draws the preloaded drawable onto the canvas for each requested
 frame. Native VDOM converts the marker to a cached `SceneNode::Image` fallback;
 it does not emulate arbitrary Canvas or WebGL APIs.
 
-Native hosts also expose `dioxuscut_media::get_image_dimensions()`, a bounded
+Native hosts also expose `rust_motion_media::get_image_dimensions()`, a bounded
 header-only image inspection helper corresponding to Remotion's
 `getImageDimensions()`. It returns width and height without allocating the full
 decoded pixel buffer, so AI-generated compositions can validate image layout
 before scheduling a render.
 
-Browser compositions can use `window.dioxuscut.getImageDimensions(src)` for the
+Browser compositions can use `window.rust_motion.getImageDimensions(src)` for the
 same Promise-based query. Results are cached by source and expose
 `{width, height}`, matching vendor `@remotion/media-utils` behavior.
-Browser compositions can likewise call `window.dioxuscut.getVideoMetadata(src)`
+Browser compositions can likewise call `window.rust_motion.getVideoMetadata(src)`
 to receive `{durationInSeconds, width, height, aspectRatio, isRemote}` with
 source-level caching.
-`window.dioxuscut.getAudioDurationInSeconds(src)` (also available as
+`window.rust_motion.getAudioDurationInSeconds(src)` (also available as
 `getAudioDuration`) provides the cached duration for audio-driven compositions.
 Audio analysis is shared through `getAudioData(src, {sampleRate, requestInit})`
 and the hook-shaped alias `useAudioData`. The host also provides
@@ -264,7 +264,7 @@ float32 WAV data URL, while `prefetch()` plus `usePreload()` keeps media in a
 blob/base64 cache and reports streaming progress. These are framework-free
 adapters: React is not required in a Three.js composition. Native Rust exposes
 the corresponding `get_waveform_bars()` and `visualize_audio_waveform()` APIs
-through `dioxuscut_media`.
+through `rust_motion_media`.
 
 For container inspection, the browser exposes `parseMedia({src, fields})` and
 `readMediaRange(source, start, endExclusive, {requestInit})`. The native side
@@ -301,7 +301,7 @@ PNG remains the default and is recommended for transparent or pixel-sensitive
 stills. JPEG capture reduces browser-to-Rust payload size for opaque video
 frames; FFmpeg still performs the final codec encoding.
 
-For headless automation, `dioxuscut serve` exposes `GET /health` and
+For headless automation, `rust-motion serve` exposes `GET /health` and
 `GET /frame?frame=N` as JSON. The latter returns the rendered PNG as
 `png_base64` together with its frame and dimensions, so an agent can inspect or
 store a frame without opening the preview UI.
@@ -309,7 +309,7 @@ Tauri hosts additionally expose `list_browser_compositions`, which performs a
 worker handshake and returns the registered Browser composition IDs without
 requiring the Studio UI.
 
-For render automation, set `DIOXUSCUT_JSON=1`. Successful and failed `render`
+For render automation, set `RUST_MOTION_JSON=1`. Successful and failed `render`
 commands then emit one machine-readable result line on stdout. Human tracing
 remains on stderr, so an agent can parse stdout without log filtering.
 `readIsoBmffSample(source, trackIndex, sampleIndex)` then fetches one encoded

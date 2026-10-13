@@ -1,8 +1,8 @@
 //! Native Scene emitters matching the Dioxus media components.
 
 use crate::img::ImageFit;
-use dioxuscut_composition::{CompositionError, SceneEmitter, SceneFrameContext};
-use dioxuscut_rasterizer::{
+use rust_motion_composition::{CompositionError, SceneEmitter, SceneFrameContext};
+use rust_motion_rasterizer::{
     gif_cache::LoopBehavior, AudioTrack, ImageFit as SceneImageFit, Scene, SceneNode,
 };
 use serde_json::Value;
@@ -234,7 +234,7 @@ impl SceneEmitter for SceneAudio {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dioxuscut_composition::{
+    use rust_motion_composition::{
         NativeComposition, NativeCompositionContext, SceneEmitterComposition, SceneSequence,
         SceneStack,
     };

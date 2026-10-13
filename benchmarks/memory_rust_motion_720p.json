@@ -1,7 +1,7 @@
 {
   "command": [
-    "/Users/sjkim1127/Dioxuscut/target/release/examples/render_bench",
-    "/Users/sjkim1127/Dioxuscut/target/native_bench.mp4"
+    "/Users/sjkim1127/Rust Motion/target/release/examples/render_bench",
+    "/Users/sjkim1127/Rust Motion/target/native_bench.mp4"
   ],
   "exit_code": 0,
   "duration_sec": 1.347,

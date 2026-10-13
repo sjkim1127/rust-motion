@@ -1,4 +1,4 @@
-//! Dioxuscut Shapes — procedural SVG motion graphics paths and optional Dioxus components.
+//! Rust Motion Shapes — procedural SVG motion graphics paths and optional Dioxus components.
 //!
 //! Pure path generators are always available. Enable the Dioxus feature for component wrappers.
 

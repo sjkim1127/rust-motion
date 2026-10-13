@@ -1,5 +1,5 @@
 //! Deterministic CPU raster workload; hashes are computed outside the render timer.
-use dioxuscut_rasterizer::{
+use rust_motion_rasterizer::{
     BlendMode, Color, FrameConfig, MaskMode, RasterizerBackend, Scene, SceneFilter, SceneNode,
     TinySkiaBackend,
 };

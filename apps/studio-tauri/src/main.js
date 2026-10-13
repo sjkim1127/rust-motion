@@ -6,9 +6,9 @@ import './style.css';
 const app = document.querySelector('#app');
 app.innerHTML = `
   <main class="studio">
-    <header><h1>Dioxuscut Studio</h1><span id="backend">connecting…</span></header>
+    <header><h1>Rust Motion Studio</h1><span id="backend">connecting…</span></header>
     <section class="toolbar">
-      <input id="project-path" value="/tmp/dioxuscut-project.json" aria-label="project path" />
+      <input id="project-path" value="/tmp/rust-motion-project.json" aria-label="project path" />
       <button id="load-project">Open project</button>
       <button id="save-project">Save project</button>
       <button id="submit-render">Queue render</button>
@@ -273,7 +273,7 @@ async function preloadAssets(assets = []) {
     const extension = source.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase();
     let task;
     if (['ttf', 'otf', 'woff', 'woff2'].includes(extension)) {
-      task = new FontFace(`dioxuscut-${preloadedAssets.size}`, `url(${source})`).load();
+      task = new FontFace(`rust-motion-${preloadedAssets.size}`, `url(${source})`).load();
       task = task.then((font) => { document.fonts.add(font); return font; });
     } else if (extension === 'json') {
       task = fetch(source).then((response) => {
@@ -2420,7 +2420,7 @@ export function getInputProps() {
 }
 
 export function getRemotionEnvironment() {
-  const isRendering = window.__DIOXUSCUT_HEADLESS_RENDER__ === true;
+  const isRendering = window.__RUST_MOTION_HEADLESS_RENDER__ === true;
   return { isRendering, isStudio: !isRendering, isPlayer: false };
 }
 
@@ -2484,10 +2484,10 @@ function isJsonSource(source = '') {
 
 async function syncLottieElements({ frame: nextFrame, fps }) {
   if (!lottieAdapter) return;
-  const elements = document.querySelectorAll('[data-dioxuscut-lottie]');
+  const elements = document.querySelectorAll('[data-rust-motion-lottie]');
   await Promise.all([...elements].map(async (element) => {
     await lottieAdapter.render(element, {
-      src: element.dataset.dioxuscutLottie,
+      src: element.dataset.rust-motionLottie,
       frame: nextFrame,
       fps,
       time: Number(element.dataset.time ?? 0),
@@ -2499,7 +2499,7 @@ async function syncLottieElements({ frame: nextFrame, fps }) {
 }
 
 async function syncCanvasImages(nextFrame) {
-  const elements = document.querySelectorAll('[data-dioxuscut-canvas-image]');
+  const elements = document.querySelectorAll('[data-rust-motion-canvas-image]');
   await Promise.all([...elements].map(async (element) => {
     const source = element.dataset.src;
     if (!source) return;
@@ -2701,7 +2701,7 @@ export async function renderFrame({ composition = 'three_preview', frame: nextFr
   await waitForRenderGates();
   return result;
 }
-window.dioxuscut = {
+window.rust-motion = {
   renderFrame,
   registerComposition,
   registerThreeComposition,
@@ -2768,7 +2768,7 @@ window.dioxuscut = {
 };
 
 function resize() {
-  if (!renderer || !camera || window.__DIOXUSCUT_HEADLESS_RENDER__ === true) return;
+  if (!renderer || !camera || window.__RUST_MOTION_HEADLESS_RENDER__ === true) return;
   const { width, height } = canvas.parentElement.getBoundingClientRect();
   renderer.setSize(width, height, false);
   camera.aspect = width / Math.max(height, 1);
@@ -3592,7 +3592,7 @@ async function refreshJobList() {
       retry.addEventListener('click', async () => {
         try {
           currentJobId = await invoke('retry_render_job', { id: job.id });
-          const output = await join(await tempDir(), `dioxuscut-${currentJobId}.mp4`);
+          const output = await join(await tempDir(), `rust-motion-${currentJobId}.mp4`);
           await invoke('start_render_job', { id: currentJobId, output });
           showMessage(`${currentJobId} rendering → ${output}`);
           await refreshJobList();
@@ -3611,7 +3611,7 @@ setInterval(() => {
 
 document.querySelector('#load-project').addEventListener('click', async () => {
   try {
-    const selected = await open({ filters: [{ name: 'Dioxuscut project', extensions: ['json'] }] });
+    const selected = await open({ filters: [{ name: 'Rust Motion project', extensions: ['json'] }] });
     if (!selected || Array.isArray(selected)) return;
     document.querySelector('#project-path').value = selected;
     project = await invoke('load_project', { path: selected });
@@ -3640,7 +3640,7 @@ document.querySelector('#save-project').addEventListener('click', async () => {
     };
     const selected = await save({
       defaultPath: document.querySelector('#project-path').value,
-      filters: [{ name: 'Dioxuscut project', extensions: ['json'] }],
+      filters: [{ name: 'Rust Motion project', extensions: ['json'] }],
     });
     if (!selected) return;
     document.querySelector('#project-path').value = selected;
@@ -3652,7 +3652,7 @@ document.querySelector('#save-project').addEventListener('click', async () => {
 document.querySelector('#submit-render').addEventListener('click', async () => {
   try {
     const id = await invoke('submit_project', { project });
-    const output = await join(await tempDir(), `dioxuscut-${id}.mp4`);
+    const output = await join(await tempDir(), `rust-motion-${id}.mp4`);
     await invoke('start_render_job', { id, output });
     currentJobId = id;
     document.querySelector('#cancel-render').disabled = false;
@@ -3675,7 +3675,7 @@ document.querySelector('#cancel-render').addEventListener('click', async (event)
 });
 
 function renderPreview() {
-  if (window.__DIOXUSCUT_HEADLESS_RENDER__) return;
+  if (window.__RUST_MOTION_HEADLESS_RENDER__) return;
   if (playing) {
     const elapsed = Math.max(0, performance.now() - playbackStartedAt);
     const duration = Math.max(project.settings.duration, 1);

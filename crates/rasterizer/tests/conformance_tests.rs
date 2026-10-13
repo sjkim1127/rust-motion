@@ -10,15 +10,15 @@
 //! 2. State Isolation & Pure Functions (no mutable state across frames)
 //! 3. Historical rendering bug regression fixtures
 
-use dioxuscut_composition::{Composition, NativeCompositionContext, SpringRectsComposition};
-use dioxuscut_rasterizer::backend::{FrameConfig, RasterizerBackend};
-use dioxuscut_rasterizer::font::{
+use rust_motion_composition::{Composition, NativeCompositionContext, SpringRectsComposition};
+use rust_motion_rasterizer::backend::{FrameConfig, RasterizerBackend};
+use rust_motion_rasterizer::font::{
     layout_text_box, TextBox, TextHorizontalAlign, TextVerticalAlign,
 };
-use dioxuscut_rasterizer::scene::{
+use rust_motion_rasterizer::scene::{
     BlendMode, ClipRegion, Color, MaskMode, Scene, SceneFilter, SceneNode,
 };
-use dioxuscut_rasterizer::TinySkiaBackend;
+use rust_motion_rasterizer::TinySkiaBackend;
 use std::collections::BTreeMap;
 
 fn test_context() -> NativeCompositionContext {

@@ -2,10 +2,10 @@
 
 ## 1. Overview
 
-Rust Motion project files (`.dioxuscut.json`) provide a declarative, versioned representation of multi-track timelines, compositions, settings, asset references, and temporal events.
+Rust Motion project files (`.rust_motion.json`) provide a declarative, versioned representation of multi-track timelines, compositions, settings, asset references, and temporal events.
 
-- Schema URI: `https://dioxuscut.dev/schema/project/v1.json`
-- Local Schema File: `schemas/dioxuscut-project-v1.schema.json`
+- Schema URI: `https://rust_motion.dev/schema/project/v1.json`
+- Local Schema File: `schemas/rust-motion-project-v1.schema.json`
 
 ---
 
@@ -25,7 +25,7 @@ A valid `v1` project object consists of:
 
 ```json
 {
-  "$schema": "https://dioxuscut.dev/schema/project/v1.json",
+  "$schema": "https://rust_motion.dev/schema/project/v1.json",
   "version": 1,
   "composition": "HelloWorld",
   "settings": {

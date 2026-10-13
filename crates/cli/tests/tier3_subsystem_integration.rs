@@ -3,16 +3,16 @@
 //! Validates contracts between HTTP server manager, Native CPU/GPU rasterizer,
 //! and FFmpeg MP4 encoding compiler.
 
-use dioxuscut_rasterizer::{
+use rust_motion_rasterizer::{
     render_all_frames, Color, NativeRenderConfig, Scene, SceneNode, TinySkiaBackend,
 };
-use dioxuscut_renderer::{encode_frames, spawn_server, EncodeConfig};
+use rust_motion_renderer::{encode_frames, spawn_server, EncodeConfig};
 use std::fs;
 
 #[tokio::test]
 async fn test_subsystem_http_server_lifecycle() {
     let temp_dir = std::env::temp_dir().join(format!(
-        "dioxuscut_tier3_server_{}",
+        "rust_motion_tier3_server_{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -22,7 +22,7 @@ async fn test_subsystem_http_server_lifecycle() {
     let index_file = temp_dir.join("index.html");
     fs::write(
         &index_file,
-        "<html><body><h1>Dioxuscut Subsystem Test</h1></body></html>",
+        "<html><body><h1>Rust Motion Subsystem Test</h1></body></html>",
     )
     .unwrap();
 
@@ -52,7 +52,7 @@ async fn test_subsystem_http_server_lifecycle() {
 #[tokio::test]
 async fn test_subsystem_native_rasterizer_frame_capture() {
     let temp_dir = std::env::temp_dir().join(format!(
-        "dioxuscut_tier3_rasterizer_{}",
+        "rust_motion_tier3_rasterizer_{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -110,7 +110,7 @@ async fn test_subsystem_native_rasterizer_frame_capture() {
 #[tokio::test]
 async fn test_subsystem_ffmpeg_mp4_encoding() {
     let temp_dir = std::env::temp_dir().join(format!(
-        "dioxuscut_tier3_ffmpeg_{}",
+        "rust_motion_tier3_ffmpeg_{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()

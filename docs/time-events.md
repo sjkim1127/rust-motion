@@ -5,7 +5,7 @@ compositions. The Studio event lane lets you move a marker; by default, markers
 at that frame and later frames move together. Hold Alt (Option on macOS) while
 dragging to move only the selected marker. Save the project to persist edits.
 
-Open [`examples/named-time-events.dioxuscut.json`](../examples/named-time-events.dioxuscut.json)
+Open [`examples/named-time-events.rust_motion.json`](../examples/named-time-events.rust_motion.json)
 in Studio to see the `NamedTimeEventsDemo`. Its progress bar waits for
 `voice_start` and derives its duration from `voice_start` to `voice_end`.
 Moving either marker changes the preview and the rendered frames.
@@ -76,11 +76,11 @@ different meaning should be treated as a composition change.
 
 ## Browser compositions
 
-Studio and the browser worker expose the same helpers on `window.dioxuscut`:
+Studio and the browser worker expose the same helpers on `window.rust-motion`:
 
 ```js
-const start = window.dioxuscut.waitUntil('voice_start');
-const duration = window.dioxuscut.getTimeEventDuration('voice_start', 'voice_end');
+const start = window.rust_motion.waitUntil('voice_start');
+const duration = window.rust_motion.getTimeEventDuration('voice_start', 'voice_end');
 const progress = Math.max(0, Math.min(1, (frame - start) / Math.max(1, duration)));
 ```
 

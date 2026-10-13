@@ -1,5 +1,5 @@
-use dioxuscut_composition::layout::prelude::*;
-use dioxuscut_rasterizer::{Color, Scene, SceneNode};
+use rust_motion_composition::layout::prelude::*;
+use rust_motion_rasterizer::{Color, Scene, SceneNode};
 
 const RED: Color = Color {
     r: 255,

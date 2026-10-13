@@ -57,7 +57,7 @@ To bump to version `X.Y.Z`:
    ```
 2. Update internal dependency versions in root `Cargo.toml`:
    ```toml
-   dioxuscut-animation = { version = "X.Y.Z", path = "crates/animation" }
+   rust-motion-animation = { version = "X.Y.Z", path = "crates/animation" }
    # ... update all internal crates
    ```
 3. Update Python version in `crates/python/pyproject.toml`:
@@ -86,28 +86,28 @@ Because internal crates depend on one another, publishing to crates.io must foll
 
 ```bash
 # Core primitives
-cargo publish -p dioxuscut-paths
-cargo publish -p dioxuscut-animation
-cargo publish -p dioxuscut-core
+cargo publish -p rust-motion-paths
+cargo publish -p rust-motion-animation
+cargo publish -p rust-motion-core
 
 # Low-level rasterizer & media
-cargo publish -p dioxuscut-rasterizer
-cargo publish -p dioxuscut-shapes
-cargo publish -p dioxuscut-charts
-cargo publish -p dioxuscut-media
+cargo publish -p rust-motion-rasterizer
+cargo publish -p rust-motion-shapes
+cargo publish -p rust-motion-charts
+cargo publish -p rust-motion-media
 
 # High-level composition & effects
-cargo publish -p dioxuscut-composition
-cargo publish -p dioxuscut-transitions
-cargo publish -p dioxuscut-noise
-cargo publish -p dioxuscut-captions
-cargo publish -p dioxuscut-project
+cargo publish -p rust-motion-composition
+cargo publish -p rust-motion-transitions
+cargo publish -p rust-motion-noise
+cargo publish -p rust-motion-captions
+cargo publish -p rust-motion-project
 
 # Engine & integrations
-cargo publish -p dioxuscut-renderer
-cargo publish -p dioxuscut-player
-cargo publish -p dioxuscut-vdom
-cargo publish -p dioxuscut-cli
+cargo publish -p rust-motion-renderer
+cargo publish -p rust-motion-player
+cargo publish -p rust-motion-vdom
+cargo publish -p rust-motion-cli
 ```
 
 > **Note**: Allow 10–30 seconds between publishes for crates.io index propagation.

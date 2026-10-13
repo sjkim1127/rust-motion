@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-noise"
-description = "Procedural Simplex 2D/3D/4D noise generation and organic noise backgrounds for Dioxuscut"
+name        = "rust-motion-noise"
+description = "Procedural Simplex 2D/3D/4D noise generation and organic noise backgrounds for Rust Motion"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -10,5 +10,5 @@ readme.workspace      = true
 
 [dependencies]
 dioxus         = { workspace = true }
-dioxuscut-core = { workspace = true }
+rust-motion-core = { workspace = true }
 serde          = { workspace = true }

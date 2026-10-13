@@ -1,6 +1,6 @@
-use dioxuscut_cli::rhai_runtime::RhaiComposition;
-use dioxuscut_composition::{Composition, NativeCompositionContext};
-use dioxuscut_rasterizer::{Color, SceneNode};
+use rust_motion_cli::rhai_runtime::RhaiComposition;
+use rust_motion_composition::{Composition, NativeCompositionContext};
+use rust_motion_rasterizer::{Color, SceneNode};
 use serde_json::json;
 
 #[test]

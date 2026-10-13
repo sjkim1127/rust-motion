@@ -1,4 +1,4 @@
-//! # dioxuscut-player
+//! # rust-motion-player
 //!
 //! Interactive `<Player>` component — renders a composition with playback
 //! controls (play/pause/seek/scrub).

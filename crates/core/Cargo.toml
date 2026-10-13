@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-core"
-description = "Core Dioxus components and hooks for Dioxuscut — Composition, Sequence, AbsoluteFill, etc."
+name        = "rust-motion-core"
+description = "Core Dioxus components and hooks for Rust Motion — Composition, Sequence, AbsoluteFill, etc."
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -10,9 +10,9 @@ readme.workspace      = true
 
 [dependencies]
 dioxus                = { workspace = true }
-dioxuscut-animation   = { workspace = true }
-dioxuscut-composition = { workspace = true }
-dioxuscut-rasterizer  = { workspace = true }
+rust-motion-animation   = { workspace = true }
+rust-motion-composition = { workspace = true }
+rust-motion-rasterizer  = { workspace = true }
 serde              = { workspace = true }
 serde_json         = { workspace = true }
 tracing            = { workspace = true }

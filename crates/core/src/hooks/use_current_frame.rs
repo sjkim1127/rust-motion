@@ -4,7 +4,7 @@
 //!
 //! # Usage
 //! ```rust,ignore
-//! use dioxuscut_core::hooks::use_current_frame;
+//! use rust_motion_core::hooks::use_current_frame;
 //!
 //! fn MyComponent() -> Element {
 //!     let frame = use_current_frame();

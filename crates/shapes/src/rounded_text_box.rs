@@ -5,7 +5,7 @@ use crate::render_svg::RenderSvg;
 use crate::shape_output::ShapeOutput;
 #[cfg(feature = "dioxus")]
 use dioxus::prelude::*;
-pub use dioxuscut_rasterizer::font::{
+pub use rust_motion_rasterizer::font::{
     create_rounded_text_box, create_rounded_text_box_from_measurements, RoundedTextBoxOptions,
     TextAlign, TextLineDimension,
 };

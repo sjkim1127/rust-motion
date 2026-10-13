@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync, unlinkSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
-const url = process.env.DIOXUSCUT_BROWSER_URL ?? 'http://127.0.0.1:1421';
+const url = process.env.RUST_MOTION_BROWSER_URL ?? 'http://127.0.0.1:1421';
 const worker = new URL('../../apps/studio-tauri/scripts/three-render-worker.mjs', import.meta.url);
 const moduleUrl = `${url}/src/three-lifecycle-composition.js`;
 const child = spawn(process.execPath, [worker.pathname, `--url=${url}`, `--composition-module=${moduleUrl}`], {
@@ -75,7 +75,7 @@ try {
     if (frame === 15) {
       assert.equal(response.video_frame.width, 640);
       assert.equal(response.video_frame.height, 360);
-      assert.match(response.video_frame.file_path, /dioxuscut-rgba-/);
+      assert.match(response.video_frame.file_path, /rust-motion-rgba-/);
       assert.equal(readFileSync(response.video_frame.file_path).length, 640 * 360 * 4);
       unlinkSync(response.video_frame.file_path);
     }

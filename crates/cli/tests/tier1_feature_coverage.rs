@@ -4,12 +4,12 @@
 //! `--width`, `--height`, `--fps`, `--duration`, and `--backend`.
 
 use clap::Parser;
-use dioxuscut_cli::{Cli, Commands, RenderBackend, RenderCodec};
+use rust_motion_cli::{Cli, Commands, RenderBackend, RenderCodec};
 use std::path::PathBuf;
 
 #[test]
 fn test_cli_flag_defaults() {
-    let args = vec!["dioxuscut", "render", "-c", "HelloWorld"];
+    let args = vec!["rust-motion", "render", "-c", "HelloWorld"];
     let cli = Cli::try_parse_from(args).expect("Failed to parse CLI args");
 
     match cli.command {
@@ -51,7 +51,7 @@ fn test_cli_flag_defaults() {
             assert_eq!(timeout_seconds, None);
             assert_eq!(crf, 18);
             assert_eq!(preset, "fast");
-            assert_eq!(hw_accel, dioxuscut_cli::HwAccelArg::Auto);
+            assert_eq!(hw_accel, rust_motion_cli::HwAccelArg::Auto);
             assert!(sandbox_roots.is_empty());
             assert!(!permissive);
         }
@@ -62,7 +62,7 @@ fn test_cli_flag_defaults() {
 #[test]
 fn test_cli_flag_custom_values() {
     let args = vec![
-        "dioxuscut",
+        "rust-motion",
         "render",
         "--composition",
         "CustomComposition",
@@ -123,7 +123,7 @@ fn test_cli_flag_custom_values() {
             assert_eq!(timeout_seconds, None);
             assert_eq!(crf, 18);
             assert_eq!(preset, "fast");
-            assert_eq!(hw_accel, dioxuscut_cli::HwAccelArg::Auto);
+            assert_eq!(hw_accel, rust_motion_cli::HwAccelArg::Auto);
             assert_eq!(sandbox_roots, Vec::<PathBuf>::new());
             assert!(!permissive);
         }
@@ -134,7 +134,7 @@ fn test_cli_flag_custom_values() {
 #[test]
 fn test_cli_parses_codec_range_quality_and_timeout() {
     let cli = Cli::try_parse_from([
-        "dioxuscut",
+        "rust-motion",
         "render",
         "-c",
         "HelloWorld",
@@ -183,7 +183,7 @@ fn test_cli_parses_codec_range_quality_and_timeout() {
 #[test]
 fn test_cli_short_flags() {
     let args = vec![
-        "dioxuscut",
+        "rust-motion",
         "render",
         "-c",
         "ShortFlagComp",
@@ -212,7 +212,7 @@ fn test_cli_short_flags() {
 
 #[test]
 fn test_cli_accepts_rhai_script_as_the_composition_source() {
-    let cli = Cli::try_parse_from(["dioxuscut", "render", "--script", "composition.rhai"])
+    let cli = Cli::try_parse_from(["rust-motion", "render", "--script", "composition.rhai"])
         .expect("Failed to parse Rhai script argument");
 
     match cli.command {
@@ -231,7 +231,7 @@ fn test_cli_accepts_rhai_script_as_the_composition_source() {
 #[test]
 fn test_cli_rejects_conflicting_composition_sources() {
     let result = Cli::try_parse_from([
-        "dioxuscut",
+        "rust-motion",
         "render",
         "--composition",
         "HelloWorld",
@@ -243,7 +243,7 @@ fn test_cli_rejects_conflicting_composition_sources() {
 
 #[test]
 fn test_cli_missing_required_composition() {
-    let args = vec!["dioxuscut", "render"];
+    let args = vec!["rust-motion", "render"];
     let result = Cli::try_parse_from(args);
     assert!(
         result.is_err(),
@@ -254,7 +254,7 @@ fn test_cli_missing_required_composition() {
 #[test]
 fn test_cli_migrate_subcommand() {
     let args = vec![
-        "dioxuscut",
+        "rust-motion",
         "migrate",
         "input.tsx",
         "--target",
@@ -281,7 +281,7 @@ fn test_cli_migrate_subcommand() {
 
 #[test]
 fn test_cli_probe_subcommand() {
-    let args = vec!["dioxuscut", "probe", "sample.mp4"];
+    let args = vec!["rust-motion", "probe", "sample.mp4"];
     let cli = Cli::try_parse_from(args).expect("Failed to parse probe command");
     match cli.command {
         Commands::Probe { path, full } => {
@@ -295,13 +295,13 @@ fn test_cli_probe_subcommand() {
 #[test]
 fn test_cli_render_project_accepts_remote_asset_cache() {
     let cli = Cli::try_parse_from([
-        "dioxuscut",
+        "rust-motion",
         "render-project",
-        "project.dioxuscut.json",
+        "project.rust_motion.json",
         "--output",
         "out.mp4",
         "--asset-cache-dir",
-        ".dioxuscut-assets",
+        ".rust-motion-assets",
         "--max-total-asset-bytes",
         "2048",
     ])
@@ -313,9 +313,9 @@ fn test_cli_render_project_accepts_remote_asset_cache() {
             asset_cache_dir,
             max_total_asset_bytes,
         } => {
-            assert_eq!(input, PathBuf::from("project.dioxuscut.json"));
+            assert_eq!(input, PathBuf::from("project.rust_motion.json"));
             assert_eq!(output, PathBuf::from("out.mp4"));
-            assert_eq!(asset_cache_dir, Some(PathBuf::from(".dioxuscut-assets")));
+            assert_eq!(asset_cache_dir, Some(PathBuf::from(".rust-motion-assets")));
             assert_eq!(max_total_asset_bytes, 2048);
         }
         _ => panic!("Expected Commands::RenderProject"),
@@ -325,7 +325,7 @@ fn test_cli_render_project_accepts_remote_asset_cache() {
 #[test]
 fn test_cli_webcodecs_drift_accepts_validation_options() {
     let cli = Cli::try_parse_from([
-        "dioxuscut",
+        "rust-motion",
         "webcodecs-drift",
         "--worker",
         "worker.mjs",
@@ -364,7 +364,7 @@ fn test_cli_webcodecs_drift_accepts_validation_options() {
 
 #[test]
 fn test_cli_profile_flag() {
-    let cli = Cli::try_parse_from(["dioxuscut", "render", "-c", "ProfileComp", "--profile"])
+    let cli = Cli::try_parse_from(["rust-motion", "render", "-c", "ProfileComp", "--profile"])
         .expect("Failed to parse --profile CLI arg");
 
     match cli.command {

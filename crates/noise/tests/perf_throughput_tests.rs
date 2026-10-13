@@ -1,6 +1,6 @@
 //! Performance throughput and zero-allocation hot path verification.
 
-use dioxuscut_noise::{FbmOptions, SimplexNoise};
+use rust_motion_noise::{FbmOptions, SimplexNoise};
 use std::time::Instant;
 
 #[test]
@@ -104,7 +104,7 @@ fn test_fbm_2d_throughput() {
     for i in 0..iterations {
         let x = (i as f64) * 0.001;
         let y = (i as f64) * 0.002;
-        sum += dioxuscut_noise::fbm_2d_with_noise(&noise, x, y, &opts);
+        sum += rust_motion_noise::fbm_2d_with_noise(&noise, x, y, &opts);
     }
     let elapsed = start.elapsed();
     let ops_per_sec = (iterations as f64) / elapsed.as_secs_f64();

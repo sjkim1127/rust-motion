@@ -2,7 +2,7 @@
 //!
 //! Font discovery follows a three-step priority order:
 //!
-//! 1. `DIOXUSCUT_FONT_PATH` environment variable — highest priority, useful for CI overrides.
+//! 1. `RUST_MOTION_FONT_PATH` environment variable — highest priority, useful for CI overrides.
 //! 2. Platform-specific system font search paths — picks up the user's installed fonts.
 //! 3. Bundled fallback (`NotoSans-Regular.ttf` compiled in with `include_bytes!`) — guarantees
 //!    reproducible rendering in any environment, including minimal Docker images and CI runners
@@ -321,21 +321,21 @@ pub(crate) struct FontLoadError {
 impl FontCache {
     /// Load a font using a three-step priority order:
     ///
-    /// 1. `DIOXUSCUT_FONT_PATH` env var — e.g. `DIOXUSCUT_FONT_PATH=/fonts/MyFont.ttf`
+    /// 1. `RUST_MOTION_FONT_PATH` env var — e.g. `RUST_MOTION_FONT_PATH=/fonts/MyFont.ttf`
     /// 2. Platform system font search paths
     /// 3. Bundled `NotoSans-Regular.ttf` — always succeeds
     ///
     /// This method never returns a cache with `is_loaded() == false`.
     pub fn load() -> Self {
         // Step 1: environment-variable override
-        if let Ok(path) = std::env::var("DIOXUSCUT_FONT_PATH") {
+        if let Ok(path) = std::env::var("RUST_MOTION_FONT_PATH") {
             let path = path.trim().to_string();
             if !path.is_empty() {
                 match std::fs::read(&path).and_then(|b| {
                     LoadedFont::from_bytes(b).map_err(|e| std::io::Error::other(e.to_string()))
                 }) {
                     Ok(font) => {
-                        tracing::info!(font_path = %path, "Loaded font from DIOXUSCUT_FONT_PATH");
+                        tracing::info!(font_path = %path, "Loaded font from RUST_MOTION_FONT_PATH");
                         return Self {
                             font: Some(Arc::new(font)),
                             path: Some(path),
@@ -348,7 +348,7 @@ impl FontCache {
                         tracing::warn!(
                             font_path = %path,
                             error = %err,
-                            "DIOXUSCUT_FONT_PATH could not be loaded, falling back"
+                            "RUST_MOTION_FONT_PATH could not be loaded, falling back"
                         );
                     }
                 }
@@ -356,7 +356,7 @@ impl FontCache {
         }
 
         // Step 2: optional system font search if explicitly opted in
-        if std::env::var("DIOXUSCUT_USE_SYSTEM_FONTS")
+        if std::env::var("RUST_MOTION_USE_SYSTEM_FONTS")
             .map(|v| v == "1" || v == "true")
             .unwrap_or(false)
         {
@@ -1821,7 +1821,7 @@ mod tests {
     #[test]
     fn missing_explicit_font_is_an_error() {
         let cache = FontCache::headless();
-        let sources = vec!["/dioxuscut/does-not-exist.ttf".to_string()];
+        let sources = vec!["/rust-motion/does-not-exist.ttf".to_string()];
         let error = cache.rasterize("Missing", 24.0, &sources).unwrap_err();
 
         assert!(error.path.ends_with("does-not-exist.ttf"));
@@ -1972,11 +1972,11 @@ mod tests {
 
     #[test]
     fn env_override_takes_precedence_over_bundled() {
-        // When DIOXUSCUT_FONT_PATH points to a non-existent file,
+        // When RUST_MOTION_FONT_PATH points to a non-existent file,
         // FontCache::load() must still succeed via the bundled fallback.
-        std::env::set_var("DIOXUSCUT_FONT_PATH", "/nonexistent/path/font.ttf");
+        std::env::set_var("RUST_MOTION_FONT_PATH", "/nonexistent/path/font.ttf");
         let cache = FontCache::load();
-        std::env::remove_var("DIOXUSCUT_FONT_PATH");
+        std::env::remove_var("RUST_MOTION_FONT_PATH");
         assert!(
             cache.is_loaded(),
             "FontCache::load() must fall back to bundled when env path is invalid"
@@ -2030,7 +2030,7 @@ mod tests {
             min_font_size: 10.0,
             max_font_size: 60.0,
         };
-        let result = fit_text_on_n_lines("Dioxuscut Engine", &font, &options).unwrap();
+        let result = fit_text_on_n_lines("Rust Motion Engine", &font, &options).unwrap();
         assert_eq!(result.lines.len(), 1);
         assert!(result.font_size >= 10.0 && result.font_size <= 60.0);
         assert!(result.max_line_width <= 300.0);

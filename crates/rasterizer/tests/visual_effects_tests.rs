@@ -1,4 +1,4 @@
-use dioxuscut_rasterizer::{
+use rust_motion_rasterizer::{
     BlendMode, Color, FrameConfig, RasterizerBackend, Scene, SceneFilter, SceneNode,
     TinySkiaBackend,
 };
@@ -20,7 +20,7 @@ fn render_single_layer(w: u32, h: u32, fill: Color, filters: Vec<SceneFilter>) -
         blend_mode: BlendMode::Normal,
         clip: None,
         mask: None,
-        mask_mode: dioxuscut_rasterizer::MaskMode::Alpha,
+        mask_mode: rust_motion_rasterizer::MaskMode::Alpha,
         filters,
         shadow: None,
         children: vec![SceneNode::Rect {
@@ -47,7 +47,7 @@ fn test_chromatic_aberration_channel_separation() {
         blend_mode: BlendMode::Normal,
         clip: None,
         mask: None,
-        mask_mode: dioxuscut_rasterizer::MaskMode::Alpha,
+        mask_mode: rust_motion_rasterizer::MaskMode::Alpha,
         filters: vec![SceneFilter::ChromaticAberration {
             offset_x: 4.0,
             offset_y: 0.0,
@@ -367,7 +367,7 @@ fn test_invalid_filter_parameters_rejected() {
         blend_mode: BlendMode::Normal,
         clip: None,
         mask: None,
-        mask_mode: dioxuscut_rasterizer::MaskMode::Alpha,
+        mask_mode: rust_motion_rasterizer::MaskMode::Alpha,
         filters: vec![SceneFilter::Contrast { factor: -1.0 }],
         shadow: None,
         children: vec![],
@@ -381,7 +381,7 @@ fn test_invalid_filter_parameters_rejected() {
         blend_mode: BlendMode::Normal,
         clip: None,
         mask: None,
-        mask_mode: dioxuscut_rasterizer::MaskMode::Alpha,
+        mask_mode: rust_motion_rasterizer::MaskMode::Alpha,
         filters: vec![SceneFilter::ColorGrading {
             contrast: 1.0,
             saturation: 1.0,

@@ -8,14 +8,14 @@ use crate::composition::{
     PreparedComposition,
 };
 use base64::Engine as _;
-use dioxuscut_rasterizer::{
-    layout_text_box, parse_glb, parse_gltf, AudioTrack, Color, ConfettiEmitter, ConfettiShape,
-    GradientStop, ImageFit, Mesh3D, Scene, SceneNode, TextBox, TextHorizontalAlign, TextOverflow,
-    Transform2D, Vec3, VisualizerStyle,
-};
 use rhai::module_resolvers::DummyModuleResolver;
 use rhai::{
     Dynamic, Engine, EvalAltResult, ImmutableString, Map, Position, Scope, AST, FLOAT, INT,
+};
+use rust_motion_rasterizer::{
+    layout_text_box, parse_glb, parse_gltf, AudioTrack, Color, ConfettiEmitter, ConfettiShape,
+    GradientStop, ImageFit, Mesh3D, Scene, SceneNode, TextBox, TextHorizontalAlign, TextOverflow,
+    Transform2D, Vec3, VisualizerStyle,
 };
 use serde_json::Value;
 use std::fs;
@@ -411,7 +411,7 @@ impl SceneBuilder {
             w: non_negative_f32("width", w)?,
             h: non_negative_f32("height", h)?,
             playback_rate: 1.0,
-            loop_behavior: dioxuscut_rasterizer::LoopBehavior::Loop,
+            loop_behavior: rust_motion_rasterizer::LoopBehavior::Loop,
             opacity: 1.0,
         });
         Ok(())
@@ -605,7 +605,7 @@ impl SceneBuilder {
         roll: FLOAT,
         color: &str,
     ) -> RhaiResult<()> {
-        let mut mesh = dioxuscut_rasterizer::Mesh3D::cube(non_negative_f32("size", size)?);
+        let mut mesh = rust_motion_rasterizer::Mesh3D::cube(non_negative_f32("size", size)?);
         mesh.rotate(pitch as f32, yaw as f32, roll as f32);
         mesh.render_to_scene(
             &mut self.scene,
@@ -613,7 +613,7 @@ impl SceneBuilder {
             finite_f32("y", y)?,
             500.0,
             parse_color(color)?,
-            dioxuscut_rasterizer::Vec3::new(0.6, 1.0, 0.8),
+            rust_motion_rasterizer::Vec3::new(0.6, 1.0, 0.8),
             false,
         );
         Ok(())
@@ -629,7 +629,7 @@ impl SceneBuilder {
         color: &str,
     ) -> RhaiResult<()> {
         let mut mesh =
-            dioxuscut_rasterizer::Mesh3D::sphere(non_negative_f32("radius", radius)?, 12, 16);
+            rust_motion_rasterizer::Mesh3D::sphere(non_negative_f32("radius", radius)?, 12, 16);
         mesh.rotate(pitch as f32, yaw as f32, 0.0);
         mesh.render_to_scene(
             &mut self.scene,
@@ -637,7 +637,7 @@ impl SceneBuilder {
             finite_f32("y", y)?,
             500.0,
             parse_color(color)?,
-            dioxuscut_rasterizer::Vec3::new(0.6, 1.0, 0.8),
+            rust_motion_rasterizer::Vec3::new(0.6, 1.0, 0.8),
             false,
         );
         Ok(())
@@ -654,7 +654,7 @@ impl SceneBuilder {
         yaw: FLOAT,
         color: &str,
     ) -> RhaiResult<()> {
-        let mut mesh = dioxuscut_rasterizer::Mesh3D::torus(
+        let mut mesh = rust_motion_rasterizer::Mesh3D::torus(
             non_negative_f32("major radius", r_major)?,
             non_negative_f32("minor radius", r_minor)?,
             16,
@@ -667,7 +667,7 @@ impl SceneBuilder {
             finite_f32("y", y)?,
             500.0,
             parse_color(color)?,
-            dioxuscut_rasterizer::Vec3::new(0.6, 1.0, 0.8),
+            rust_motion_rasterizer::Vec3::new(0.6, 1.0, 0.8),
             false,
         );
         Ok(())
@@ -767,14 +767,14 @@ impl SceneBuilder {
     }
 
     fn svg(&mut self, markup: &str) -> RhaiResult<()> {
-        let doc = dioxuscut_charts::parse_svg(markup)
+        let doc = rust_motion_charts::parse_svg(markup)
             .map_err(|e| runtime_error(format!("SVG parse error: {e}")))?;
         self.scene.nodes.extend(doc.scene.nodes);
         Ok(())
     }
 
     fn svg_at(&mut self, x: FLOAT, y: FLOAT, markup: &str) -> RhaiResult<()> {
-        let doc = dioxuscut_charts::parse_svg(markup)
+        let doc = rust_motion_charts::parse_svg(markup)
             .map_err(|e| runtime_error(format!("SVG parse error: {e}")))?;
         let group = SceneNode::Group {
             transform: Transform2D::translate(finite_f32("x", x)?, finite_f32("y", y)?),
@@ -786,7 +786,7 @@ impl SceneBuilder {
     }
 
     fn mermaid(&mut self, code: &str) -> RhaiResult<()> {
-        let scene = dioxuscut_charts::render_mermaid(code, None)
+        let scene = rust_motion_charts::render_mermaid(code, None)
             .map_err(|e| runtime_error(format!("Mermaid error: {e}")))?;
         self.scene.nodes.extend(scene.nodes);
         Ok(())
@@ -795,10 +795,10 @@ impl SceneBuilder {
     fn mermaid_opts(&mut self, code: &str, opts: Map) -> RhaiResult<()> {
         let theme_str = get_opt_string(&opts, "theme");
         let theme = match theme_str.as_deref() {
-            Some("light") => dioxuscut_charts::DiagramTheme::light(),
-            _ => dioxuscut_charts::DiagramTheme::dark(),
+            Some("light") => rust_motion_charts::DiagramTheme::light(),
+            _ => rust_motion_charts::DiagramTheme::dark(),
         };
-        let scene = dioxuscut_charts::render_mermaid(code, Some(&theme))
+        let scene = rust_motion_charts::render_mermaid(code, Some(&theme))
             .map_err(|e| runtime_error(format!("Mermaid error: {e}")))?;
 
         let x = get_opt_f32(&opts, "x", 0.0);
@@ -819,7 +819,7 @@ impl SceneBuilder {
         let width = get_opt_f32(&opts, "width", 800.0);
         let height = get_opt_f32(&opts, "height", 450.0);
         let stroke_width = get_opt_f32(&opts, "stroke_width", 3.0);
-        let mut chart = dioxuscut_charts::D3LineChart {
+        let mut chart = rust_motion_charts::D3LineChart {
             width,
             height,
             stroke_width,
@@ -830,9 +830,9 @@ impl SceneBuilder {
         }
         if let Some(c) = get_opt_string(&opts, "curve") {
             chart.curve = match c.as_str() {
-                "linear" => dioxuscut_charts::CurveType::Linear,
-                "step" => dioxuscut_charts::CurveType::Step,
-                _ => dioxuscut_charts::CurveType::MonotoneX,
+                "linear" => rust_motion_charts::CurveType::Linear,
+                "step" => rust_motion_charts::CurveType::Step,
+                _ => rust_motion_charts::CurveType::MonotoneX,
             };
         }
         if let Some(f) = opts.get("fill") {
@@ -892,7 +892,7 @@ impl SceneBuilder {
         let width = get_opt_f32(&opts, "width", 800.0);
         let height = get_opt_f32(&opts, "height", 450.0);
         let corner_radius = get_opt_f32(&opts, "corner_radius", 6.0);
-        let mut chart = dioxuscut_charts::D3BarChart {
+        let mut chart = rust_motion_charts::D3BarChart {
             width,
             height,
             corner_radius,
@@ -947,7 +947,7 @@ impl SceneBuilder {
         let width = get_opt_f32(&opts, "width", 600.0);
         let height = get_opt_f32(&opts, "height", 600.0);
         let outer_radius = width.min(height) * 0.38;
-        let mut chart = dioxuscut_charts::D3PieChart {
+        let mut chart = rust_motion_charts::D3PieChart {
             width,
             height,
             outer_radius,
@@ -1004,15 +1004,15 @@ impl SceneBuilder {
             .map_err(|e| runtime_error(format!("Failed to serialize data for QuickJS D3: {e}")))?;
 
         thread_local! {
-            static JS_ENGINE: std::cell::RefCell<Option<dioxuscut_charts::QuickJsEngine>> = const { std::cell::RefCell::new(None) };
+            static JS_ENGINE: std::cell::RefCell<Option<rust_motion_charts::QuickJsEngine>> = const { std::cell::RefCell::new(None) };
         }
 
         let doc = JS_ENGINE
             .with(
-                |cell| -> Result<dioxuscut_charts::SvgDocument, dioxuscut_charts::ChartError> {
+                |cell| -> Result<rust_motion_charts::SvgDocument, rust_motion_charts::ChartError> {
                     let mut borrow = cell.borrow_mut();
                     if borrow.is_none() {
-                        *borrow = Some(dioxuscut_charts::QuickJsEngine::new()?);
+                        *borrow = Some(rust_motion_charts::QuickJsEngine::new()?);
                     }
                     borrow.as_ref().unwrap().eval_d3(script, &json_val)
                 },
@@ -1705,48 +1705,48 @@ fn register_scene_api(engine: &mut Engine) {
     engine.register_fn(
         "interpolate_colors",
         |from: ImmutableString, to: ImmutableString, t: FLOAT| -> ImmutableString {
-            dioxuscut_animation::interpolate_colors(from.as_str(), to.as_str(), t).into()
+            rust_motion_animation::interpolate_colors(from.as_str(), to.as_str(), t).into()
         },
     );
     engine.register_fn("random", |seed: ImmutableString| -> FLOAT {
-        dioxuscut_animation::random(seed.as_str())
+        rust_motion_animation::random(seed.as_str())
     });
     engine.register_fn("random", |seed: INT| -> FLOAT {
-        dioxuscut_animation::random(seed as f64)
+        rust_motion_animation::random(seed as f64)
     });
     engine.register_fn("random", |seed: FLOAT| -> FLOAT {
-        dioxuscut_animation::random(seed)
+        rust_motion_animation::random(seed)
     });
     engine.register_fn("spring", |frame: FLOAT, fps: FLOAT| -> FLOAT {
-        let config = dioxuscut_animation::SpringConfig::default();
-        dioxuscut_animation::spring_with_options(
+        let config = rust_motion_animation::SpringConfig::default();
+        rust_motion_animation::spring_with_options(
             frame,
             fps,
             config,
-            dioxuscut_animation::SpringOptions::default(),
+            rust_motion_animation::SpringOptions::default(),
         )
         .unwrap_or(1.0)
     });
     engine.register_fn(
         "spring",
         |frame: FLOAT, fps: FLOAT, damping: FLOAT, mass: FLOAT, stiffness: FLOAT| -> FLOAT {
-            let config = dioxuscut_animation::SpringConfig {
+            let config = rust_motion_animation::SpringConfig {
                 damping,
                 mass,
                 stiffness,
                 overshoot_clamping: false,
             };
-            dioxuscut_animation::spring_with_options(
+            rust_motion_animation::spring_with_options(
                 frame,
                 fps,
                 config,
-                dioxuscut_animation::SpringOptions::default(),
+                rust_motion_animation::SpringOptions::default(),
             )
             .unwrap_or(1.0)
         },
     );
     engine.register_fn("static_file", |path: ImmutableString| -> ImmutableString {
-        dioxuscut_media::static_file(path.as_str())
+        rust_motion_media::static_file(path.as_str())
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| path.to_string())
             .into()
@@ -1758,7 +1758,7 @@ fn register_scene_api(engine: &mut Engine) {
         "lfo",
         |frame: FLOAT, fps: FLOAT, freq_hz: FLOAT, amp: FLOAT| -> FLOAT {
             let lfo =
-                dioxuscut_animation::LfoChop::new(dioxuscut_animation::LfoWave::Sine, freq_hz)
+                rust_motion_animation::LfoChop::new(rust_motion_animation::LfoWave::Sine, freq_hz)
                     .with_amplitude(amp);
             lfo.sample(frame, fps)
         },
@@ -1766,7 +1766,7 @@ fn register_scene_api(engine: &mut Engine) {
     engine.register_fn(
         "lag",
         |current: FLOAT, target: FLOAT, dt: FLOAT, lag_sec: FLOAT| -> FLOAT {
-            let filter = dioxuscut_animation::LagChop::new(lag_sec, lag_sec);
+            let filter = rust_motion_animation::LagChop::new(lag_sec, lag_sec);
             filter.filter(current, target, dt)
         },
     );
@@ -1780,29 +1780,29 @@ fn register_scene_api(engine: &mut Engine) {
     engine.register_fn(
         "typewriter_text",
         |text: ImmutableString, progress: FLOAT| -> ImmutableString {
-            dioxuscut_animation::typewriter_text(&text, progress, true, '|').into()
+            rust_motion_animation::typewriter_text(&text, progress, true, '|').into()
         },
     );
     engine.register_fn(
         "scramble_text",
         |text: ImmutableString, progress: FLOAT, seed: INT| -> ImmutableString {
-            dioxuscut_animation::scramble_text(&text, progress, seed as u64).into()
+            rust_motion_animation::scramble_text(&text, progress, seed as u64).into()
         },
     );
     engine.register_fn("make_ellipse", |rx: FLOAT, ry: FLOAT| -> ImmutableString {
-        dioxuscut_shapes::make_ellipse(rx, ry).path.into()
+        rust_motion_shapes::make_ellipse(rx, ry).path.into()
     });
     engine.register_fn(
         "safe_area_insets",
         |platform: ImmutableString, w: FLOAT, h: FLOAT| -> Map {
             let plat = match platform.to_lowercase().as_str() {
-                "reels" | "instagram" => dioxuscut_composition::Platform::InstagramReels,
-                "shorts" | "youtube" => dioxuscut_composition::Platform::YouTubeShorts,
-                "action" => dioxuscut_composition::Platform::ActionSafe,
-                "title" => dioxuscut_composition::Platform::TitleSafe,
-                _ => dioxuscut_composition::Platform::TikTok,
+                "reels" | "instagram" => rust_motion_composition::Platform::InstagramReels,
+                "shorts" | "youtube" => rust_motion_composition::Platform::YouTubeShorts,
+                "action" => rust_motion_composition::Platform::ActionSafe,
+                "title" => rust_motion_composition::Platform::TitleSafe,
+                _ => rust_motion_composition::Platform::TikTok,
             };
-            let insets = dioxuscut_composition::get_safe_area_insets(plat, w as f32, h as f32);
+            let insets = rust_motion_composition::get_safe_area_insets(plat, w as f32, h as f32);
             let mut map = Map::new();
             map.insert("top".into(), Dynamic::from(insets.top as FLOAT));
             map.insert("bottom".into(), Dynamic::from(insets.bottom as FLOAT));
@@ -1814,12 +1814,13 @@ fn register_scene_api(engine: &mut Engine) {
     engine.register_fn(
         "fit_text",
         |text: ImmutableString, max_w: FLOAT, max_h: FLOAT| -> FLOAT {
-            dioxuscut_composition::fit_text(&text, max_w as f32, max_h as f32, 10.0, 120.0) as FLOAT
+            rust_motion_composition::fit_text(&text, max_w as f32, max_h as f32, 10.0, 120.0)
+                as FLOAT
         },
     );
     engine.register_fn("path_bounding_box", |path: ImmutableString| -> Map {
         let mut map = Map::new();
-        if let Some(bbox) = dioxuscut_paths::get_bounding_box(&path) {
+        if let Some(bbox) = rust_motion_paths::get_bounding_box(&path) {
             map.insert("x".into(), Dynamic::from(bbox.x));
             map.insert("y".into(), Dynamic::from(bbox.y));
             map.insert("width".into(), Dynamic::from(bbox.width));
@@ -1830,11 +1831,11 @@ fn register_scene_api(engine: &mut Engine) {
     engine.register_fn(
         "rotate_path",
         |path: ImmutableString, angle_rad: FLOAT, cx: FLOAT, cy: FLOAT| -> ImmutableString {
-            dioxuscut_paths::rotate_path(&path, angle_rad, cx, cy).into()
+            rust_motion_paths::rotate_path(&path, angle_rad, cx, cy).into()
         },
     );
     engine.register_fn("reverse_path", |path: ImmutableString| -> ImmutableString {
-        dioxuscut_paths::reverse_path(&path).into()
+        rust_motion_paths::reverse_path(&path).into()
     });
 }
 
@@ -2007,7 +2008,7 @@ mod tests {
                 output
             }
         "##;
-        let font_cache = dioxuscut_rasterizer::FontCache::load();
+        let font_cache = rust_motion_rasterizer::FontCache::load();
         let Some(font) = font_cache.font_path() else {
             return;
         };

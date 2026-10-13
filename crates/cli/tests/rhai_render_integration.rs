@@ -1,6 +1,6 @@
 #![cfg(feature = "rhai")]
 
-use dioxuscut_cli::{execute_render_command, RenderBackend, RenderRequest};
+use rust_motion_cli::{execute_render_command, RenderBackend, RenderRequest};
 use std::fs;
 use std::path::PathBuf;
 
@@ -19,7 +19,7 @@ async fn rhai_example_renders_a_real_mp4() {
 
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let temp_dir = std::env::temp_dir().join(format!(
-        "dioxuscut_rhai_render_{}",
+        "rust_motion_rhai_render_{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -39,7 +39,7 @@ async fn rhai_example_renders_a_real_mp4() {
         fps: 30.0,
         duration: 3,
         backend: RenderBackend::Native,
-        codec: dioxuscut_cli::RenderCodec::H264,
+        codec: rust_motion_cli::RenderCodec::H264,
         frame_start: 0,
         frame_end: None,
         frame_step: 1,
@@ -47,7 +47,7 @@ async fn rhai_example_renders_a_real_mp4() {
         timeout_seconds: None,
         crf: 18,
         preset: "fast".into(),
-        hw_accel: dioxuscut_rasterizer::HwAccel::Disabled,
+        hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
         sandbox_roots: Vec::new(),
         permissive: false,
     };
@@ -61,11 +61,11 @@ async fn rhai_example_renders_a_real_mp4() {
 
 #[test]
 fn test_untrusted_script_defaults_to_script_dir_without_cwd() {
-    use dioxuscut_rasterizer::MediaSecurityPolicy;
+    use rust_motion_rasterizer::MediaSecurityPolicy;
     use std::env;
 
     let temp_parent =
-        env::temp_dir().join(format!("dioxuscut_sandbox_test_{}", std::process::id()));
+        env::temp_dir().join(format!("rust_motion_sandbox_test_{}", std::process::id()));
     let _ = fs::create_dir_all(&temp_parent);
     let canon_parent = temp_parent
         .canonicalize()
@@ -84,7 +84,7 @@ fn test_untrusted_script_defaults_to_script_dir_without_cwd() {
         fps: 30.0,
         duration: 30,
         backend: RenderBackend::Native,
-        codec: dioxuscut_cli::RenderCodec::H264,
+        codec: rust_motion_cli::RenderCodec::H264,
         frame_start: 0,
         frame_end: None,
         frame_step: 1,
@@ -92,7 +92,7 @@ fn test_untrusted_script_defaults_to_script_dir_without_cwd() {
         timeout_seconds: None,
         crf: 18,
         preset: "fast".into(),
-        hw_accel: dioxuscut_rasterizer::HwAccel::Auto,
+        hw_accel: rust_motion_rasterizer::HwAccel::Auto,
         sandbox_roots: Vec::new(),
         permissive: false,
     };

@@ -11,8 +11,8 @@ fn render(ctx, props) {
     let frame = ctx.frame;
 
     let bg = if props.bg != () { props.bg } else { "#0f111a" };
-    let term_title = if props.terminal_title != () { props.terminal_title } else { "dioxuscut — bash — 80x24" };
-    let full_command = if props.command != () { props.command } else { "cargo run --release --bin dioxuscut" };
+    let term_title = if props.terminal_title != () { props.terminal_title } else { "rust-motion — bash — 80x24" };
+    let full_command = if props.command != () { props.command } else { "cargo run --release --bin rust-motion" };
 
     // 1. Cyber dark backdrop
     output.rect(0.0, 0.0, width, height, bg);
@@ -44,7 +44,7 @@ fn render(ctx, props) {
     let line_y = win_y + bar_h + 38.0;
     let font_size = if width < height { width * 0.035 } else { (win_w * 0.024).clamp(14.0, 22.0) };
 
-    output.text_bold(content_x, line_y, "➜  dioxuscut git:(main) ", font_size, "#a6e3a1");
+    output.text_bold(content_x, line_y, "➜  rust-motion git:(main) ", font_size, "#a6e3a1");
 
     // Typing animation
     let typing_t = (t * 2.2).clamp(0.0, 1.0);

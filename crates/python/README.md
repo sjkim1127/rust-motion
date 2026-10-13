@@ -1,4 +1,4 @@
-# dioxuscut (Python SDK)
+# rust-motion (Python SDK)
 
 High-performance, browser-free, programmatic video rendering engine for Python.  
 Zero Chromium. Zero Puppeteer. Zero Node.js. 100% Pure Rust Native Speed.
@@ -6,7 +6,7 @@ Zero Chromium. Zero Puppeteer. Zero Node.js. 100% Pure Rust Native Speed.
 ## Installation
 
 ```bash
-pip install dioxuscut
+pip install rust-motion
 ```
 
 *(Prerequisite: `ffmpeg` installed on your system PATH)*
@@ -16,9 +16,9 @@ pip install dioxuscut
 ### 1. Render a Video in 3 Lines
 
 ```python
-import dioxuscut
+import rust_motion
 
-dioxuscut.render(
+rust_motion.render(
     composition="HelloWorld",
     output="video.mp4",
     props={"title": "Hello from Python", "subtitle": "Rendered in 0.3s"},
@@ -32,9 +32,9 @@ dioxuscut.render(
 ### 2. Render a Still Frame (Thumbnail / Poster)
 
 ```python
-import dioxuscut
+import rust_motion
 
-dioxuscut.render_still(
+rust_motion.render_still(
     composition="HelloWorld",
     frame=30,
     output="thumbnail.png"
@@ -44,9 +44,9 @@ dioxuscut.render_still(
 ### 3. Dynamic Video Templates with Rhai Scripts
 
 ```python
-import dioxuscut
+import rust_motion
 
-dioxuscut.render_script(
+rust_motion.render_script(
     script_path="templates/shorts.rhai",
     output="shorts.mp4",
     props={
@@ -63,16 +63,16 @@ dioxuscut.render_script(
 ### 4. Object-Oriented Composition API
 
 ```python
-import dioxuscut
+import rust_motion
 
-comp = dioxuscut.Composition("HelloWorld", width=1920, height=1080, duration=180)
+comp = rust_motion.Composition("HelloWorld", width=1920, height=1080, duration=180)
 comp.render("output.mp4")
 comp.render_still(frame=0, output="cover.png")
 ```
 
 ## Performance Comparison (vs Remotion)
 
-| Metric | Remotion (Node.js + Chromium) | **Dioxuscut Python SDK** | Advantage |
+| Metric | Remotion (Node.js + Chromium) | **Rust Motion Python SDK** | Advantage |
 |:---|:---:|:---:|:---:|
 | **Runtime Dependencies** | Node.js, Chromium, X11, Mesa | **Pure Rust Binary + FFmpeg** | Zero Browser Overhead |
 | **Memory Footprint (RSS)** | 1,800 ~ 2,500 MB | **400 ~ 900 MB** | **4x ~ 6x Less RAM** |

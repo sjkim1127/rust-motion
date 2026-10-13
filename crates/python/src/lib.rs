@@ -1,15 +1,15 @@
-//! Python native bindings for Dioxuscut using PyO3.
+//! Python native bindings for Rust Motion using PyO3.
 #![allow(clippy::useless_conversion)]
-use dioxuscut_cli::{built_in_registry, RenderBackend, RenderCodec, RenderRequest};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use rust_motion_cli::{built_in_registry, RenderBackend, RenderCodec, RenderRequest};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Return the current Dioxuscut engine version.
+/// Return the current Rust Motion engine version.
 #[pyfunction]
 fn get_version() -> &'static str {
     VERSION
@@ -53,12 +53,12 @@ fn parse_backend(backend: &str) -> Result<RenderBackend, PyErr> {
 }
 
 /// Parse hw_accel string.
-fn parse_hw_accel(hw_accel: &str) -> Result<dioxuscut_rasterizer::HwAccel, PyErr> {
+fn parse_hw_accel(hw_accel: &str) -> Result<rust_motion_rasterizer::HwAccel, PyErr> {
     match hw_accel.to_ascii_lowercase().as_str() {
-        "auto" => Ok(dioxuscut_rasterizer::HwAccel::Auto),
-        "disabled" | "none" | "cpu" | "sw" => Ok(dioxuscut_rasterizer::HwAccel::Disabled),
-        "videotoolbox" | "vt" | "apple" => Ok(dioxuscut_rasterizer::HwAccel::VideoToolbox),
-        "nvenc" | "nvidia" => Ok(dioxuscut_rasterizer::HwAccel::Nvenc),
+        "auto" => Ok(rust_motion_rasterizer::HwAccel::Auto),
+        "disabled" | "none" | "cpu" | "sw" => Ok(rust_motion_rasterizer::HwAccel::Disabled),
+        "videotoolbox" | "vt" | "apple" => Ok(rust_motion_rasterizer::HwAccel::VideoToolbox),
+        "nvenc" | "nvidia" => Ok(rust_motion_rasterizer::HwAccel::Nvenc),
         other => Err(PyValueError::new_err(format!(
             "Unsupported hw_accel '{other}'. Supported: auto, disabled, videotoolbox, nvenc"
         ))),
@@ -123,7 +123,7 @@ fn render_native(
     // Handle props: if JSON string provided, write to a temporary file or validate
     let props_path = if let Some(ref json_str) = props_json {
         let temp_dir = std::env::temp_dir();
-        let temp_file = temp_dir.join(format!("dioxuscut_props_{}.json", std::process::id()));
+        let temp_file = temp_dir.join(format!("rust_motion_props_{}.json", std::process::id()));
         std::fs::write(&temp_file, json_str)
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to write props: {e}")))?;
         Some(temp_file)
@@ -167,8 +167,8 @@ fn render_native(
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to initialize runtime: {e}")))?;
 
         rt.block_on(async {
-            let cancellation = dioxuscut_rasterizer::RenderCancellationToken::default();
-            let control = dioxuscut_rasterizer::RenderControl::new()
+            let cancellation = rust_motion_rasterizer::RenderCancellationToken::default();
+            let control = rust_motion_rasterizer::RenderControl::new()
                 .with_cancellation(cancellation.clone())
                 .with_stderr_progress();
             let control = if let Some(callback) = progress_callback {
@@ -193,7 +193,7 @@ fn render_native(
             } else {
                 control
             };
-            dioxuscut_cli::execute_render_command_with_control(&request, control)
+            rust_motion_cli::execute_render_command_with_control(&request, control)
                 .await
                 .map_err(|e| PyRuntimeError::new_err(format!("Render failed: {e:#}")))
         })
@@ -218,11 +218,11 @@ fn render_native(
 #[pyfunction]
 fn random(seed: &Bound<'_, PyAny>) -> PyResult<f64> {
     if let Ok(s) = seed.extract::<String>() {
-        Ok(dioxuscut_animation::random(s))
+        Ok(rust_motion_animation::random(s))
     } else if let Ok(n) = seed.extract::<f64>() {
-        Ok(dioxuscut_animation::random(n))
+        Ok(rust_motion_animation::random(n))
     } else if let Ok(i) = seed.extract::<i64>() {
-        Ok(dioxuscut_animation::random(i as f64))
+        Ok(rust_motion_animation::random(i as f64))
     } else {
         Err(PyValueError::new_err(
             "random() seed must be a string or number",
@@ -247,9 +247,9 @@ fn interpolate(
     extrapolate_right: &str,
 ) -> PyResult<f64> {
     let parse_extrapolate = |s: &str| match s.to_ascii_lowercase().as_str() {
-        "extend" => Ok(dioxuscut_animation::ExtrapolateType::Extend),
-        "identity" => Ok(dioxuscut_animation::ExtrapolateType::Identity),
-        "clamp" => Ok(dioxuscut_animation::ExtrapolateType::Clamp),
+        "extend" => Ok(rust_motion_animation::ExtrapolateType::Extend),
+        "identity" => Ok(rust_motion_animation::ExtrapolateType::Identity),
+        "clamp" => Ok(rust_motion_animation::ExtrapolateType::Clamp),
         other => Err(PyValueError::new_err(format!(
             "Unsupported extrapolate '{other}'. Supported: extend, identity, clamp"
         ))),
@@ -258,7 +258,7 @@ fn interpolate(
     let left = parse_extrapolate(extrapolate_left)?;
     let right = parse_extrapolate(extrapolate_right)?;
 
-    let opts = dioxuscut_animation::InterpolateOptions {
+    let opts = rust_motion_animation::InterpolateOptions {
         extrapolate_left: left,
         extrapolate_right: right,
         easing: None,
@@ -275,7 +275,7 @@ fn interpolate(
         ));
     }
 
-    Ok(dioxuscut_animation::interpolate(
+    Ok(rust_motion_animation::interpolate(
         input,
         &input_range,
         &output_range,
@@ -297,7 +297,7 @@ fn interpolate_colors(
             (arg2.extract::<Vec<f64>>(), arg3.extract::<Vec<String>>())
         {
             let str_slices: Vec<&str> = out_range.iter().map(|s| s.as_str()).collect();
-            return Ok(dioxuscut_animation::interpolate_colors_range(
+            return Ok(rust_motion_animation::interpolate_colors_range(
                 input,
                 &in_range,
                 &str_slices,
@@ -310,7 +310,7 @@ fn interpolate_colors(
         arg2.extract::<String>(),
         arg3.extract::<f64>(),
     ) {
-        return Ok(dioxuscut_animation::interpolate_colors(
+        return Ok(rust_motion_animation::interpolate_colors(
             &from, &to, progress,
         ));
     }
@@ -338,17 +338,17 @@ fn spring(
     stiffness: f64,
     overshoot_clamping: bool,
 ) -> PyResult<f64> {
-    let config = dioxuscut_animation::SpringConfig {
+    let config = rust_motion_animation::SpringConfig {
         damping,
         mass,
         stiffness,
         overshoot_clamping,
     };
-    dioxuscut_animation::spring_with_options(
+    rust_motion_animation::spring_with_options(
         frame,
         fps,
         config,
-        dioxuscut_animation::SpringOptions::default(),
+        rust_motion_animation::SpringOptions::default(),
     )
     .map_err(|e| PyValueError::new_err(format!("Spring error: {e}")))
 }
@@ -356,7 +356,7 @@ fn spring(
 /// Resolve a static asset file relative to project public or asset directories.
 #[pyfunction]
 fn static_file(path: &str) -> PyResult<String> {
-    dioxuscut_media::static_file(path)
+    rust_motion_media::static_file(path)
         .map(|p| p.to_string_lossy().to_string())
         .map_err(|e| PyValueError::new_err(format!("static_file error: {e}")))
 }
@@ -364,7 +364,7 @@ fn static_file(path: &str) -> PyResult<String> {
 /// Probe video metadata including resolution, fps, duration, and aspect ratio.
 #[pyfunction]
 fn get_video_metadata(py: Python<'_>, path: &str) -> PyResult<Py<PyAny>> {
-    let meta = dioxuscut_media::get_video_metadata(path)
+    let meta = rust_motion_media::get_video_metadata(path)
         .map_err(|e| PyValueError::new_err(format!("get_video_metadata error: {e}")))?;
 
     let dict = pyo3::types::PyDict::new(py);
@@ -380,7 +380,7 @@ fn get_video_metadata(py: Python<'_>, path: &str) -> PyResult<Py<PyAny>> {
 
 fn tokens_to_py_list(
     py: Python<'_>,
-    tokens: &[dioxuscut_captions::CaptionToken],
+    tokens: &[rust_motion_captions::CaptionToken],
 ) -> PyResult<Vec<Py<PyAny>>> {
     let mut list = Vec::new();
     for t in tokens {
@@ -398,7 +398,7 @@ fn tokens_to_py_list(
 /// Parse OpenAI / Faster-Whisper JSON into a list of word tokens.
 #[pyfunction]
 fn parse_whisper(py: Python<'_>, json_str: &str) -> PyResult<Vec<Py<PyAny>>> {
-    let tokens = dioxuscut_captions::parse_whisper_json(json_str)
+    let tokens = rust_motion_captions::parse_whisper_json(json_str)
         .map_err(|e| PyValueError::new_err(format!("Whisper parse error: {e}")))?;
     tokens_to_py_list(py, &tokens)
 }
@@ -406,7 +406,7 @@ fn parse_whisper(py: Python<'_>, json_str: &str) -> PyResult<Vec<Py<PyAny>>> {
 /// Parse SRT subtitle file content into a list of word tokens.
 #[pyfunction]
 fn parse_srt(py: Python<'_>, srt_str: &str) -> PyResult<Vec<Py<PyAny>>> {
-    let tokens = dioxuscut_captions::parse_srt(srt_str)
+    let tokens = rust_motion_captions::parse_srt(srt_str)
         .map_err(|e| PyValueError::new_err(format!("SRT parse error: {e}")))?;
     tokens_to_py_list(py, &tokens)
 }
@@ -414,7 +414,7 @@ fn parse_srt(py: Python<'_>, srt_str: &str) -> PyResult<Vec<Py<PyAny>>> {
 /// Parse WebVTT subtitle file content into a list of word tokens.
 #[pyfunction]
 fn parse_vtt(py: Python<'_>, vtt_str: &str) -> PyResult<Vec<Py<PyAny>>> {
-    let tokens = dioxuscut_captions::parse_vtt(vtt_str)
+    let tokens = rust_motion_captions::parse_vtt(vtt_str)
         .map_err(|e| PyValueError::new_err(format!("VTT parse error: {e}")))?;
     tokens_to_py_list(py, &tokens)
 }
@@ -439,12 +439,12 @@ fn calculate_ducking(
     release_sec: f64,
     hold_threshold_sec: f64,
 ) -> Vec<(f64, f64)> {
-    let speech_intervals: Vec<dioxuscut_media::SpeechInterval> = intervals
+    let speech_intervals: Vec<rust_motion_media::SpeechInterval> = intervals
         .into_iter()
-        .map(|(s, e)| dioxuscut_media::SpeechInterval::new(s, e))
+        .map(|(s, e)| rust_motion_media::SpeechInterval::new(s, e))
         .collect();
 
-    let options = dioxuscut_media::DuckingOptions {
+    let options = rust_motion_media::DuckingOptions {
         base_volume,
         duck_volume,
         attack_sec,
@@ -452,7 +452,7 @@ fn calculate_ducking(
         hold_threshold_sec,
     };
 
-    dioxuscut_media::calculate_ducking_envelope(&speech_intervals, total_duration, &options)
+    rust_motion_media::calculate_ducking_envelope(&speech_intervals, total_duration, &options)
 }
 
 /// Compute frequency spectrum band magnitudes for an audio file at a given timestamp.
@@ -460,7 +460,7 @@ fn calculate_ducking(
 #[pyo3(signature = (src, time_secs, n_bars = 32))]
 fn get_audio_spectrum(src: &str, time_secs: f64, n_bars: usize) -> PyResult<Vec<f32>> {
     let path = std::path::Path::new(src);
-    let data = dioxuscut_rasterizer::audio_cache::decode_audio_file(path)
+    let data = rust_motion_rasterizer::audio_cache::decode_audio_file(path)
         .map_err(|e| PyRuntimeError::new_err(format!("Failed to decode audio: {e}")))?;
     Ok(data.get_spectrum(time_secs, n_bars))
 }
@@ -468,7 +468,7 @@ fn get_audio_spectrum(src: &str, time_secs: f64, n_bars: usize) -> PyResult<Vec<
 /// Compute the axis-aligned bounding box of an SVG path.
 #[pyfunction]
 fn get_bounding_box(py: Python<'_>, path: &str) -> PyResult<Option<Py<PyAny>>> {
-    if let Some(bbox) = dioxuscut_paths::get_bounding_box(path) {
+    if let Some(bbox) = rust_motion_paths::get_bounding_box(path) {
         let dict = pyo3::types::PyDict::new(py);
         dict.set_item("x", bbox.x)?;
         dict.set_item("y", bbox.y)?;
@@ -484,25 +484,25 @@ fn get_bounding_box(py: Python<'_>, path: &str) -> PyResult<Option<Py<PyAny>>> {
 #[pyfunction]
 #[pyo3(signature = (path, angle_rad, cx = 0.0, cy = 0.0))]
 fn rotate_path(path: &str, angle_rad: f64, cx: f64, cy: f64) -> String {
-    dioxuscut_paths::rotate_path(path, angle_rad, cx, cy)
+    rust_motion_paths::rotate_path(path, angle_rad, cx, cy)
 }
 
 /// Reverse the drawing direction of an SVG path.
 #[pyfunction]
 fn reverse_path(path: &str) -> String {
-    dioxuscut_paths::reverse_path(path)
+    rust_motion_paths::reverse_path(path)
 }
 
 /// Get the normalized 2D tangent vector (dx, dy) at arc length along an SVG path.
 #[pyfunction]
 fn get_tangent_at_length(path: &str, length: f64) -> Option<(f64, f64)> {
-    dioxuscut_paths::get_tangent_at_length(path, length).map(|pt| (pt.x, pt.y))
+    rust_motion_paths::get_tangent_at_length(path, length).map(|pt| (pt.x, pt.y))
 }
 
 /// Generate SVG path string for an ellipse of radii `rx` and `ry`.
 #[pyfunction]
 fn make_ellipse(rx: f64, ry: f64) -> String {
-    dioxuscut_shapes::make_ellipse(rx, ry).path
+    rust_motion_shapes::make_ellipse(rx, ry).path
 }
 
 /// Get safe area insets for TikTok, Instagram Reels, or YouTube Shorts.
@@ -515,13 +515,13 @@ fn get_safe_area_insets(
     height: f32,
 ) -> PyResult<Py<PyAny>> {
     let plat = match platform.to_lowercase().as_str() {
-        "reels" | "instagram" => dioxuscut_composition::Platform::InstagramReels,
-        "shorts" | "youtube" => dioxuscut_composition::Platform::YouTubeShorts,
-        "action" => dioxuscut_composition::Platform::ActionSafe,
-        "title" => dioxuscut_composition::Platform::TitleSafe,
-        _ => dioxuscut_composition::Platform::TikTok,
+        "reels" | "instagram" => rust_motion_composition::Platform::InstagramReels,
+        "shorts" | "youtube" => rust_motion_composition::Platform::YouTubeShorts,
+        "action" => rust_motion_composition::Platform::ActionSafe,
+        "title" => rust_motion_composition::Platform::TitleSafe,
+        _ => rust_motion_composition::Platform::TikTok,
     };
-    let insets = dioxuscut_composition::get_safe_area_insets(plat, width, height);
+    let insets = rust_motion_composition::get_safe_area_insets(plat, width, height);
     let dict = pyo3::types::PyDict::new(py);
     dict.set_item("top", insets.top)?;
     dict.set_item("bottom", insets.bottom)?;
@@ -545,7 +545,7 @@ fn fit_text(
     min_font_size: f32,
     max_font_size: f32,
 ) -> f32 {
-    dioxuscut_composition::fit_text(text, max_width, max_height, min_font_size, max_font_size)
+    rust_motion_composition::fit_text(text, max_width, max_height, min_font_size, max_font_size)
 }
 
 /// Typewriter text reveal effect.
@@ -553,19 +553,19 @@ fn fit_text(
 #[pyo3(signature = (text, progress, show_cursor = true, cursor_char = "|"))]
 fn typewriter_text(text: &str, progress: f64, show_cursor: bool, cursor_char: &str) -> String {
     let ch = cursor_char.chars().next().unwrap_or('|');
-    dioxuscut_animation::typewriter_text(text, progress, show_cursor, ch)
+    rust_motion_animation::typewriter_text(text, progress, show_cursor, ch)
 }
 
 /// Cyberpunk / matrix scrambled text decoding effect.
 #[pyfunction]
 #[pyo3(signature = (target_text, progress, seed = 42))]
 fn scramble_text(target_text: &str, progress: f64, seed: u64) -> String {
-    dioxuscut_animation::scramble_text(target_text, progress, seed)
+    rust_motion_animation::scramble_text(target_text, progress, seed)
 }
 
 /// Python module initialization.
 #[pymodule]
-fn _dioxuscut(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _rust_motion(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_version, m)?)?;
     m.add_function(wrap_pyfunction!(list_compositions, m)?)?;
     m.add_function(wrap_pyfunction!(render_native, m)?)?;

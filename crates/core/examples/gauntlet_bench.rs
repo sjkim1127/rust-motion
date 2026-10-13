@@ -1,6 +1,6 @@
 //! "The Gauntlet" Extreme Stress Benchmark — 2x Video Decoders, 20 Images, 60 Particles, Sigma 30 Blur, Multilingual Text.
 #![allow(clippy::manual_is_multiple_of)]
-use dioxuscut_rasterizer::{
+use rust_motion_rasterizer::{
     render_to_ffmpeg_pipe, BlendMode, Color, FrameConfig, ImageFit, MaskMode, PipeConfig,
     RasterizerBackend, RenderControl, Scene, SceneFilter, SceneNode, TinySkiaBackend,
 };

@@ -1,20 +1,20 @@
 use clap::Parser;
-use dioxuscut_cli::{
+use rust_motion_cli::{
     default_render_control, execute_render_command_with_control, run_doctor, run_inspect_backends,
     run_inspect_codecs, run_inspect_compositions, run_validate, serve::ServeConfig, Cli, Commands,
     RenderRequest, EXIT_MISSING_DEPENDENCY, EXIT_TIMEOUT_OR_CANCELLED, EXIT_VALIDATION_ERROR,
 };
 use std::time::Instant;
 
-fn project_codec(output: &std::path::Path) -> anyhow::Result<dioxuscut_cli::RenderCodec> {
+fn project_codec(output: &std::path::Path) -> anyhow::Result<rust_motion_cli::RenderCodec> {
     match output.extension().and_then(|value| value.to_str()).unwrap_or("").to_ascii_lowercase().as_str() {
-        "png" => Ok(dioxuscut_cli::RenderCodec::Png),
-        "jpg" | "jpeg" => Ok(dioxuscut_cli::RenderCodec::Jpeg),
-        "webp" => Ok(dioxuscut_cli::RenderCodec::Webp),
-        "mp4" => Ok(dioxuscut_cli::RenderCodec::H264),
-        "webm" => Ok(dioxuscut_cli::RenderCodec::Vp9),
-        "mov" => Ok(dioxuscut_cli::RenderCodec::ProRes),
-        "gif" => Ok(dioxuscut_cli::RenderCodec::Gif),
+        "png" => Ok(rust_motion_cli::RenderCodec::Png),
+        "jpg" | "jpeg" => Ok(rust_motion_cli::RenderCodec::Jpeg),
+        "webp" => Ok(rust_motion_cli::RenderCodec::Webp),
+        "mp4" => Ok(rust_motion_cli::RenderCodec::H264),
+        "webm" => Ok(rust_motion_cli::RenderCodec::Vp9),
+        "mov" => Ok(rust_motion_cli::RenderCodec::ProRes),
+        "gif" => Ok(rust_motion_cli::RenderCodec::Gif),
         _ => anyhow::bail!("Cannot infer project codec from output extension; use .mp4, .webm, .mov, .gif, .png, .jpg, or .webp"),
     }
 }
@@ -22,18 +22,18 @@ fn project_codec(output: &std::path::Path) -> anyhow::Result<dioxuscut_cli::Rend
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter("info,dioxuscut_renderer=debug,dioxuscut_rasterizer=debug")
+        .with_env_filter("info,rust_motion_renderer=debug,rust_motion_rasterizer=debug")
         .init();
 
     let mut cli = Cli::parse();
-    if std::env::var("DIOXUSCUT_JSON")
+    if std::env::var("RUST_MOTION_JSON")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
     {
         cli.json = true;
     }
     if cli.json {
-        std::env::set_var("DIOXUSCUT_JSON", "1");
+        std::env::set_var("RUST_MOTION_JSON", "1");
     }
 
     match &cli.command {
@@ -63,7 +63,7 @@ async fn main() -> anyhow::Result<()> {
             profile,
         } => {
             if *profile {
-                std::env::set_var("DIOXUSCUT_PROFILE", "1");
+                std::env::set_var("RUST_MOTION_PROFILE", "1");
             }
             let request = RenderRequest {
                 composition: composition.clone(),
@@ -100,7 +100,7 @@ async fn main() -> anyhow::Result<()> {
             let result = execute_render_command_with_control(&request, control).await;
             signal_task.abort();
             if let Err(error) = result {
-                if std::env::var_os("DIOXUSCUT_JSON").is_some() {
+                if std::env::var_os("RUST_MOTION_JSON").is_some() {
                     println!(
                         "{}",
                         serde_json::json!({
@@ -133,18 +133,18 @@ async fn main() -> anyhow::Result<()> {
             experimental: _,
         } => {
             eprintln!(
-                "⚠️  [EXPERIMENTAL] dioxuscut migrate generates a starting scaffold template."
+                "⚠️  [EXPERIMENTAL] rust-motion migrate generates a starting scaffold template."
             );
             eprintln!(
                 "    Complex TypeScript logic and full CSS layouts require manual adaptation.\n"
             );
 
-            let target_mode: dioxuscut_cli::MigrationTarget =
+            let target_mode: rust_motion_cli::MigrationTarget =
                 target.parse().map_err(|e: String| anyhow::anyhow!("{e}"))?;
             let source = std::fs::read_to_string(input)
                 .map_err(|e| anyhow::anyhow!("Failed to read '{input:?}': {e}"))?;
 
-            let (code, stats) = dioxuscut_cli::transpile_remotion(&source, target_mode)
+            let (code, stats) = rust_motion_cli::transpile_remotion(&source, target_mode)
                 .map_err(|e| anyhow::anyhow!("Migration failed: {e}"))?;
 
             if let Some(out_path) = output {
@@ -165,12 +165,12 @@ async fn main() -> anyhow::Result<()> {
             );
         }
         Commands::ListCompositions => {
-            let compositions = dioxuscut_cli::built_in_registry()
+            let compositions = rust_motion_cli::built_in_registry()
                 .ids()
                 .into_iter()
                 .map(str::to_owned)
                 .collect::<Vec<_>>();
-            if std::env::var_os("DIOXUSCUT_JSON").is_some() {
+            if std::env::var_os("RUST_MOTION_JSON").is_some() {
                 println!(
                     "{}",
                     serde_json::json!({"ok": true, "compositions": compositions})
@@ -208,7 +208,7 @@ async fn main() -> anyhow::Result<()> {
             if !fps.is_finite() || *fps <= 0.0 {
                 anyhow::bail!("--fps must be finite and greater than zero");
             }
-            let backend = dioxuscut_rasterizer::BrowserFrameBackend::with_concurrency(
+            let backend = rust_motion_rasterizer::BrowserFrameBackend::with_concurrency(
                 node,
                 worker,
                 url.clone(),
@@ -223,7 +223,7 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?;
             let render_sequence = || -> anyhow::Result<(
-                dioxuscut_rasterizer::WebFrameDriftReport,
+                rust_motion_rasterizer::WebFrameDriftReport,
                 std::time::Duration,
             )> {
                 let started = Instant::now();
@@ -234,7 +234,7 @@ async fn main() -> anyhow::Result<()> {
                         let handles = batch.iter().map(|&frame| {
                             let backend = backend_ref;
                             scope.spawn(move || {
-                                let request = dioxuscut_rasterizer::WebFrameRequest {
+                                let request = rust_motion_rasterizer::WebFrameRequest {
                                     composition: Some(composition.clone()),
                                     frame,
                                     fps: *fps,
@@ -271,7 +271,7 @@ async fn main() -> anyhow::Result<()> {
                     samples.extend(batch_results);
                 }
                 samples.sort_by_key(|(frame, _)| *frame);
-                let report = dioxuscut_rasterizer::WebFrameDriftReport::from_samples(&samples)
+                let report = rust_motion_rasterizer::WebFrameDriftReport::from_samples(&samples)
                     .ok_or_else(|| anyhow::anyhow!("no WebCodecs timing samples were collected"))?;
                 Ok((report, started.elapsed()))
             };
@@ -323,7 +323,7 @@ async fn main() -> anyhow::Result<()> {
             );
         }
         Commands::ValidateProject { input } => {
-            let project = dioxuscut_project::Project::load(input)
+            let project = rust_motion_project::Project::load(input)
                 .map_err(|error| anyhow::anyhow!("Project validation failed: {error}"))?;
             if let Some(parent) = input.parent() {
                 project.validate_asset_files(parent)?;
@@ -336,7 +336,7 @@ async fn main() -> anyhow::Result<()> {
             asset_cache_dir,
             max_total_asset_bytes,
         } => {
-            let mut project = dioxuscut_project::Project::load(input)
+            let mut project = rust_motion_project::Project::load(input)
                 .map_err(|error| anyhow::anyhow!("Project validation failed: {error}"))?;
             if let Some(parent) = input.parent() {
                 project.validate_asset_files(parent)?;
@@ -350,7 +350,7 @@ async fn main() -> anyhow::Result<()> {
                 )?;
             }
             let props_path = std::env::temp_dir().join(format!(
-                "dioxuscut-project-props-{}.json",
+                "rust-motion-project-props-{}.json",
                 std::process::id()
             ));
             std::fs::write(&props_path, serde_json::to_vec(&project.props)?)?;
@@ -359,7 +359,7 @@ async fn main() -> anyhow::Result<()> {
                 script: None,
                 props: Some(props_path.clone()),
                 output: output.clone(),
-                audio: dioxuscut_cli::project_audio_assets_from_dir(
+                audio: rust_motion_cli::project_audio_assets_from_dir(
                     &project,
                     input.parent().unwrap_or_else(|| std::path::Path::new(".")),
                 ),
@@ -369,11 +369,13 @@ async fn main() -> anyhow::Result<()> {
                 fps: project.settings.fps,
                 duration: project.settings.duration,
                 backend: match project.settings.backend {
-                    dioxuscut_project::BackendKind::Native => dioxuscut_cli::RenderBackend::Native,
-                    dioxuscut_project::BackendKind::Browser => {
-                        dioxuscut_cli::RenderBackend::Browser
+                    rust_motion_project::BackendKind::Native => {
+                        rust_motion_cli::RenderBackend::Native
                     }
-                    dioxuscut_project::BackendKind::Gpu => dioxuscut_cli::RenderBackend::Gpu,
+                    rust_motion_project::BackendKind::Browser => {
+                        rust_motion_cli::RenderBackend::Browser
+                    }
+                    rust_motion_project::BackendKind::Gpu => rust_motion_cli::RenderBackend::Gpu,
                 },
                 codec: project_codec(output)?,
                 frame_start: project.settings.frame_start.unwrap_or(0),
@@ -387,23 +389,25 @@ async fn main() -> anyhow::Result<()> {
                     .preset
                     .clone()
                     .unwrap_or_else(|| "fast".into()),
-                hw_accel: dioxuscut_rasterizer::HwAccel::Auto,
+                hw_accel: rust_motion_rasterizer::HwAccel::Auto,
                 sandbox_roots: vec![],
                 permissive: true,
             };
-            let previous_browser_assets = std::env::var_os("DIOXUSCUT_BROWSER_ASSETS");
-            let previous_browser_timeline = std::env::var_os("DIOXUSCUT_BROWSER_TIMELINE");
-            let previous_browser_image_format = std::env::var_os("DIOXUSCUT_BROWSER_IMAGE_FORMAT");
-            let previous_browser_jpeg_quality = std::env::var_os("DIOXUSCUT_BROWSER_JPEG_QUALITY");
+            let previous_browser_assets = std::env::var_os("RUST_MOTION_BROWSER_ASSETS");
+            let previous_browser_timeline = std::env::var_os("RUST_MOTION_BROWSER_TIMELINE");
+            let previous_browser_image_format =
+                std::env::var_os("RUST_MOTION_BROWSER_IMAGE_FORMAT");
+            let previous_browser_jpeg_quality =
+                std::env::var_os("RUST_MOTION_BROWSER_JPEG_QUALITY");
             let previous_browser_frame_timeout =
-                std::env::var_os("DIOXUSCUT_BROWSER_FRAME_TIMEOUT_MS");
-            let previous_browser_transport = std::env::var_os("DIOXUSCUT_BROWSER_TRANSPORT");
+                std::env::var_os("RUST_MOTION_BROWSER_FRAME_TIMEOUT_MS");
+            let previous_browser_transport = std::env::var_os("RUST_MOTION_BROWSER_TRANSPORT");
             let previous_browser_transport_retries =
-                std::env::var_os("DIOXUSCUT_BROWSER_TRANSPORT_RETRIES");
-            if request.backend == dioxuscut_cli::RenderBackend::Browser {
+                std::env::var_os("RUST_MOTION_BROWSER_TRANSPORT_RETRIES");
+            if request.backend == rust_motion_cli::RenderBackend::Browser {
                 let asset_separator = if cfg!(windows) { ';' } else { ':' };
                 std::env::set_var(
-                    "DIOXUSCUT_BROWSER_ASSETS",
+                    "RUST_MOTION_BROWSER_ASSETS",
                     project
                         .assets
                         .iter()
@@ -415,7 +419,7 @@ async fn main() -> anyhow::Result<()> {
                     .tracks
                     .iter()
                     .flat_map(|track| track.clips.iter())
-                    .map(|clip| dioxuscut_rasterizer::WebTimelineClip {
+                    .map(|clip| rust_motion_rasterizer::WebTimelineClip {
                         id: clip.id.clone(),
                         composition: clip.composition.clone(),
                         start: clip.start,
@@ -424,15 +428,15 @@ async fn main() -> anyhow::Result<()> {
                     })
                     .collect::<Vec<_>>();
                 std::env::set_var(
-                    "DIOXUSCUT_BROWSER_TIMELINE",
+                    "RUST_MOTION_BROWSER_TIMELINE",
                     serde_json::to_string(&timeline)?,
                 );
                 set_optional_browser_env(
-                    "DIOXUSCUT_BROWSER_IMAGE_FORMAT",
+                    "RUST_MOTION_BROWSER_IMAGE_FORMAT",
                     project.settings.browser_image_format.as_deref(),
                 );
                 set_optional_browser_env(
-                    "DIOXUSCUT_BROWSER_JPEG_QUALITY",
+                    "RUST_MOTION_BROWSER_JPEG_QUALITY",
                     project
                         .settings
                         .browser_jpeg_quality
@@ -440,7 +444,7 @@ async fn main() -> anyhow::Result<()> {
                         .as_deref(),
                 );
                 set_optional_browser_env(
-                    "DIOXUSCUT_BROWSER_FRAME_TIMEOUT_MS",
+                    "RUST_MOTION_BROWSER_FRAME_TIMEOUT_MS",
                     project
                         .settings
                         .browser_frame_timeout_ms
@@ -448,7 +452,7 @@ async fn main() -> anyhow::Result<()> {
                         .as_deref(),
                 );
                 set_optional_browser_env(
-                    "DIOXUSCUT_BROWSER_TRANSPORT_RETRIES",
+                    "RUST_MOTION_BROWSER_TRANSPORT_RETRIES",
                     project
                         .settings
                         .browser_transport_retries
@@ -456,7 +460,7 @@ async fn main() -> anyhow::Result<()> {
                         .as_deref(),
                 );
                 set_optional_browser_env(
-                    "DIOXUSCUT_BROWSER_TRANSPORT",
+                    "RUST_MOTION_BROWSER_TRANSPORT",
                     project
                         .settings
                         .browser_transport
@@ -466,53 +470,53 @@ async fn main() -> anyhow::Result<()> {
                         .as_deref(),
                 );
             }
-            let result = dioxuscut_cli::execute_project_render_command_with_control(
+            let result = rust_motion_cli::execute_project_render_command_with_control(
                 &request,
                 &project,
-                dioxuscut_cli::default_render_control(&request),
+                rust_motion_cli::default_render_control(&request),
             )
             .await;
             match previous_browser_assets {
-                Some(value) => std::env::set_var("DIOXUSCUT_BROWSER_ASSETS", value),
-                None => std::env::remove_var("DIOXUSCUT_BROWSER_ASSETS"),
+                Some(value) => std::env::set_var("RUST_MOTION_BROWSER_ASSETS", value),
+                None => std::env::remove_var("RUST_MOTION_BROWSER_ASSETS"),
             }
             match previous_browser_timeline {
-                Some(value) => std::env::set_var("DIOXUSCUT_BROWSER_TIMELINE", value),
-                None => std::env::remove_var("DIOXUSCUT_BROWSER_TIMELINE"),
+                Some(value) => std::env::set_var("RUST_MOTION_BROWSER_TIMELINE", value),
+                None => std::env::remove_var("RUST_MOTION_BROWSER_TIMELINE"),
             }
             restore_browser_env(
-                "DIOXUSCUT_BROWSER_IMAGE_FORMAT",
+                "RUST_MOTION_BROWSER_IMAGE_FORMAT",
                 previous_browser_image_format,
             );
             restore_browser_env(
-                "DIOXUSCUT_BROWSER_JPEG_QUALITY",
+                "RUST_MOTION_BROWSER_JPEG_QUALITY",
                 previous_browser_jpeg_quality,
             );
             restore_browser_env(
-                "DIOXUSCUT_BROWSER_FRAME_TIMEOUT_MS",
+                "RUST_MOTION_BROWSER_FRAME_TIMEOUT_MS",
                 previous_browser_frame_timeout,
             );
             restore_browser_env(
-                "DIOXUSCUT_BROWSER_TRANSPORT_RETRIES",
+                "RUST_MOTION_BROWSER_TRANSPORT_RETRIES",
                 previous_browser_transport_retries,
             );
-            restore_browser_env("DIOXUSCUT_BROWSER_TRANSPORT", previous_browser_transport);
+            restore_browser_env("RUST_MOTION_BROWSER_TRANSPORT", previous_browser_transport);
             let _ = std::fs::remove_file(props_path);
             result?;
         }
         Commands::Probe { path, full } => {
             if *full {
-                let metadata = dioxuscut_cli::parse_media(path, 30.0)?;
+                let metadata = rust_motion_cli::parse_media(path, 30.0)?;
                 println!("{}", serde_json::to_string_pretty(&metadata)?);
                 return Ok(());
             }
-            match dioxuscut_cli::get_video_metadata(path) {
+            match rust_motion_cli::get_video_metadata(path) {
                 Ok(meta) => {
                     println!("{}", serde_json::to_string_pretty(&meta)?);
                 }
                 Err(e) => {
                     // Try audio probe
-                    match dioxuscut_cli::get_audio_metadata(path, 30.0) {
+                    match rust_motion_cli::get_audio_metadata(path, 30.0) {
                         Ok(audio_meta) => {
                             println!("{}", serde_json::to_string_pretty(&audio_meta)?);
                         }
@@ -533,7 +537,7 @@ async fn main() -> anyhow::Result<()> {
             fps,
             duration,
         } => {
-            dioxuscut_cli::serve::run(ServeConfig {
+            rust_motion_cli::serve::run(ServeConfig {
                 script: script.clone(),
                 props: props.clone(),
                 port: *port,
@@ -557,7 +561,7 @@ async fn main() -> anyhow::Result<()> {
                 script.as_deref(),
                 props.as_deref(),
             );
-            if cli.json || std::env::var_os("DIOXUSCUT_JSON").is_some() {
+            if cli.json || std::env::var_os("RUST_MOTION_JSON").is_some() {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
                 println!(
@@ -588,7 +592,7 @@ async fn main() -> anyhow::Result<()> {
             backends,
             codecs,
         } => {
-            let json_mode = cli.json || std::env::var_os("DIOXUSCUT_JSON").is_some();
+            let json_mode = cli.json || std::env::var_os("RUST_MOTION_JSON").is_some();
             if *backends {
                 let list = run_inspect_backends();
                 if json_mode {
@@ -642,7 +646,7 @@ async fn main() -> anyhow::Result<()> {
             }
             if let Some(target_path) = target {
                 if target_path.extension().and_then(|s| s.to_str()) == Some("json") {
-                    if let Ok(project) = dioxuscut_project::Project::load(target_path) {
+                    if let Ok(project) = rust_motion_project::Project::load(target_path) {
                         if json_mode {
                             println!("{}", serde_json::to_string_pretty(&project)?);
                         } else {
@@ -662,17 +666,17 @@ async fn main() -> anyhow::Result<()> {
                         return Ok(());
                     }
                 }
-                match dioxuscut_cli::parse_media(target_path, 30.0) {
+                match rust_motion_cli::parse_media(target_path, 30.0) {
                     Ok(meta) => {
                         println!("{}", serde_json::to_string_pretty(&meta)?);
                         return Ok(());
                     }
-                    Err(_) => match dioxuscut_cli::get_video_metadata(target_path) {
+                    Err(_) => match rust_motion_cli::get_video_metadata(target_path) {
                         Ok(meta) => {
                             println!("{}", serde_json::to_string_pretty(&meta)?);
                             return Ok(());
                         }
-                        Err(e) => match dioxuscut_cli::get_audio_metadata(target_path, 30.0) {
+                        Err(e) => match rust_motion_cli::get_audio_metadata(target_path, 30.0) {
                             Ok(ameta) => {
                                 println!("{}", serde_json::to_string_pretty(&ameta)?);
                                 return Ok(());
@@ -695,7 +699,7 @@ async fn main() -> anyhow::Result<()> {
                         }))?
                     );
                 } else {
-                    println!("Dioxuscut Engine Capabilities");
+                    println!("Rust Motion Engine Capabilities");
                     println!("=============================");
                     println!("Backends:");
                     for b in b_list {
@@ -718,10 +722,10 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Doctor => {
             let report = run_doctor();
-            if cli.json || std::env::var_os("DIOXUSCUT_JSON").is_some() {
+            if cli.json || std::env::var_os("RUST_MOTION_JSON").is_some() {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
-                println!("Dioxuscut Environment Doctor");
+                println!("Rust Motion Environment Doctor");
                 println!("============================");
                 println!(
                     "FFmpeg:      {} ({})",

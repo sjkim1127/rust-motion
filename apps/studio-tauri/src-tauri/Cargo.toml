@@ -1,5 +1,5 @@
 [package]
-name = "dioxuscut-studio-tauri"
+name = "rust-motion-studio-tauri"
 version.workspace = true
 edition.workspace = true
 publish = false
@@ -12,14 +12,14 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
-dioxuscut-composition = { workspace = true }
-dioxuscut-rasterizer = { workspace = true }
-dioxuscut-project = { workspace = true }
-dioxuscut-cli = { workspace = true }
-dioxuscut-renderer = { workspace = true }
+rust-motion-composition = { workspace = true }
+rust-motion-rasterizer = { workspace = true }
+rust-motion-project = { workspace = true }
+rust-motion-cli = { workspace = true }
+rust-motion-renderer = { workspace = true }
 tokio = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
-gpu = ["dioxuscut-cli/gpu", "dioxuscut-rasterizer/gpu"]
+gpu = ["rust-motion-cli/gpu", "rust-motion-rasterizer/gpu"]

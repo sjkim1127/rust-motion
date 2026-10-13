@@ -1,4 +1,4 @@
-//! Dioxuscut Captions — Subtitle parsing, word timing, and kinetic animated subtitles.
+//! Rust Motion Captions — Subtitle parsing, word timing, and kinetic animated subtitles.
 //!
 //! Ported and extended from `@remotion/captions`:
 //! - [`parse_srt`] / [`serialize_srt`]

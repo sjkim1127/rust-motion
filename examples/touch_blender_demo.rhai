@@ -33,7 +33,7 @@ fn render(ctx, props) {
     output.sphere_3d(1520.0, 540.0 - osc_y * 0.8, 85.0, rot_speed * 0.9, rot_speed * 1.1, "#00f0ff");
 
     // Title Card
-    output.text_bold(960.0 - 450.0, 220.0, "DIOXUSCUT SYNTHESIS", 64.0, "#ffffff");
+    output.text_bold(960.0 - 450.0, 220.0, "RUST_MOTION SYNTHESIS", 64.0, "#ffffff");
     output.text(960.0 - 320.0, 290.0, "Remotion Timeline + Blender 3D + TouchDesigner CHOPs", 24.0, "#00f0ff");
 
     output

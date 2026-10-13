@@ -41,7 +41,7 @@ fn render(ctx, props) {
 
     // Timed words: [word, start_pct, end_pct]
     let words = [
-        ["Dioxuscut", 0.00, 0.20],
+        ["Rust Motion", 0.00, 0.20],
         ["renders", 0.20, 0.40],
         ["video", 0.40, 0.60],
         ["natively", 0.60, 0.80],

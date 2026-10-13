@@ -266,7 +266,7 @@ mod tests {
     #[test]
     fn test_cleanup_frames() {
         let temp_dir = std::env::temp_dir().join(format!(
-            "dioxuscut_test_cleanup_{}",
+            "rust_motion_test_cleanup_{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -284,7 +284,7 @@ mod tests {
     #[tokio::test]
     async fn test_encode_mp4_synthetic_frames() {
         let temp_dir = std::env::temp_dir().join(format!(
-            "dioxuscut_test_encode_{}",
+            "rust_motion_test_encode_{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()

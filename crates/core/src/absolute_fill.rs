@@ -7,7 +7,7 @@
 //!
 //! # Example
 //! ```rust,ignore
-//! use dioxuscut_core::AbsoluteFill;
+//! use rust_motion_core::AbsoluteFill;
 //!
 //! fn Background() -> Element {
 //!     rsx! {

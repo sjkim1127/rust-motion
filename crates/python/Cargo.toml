@@ -1,16 +1,16 @@
 [package]
-name = "dioxuscut-python"
+name = "rust-motion-python"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Python native bindings for Dioxuscut programmatic video engine"
+description = "Python native bindings for Rust Motion programmatic video engine"
 repository = "https://github.com/sjkim1127/rust-motion"
 readme = "README.md"
 publish = false
 
 [lib]
-name = "_dioxuscut"
+name = "_rust_motion"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -20,14 +20,14 @@ serde = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 
-dioxuscut-animation = { workspace = true }
-dioxuscut-captions = { workspace = true, default-features = false }
-dioxuscut-cli = { workspace = true, features = ["rhai"] }
-dioxuscut-composition = { workspace = true }
-dioxuscut-media = { workspace = true, default-features = false }
-dioxuscut-paths = { workspace = true }
-dioxuscut-rasterizer = { workspace = true }
-dioxuscut-shapes = { workspace = true, default-features = false }
+rust-motion-animation = { workspace = true }
+rust-motion-captions = { workspace = true, default-features = false }
+rust-motion-cli = { workspace = true, features = ["rhai"] }
+rust-motion-composition = { workspace = true }
+rust-motion-media = { workspace = true, default-features = false }
+rust-motion-paths = { workspace = true }
+rust-motion-rasterizer = { workspace = true }
+rust-motion-shapes = { workspace = true, default-features = false }
 
 [features]
 default = ["extension-module"]

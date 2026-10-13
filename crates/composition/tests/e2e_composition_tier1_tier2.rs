@@ -6,12 +6,12 @@
 //! - Tier 3: Pairwise cross-feature combinations
 //! - Tier 4: Real-world video application scenario (Cinematic Color-Graded Video Reel)
 
-use dioxuscut_composition::{
+use rust_motion_composition::{
     NativeComposition, NativeCompositionContext, SceneEmitter, SceneEmitterComposition,
     SceneFrameContext, SceneFreeze, SceneGroup, SceneLayer, SceneLoop, SceneSequence, SceneStack,
     SceneTextBlock, SceneTrail, SceneTransitionSeries, TransitionKind, TransitionTiming,
 };
-use dioxuscut_rasterizer::{Color, Scene, SceneFilter, SceneNode, SceneShadow, Transform2D};
+use rust_motion_rasterizer::{Color, Scene, SceneFilter, SceneNode, SceneShadow, Transform2D};
 use serde_json::Value;
 
 fn make_test_context(w: u32, h: u32, duration: u32) -> NativeCompositionContext {

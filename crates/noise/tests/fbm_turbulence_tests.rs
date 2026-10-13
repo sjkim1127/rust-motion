@@ -1,6 +1,6 @@
 //! Integration tests for Fractional Brownian Motion (fBm) and turbulent flow domain warping.
 
-use dioxuscut_noise::{
+use rust_motion_noise::{
     domain_warp_2d, fbm_2d, fbm_3d, turbulence_2d, turbulence_warp_2d, warp_points_2d, FbmOptions,
 };
 

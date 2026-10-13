@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-paths"
-description = "SVG path parsing, metrics, and stroke evolution animations for Dioxuscut"
+name        = "rust-motion-paths"
+description = "SVG path parsing, metrics, and stroke evolution animations for Rust Motion"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true

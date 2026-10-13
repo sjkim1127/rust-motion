@@ -2,7 +2,7 @@
 //!
 //! # Example
 //! ```rust
-//! use dioxuscut_animation::transform::{make_transform, rotate, scale, translate_x};
+//! use rust_motion_animation::transform::{make_transform, rotate, scale, translate_x};
 //!
 //! let css = make_transform(&[rotate(45.0), scale(1.5), translate_x(100.0)]);
 //! assert_eq!(css, "rotate(45deg) scale(1.5) translateX(100px)");

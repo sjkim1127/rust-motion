@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-High-Performance Headless Video Rendering Microservice powered by Dioxuscut & FastAPI.
+High-Performance Headless Video Rendering Microservice powered by Rust Motion & FastAPI.
 
 Run with:
     uvicorn examples.python.fastapi_render_server:app --port 8000 --reload
@@ -15,12 +15,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-import dioxuscut
+import rust_motion
 
 app = FastAPI(
-    title="Dioxuscut Headless Video Microservice",
+    title="Rust Motion Headless Video Microservice",
     description="Render programmatic videos with zero Chromium overhead in milliseconds.",
-    version=dioxuscut.__version__,
+    version=rust_motion.__version__,
 )
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -31,7 +31,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 class RenderRequest(BaseModel):
     headline: str = Field(..., example="Breaking News:\nAI Video Infrastructure")
-    caption: str = Field(..., example="Created dynamically via FastAPI & Dioxuscut.")
+    caption: str = Field(..., example="Created dynamically via FastAPI & Rust Motion.")
     tag: str = Field(default="FASTAPI ENGINE", example="FINTECH DAILY")
     background: str = Field(default="#0b0d19", example="#0b0d19")
     accent: str = Field(default="#ff007f33", example="#00f0ff33")
@@ -43,9 +43,9 @@ class RenderRequest(BaseModel):
 def health_check():
     return {
         "status": "healthy",
-        "engine": "Dioxuscut Native",
-        "version": dioxuscut.__version__,
-        "compositions": dioxuscut.list_compositions(),
+        "engine": "Rust Motion Native",
+        "version": rust_motion.__version__,
+        "compositions": rust_motion.list_compositions(),
     }
 
 
@@ -69,7 +69,7 @@ def render_shorts_video(req: RenderRequest):
 
     start = time.time()
     try:
-        dioxuscut.render_script(
+        rust_motion.render_script(
             script_path=TEMPLATE_PATH,
             output=out_file,
             props=props,

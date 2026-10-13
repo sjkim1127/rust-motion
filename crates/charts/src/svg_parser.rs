@@ -1,11 +1,11 @@
 //! High-performance SVG to Native [`SceneNode`] parser.
 //!
 //! Translates standard SVG markup produced by D3, Mermaid, and vector tools
-//! into Dioxuscut's hardware-accelerated scene graph.
+//! into Rust Motion's hardware-accelerated scene graph.
 
-use dioxuscut_rasterizer::{Color, Scene, SceneNode, Transform2D};
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use rust_motion_rasterizer::{Color, Scene, SceneNode, Transform2D};
 use std::collections::HashMap;
 
 /// Result of parsing an SVG document.

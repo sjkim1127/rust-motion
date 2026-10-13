@@ -4,7 +4,7 @@
 //! with automatic graph layout and zero Chromium overhead.
 
 use crate::svg_parser::SvgDocument;
-use dioxuscut_rasterizer::{Color, Scene, SceneNode};
+use rust_motion_rasterizer::{Color, Scene, SceneNode};
 use std::collections::{HashMap, VecDeque};
 
 /// Diagram orientation for flowcharts.

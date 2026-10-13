@@ -1,5 +1,5 @@
 use crate::dom::NativeElement;
-use dioxuscut_rasterizer::{BlendMode, Color, GradientStop, ImageFit, SceneFilter, Transform2D};
+use rust_motion_rasterizer::{BlendMode, Color, GradientStop, ImageFit, SceneFilter, Transform2D};
 use std::collections::HashMap;
 use taffy::geometry::{Line, Point, Rect, Size};
 use taffy::prelude::{
@@ -56,7 +56,7 @@ pub struct ResolvedStyle {
     pub border_color: Option<Color>,
     pub border_width: f32,
     pub border_radius: f32,
-    pub box_shadow: Option<dioxuscut_rasterizer::SceneShadow>,
+    pub box_shadow: Option<rust_motion_rasterizer::SceneShadow>,
     pub filters: Vec<SceneFilter>,
     pub blend_mode: BlendMode,
     pub font_size: f32,
@@ -242,7 +242,7 @@ impl Stylesheet {
         }
         if let Some(font) = element.attributes.get("data-font-src") {
             winners.insert(
-                "--dioxuscut-font-source".into(),
+                "--rust-motion-font-source".into(),
                 (1_000, inline_order, font.clone()),
             );
         }
@@ -661,7 +661,7 @@ pub(crate) fn apply_declarations(style: &mut ResolvedStyle, declarations: &[(Str
                     (height > 0.0).then_some(width / height)
                 });
             }
-            "--dioxuscut-font-source" => {
+            "--rust-motion-font-source" => {
                 style.font_sources = value
                     .split(',')
                     .map(|source| source.trim().trim_matches(['\'', '"']).to_string())
@@ -673,7 +673,7 @@ pub(crate) fn apply_declarations(style: &mut ResolvedStyle, declarations: &[(Str
     }
 }
 
-fn parse_box_shadow(value: &str) -> Option<dioxuscut_rasterizer::SceneShadow> {
+fn parse_box_shadow(value: &str) -> Option<rust_motion_rasterizer::SceneShadow> {
     let parts = css_values(value);
     if parts.iter().any(|part| part.eq_ignore_ascii_case("inset")) {
         return None;
@@ -694,7 +694,7 @@ fn parse_box_shadow(value: &str) -> Option<dioxuscut_rasterizer::SceneShadow> {
             .find_map(|part| Color::from_css(part))
             .unwrap_or(Color::BLACK)
     };
-    Some(dioxuscut_rasterizer::SceneShadow {
+    Some(rust_motion_rasterizer::SceneShadow {
         offset_x: lengths[0],
         offset_y: lengths[1],
         blur_sigma: lengths.get(2).copied().unwrap_or(0.0).max(0.0),
@@ -738,7 +738,7 @@ fn parse_filters(value: &str) -> Vec<SceneFilter> {
     filters
 }
 
-fn parse_drop_shadow(value: &str) -> Option<dioxuscut_rasterizer::SceneShadow> {
+fn parse_drop_shadow(value: &str) -> Option<rust_motion_rasterizer::SceneShadow> {
     let start = value.find("drop-shadow(")? + "drop-shadow(".len();
     let end = value.rfind(')')?;
     parse_box_shadow(&value[start..end])

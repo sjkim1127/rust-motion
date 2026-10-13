@@ -122,7 +122,7 @@ impl Rgba {
 ///
 /// # Example
 /// ```rust
-/// use dioxuscut_animation::interpolate_colors::interpolate_colors;
+/// use rust_motion_animation::interpolate_colors::interpolate_colors;
 ///
 /// let color = interpolate_colors("#000000", "#ffffff", 0.5);
 /// assert_eq!(color, "rgba(128, 128, 128, 1.0000)");

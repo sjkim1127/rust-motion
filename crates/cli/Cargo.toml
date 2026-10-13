@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-cli"
-description = "CLI tool for rendering Dioxuscut compositions headlessly"
+name        = "rust-motion-cli"
+description = "CLI tool for rendering Rust Motion compositions headlessly"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -9,22 +9,22 @@ repository.workspace  = true
 readme.workspace      = true
 
 [lib]
-name = "dioxuscut_cli"
+name = "rust_motion_cli"
 path = "src/lib.rs"
 
 [[bin]]
-name = "dioxuscut"
+name = "rust-motion"
 path = "src/main.rs"
 
 [dependencies]
-dioxuscut-animation   = { workspace = true }
-dioxuscut-composition = { workspace = true }
-dioxuscut-media       = { workspace = true, default-features = false }
-dioxuscut-paths       = { workspace = true }
-dioxuscut-rasterizer  = { workspace = true }
-dioxuscut-shapes      = { workspace = true, default-features = false }
-dioxuscut-charts      = { workspace = true }
-dioxuscut-project     = { workspace = true }
+rust-motion-animation   = { workspace = true }
+rust-motion-composition = { workspace = true }
+rust-motion-media       = { workspace = true, default-features = false }
+rust-motion-paths       = { workspace = true }
+rust-motion-rasterizer  = { workspace = true }
+rust-motion-shapes      = { workspace = true, default-features = false }
+rust-motion-charts      = { workspace = true }
+rust-motion-project     = { workspace = true }
 clap               = { version = "4.4", features = ["derive", "env"] }
 tokio              = { workspace = true }
 tracing            = { workspace = true }
@@ -42,7 +42,7 @@ base64             = { workspace = true }
 taffy              = { workspace = true }
 
 [dev-dependencies]
-dioxuscut-renderer = { workspace = true }
+rust-motion-renderer = { workspace = true }
 reqwest            = { workspace = true }
 serde_json         = { workspace = true }
 filetime           = "0.2"
@@ -56,5 +56,5 @@ harness = true
 
 [features]
 default = ["rhai"]
-gpu     = ["dioxuscut-rasterizer/gpu"]
+gpu     = ["rust-motion-rasterizer/gpu"]
 rhai    = ["dep:rhai"]

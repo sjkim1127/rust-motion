@@ -31,7 +31,7 @@ pub struct CanvasImageProps {
 
 /// Render an image source on a canvas-capable surface.
 ///
-/// The `data-dioxuscut-canvas-image` marker is intentionally stable so a
+/// The `data-rust-motion-canvas-image` marker is intentionally stable so a
 /// Chromium/Three.js host can install a richer frame decoder without coupling
 /// the Rust crate to a particular JavaScript canvas library.
 #[component]
@@ -50,7 +50,7 @@ pub fn CanvasImage(props: CanvasImageProps) -> Element {
         canvas {
             class: props.class.unwrap_or_default(),
             style: "object-fit: {props.fit.as_css()}; {style}",
-            "data-dioxuscut-canvas-image": "true",
+            "data-rust-motion-canvas-image": "true",
             "data-src": "{props.src}",
             "data-fit": "{props.fit.as_css()}",
             "data-max-retries": "{props.max_retries}",

@@ -1,6 +1,6 @@
 # CLI & Agent Interface Reference
 
-The `dioxuscut` CLI is a first-class product surface in Rust Motion 1.0, engineered for both human developers and autonomous AI coding agents.
+The `rust-motion` CLI is a first-class product surface in Rust Motion 1.0, engineered for both human developers and autonomous AI coding agents.
 
 ---
 
@@ -19,11 +19,11 @@ All invocations return stable, predictable exit codes:
 
 ---
 
-## 2. Machine-Readable Mode (`--json` & `DIOXUSCUT_JSON`)
+## 2. Machine-Readable Mode (`--json` & `RUST_MOTION_JSON`)
 
 To ensure AI coding agents never need to parse unstructured human logs:
 - Pass the global flag `--json`.
-- Or set the environment variable `DIOXUSCUT_JSON=1`.
+- Or set the environment variable `RUST_MOTION_JSON=1`.
 
 All structured outputs and error payloads conform to valid JSON schemas.
 
@@ -35,7 +35,7 @@ All structured outputs and error payloads conform to valid JSON schemas.
 Inspects host environment, external tools (`ffmpeg`, `ffprobe`, `node`), temp directory permissions, hardware acceleration, and supported codecs.
 
 ```bash
-dioxuscut doctor [--json]
+rust-motion doctor [--json]
 ```
 
 Exit code: `0` if ready, `3` if critical dependencies are missing.
@@ -47,13 +47,13 @@ Performs zero-render preflight checks on project files, Rhai scripts, or registe
 
 ```bash
 # Validate a project file
-dioxuscut validate --project project.dioxuscut.json [--json]
+rust-motion validate --project project.rust_motion.json [--json]
 
 # Validate a Rhai script and props file
-dioxuscut validate --script video.rhai --props props.json [--json]
+rust-motion validate --script video.rhai --props props.json [--json]
 
 # Validate a registered Rust composition
-dioxuscut validate --composition HelloWorld [--json]
+rust-motion validate --composition HelloWorld [--json]
 ```
 
 Exit code: `0` if valid, `4` if invalid (`EXIT_VALIDATION_ERROR`).
@@ -65,19 +65,19 @@ Discovers system capabilities, codec support, or inspects project and media file
 
 ```bash
 # Discover supported rendering backends and capabilities
-dioxuscut inspect --backends [--json]
+rust-motion inspect --backends [--json]
 
 # Discover supported codecs and hardware encoder availability
-dioxuscut inspect --codecs [--json]
+rust-motion inspect --codecs [--json]
 
 # List all registered built-in compositions
-dioxuscut inspect --compositions [--json]
+rust-motion inspect --compositions [--json]
 
-# Inspect a .dioxuscut.json project file
-dioxuscut inspect project.dioxuscut.json [--json]
+# Inspect a .rust_motion.json project file
+rust-motion inspect project.rust_motion.json [--json]
 
 # Inspect a media file (duration, streams, dimensions, codecs)
-dioxuscut inspect video.mp4 [--json]
+rust-motion inspect video.mp4 [--json]
 ```
 
 ---
@@ -86,7 +86,7 @@ dioxuscut inspect video.mp4 [--json]
 Renders video or still images.
 
 ```bash
-dioxuscut render [OPTIONS]
+rust-motion render [OPTIONS]
 ```
 
 #### Key Options:
@@ -123,7 +123,7 @@ dioxuscut render [OPTIONS]
 Launches the WebSocket preview server for Studio or custom live-editing environments.
 
 ```bash
-dioxuscut serve --script video.rhai --port 7890
+rust-motion serve --script video.rhai --port 7890
 ```
 
 ---
@@ -132,7 +132,7 @@ dioxuscut serve --script video.rhai --port 7890
 Probes audio/video container metadata and streams.
 
 ```bash
-dioxuscut probe video.mp4 [--full]
+rust-motion probe video.mp4 [--full]
 ```
 
 ---
@@ -141,5 +141,5 @@ dioxuscut probe video.mp4 [--full]
 Scaffolds Remotion TypeScript components into Rust/Rhai templates.
 
 ```bash
-dioxuscut migrate -i RemotionComp.tsx -t rhai -o comp.rhai
+rust-motion migrate -i RemotionComp.tsx -t rhai -o comp.rhai
 ```

@@ -9,7 +9,7 @@ import os
 import json
 import subprocess
 from pathlib import Path
-import dioxuscut
+import rust_motion
 
 def get_codec_info(file_path):
     try:
@@ -48,11 +48,11 @@ def run_test(name, fn, output_path, total_frames):
 
 def main():
     print("=" * 85)
-    print("🔥 Dioxuscut Hardware Acceleration (VideoToolbox vs Software CPU) Benchmark")
+    print("🔥 Rust Motion Hardware Acceleration (VideoToolbox vs Software CPU) Benchmark")
     print("=" * 85)
     print()
 
-    out_dir = Path("/tmp/dioxuscut_bench_hw")
+    out_dir = Path("/tmp/rust_motion_bench_hw")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. 1080p 60 frames (HelloWorld)
@@ -63,7 +63,7 @@ def main():
 
     sw_1080 = run_test(
         "1080p H.264 Software (libx264)",
-        lambda: dioxuscut.render(
+        lambda: rust_motion.render(
             "HelloWorld",
             out_dir / "sw_1080.mp4",
             width=1920,
@@ -79,7 +79,7 @@ def main():
 
     hw_1080 = run_test(
         "1080p H.264 VideoToolbox (Apple HW)",
-        lambda: dioxuscut.render(
+        lambda: rust_motion.render(
             "HelloWorld",
             out_dir / "hw_1080.mp4",
             width=1920,
@@ -95,7 +95,7 @@ def main():
 
     auto_1080 = run_test(
         "1080p H.264 Auto (Auto -> VT)",
-        lambda: dioxuscut.render(
+        lambda: rust_motion.render(
             "HelloWorld",
             out_dir / "auto_1080.mp4",
             width=1920,
@@ -121,7 +121,7 @@ def main():
 
         sw_4k = run_test(
             "4K H.264 Software (libx264)",
-            lambda: dioxuscut.render_script(
+            lambda: rust_motion.render_script(
                 script_path,
                 out_dir / "sw_4k.mp4",
                 width=3840,
@@ -137,7 +137,7 @@ def main():
 
         hw_4k = run_test(
             "4K H.264 VideoToolbox (Apple HW)",
-            lambda: dioxuscut.render_script(
+            lambda: rust_motion.render_script(
                 script_path,
                 out_dir / "hw_4k.mp4",
                 width=3840,
@@ -154,7 +154,7 @@ def main():
         # 3. 4K HEVC / H.265 Test (HEVC software is notorious for high CPU load)
         sw_4k_hevc = run_test(
             "4K HEVC Software (libx265)",
-            lambda: dioxuscut.render_script(
+            lambda: rust_motion.render_script(
                 script_path,
                 out_dir / "sw_4k_hevc.mp4",
                 width=3840,
@@ -170,7 +170,7 @@ def main():
 
         hw_4k_hevc = run_test(
             "4K HEVC VideoToolbox (Apple HW)",
-            lambda: dioxuscut.render_script(
+            lambda: rust_motion.render_script(
                 script_path,
                 out_dir / "hw_4k_hevc.mp4",
                 width=3840,

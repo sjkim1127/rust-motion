@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-animation"
-description = "Animation primitives for Dioxuscut — interpolate, spring, easing (Remotion-compatible)"
+name        = "rust-motion-animation"
+description = "Animation primitives for Rust Motion — interpolate, spring, easing (Remotion-compatible)"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true

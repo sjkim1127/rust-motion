@@ -1,6 +1,6 @@
 [package]
 name        = "studio"
-description = "Dioxuscut Studio — desktop video editor application"
+description = "Rust Motion Studio — desktop video editor application"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -15,13 +15,13 @@ path = "src/main.rs"
 [dependencies]
 dioxus              = { workspace = true }
 dioxus-desktop      = { workspace = true }
-dioxuscut-cli       = { workspace = true }
-dioxuscut-composition = { workspace = true }
-dioxuscut-core      = { workspace = true }
-dioxuscut-animation = { workspace = true }
-dioxuscut-player    = { workspace = true }
-dioxuscut-rasterizer  = { workspace = true }
-dioxuscut-renderer  = { workspace = true }
+rust-motion-cli       = { workspace = true }
+rust-motion-composition = { workspace = true }
+rust-motion-core      = { workspace = true }
+rust-motion-animation = { workspace = true }
+rust-motion-player    = { workspace = true }
+rust-motion-rasterizer  = { workspace = true }
+rust-motion-renderer  = { workspace = true }
 tokio               = { workspace = true }
 tracing             = { workspace = true }
 tracing-subscriber  = { workspace = true }
@@ -31,4 +31,4 @@ anyhow              = { workspace = true }
 
 [features]
 default = ["desktop"]
-desktop = ["dioxus/desktop", "dioxuscut-core/desktop"]
+desktop = ["dioxus/desktop", "rust-motion-core/desktop"]

@@ -1,8 +1,8 @@
 //! Integration tests for FrameCacheManager, LRU eviction, thread safety, and metrics.
 
-use dioxuscut_rasterizer::backend::RasterError;
-use dioxuscut_rasterizer::frame_cache::{FrameCacheConfig, FrameCacheKey, FrameCacheManager};
 use image::{Rgba, RgbaImage};
+use rust_motion_rasterizer::backend::RasterError;
+use rust_motion_rasterizer::frame_cache::{FrameCacheConfig, FrameCacheKey, FrameCacheManager};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;

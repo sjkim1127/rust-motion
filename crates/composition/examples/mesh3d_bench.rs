@@ -1,9 +1,9 @@
 //! Small release-mode benchmark for the cached native 3D composition path.
 
-use dioxuscut_composition::{
+use rust_motion_composition::{
     NativeCompositionContext, SceneEmitter, SceneFrameContext, SceneMesh3D,
 };
-use dioxuscut_rasterizer::{Color, Scene, Vec3};
+use rust_motion_rasterizer::{Color, Scene, Vec3};
 use serde_json::Value;
 use std::time::Instant;
 

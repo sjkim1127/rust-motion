@@ -87,7 +87,7 @@ impl BrowserFrameBackend {
             next_worker: AtomicUsize::new(0),
             composition: Mutex::new(None),
             assets: Mutex::new(
-                std::env::var_os("DIOXUSCUT_BROWSER_ASSETS")
+                std::env::var_os("RUST_MOTION_BROWSER_ASSETS")
                     .map(|value| {
                         std::env::split_paths(&value)
                             .map(|path| path.to_string_lossy().into_owned())
@@ -96,25 +96,25 @@ impl BrowserFrameBackend {
                     .unwrap_or_default(),
             ),
             timeline: Mutex::new(
-                std::env::var("DIOXUSCUT_BROWSER_TIMELINE")
+                std::env::var("RUST_MOTION_BROWSER_TIMELINE")
                     .ok()
                     .and_then(|value| serde_json::from_str(&value).ok())
                     .unwrap_or_default(),
             ),
             time_events: Mutex::new(
-                std::env::var("DIOXUSCUT_BROWSER_TIME_EVENTS")
+                std::env::var("RUST_MOTION_BROWSER_TIME_EVENTS")
                     .ok()
                     .and_then(|value| serde_json::from_str(&value).ok())
                     .unwrap_or_default(),
             ),
-            image_format: std::env::var("DIOXUSCUT_BROWSER_IMAGE_FORMAT")
+            image_format: std::env::var("RUST_MOTION_BROWSER_IMAGE_FORMAT")
                 .ok()
                 .filter(|v| v == "png" || v == "jpeg"),
-            jpeg_quality: std::env::var("DIOXUSCUT_BROWSER_JPEG_QUALITY")
+            jpeg_quality: std::env::var("RUST_MOTION_BROWSER_JPEG_QUALITY")
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .filter(|v: &u8| (1..=100).contains(v)),
-            transparent: std::env::var("DIOXUSCUT_BROWSER_TRANSPARENT")
+            transparent: std::env::var("RUST_MOTION_BROWSER_TRANSPARENT")
                 .ok()
                 .is_some_and(|value| {
                     matches!(
@@ -122,7 +122,7 @@ impl BrowserFrameBackend {
                         "1" | "true" | "yes"
                     )
                 }),
-            transport: std::env::var("DIOXUSCUT_BROWSER_TRANSPORT")
+            transport: std::env::var("RUST_MOTION_BROWSER_TRANSPORT")
                 .ok()
                 .filter(|value| matches!(value.as_str(), "file" | "rgba_file")),
             transport_retries: browser_transport_retries_from_env(),
@@ -136,8 +136,8 @@ impl BrowserFrameBackend {
 }
 
 fn browser_transport_retries_from_env() -> usize {
-    let primary = std::env::var("DIOXUSCUT_BROWSER_TRANSPORT_RETRIES").ok();
-    let legacy = std::env::var("DIOXUSCUT_BROWSER_FRAME_RETRIES").ok();
+    let primary = std::env::var("RUST_MOTION_BROWSER_TRANSPORT_RETRIES").ok();
+    let legacy = std::env::var("RUST_MOTION_BROWSER_FRAME_RETRIES").ok();
     parse_browser_transport_retries(primary.as_deref().or(legacy.as_deref()))
 }
 
@@ -157,7 +157,7 @@ impl BrowserWorker {
         let worker = worker.to_path_buf();
         let url = url.to_string();
         let timeout = Duration::from_millis(
-            std::env::var("DIOXUSCUT_BROWSER_FRAME_TIMEOUT_MS")
+            std::env::var("RUST_MOTION_BROWSER_FRAME_TIMEOUT_MS")
                 .ok()
                 .and_then(|value| value.parse().ok())
                 .filter(|value: &u64| *value > 0)
@@ -287,7 +287,7 @@ impl BrowserFrameBackend {
 
     /// Configure alpha-preserving PNG screenshots for this browser backend.
     ///
-    /// This is equivalent to setting `DIOXUSCUT_BROWSER_TRANSPARENT=1`, but is
+    /// This is equivalent to setting `RUST_MOTION_BROWSER_TRANSPARENT=1`, but is
     /// preferable for embedders that do not use process-wide environment state.
     pub fn with_transparent(mut self, transparent: bool) -> Self {
         self.transparent = transparent;
@@ -813,7 +813,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("dioxuscut-browser-restart-{nonce}"));
+        let root = std::env::temp_dir().join(format!("rust-motion-browser-restart-{nonce}"));
         fs::create_dir_all(&root).unwrap();
         let marker = root.join("first-request-seen");
         let script = root.join("worker.sh");
@@ -874,7 +874,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("dioxuscut-browser-video-frame-{nonce}"));
+        let root = std::env::temp_dir().join(format!("rust-motion-browser-video-frame-{nonce}"));
         fs::create_dir_all(&root).unwrap();
         let script = root.join("worker.sh");
         fs::write(
@@ -943,7 +943,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("dioxuscut-browser-video-sequence-{nonce}"));
+        let root = std::env::temp_dir().join(format!("rust-motion-browser-video-sequence-{nonce}"));
         fs::create_dir_all(&root).unwrap();
         let script = root.join("worker.sh");
         fs::write(

@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-vdom"
-description = "Dioxus VirtualDom and CSS to native Dioxuscut Scene adapter"
+name        = "rust-motion-vdom"
+description = "Dioxus VirtualDom and CSS to native Rust Motion Scene adapter"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -10,8 +10,8 @@ readme.workspace      = true
 
 [dependencies]
 dioxus-core          = { workspace = true }
-dioxuscut-composition = { workspace = true }
-dioxuscut-rasterizer  = { workspace = true }
+rust-motion-composition = { workspace = true }
+rust-motion-rasterizer  = { workspace = true }
 serde_json            = { workspace = true }
 taffy                 = { workspace = true }
 thiserror             = { workspace = true }

@@ -1,4 +1,4 @@
-//! Dioxus VirtualDom and CSS to native Dioxuscut Scene conversion.
+//! Dioxus VirtualDom and CSS to native Rust Motion Scene conversion.
 //!
 //! This crate implements a renderer for Dioxus 0.6 mutations. It preserves a
 //! lightweight DOM tree, resolves a practical CSS subset, computes block,
@@ -16,7 +16,7 @@ pub use dom::{NativeDom, NativeDomError};
 pub use tailwind::apply_utility_class;
 
 use dioxus_core::VirtualDom;
-use dioxuscut_rasterizer::Scene;
+use rust_motion_rasterizer::Scene;
 
 /// Rebuild a Dioxus VirtualDom and convert it to a native Scene.
 pub fn render_virtual_dom(
@@ -34,8 +34,8 @@ pub fn render_virtual_dom(
 mod tests {
     use super::*;
     use dioxus::prelude::*;
-    use dioxuscut_composition::{NativeComposition, NativeCompositionContext};
-    use dioxuscut_rasterizer::{BlendMode, Color, ImageFit, SceneFilter, SceneNode};
+    use rust_motion_composition::{NativeComposition, NativeCompositionContext};
+    use rust_motion_rasterizer::{BlendMode, Color, ImageFit, SceneFilter, SceneNode};
     use serde_json::json;
     use std::sync::atomic::{AtomicBool, Ordering};
 

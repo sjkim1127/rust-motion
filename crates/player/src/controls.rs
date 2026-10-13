@@ -32,7 +32,7 @@ pub fn Controls(props: ControlsProps) -> Element {
 
     rsx! {
         div {
-            class: "dioxuscut-controls",
+            class: "rust-motion-controls",
             style: "
                 display: flex;
                 align-items: center;

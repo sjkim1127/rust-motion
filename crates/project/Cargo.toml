@@ -1,6 +1,6 @@
 [package]
-name = "dioxuscut-project"
-description = "Shared project, timeline, asset, and render-job contracts for Dioxuscut hosts"
+name = "rust-motion-project"
+description = "Shared project, timeline, asset, and render-job contracts for Rust Motion hosts"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

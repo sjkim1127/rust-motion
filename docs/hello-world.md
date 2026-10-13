@@ -15,14 +15,14 @@ Every Rust Motion video is built on the `Composition` contract:
 
 ## 2. Approach A: Writing a Native Rust Composition
 
-Add `dioxuscut-composition`, `dioxuscut-rasterizer`, and `dioxuscut-animation` to your `Cargo.toml`:
+Add `rust-motion-composition`, `rust-motion-rasterizer`, and `rust-motion-animation` to your `Cargo.toml`:
 
 ```rust
-use dioxuscut_animation::interpolate;
-use dioxuscut_composition::{
+use rust_motion_animation::interpolate;
+use rust_motion_composition::{
     Composition, CompositionError, NativeCompositionContext, PreparedComposition,
 };
-use dioxuscut_rasterizer::scene::{Color, Scene, SceneNode};
+use rust_motion_rasterizer::scene::{Color, Scene, SceneNode};
 
 pub struct TitleCardComposition;
 
@@ -136,18 +136,18 @@ Create a props file `props.json`:
 Validate the script and props before spending GPU/CPU cycles:
 
 ```bash
-dioxuscut validate --script my_video.rhai --props props.json --json
+rust-motion validate --script my_video.rhai --props props.json --json
 ```
 
 Render to video:
 
 ```bash
 # Render to MP4
-dioxuscut render --script my_video.rhai --props props.json -o out.mp4
+rust-motion render --script my_video.rhai --props props.json -o out.mp4
 
 # Render to WebM with VP9
-dioxuscut render --script my_video.rhai --props props.json --codec vp9 -o out.webm
+rust-motion render --script my_video.rhai --props props.json --codec vp9 -o out.webm
 
 # Render to Animated GIF
-dioxuscut render --script my_video.rhai --props props.json --codec gif -o out.gif
+rust-motion render --script my_video.rhai --props props.json --codec gif -o out.gif
 ```

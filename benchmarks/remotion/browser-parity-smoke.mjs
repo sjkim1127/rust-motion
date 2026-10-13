@@ -11,7 +11,7 @@ const require = createRequire(new URL('../../apps/studio-tauri/package.json', im
 const {chromium} = require('playwright-core');
 const {PNG} = require('pngjs');
 const browserExecutable = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const url = process.env.DIOXUSCUT_BROWSER_URL ?? 'http://127.0.0.1:1420';
+const url = process.env.RUST_MOTION_BROWSER_URL ?? 'http://127.0.0.1:1420';
 const frames = [0, 1, 7, 15, 30, 59];
 const output = path.join(root, 'target/browser-parity-smoke');
 mkdirSync(output, {recursive: true});
@@ -24,19 +24,19 @@ const remotionCommon = {serveUrl, puppeteerInstance: remotionBrowser, logLevel: 
 const composition = await selectComposition({...remotionCommon, id: 'SpringRectsBrowserParity'});
 const dioxusBrowser = await chromium.launch({executablePath: browserExecutable, headless: true});
 const page = await dioxusBrowser.newPage({viewport: {width: 320, height: 180}, deviceScaleFactor: 1});
-await page.addInitScript(() => { window.__DIOXUSCUT_HEADLESS_RENDER__ = true; });
+await page.addInitScript(() => { window.__RUST_MOTION_HEADLESS_RENDER__ = true; });
 await page.goto(url, {waitUntil: 'domcontentloaded'});
-await page.waitForFunction(() => typeof window.dioxuscut?.renderFrame === 'function');
+await page.waitForFunction(() => typeof window.rust-motion?.renderFrame === 'function');
 
 try {
   const comparisons = [];
   let dioxusTotalMs = 0;
   let remotionTotalMs = 0;
   for (const frame of frames) {
-    const dioxusPath = path.join(output, `dioxuscut-${frame}.png`);
+    const dioxusPath = path.join(output, `rust-motion-${frame}.png`);
     const remotionPath = path.join(output, `remotion-${frame}.png`);
     const dioxusStart = performance.now();
-    await page.evaluate((nextFrame) => window.dioxuscut.renderFrame({
+    await page.evaluate((nextFrame) => window.rust_motion.renderFrame({
       composition: 'SpringRects', frame: nextFrame, fps: 30, width: 320, height: 180,
       durationInFrames: 60, props: {}, assets: [], timeline: [],
     }), frame);

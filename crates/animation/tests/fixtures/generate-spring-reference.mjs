@@ -16,7 +16,7 @@ const configs = [{}, {damping: 200}, {damping: 6, mass: 2, stiffness: 80}, {over
 const options = [{}, {durationInFrames: 10}, {durationInFrames: 45, delay: 12.5}, {reverse: true}, {durationInFrames: 10, delay: 5, reverse: true}, {from: -50, to: 200}, {durationInFrames: 20, durationRestThreshold: 0.001}];
 const rows = [];
 for (const fps of [15, 30, 59.94]) for (let ci = 0; ci < configs.length; ci++) for (let oi = 0; oi < options.length; oi++) {
-  // Preserve Dioxuscut's range clamping contract rather than upstream's non-unit-range clamp bug.
+  // Preserve Rust Motion's range clamping contract rather than upstream's non-unit-range clamp bug.
   if (ci === 3 && oi === 5) continue;
   for (const frame of [-2, 0, 0.5, 1, 5, 9.5, 10, 15, 28, 60]) {
     const c = configs[ci], o = options[oi];

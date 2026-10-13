@@ -164,7 +164,7 @@ pub fn parse_media(
 /// Resolves an asset path relative to the public/assets directory, matching Remotion's `staticFile()`.
 ///
 /// Looks in:
-/// 1. `DIOXUSCUT_PUBLIC_DIR` environment variable if set.
+/// 1. `RUST_MOTION_PUBLIC_DIR` environment variable if set.
 /// 2. `./public/<path>`
 /// 3. `./assets/<path>`
 /// 4. `./<path>`
@@ -175,7 +175,7 @@ pub fn static_file(relative_path: impl AsRef<Path>) -> Result<PathBuf, MediaMeta
     }
 
     let candidates = [
-        std::env::var("DIOXUSCUT_PUBLIC_DIR")
+        std::env::var("RUST_MOTION_PUBLIC_DIR")
             .ok()
             .map(PathBuf::from),
         Some(PathBuf::from("public")),
@@ -474,7 +474,7 @@ mod tests {
         }
 
         let directory = std::env::temp_dir().join(format!(
-            "dioxuscut-media-vfr-metadata-test-{}",
+            "rust-motion-media-vfr-metadata-test-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&directory);
@@ -524,7 +524,7 @@ mod tests {
 
         let media = get_video_metadata(&source).unwrap();
         let rasterizer =
-            dioxuscut_rasterizer::probe_video_metadata(source.to_str().unwrap()).unwrap();
+            rust_motion_rasterizer::probe_video_metadata(source.to_str().unwrap()).unwrap();
         let rasterizer_fps = rasterizer.fps.unwrap();
         assert!((media.fps - average_fps).abs() < 1e-6);
         assert!((media.fps - rasterizer_fps).abs() < 1e-6);

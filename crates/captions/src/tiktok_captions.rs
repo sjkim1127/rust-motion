@@ -4,7 +4,7 @@ use crate::types::{CaptionPage, CaptionToken};
 #[cfg(feature = "dioxus")]
 use dioxus::prelude::*;
 #[cfg(feature = "dioxus")]
-use dioxuscut_core::hooks::{use_current_frame, use_video_config};
+use rust_motion_core::hooks::{use_current_frame, use_video_config};
 
 /// Groups a flat list of [`CaptionToken`]s into pages containing at most `max_words_per_page` tokens.
 pub fn create_tiktok_style_captions(

@@ -1,5 +1,5 @@
 // Run from the repository root.
-// Compares Remotion vs Dioxuscut on a realistic 1080p Cyberpunk motion graphics scene
+// Compares Remotion vs Rust Motion on a realistic 1080p Cyberpunk motion graphics scene
 // exercising text auto-fitting, drop-shadow glow, offscreen layers, chromatic aberration, and vignette.
 import {bundle} from '@remotion/bundler';
 import {openBrowser, renderMedia, selectComposition} from '@remotion/renderer';
@@ -51,16 +51,16 @@ try {
   const remotionMs = performance.now() - remotionStart;
   console.log(`[+] Remotion render completed in ${(remotionMs / 1000).toFixed(2)}s`);
 
-  console.log('[*] Rendering Dioxuscut Cyberpunk scene (1920x1080, 180 frames, concurrency: 4)...');
-  const dioxuscutStart = performance.now();
-  const rawOutput = execFileSync(nativeBinary, [path.join(outputDir, 'dioxuscut-cyberpunk.mp4'), '4'], {
+  console.log('[*] Rendering Rust Motion Cyberpunk scene (1920x1080, 180 frames, concurrency: 4)...');
+  const rust-motionStart = performance.now();
+  const rawOutput = execFileSync(nativeBinary, [path.join(outputDir, 'rust-motion-cyberpunk.mp4'), '4'], {
     encoding: 'utf8',
   });
-  const dioxuscutProcessMs = performance.now() - dioxuscutStart;
+  const rust-motionProcessMs = performance.now() - rust-motionStart;
   const nativeStats = JSON.parse(rawOutput.trim());
-  console.log(`[+] Dioxuscut render completed in ${(dioxuscutProcessMs / 1000).toFixed(2)}s (internal render: ${(nativeStats.render_ms / 1000).toFixed(2)}s)`);
+  console.log(`[+] Rust Motion render completed in ${(rust-motionProcessMs / 1000).toFixed(2)}s (internal render: ${(nativeStats.render_ms / 1000).toFixed(2)}s)`);
 
-  const nativeOutput = path.join(outputDir, 'dioxuscut-cyberpunk.mp4');
+  const nativeOutput = path.join(outputDir, 'rust-motion-cyberpunk.mp4');
   const remotionOutput = path.join(outputDir, 'remotion-cyberpunk.mp4');
   const probe = (file) => JSON.parse(execFileSync('ffprobe', [
     '-v', 'error', '-count_frames', '-select_streams', 'v:0',
@@ -106,9 +106,9 @@ try {
     background: cropSsim('background', 0, 0, 1920, 300),
   };
 
-  const speedup = remotionMs / dioxuscutProcessMs;
+  const speedup = remotionMs / rust-motionProcessMs;
   console.log(`\n======================================================`);
-  console.log(`🔥 1080p VFX Speedup: Dioxuscut is ${speedup.toFixed(2)}x faster!`);
+  console.log(`🔥 1080p VFX Speedup: Rust Motion is ${speedup.toFixed(2)}x faster!`);
   console.log(`======================================================\n`);
 
   const report = {
@@ -123,10 +123,10 @@ try {
       render_ms: remotionMs,
       fps: 180 / (remotionMs / 1000),
     },
-    dioxuscut: {
-      process_ms: dioxuscutProcessMs,
+    rust-motion: {
+      process_ms: rust-motionProcessMs,
       render_ms: nativeStats.render_ms,
-      fps: 180 / (dioxuscutProcessMs / 1000),
+      fps: 180 / (rust-motionProcessMs / 1000),
     },
     speedup,
     validation: {probes, decoded_ssim: decodedSsim, parity_gate_passed: parityGatePassed, crop_ssim: cropValidation, ffmpeg: execFileSync('ffmpeg', ['-version'], {encoding: 'utf8'}).split('\n')[0]},

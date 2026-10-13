@@ -92,14 +92,14 @@
   "bundle_ms": 461.1002920000001,
   "browser_ms": 367.75275,
   "warmup": {
-    "dioxuscut": {
+    "rust-motion": {
       "process_ms": 562.202708,
       "render_ms": 558.797666
     },
     "remotion_ms": 10182.36225
   },
   "samples_ms": {
-    "dioxuscut": [
+    "rust-motion": [
       549.7752500000006,
       554.7067499999976,
       561.0472919999957
@@ -117,7 +117,7 @@
   ],
   "host_load_before_samples": [
     {
-      "engine": "dioxuscut",
+      "engine": "rust-motion",
       "run": 0,
       "load": [
         8.4921875,
@@ -144,7 +144,7 @@
       ]
     },
     {
-      "engine": "dioxuscut",
+      "engine": "rust-motion",
       "run": 1,
       "load": [
         7.3466796875,
@@ -153,7 +153,7 @@
       ]
     },
     {
-      "engine": "dioxuscut",
+      "engine": "rust-motion",
       "run": 2,
       "load": [
         7.3466796875,
@@ -172,7 +172,7 @@
     }
   ],
   "median_ms": {
-    "dioxuscut": 554.7067499999976,
+    "rust-motion": 554.7067499999976,
     "remotion": 10199.770875000002
   },
   "speedup": 18.3876811937119,

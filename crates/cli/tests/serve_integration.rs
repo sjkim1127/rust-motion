@@ -1,4 +1,4 @@
-//! Integration tests for `dioxuscut serve`.
+//! Integration tests for `rust-motion serve`.
 //!
 //! These tests verify that:
 //!  1. `ServeConfig` is constructable with reasonable defaults.
@@ -8,7 +8,7 @@
 
 #[cfg(feature = "rhai")]
 mod serve_tests {
-    use dioxuscut_cli::serve::ServeConfig;
+    use rust_motion_cli::serve::ServeConfig;
     use std::path::PathBuf;
 
     /// ServeConfig can be constructed with valid fields.
@@ -33,10 +33,10 @@ mod serve_tests {
     #[test]
     fn test_serve_cli_parse() {
         use clap::Parser;
-        use dioxuscut_cli::{Cli, Commands};
+        use rust_motion_cli::{Cli, Commands};
 
         let cli = Cli::try_parse_from([
-            "dioxuscut",
+            "rust-motion",
             "serve",
             "--script",
             "examples/templates/podcast_waveform.rhai",
@@ -65,11 +65,11 @@ mod serve_tests {
         }
     }
 
-    /// The `dioxuscut serve --help` text includes the expected subcommand flags.
+    /// The `rust-motion serve --help` text includes the expected subcommand flags.
     #[test]
     fn test_serve_help_text() {
         use clap::CommandFactory;
-        use dioxuscut_cli::Cli;
+        use rust_motion_cli::Cli;
 
         let mut cmd = Cli::command();
         let help = format!("{}", cmd.render_help());

@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-A comprehensive, opaque-box, requirement-driven 4-Tier End-to-End (E2E) test suite has been implemented across the Dioxuscut workspace according to `TEST_INFRA.md`, `PROJECT.md`, and authoritative Remotion mathematical specifications.
+A comprehensive, opaque-box, requirement-driven 4-Tier End-to-End (E2E) test suite has been implemented across the Rust Motion workspace according to `TEST_INFRA.md`, `PROJECT.md`, and authoritative Remotion mathematical specifications.
 
 - **Total E2E Integration Tests**: **208 tests**
 - **Feature Coverage**: 100% (All 17 Features in Feature Inventory tested)
@@ -33,23 +33,23 @@ A comprehensive, opaque-box, requirement-driven 4-Tier End-to-End (E2E) test sui
 
 | Feature ID | Feature Name | Primary Test Target | Tier 1 | Tier 2 | Tier 3 Pairwise | Tier 4 Scenario | Total |
 |:---:|:---|:---|:---:|:---:|:---:|:---:|:---:|
-| **F1** | Remotion-Compatible Simplex Noise (2D, 3D, 4D) | `dioxuscut-noise` | 5 | 5 | 2 | 1 | **13** |
-| **F2** | Mulberry32 PRNG & String Hash Seeding | `dioxuscut-noise` | 5 | 5 | 1 | 1 | **12** |
-| **F3** | Fractional Brownian Motion (fBm) Fractal Synthesis | `dioxuscut-noise` | 5 | 5 | 2 | 1 | **13** |
-| **F4** | Turbulence & Domain Warping Vector Fields | `dioxuscut-noise` | 5 | 5 | 2 | 1 | **13** |
-| **F5** | Procedural Noise Background & Wave Paths | `dioxuscut-noise` | 5 | 5 | 1 | 1 | **12** |
-| **F6** | Offscreen Layer Filtering & Blur Compositing | `dioxuscut-rasterizer` | 5 | 5 | 2 | 1 | **13** |
-| **F7** | Vignette & Edge Falloff Simulation | `dioxuscut-rasterizer` | 5 | 5 | 2 | 1 | **13** |
-| **F8** | Color Grading Suite (Brightness, Grayscale, Opacity) | `dioxuscut-rasterizer` | 5 | 5 | 2 | 1 | **13** |
-| **F9** | Presentation & Wipe Transitions | `dioxuscut-transitions` | 5 | 5 | 2 | 1 | **13** |
-| **F10** | Push & Slide Transitions | `dioxuscut-transitions` | 5 | 5 | 2 | 1 | **13** |
-| **F11** | Cross-Fade Transitions | `dioxuscut-transitions` | 5 | 5 | 2 | 1 | **13** |
-| **F12** | Customizable Easing & Text Auto-Scaling (`fit_text`) | `dioxuscut-transitions` / `dioxuscut-rasterizer` | 10 | 10 | 3 | 1 | **24** |
-| **F13** | Declarative Transition Series | `dioxuscut-composition` | 5 | 5 | 2 | 1 | **13** |
-| **F14** | Typography & Text Box Layout | `dioxuscut-rasterizer` | 5 | 5 | 2 | 1 | **13** |
-| **F15** | Unified Public Scene APIs & Re-exports | `dioxuscut-rasterizer` | 5 | 5 | 2 | 1 | **13** |
-| **F16** | Procedural Shapes & Multi-Corner Paths | `dioxuscut-shapes` | 6 | 5 | 3 | 1 | **15** |
-| **F17** | Seamless Looping & Trail Animations | `dioxuscut-composition` | 5 | 5 | 2 | 1 | **13** |
+| **F1** | Remotion-Compatible Simplex Noise (2D, 3D, 4D) | `rust-motion-noise` | 5 | 5 | 2 | 1 | **13** |
+| **F2** | Mulberry32 PRNG & String Hash Seeding | `rust-motion-noise` | 5 | 5 | 1 | 1 | **12** |
+| **F3** | Fractional Brownian Motion (fBm) Fractal Synthesis | `rust-motion-noise` | 5 | 5 | 2 | 1 | **13** |
+| **F4** | Turbulence & Domain Warping Vector Fields | `rust-motion-noise` | 5 | 5 | 2 | 1 | **13** |
+| **F5** | Procedural Noise Background & Wave Paths | `rust-motion-noise` | 5 | 5 | 1 | 1 | **12** |
+| **F6** | Offscreen Layer Filtering & Blur Compositing | `rust-motion-rasterizer` | 5 | 5 | 2 | 1 | **13** |
+| **F7** | Vignette & Edge Falloff Simulation | `rust-motion-rasterizer` | 5 | 5 | 2 | 1 | **13** |
+| **F8** | Color Grading Suite (Brightness, Grayscale, Opacity) | `rust-motion-rasterizer` | 5 | 5 | 2 | 1 | **13** |
+| **F9** | Presentation & Wipe Transitions | `rust-motion-transitions` | 5 | 5 | 2 | 1 | **13** |
+| **F10** | Push & Slide Transitions | `rust-motion-transitions` | 5 | 5 | 2 | 1 | **13** |
+| **F11** | Cross-Fade Transitions | `rust-motion-transitions` | 5 | 5 | 2 | 1 | **13** |
+| **F12** | Customizable Easing & Text Auto-Scaling (`fit_text`) | `rust-motion-transitions` / `rust-motion-rasterizer` | 10 | 10 | 3 | 1 | **24** |
+| **F13** | Declarative Transition Series | `rust-motion-composition` | 5 | 5 | 2 | 1 | **13** |
+| **F14** | Typography & Text Box Layout | `rust-motion-rasterizer` | 5 | 5 | 2 | 1 | **13** |
+| **F15** | Unified Public Scene APIs & Re-exports | `rust-motion-rasterizer` | 5 | 5 | 2 | 1 | **13** |
+| **F16** | Procedural Shapes & Multi-Corner Paths | `rust-motion-shapes` | 6 | 5 | 3 | 1 | **15** |
+| **F17** | Seamless Looping & Trail Animations | `rust-motion-composition` | 5 | 5 | 2 | 1 | **13** |
 | **Sum** | | | **89** | **87** | **27** | **5** | **208** |
 
 ---
@@ -57,30 +57,30 @@ A comprehensive, opaque-box, requirement-driven 4-Tier End-to-End (E2E) test sui
 ## 4. Test Suite Files & Runner Commands
 
 ### Test File Locations
-1. **Noise Engine (`dioxuscut-noise`)**: `crates/noise/tests/e2e_noise_tier1_tier2.rs` (56 tests)
-2. **Rasterizer, Typography & Filters (`dioxuscut-rasterizer`)**: `crates/rasterizer/tests/e2e_rasterizer_tier1_tier2.rs` (67 tests)
-3. **Transitions & Easing (`dioxuscut-transitions`)**: `crates/transitions/tests/e2e_transitions_tier1_tier2.rs` (46 tests)
-4. **Procedural Shapes (`dioxuscut-shapes`)**: `crates/shapes/tests/e2e_shapes_tier1_tier2.rs` (15 tests)
-5. **Composition & Timeline (`dioxuscut-composition`)**: `crates/composition/tests/e2e_composition_tier1_tier2.rs` (24 tests)
+1. **Noise Engine (`rust-motion-noise`)**: `crates/noise/tests/e2e_noise_tier1_tier2.rs` (56 tests)
+2. **Rasterizer, Typography & Filters (`rust-motion-rasterizer`)**: `crates/rasterizer/tests/e2e_rasterizer_tier1_tier2.rs` (67 tests)
+3. **Transitions & Easing (`rust-motion-transitions`)**: `crates/transitions/tests/e2e_transitions_tier1_tier2.rs` (46 tests)
+4. **Procedural Shapes (`rust-motion-shapes`)**: `crates/shapes/tests/e2e_shapes_tier1_tier2.rs` (15 tests)
+5. **Composition & Timeline (`rust-motion-composition`)**: `crates/composition/tests/e2e_composition_tier1_tier2.rs` (24 tests)
 
 ### How to Run the E2E Test Suite
 
 Run individual crate E2E suites:
 ```bash
-cargo test --package dioxuscut-noise --test e2e_noise_tier1_tier2
-cargo test --package dioxuscut-rasterizer --test e2e_rasterizer_tier1_tier2
-cargo test --package dioxuscut-transitions --test e2e_transitions_tier1_tier2
-cargo test --package dioxuscut-shapes --test e2e_shapes_tier1_tier2
-cargo test --package dioxuscut-composition --test e2e_composition_tier1_tier2
+cargo test --package rust-motion-noise --test e2e_noise_tier1_tier2
+cargo test --package rust-motion-rasterizer --test e2e_rasterizer_tier1_tier2
+cargo test --package rust-motion-transitions --test e2e_transitions_tier1_tier2
+cargo test --package rust-motion-shapes --test e2e_shapes_tier1_tier2
+cargo test --package rust-motion-composition --test e2e_composition_tier1_tier2
 ```
 
 Run all 5 E2E test suites together:
 ```bash
-cargo test --package dioxuscut-noise --test e2e_noise_tier1_tier2 \
-           --package dioxuscut-rasterizer --test e2e_rasterizer_tier1_tier2 \
-           --package dioxuscut-transitions --test e2e_transitions_tier1_tier2 \
-           --package dioxuscut-shapes --test e2e_shapes_tier1_tier2 \
-           --package dioxuscut-composition --test e2e_composition_tier1_tier2
+cargo test --package rust-motion-noise --test e2e_noise_tier1_tier2 \
+           --package rust-motion-rasterizer --test e2e_rasterizer_tier1_tier2 \
+           --package rust-motion-transitions --test e2e_transitions_tier1_tier2 \
+           --package rust-motion-shapes --test e2e_shapes_tier1_tier2 \
+           --package rust-motion-composition --test e2e_composition_tier1_tier2
 ```
 
 ---
@@ -102,7 +102,7 @@ cargo test --package dioxuscut-noise --test e2e_noise_tier1_tier2 \
 
 ## 6. Implementation Notes & Escalations
 
-- **`dioxuscut-player` non-exhaustive pattern match on `SceneFilter`**:
+- **`rust-motion-player` non-exhaustive pattern match on `SceneFilter`**:
   - Located at `crates/player/src/native_preview.rs:657`.
   - When matching `&SceneFilter`, new filter enum variants (`ChromaticAberration`, `Vignette`, `Contrast`, `Saturation`, `HueRotate`, etc.) are not yet handled in Player preview CSS generation.
   - *Action*: Escalated to the implementing agent for Milestone 3 / Player preview alignment.

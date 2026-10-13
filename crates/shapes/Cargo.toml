@@ -1,6 +1,6 @@
 [package]
-name        = "dioxuscut-shapes"
-description = "Procedural SVG shapes for Dioxuscut — Circle, Rect, Star, Triangle, Polygon, Pie, Arrow"
+name        = "rust-motion-shapes"
+description = "Procedural SVG shapes for Rust Motion — Circle, Rect, Star, Triangle, Polygon, Pie, Arrow"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -10,14 +10,14 @@ readme.workspace      = true
 
 [dependencies]
 dioxus              = { workspace = true, optional = true }
-dioxuscut-animation = { workspace = true }
-dioxuscut-composition = { workspace = true }
-dioxuscut-rasterizer  = { workspace = true }
+rust-motion-animation = { workspace = true }
+rust-motion-composition = { workspace = true }
+rust-motion-rasterizer  = { workspace = true }
 serde               = { workspace = true }
 serde_json          = { workspace = true }
 
 [dev-dependencies]
-dioxuscut-paths     = { workspace = true }
+rust-motion-paths     = { workspace = true }
 
 [features]
 default = ["dioxus"]

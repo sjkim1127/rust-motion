@@ -1,4 +1,4 @@
-//! Adversarial Stress Testing & Numerical Stability Harness for `dioxuscut-noise`.
+//! Adversarial Stress Testing & Numerical Stability Harness for `rust-motion-noise`.
 //!
 //! Stress dimensions:
 //! 1. Extreme & degenerate coordinates (subnormals, epsilons, huge floats up to 1e300, infinities, NaNs, negative zeros)
@@ -7,7 +7,7 @@
 //! 4. Memory safety, thread safety, and allocation-free hot path evaluation
 //! 5. fBm convergence, turbulence flow stability, SVG path sanitization
 
-use dioxuscut_noise::{
+use rust_motion_noise::{
     domain_warp_2d, fbm_2d, fbm_3d, generate_noise_svg_data_url, generate_noise_wave_path,
     mulberry32, noise2d, noise3d, noise4d, turbulence_2d, FbmOptions, SimplexNoise,
     WavePathOptions,

@@ -1,6 +1,6 @@
-//! Remotion TSX to Dioxuscut Migration Engine (`dioxuscut migrate`).
+//! Remotion TSX to Rust Motion Migration Engine (`rust-motion migrate`).
 //!
-//! Automatically transpiles Remotion React components (.tsx) into native Dioxuscut code:
+//! Automatically transpiles Remotion React components (.tsx) into native Rust Motion code:
 //! - Rust RSX components (`.rs`)
 //! - Sandboxed dynamic Rhai scripts (`.rhai`)
 //! - Python SDK scripts (`.py`)
@@ -95,7 +95,7 @@ fn transpile_to_rust(
     );
     out.push_str("//! Please review and verify types, layout properties, and styling.\n\n");
     out.push_str("use dioxus::prelude::*;\n");
-    out.push_str("use dioxuscut_core::{\n");
+    out.push_str("use rust_motion_core::{\n");
     out.push_str("    interpolate, interpolate_colors, random, spring, use_current_frame,\n");
     out.push_str(
         "    use_video_config, AbsoluteFill, ExtrapolateType, InterpolateOptions, Loop,\n",
@@ -177,7 +177,7 @@ fn transpile_to_rhai(
     stats: &mut MigrationStats,
 ) -> Result<(String, MigrationStats), String> {
     let mut out = String::new();
-    out.push_str("//! ⚠️ EXPERIMENTAL SCAFFOLD: Remotion -> Dioxuscut Rhai script\n");
+    out.push_str("//! ⚠️ EXPERIMENTAL SCAFFOLD: Remotion -> Rust Motion Rhai script\n");
     out.push_str("//! Review and adapt properties and scene nodes for production use.\n\n");
     out.push_str("fn render(ctx, props) {\n");
     out.push_str("    let frame = ctx.frame.to_float();\n");
@@ -214,11 +214,11 @@ fn transpile_to_python(
     stats: &mut MigrationStats,
 ) -> Result<(String, MigrationStats), String> {
     let mut out = String::new();
-    out.push_str("\"\"\"⚠️ EXPERIMENTAL SCAFFOLD: Remotion -> Dioxuscut Python SDK.\n");
+    out.push_str("\"\"\"⚠️ EXPERIMENTAL SCAFFOLD: Remotion -> Rust Motion Python SDK.\n");
     out.push_str(
         "Review animation keyframes and layout definitions before production use.\n\"\"\"\n\n",
     );
-    out.push_str("import dioxuscut\n\n");
+    out.push_str("import rust_motion\n\n");
     writeln!(
         out,
         "def {comp_name}_timeline(frame: int, fps: float = 30.0):"
@@ -232,7 +232,7 @@ fn transpile_to_python(
             stats.interpolations_converted += 1;
         }
         if trimmed.contains("spring(") {
-            out.push_str("    sp = dioxuscut.spring(frame, fps=fps)\n");
+            out.push_str("    sp = rust_motion.spring(frame, fps=fps)\n");
             stats.springs_converted += 1;
         }
     }

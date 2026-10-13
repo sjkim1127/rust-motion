@@ -1,6 +1,6 @@
-//! # Dioxuscut Hello World Example
+//! # Rust Motion Hello World Example
 //!
-//! Demonstrates the core Dioxuscut API:
+//! Demonstrates the core Rust Motion API:
 //! - `<Composition>` — defines the video canvas
 //! - `<Sequence>` — time-sliced segments
 //! - `<AbsoluteFill>` — full-canvas overlay
@@ -10,16 +10,16 @@
 //! - `<Fade>` / `<Slide>` — transitions
 
 use dioxus::prelude::*;
-use dioxuscut_animation::{
+use rust_motion_animation::{
     interpolate::{interpolate, ExtrapolateType, InterpolateOptions},
     spring::{spring, spring_with_options, SpringConfig, SpringOptions},
 };
-use dioxuscut_core::{
+use rust_motion_core::{
     hooks::{use_current_frame, use_input_props, use_video_config},
     AbsoluteFill, Sequence,
 };
-use dioxuscut_player::Player;
-use dioxuscut_transitions::{Fade, Slide, SlideDirection};
+use rust_motion_player::Player;
+use rust_motion_transitions::{Fade, Slide, SlideDirection};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
@@ -33,7 +33,7 @@ pub struct ExampleProps {
 impl Default for ExampleProps {
     fn default() -> Self {
         Self {
-            title: "🦀 Dioxuscut".to_string(),
+            title: "🦀 Rust Motion".to_string(),
             subtitle: "Remotion · powered by Rust & Dioxus".to_string(),
             background_start: "#1a0533".to_string(),
             background_end: "#001a33".to_string(),
@@ -75,7 +75,7 @@ fn App() -> Element {
 
             h1 {
                 style: "color: #e8e8f0; font-size: 1.5rem; font-weight: 600; margin: 0; letter-spacing: -0.02em;",
-                "🦀 Dioxuscut — Remotion in Rust"
+                "🦀 Rust Motion — Remotion in Rust"
             }
 
             Player {
@@ -89,7 +89,7 @@ fn App() -> Element {
 
             p {
                 style: "color: rgba(255,255,255,0.35); font-size: 0.8rem; margin: 0;",
-                "Built with Dioxus 0.6 · dioxuscut 0.1.0"
+                "Built with Dioxus 0.6 · rust-motion 0.1.0"
             }
         }
     }

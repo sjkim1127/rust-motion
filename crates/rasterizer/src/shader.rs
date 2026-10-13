@@ -173,7 +173,7 @@ impl WgpuShaderRunner {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    label: Some("dioxuscut-shader-runner"),
+                    label: Some("rust-motion-shader-runner"),
                     required_features: wgpu::Features::empty(),
                     required_limits: limits,
                     memory_hints: Default::default(),

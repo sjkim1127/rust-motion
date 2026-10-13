@@ -1,13 +1,13 @@
 use crate::{render_virtual_dom, CssError, NativeDomError, Stylesheet};
 use dioxus_core::VirtualDom;
-use dioxuscut_composition::{CompositionError, NativeComposition, NativeCompositionContext};
-use dioxuscut_rasterizer::Scene;
+use rust_motion_composition::{CompositionError, NativeComposition, NativeCompositionContext};
+use rust_motion_rasterizer::Scene;
 use serde_json::Value;
 
 /// Creates a fresh Dioxus [`VirtualDom`] for a native video frame.
 ///
 /// A new VDOM is built per frame so the resulting composition remains safe to
-/// render concurrently through Dioxuscut's native renderer.
+/// render concurrently through Rust Motion's native renderer.
 pub trait VdomFactory: Send + Sync {
     fn create(&self, frame: u32, props: &Value, context: NativeCompositionContext) -> VirtualDom;
 }

@@ -5,7 +5,7 @@
 //!
 //! # Example
 //! ```rust,ignore
-//! use dioxuscut_core::{Composition, CompositionProps};
+//! use rust_motion_core::{Composition, CompositionProps};
 //!
 //! fn App() -> Element {
 //!     rsx! {

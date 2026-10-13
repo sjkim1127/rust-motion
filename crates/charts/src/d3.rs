@@ -4,7 +4,7 @@
 //! bars, areas, and pie/donut charts with 0ms runtime cost.
 
 use crate::svg_parser::SvgDocument;
-use dioxuscut_rasterizer::{Color, Scene, SceneNode};
+use rust_motion_rasterizer::{Color, Scene, SceneNode};
 
 /// Curve interpolation type for line charts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

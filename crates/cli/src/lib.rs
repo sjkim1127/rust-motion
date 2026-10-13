@@ -14,12 +14,12 @@ pub use composition::{
     PodcastWaveformComposition, PreparedComposition, ShapesAndFiltersComposition,
     TimeEventSchedule,
 };
-pub use dioxuscut_media::{
+pub use migrate::{transpile_remotion, MigrationStats, MigrationTarget};
+pub use rust_motion_media::{
     get_audio_metadata, get_video_metadata, parse_media, static_file, AudioMetadata,
     ParsedMediaMetadata, VideoMetadata,
 };
-use dioxuscut_project::{Clip, Project};
-pub use migrate::{transpile_remotion, MigrationStats, MigrationTarget};
+use rust_motion_project::{Clip, Project};
 
 /// Resolve audio assets declared by a project into encoder input paths.
 ///
@@ -29,7 +29,7 @@ pub fn project_audio_assets(project: &Project) -> Vec<std::path::PathBuf> {
     project
         .assets
         .iter()
-        .filter(|asset| asset.kind == dioxuscut_project::AssetKind::Audio)
+        .filter(|asset| asset.kind == rust_motion_project::AssetKind::Audio)
         .map(|asset| std::path::PathBuf::from(&asset.path))
         .collect()
 }
@@ -44,7 +44,7 @@ pub fn project_audio_assets_from_dir(
     project
         .assets
         .iter()
-        .filter(|asset| asset.kind == dioxuscut_project::AssetKind::Audio)
+        .filter(|asset| asset.kind == rust_motion_project::AssetKind::Audio)
         .map(|asset| {
             if asset.path.contains("://") || asset.path.starts_with("data:") {
                 std::path::PathBuf::from(&asset.path)
@@ -57,17 +57,17 @@ pub fn project_audio_assets_from_dir(
 
 struct InferredAudioTrack {
     track_index: usize,
-    track: dioxuscut_rasterizer::AudioTrack,
+    track: rust_motion_rasterizer::AudioTrack,
     has_explicit_volume_keyframes: bool,
     last_sampled_volume: f64,
 }
 
 fn collect_scene_audio_tracks(
     prepared: &dyn PreparedComposition,
-    first_scene: &dioxuscut_rasterizer::Scene,
+    first_scene: &rust_motion_rasterizer::Scene,
     duration_in_frames: u32,
     fps: f64,
-) -> Result<Vec<dioxuscut_rasterizer::AudioTrack>, CompositionError> {
+) -> Result<Vec<rust_motion_rasterizer::AudioTrack>, CompositionError> {
     let mut tracks: Vec<InferredAudioTrack> = Vec::new();
     for frame in 0..duration_in_frames {
         let scene;
@@ -138,8 +138,8 @@ fn collect_scene_audio_tracks(
 }
 
 fn same_inferred_audio_track(
-    left: &dioxuscut_rasterizer::AudioTrack,
-    right: &dioxuscut_rasterizer::AudioTrack,
+    left: &rust_motion_rasterizer::AudioTrack,
+    right: &rust_motion_rasterizer::AudioTrack,
 ) -> bool {
     left.src == right.src
         && left.start_from == right.start_from
@@ -148,7 +148,7 @@ fn same_inferred_audio_track(
 }
 
 fn native_image_cache_bytes() -> Option<usize> {
-    std::env::var("DIOXUSCUT_IMAGE_CACHE_BYTES")
+    std::env::var("RUST_MOTION_IMAGE_CACHE_BYTES")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .filter(|value| *value > 0)
@@ -162,7 +162,7 @@ mod project_asset_tests {
         Project {
             version: 1,
             composition: "test".into(),
-            settings: dioxuscut_project::ProjectSettings {
+            settings: rust_motion_project::ProjectSettings {
                 width: 320,
                 height: 240,
                 fps: 30.0,
@@ -174,7 +174,7 @@ mod project_asset_tests {
                 frame_step: 1,
                 frame_start: None,
                 frame_end: None,
-                backend: dioxuscut_project::BackendKind::Native,
+                backend: rust_motion_project::BackendKind::Native,
                 browser_image_format: None,
                 browser_jpeg_quality: None,
                 browser_frame_timeout_ms: None,
@@ -194,7 +194,7 @@ mod project_asset_tests {
         let project = Project {
             version: 1,
             composition: "test".into(),
-            settings: dioxuscut_project::ProjectSettings {
+            settings: rust_motion_project::ProjectSettings {
                 width: 320,
                 height: 240,
                 fps: 30.0,
@@ -206,7 +206,7 @@ mod project_asset_tests {
                 frame_step: 1,
                 frame_start: None,
                 frame_end: None,
-                backend: dioxuscut_project::BackendKind::Native,
+                backend: rust_motion_project::BackendKind::Native,
                 browser_image_format: None,
                 browser_jpeg_quality: None,
                 browser_frame_timeout_ms: None,
@@ -215,16 +215,16 @@ mod project_asset_tests {
             },
             props: serde_json::json!({}),
             assets: vec![
-                dioxuscut_project::AssetRef {
+                rust_motion_project::AssetRef {
                     id: "music".into(),
                     path: "music.wav".into(),
-                    kind: dioxuscut_project::AssetKind::Audio,
+                    kind: rust_motion_project::AssetKind::Audio,
                     sha256: None,
                 },
-                dioxuscut_project::AssetRef {
+                rust_motion_project::AssetRef {
                     id: "logo".into(),
                     path: "logo.png".into(),
-                    kind: dioxuscut_project::AssetKind::Image,
+                    kind: rust_motion_project::AssetKind::Image,
                     sha256: None,
                 },
             ],
@@ -243,16 +243,16 @@ mod project_asset_tests {
     fn project_audio_assets_from_dir_resolves_local_paths_without_touching_urls() {
         let project = Project {
             assets: vec![
-                dioxuscut_project::AssetRef {
+                rust_motion_project::AssetRef {
                     id: "local".into(),
                     path: "audio/music.wav".into(),
-                    kind: dioxuscut_project::AssetKind::Audio,
+                    kind: rust_motion_project::AssetKind::Audio,
                     sha256: None,
                 },
-                dioxuscut_project::AssetRef {
+                rust_motion_project::AssetRef {
                     id: "remote".into(),
                     path: "https://cdn.example/music.wav".into(),
-                    kind: dioxuscut_project::AssetKind::Audio,
+                    kind: rust_motion_project::AssetKind::Audio,
                     sha256: None,
                 },
             ],
@@ -291,7 +291,7 @@ mod project_timeline_tests {
         explicit_keyframes: bool,
     }
 
-    impl dioxuscut_composition::Composition for AudioOnlyComposition {
+    impl rust_motion_composition::Composition for AudioOnlyComposition {
         fn id(&self) -> &str {
             "AudioOnly"
         }
@@ -300,47 +300,47 @@ mod project_timeline_tests {
             &self,
             _props: &serde_json::Value,
             _context: NativeCompositionContext,
-        ) -> Result<Box<dyn dioxuscut_composition::PreparedComposition + '_>, CompositionError>
+        ) -> Result<Box<dyn rust_motion_composition::PreparedComposition + '_>, CompositionError>
         {
             Ok(Box::new(PreparedAudioOnly))
         }
     }
 
-    impl dioxuscut_composition::PreparedComposition for PreparedAudioOnly {
-        fn render(&self, _frame: u32) -> Result<dioxuscut_rasterizer::Scene, CompositionError> {
-            Ok(dioxuscut_rasterizer::Scene::new())
+    impl rust_motion_composition::PreparedComposition for PreparedAudioOnly {
+        fn render(&self, _frame: u32) -> Result<rust_motion_rasterizer::Scene, CompositionError> {
+            Ok(rust_motion_rasterizer::Scene::new())
         }
 
         fn audio_tracks(
             &self,
-        ) -> Result<Option<Vec<dioxuscut_rasterizer::AudioTrack>>, CompositionError> {
-            Ok(Some(vec![dioxuscut_rasterizer::AudioTrack::new(
+        ) -> Result<Option<Vec<rust_motion_rasterizer::AudioTrack>>, CompositionError> {
+            Ok(Some(vec![rust_motion_rasterizer::AudioTrack::new(
                 "later.wav",
             )]))
         }
     }
 
-    impl dioxuscut_composition::PreparedComposition for PreparedLateSceneAudio {
-        fn render(&self, frame: u32) -> Result<dioxuscut_rasterizer::Scene, CompositionError> {
-            let mut scene = dioxuscut_rasterizer::Scene::new();
+    impl rust_motion_composition::PreparedComposition for PreparedLateSceneAudio {
+        fn render(&self, frame: u32) -> Result<rust_motion_rasterizer::Scene, CompositionError> {
+            let mut scene = rust_motion_rasterizer::Scene::new();
             if frame >= 30 {
-                scene.push(dioxuscut_rasterizer::SceneNode::Audio {
-                    track: dioxuscut_rasterizer::AudioTrack::new("later.wav"),
+                scene.push(rust_motion_rasterizer::SceneNode::Audio {
+                    track: rust_motion_rasterizer::AudioTrack::new("later.wav"),
                 });
             }
             Ok(scene)
         }
     }
 
-    impl dioxuscut_composition::PreparedComposition for PreparedFrameVaryingAudio {
-        fn render(&self, frame: u32) -> Result<dioxuscut_rasterizer::Scene, CompositionError> {
-            let mut scene = dioxuscut_rasterizer::Scene::new();
-            let mut track = dioxuscut_rasterizer::AudioTrack::new("ducked.wav");
+    impl rust_motion_composition::PreparedComposition for PreparedFrameVaryingAudio {
+        fn render(&self, frame: u32) -> Result<rust_motion_rasterizer::Scene, CompositionError> {
+            let mut scene = rust_motion_rasterizer::Scene::new();
+            let mut track = rust_motion_rasterizer::AudioTrack::new("ducked.wav");
             track.volume = if frame < 30 { 1.0 } else { 0.25 };
             if self.explicit_keyframes {
                 track.volume_keyframes = vec![(0.0, 1.0), (1.0, 0.5)];
             }
-            scene.push(dioxuscut_rasterizer::SceneNode::Audio { track });
+            scene.push(rust_motion_rasterizer::SceneNode::Audio { track });
             Ok(scene)
         }
     }
@@ -458,11 +458,11 @@ mod project_timeline_tests {
 
     #[test]
     fn nested_scene_audio_keeps_rebased_nonzero_start_during_cli_inference() {
-        let mut audio = dioxuscut_media::SceneAudio::new("voice.wav");
+        let mut audio = rust_motion_media::SceneAudio::new("voice.wav");
         audio.track.timeline_start = 1.0;
-        let composition = dioxuscut_composition::SceneEmitterComposition::new(
+        let composition = rust_motion_composition::SceneEmitterComposition::new(
             "nested-audio",
-            dioxuscut_composition::SceneSequence::new(60, audio),
+            rust_motion_composition::SceneSequence::new(60, audio),
         );
         let context = NativeCompositionContext {
             width: 320,
@@ -506,9 +506,9 @@ struct ProjectTimelinePrepared<'a> {
     time_events: TimeEventSchedule,
 }
 
-impl dioxuscut_composition::PreparedComposition for ProjectTimelinePrepared<'_> {
-    fn render(&self, frame: u32) -> Result<dioxuscut_rasterizer::Scene, CompositionError> {
-        let mut scene = dioxuscut_rasterizer::Scene::new();
+impl rust_motion_composition::PreparedComposition for ProjectTimelinePrepared<'_> {
+    fn render(&self, frame: u32) -> Result<rust_motion_rasterizer::Scene, CompositionError> {
+        let mut scene = rust_motion_rasterizer::Scene::new();
         for clip in &self.composition.clips {
             if frame < clip.start || frame >= clip.start.saturating_add(clip.duration) {
                 continue;
@@ -536,7 +536,7 @@ impl dioxuscut_composition::PreparedComposition for ProjectTimelinePrepared<'_> 
 
     fn audio_tracks(
         &self,
-    ) -> Result<Option<Vec<dioxuscut_rasterizer::AudioTrack>>, CompositionError> {
+    ) -> Result<Option<Vec<rust_motion_rasterizer::AudioTrack>>, CompositionError> {
         let mut tracks = Vec::new();
         for clip in &self.composition.clips {
             let composition = self
@@ -584,7 +584,7 @@ impl Composition for ProjectTimelineComposition {
         &self,
         _props: &serde_json::Value,
         context: NativeCompositionContext,
-    ) -> Result<Box<dyn dioxuscut_composition::PreparedComposition + '_>, CompositionError> {
+    ) -> Result<Box<dyn rust_motion_composition::PreparedComposition + '_>, CompositionError> {
         Ok(Box::new(ProjectTimelinePrepared {
             composition: self,
             context,
@@ -597,7 +597,7 @@ impl Composition for ProjectTimelineComposition {
         _props: &serde_json::Value,
         context: NativeCompositionContext,
         time_events: TimeEventSchedule,
-    ) -> Result<Box<dyn dioxuscut_composition::PreparedComposition + '_>, CompositionError> {
+    ) -> Result<Box<dyn rust_motion_composition::PreparedComposition + '_>, CompositionError> {
         Ok(Box::new(ProjectTimelinePrepared {
             composition: self,
             context,
@@ -606,9 +606,9 @@ impl Composition for ProjectTimelineComposition {
     }
 }
 
-impl dioxuscut_composition::PreparedComposition for BrowserPreparedComposition {
-    fn render(&self, _frame: u32) -> Result<dioxuscut_rasterizer::Scene, CompositionError> {
-        Ok(dioxuscut_rasterizer::Scene::new())
+impl rust_motion_composition::PreparedComposition for BrowserPreparedComposition {
+    fn render(&self, _frame: u32) -> Result<rust_motion_rasterizer::Scene, CompositionError> {
+        Ok(rust_motion_rasterizer::Scene::new())
     }
 }
 
@@ -621,7 +621,7 @@ impl Composition for BrowserComposition {
         &self,
         _props: &serde_json::Value,
         _context: NativeCompositionContext,
-    ) -> Result<Box<dyn dioxuscut_composition::PreparedComposition + '_>, CompositionError> {
+    ) -> Result<Box<dyn rust_motion_composition::PreparedComposition + '_>, CompositionError> {
         Ok(Box::new(BrowserPreparedComposition))
     }
 }
@@ -690,7 +690,7 @@ pub enum RenderBackend {
     /// Pure-Rust CPU rasterizer via tiny-skia. Default.
     #[default]
     Native,
-    /// Browser-backed Three.js/WebGL renderer. Requires a worker path in `DIOXUSCUT_BROWSER_WORKER`.
+    /// Browser-backed Three.js/WebGL renderer. Requires a worker path in `RUST_MOTION_BROWSER_WORKER`.
     Browser,
     /// GPU rasterizer via wgpu. Requires `--features gpu`.
     Gpu,
@@ -713,23 +713,23 @@ pub enum RenderCodec {
 }
 
 impl RenderCodec {
-    fn still_format(self) -> Option<dioxuscut_rasterizer::StillImageFormat> {
+    fn still_format(self) -> Option<rust_motion_rasterizer::StillImageFormat> {
         match self {
-            Self::Png => Some(dioxuscut_rasterizer::StillImageFormat::Png),
-            Self::Jpeg => Some(dioxuscut_rasterizer::StillImageFormat::Jpeg),
-            Self::Webp => Some(dioxuscut_rasterizer::StillImageFormat::WebP),
+            Self::Png => Some(rust_motion_rasterizer::StillImageFormat::Png),
+            Self::Jpeg => Some(rust_motion_rasterizer::StillImageFormat::Jpeg),
+            Self::Webp => Some(rust_motion_rasterizer::StillImageFormat::WebP),
             _ => None,
         }
     }
 
-    fn video_codec(self) -> Option<dioxuscut_rasterizer::VideoCodec> {
+    fn video_codec(self) -> Option<rust_motion_rasterizer::VideoCodec> {
         match self {
-            Self::H264 => Some(dioxuscut_rasterizer::VideoCodec::H264),
-            Self::H265 => Some(dioxuscut_rasterizer::VideoCodec::H265),
-            Self::Vp9 => Some(dioxuscut_rasterizer::VideoCodec::Vp9),
-            Self::Av1 => Some(dioxuscut_rasterizer::VideoCodec::Av1),
-            Self::ProRes => Some(dioxuscut_rasterizer::VideoCodec::ProRes),
-            Self::Gif => Some(dioxuscut_rasterizer::VideoCodec::Gif),
+            Self::H264 => Some(rust_motion_rasterizer::VideoCodec::H264),
+            Self::H265 => Some(rust_motion_rasterizer::VideoCodec::H265),
+            Self::Vp9 => Some(rust_motion_rasterizer::VideoCodec::Vp9),
+            Self::Av1 => Some(rust_motion_rasterizer::VideoCodec::Av1),
+            Self::ProRes => Some(rust_motion_rasterizer::VideoCodec::ProRes),
+            Self::Gif => Some(rust_motion_rasterizer::VideoCodec::Gif),
             Self::Png | Self::Jpeg | Self::Webp => None,
         }
     }
@@ -747,7 +747,7 @@ impl RenderCodec {
     }
 }
 
-/// Standard exit codes for the Dioxuscut CLI.
+/// Standard exit codes for the Rust Motion CLI.
 pub const EXIT_SUCCESS: i32 = 0;
 pub const EXIT_GENERAL_ERROR: i32 = 1;
 pub const EXIT_INVALID_ARGUMENTS: i32 = 2;
@@ -755,7 +755,7 @@ pub const EXIT_MISSING_DEPENDENCY: i32 = 3;
 pub const EXIT_VALIDATION_ERROR: i32 = 4;
 pub const EXIT_TIMEOUT_OR_CANCELLED: i32 = 5;
 
-/// Dioxuscut CLI — render registered Rust or Rhai compositions to video.
+/// Rust Motion CLI — render registered Rust or Rhai compositions to video.
 #[derive(Parser, Debug, Clone, PartialEq)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
@@ -878,7 +878,7 @@ pub enum Commands {
 
     /// Render browser WebCodecs frames and write a timeline-drift report.
     WebcodecsDrift {
-        /// Browser worker executable/script implementing the Dioxuscut protocol.
+        /// Browser worker executable/script implementing the Rust Motion protocol.
         #[arg(long)]
         worker: PathBuf,
 
@@ -918,13 +918,13 @@ pub enum Commands {
         csv: Option<PathBuf>,
     },
 
-    /// Validate a versioned Dioxuscut project file without rendering.
+    /// Validate a versioned Rust Motion project file without rendering.
     ValidateProject {
-        /// Path to the `.dioxuscut.json` project file.
+        /// Path to the `.rust_motion.json` project file.
         input: PathBuf,
     },
 
-    /// Render a versioned `.dioxuscut.json` project file.
+    /// Render a versioned `.rust_motion.json` project file.
     RenderProject {
         /// Path to the project file.
         input: PathBuf,
@@ -939,7 +939,7 @@ pub enum Commands {
         max_total_asset_bytes: usize,
     },
 
-    /// (Experimental) Scaffold a Dioxuscut component from a Remotion (.tsx) file.
+    /// (Experimental) Scaffold a Rust Motion component from a Remotion (.tsx) file.
     Migrate {
         /// Path to the Remotion .tsx file.
         input: PathBuf,
@@ -1003,7 +1003,7 @@ pub enum Commands {
 
     /// Validate inputs (project file, Rhai script, or composition) before rendering.
     Validate {
-        /// Path to a versioned `.dioxuscut.json` project file.
+        /// Path to a versioned `.rust_motion.json` project file.
         #[arg(long, short = 'p', conflicts_with_all = ["composition", "script"])]
         project: Option<PathBuf>,
 
@@ -1129,8 +1129,10 @@ pub fn run_doctor() -> DoctorReport {
     }
 
     let temp_dir_path = std::env::temp_dir();
-    let temp_probe_file =
-        temp_dir_path.join(format!("dioxuscut_doctor_probe_{}.tmp", std::process::id()));
+    let temp_probe_file = temp_dir_path.join(format!(
+        "rust_motion_doctor_probe_{}.tmp",
+        std::process::id()
+    ));
     let temp_writable = std::fs::write(&temp_probe_file, b"ok").is_ok()
         && std::fs::remove_file(&temp_probe_file).is_ok();
 
@@ -1440,13 +1442,13 @@ pub enum HwAccelArg {
     Nvenc,
 }
 
-impl From<HwAccelArg> for dioxuscut_rasterizer::HwAccel {
+impl From<HwAccelArg> for rust_motion_rasterizer::HwAccel {
     fn from(arg: HwAccelArg) -> Self {
         match arg {
-            HwAccelArg::Auto => dioxuscut_rasterizer::HwAccel::Auto,
-            HwAccelArg::Disabled => dioxuscut_rasterizer::HwAccel::Disabled,
-            HwAccelArg::VideoToolbox => dioxuscut_rasterizer::HwAccel::VideoToolbox,
-            HwAccelArg::Nvenc => dioxuscut_rasterizer::HwAccel::Nvenc,
+            HwAccelArg::Auto => rust_motion_rasterizer::HwAccel::Auto,
+            HwAccelArg::Disabled => rust_motion_rasterizer::HwAccel::Disabled,
+            HwAccelArg::VideoToolbox => rust_motion_rasterizer::HwAccel::VideoToolbox,
+            HwAccelArg::Nvenc => rust_motion_rasterizer::HwAccel::Nvenc,
         }
     }
 }
@@ -1473,7 +1475,7 @@ pub struct RenderRequest {
     pub timeout_seconds: Option<u64>,
     pub crf: u32,
     pub preset: String,
-    pub hw_accel: dioxuscut_rasterizer::HwAccel,
+    pub hw_accel: rust_motion_rasterizer::HwAccel,
     pub sandbox_roots: Vec<PathBuf>,
     pub permissive: bool,
 }
@@ -1495,12 +1497,12 @@ impl RenderRequest {
     /// - If rendering an external Rhai script (`self.script.is_some()`), automatically defaults
     ///   to `MediaSecurityPolicy::sandboxed([script_dir])` to safely sandbox untrusted scripts under least privilege.
     /// - Otherwise (built-in Rust composition with no roots specified), defaults to `MediaSecurityPolicy::Permissive`.
-    pub fn effective_security_policy(&self) -> dioxuscut_rasterizer::MediaSecurityPolicy {
+    pub fn effective_security_policy(&self) -> rust_motion_rasterizer::MediaSecurityPolicy {
         if self.permissive {
-            return dioxuscut_rasterizer::MediaSecurityPolicy::Permissive;
+            return rust_motion_rasterizer::MediaSecurityPolicy::Permissive;
         }
         if !self.sandbox_roots.is_empty() {
-            return dioxuscut_rasterizer::MediaSecurityPolicy::sandboxed(
+            return rust_motion_rasterizer::MediaSecurityPolicy::sandboxed(
                 self.sandbox_roots.clone(),
             );
         }
@@ -1520,9 +1522,9 @@ impl RenderRequest {
                     roots.push(cwd);
                 }
             }
-            return dioxuscut_rasterizer::MediaSecurityPolicy::sandboxed(roots);
+            return rust_motion_rasterizer::MediaSecurityPolicy::sandboxed(roots);
         }
-        dioxuscut_rasterizer::MediaSecurityPolicy::Permissive
+        rust_motion_rasterizer::MediaSecurityPolicy::Permissive
     }
 }
 
@@ -1551,7 +1553,7 @@ mod render_request_tests {
             timeout_seconds: None,
             crf: 23,
             preset: "medium".into(),
-            hw_accel: dioxuscut_rasterizer::HwAccel::Auto,
+            hw_accel: rust_motion_rasterizer::HwAccel::Auto,
             sandbox_roots: vec![],
             permissive: false,
         }
@@ -1771,7 +1773,7 @@ pub async fn execute_render_command_with_registry(
 pub async fn execute_project_render_command_with_control(
     request: &RenderRequest,
     project: &Project,
-    control: dioxuscut_rasterizer::RenderControl,
+    control: rust_motion_rasterizer::RenderControl,
 ) -> anyhow::Result<()> {
     let time_events = TimeEventSchedule::new(project.events.clone())
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
@@ -1808,12 +1810,12 @@ fn uses_project_timeline(backend: RenderBackend, has_tracks: bool) -> bool {
 }
 
 /// Build the standard CLI progress and timeout controls for a render request.
-pub fn default_render_control(request: &RenderRequest) -> dioxuscut_rasterizer::RenderControl {
+pub fn default_render_control(request: &RenderRequest) -> rust_motion_rasterizer::RenderControl {
     // Progress is emitted by the shared render engine so every CLI render
     // path (native, browser, still, and video) has the same observable
     // behavior. Keep the CLI responsible only for request-specific timeout
     // configuration.
-    let mut control = dioxuscut_rasterizer::RenderControl::new()
+    let mut control = rust_motion_rasterizer::RenderControl::new()
         .with_stderr_progress()
         .with_stderr_render_stats();
     if let Some(seconds) = request.timeout_seconds {
@@ -1824,11 +1826,11 @@ pub fn default_render_control(request: &RenderRequest) -> dioxuscut_rasterizer::
 
 #[cfg(feature = "gpu")]
 fn report_gpu_fallback_diagnostics(
-    rasterizer: &dioxuscut_rasterizer::WgpuBackend,
-    control: &dioxuscut_rasterizer::RenderControl,
+    rasterizer: &rust_motion_rasterizer::WgpuBackend,
+    control: &rust_motion_rasterizer::RenderControl,
 ) {
     let stats = rasterizer.render_stats();
-    control.report_diagnostics(dioxuscut_rasterizer::RenderDiagnostics {
+    control.report_diagnostics(rust_motion_rasterizer::RenderDiagnostics {
         backend: "gpu",
         gpu_frames: stats.gpu_frames,
         cpu_fallback_frames: stats.cpu_fallback_frames,
@@ -1861,7 +1863,7 @@ fn report_gpu_fallback_diagnostics(
 /// Execute a render with caller-owned progress, cancellation, and timeout controls.
 pub async fn execute_render_command_with_control(
     request: &RenderRequest,
-    control: dioxuscut_rasterizer::RenderControl,
+    control: rust_motion_rasterizer::RenderControl,
 ) -> anyhow::Result<()> {
     let registry = built_in_registry();
     execute_render_command_with_registry_and_control(request, &registry, control).await
@@ -1871,7 +1873,7 @@ pub async fn execute_render_command_with_control(
 pub async fn execute_render_command_with_registry_and_control(
     request: &RenderRequest,
     registry: &CompositionRegistry,
-    control: dioxuscut_rasterizer::RenderControl,
+    control: rust_motion_rasterizer::RenderControl,
 ) -> anyhow::Result<()> {
     execute_render_command_with_registry_and_time_events_and_control(
         request,
@@ -1886,7 +1888,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
     request: &RenderRequest,
     registry: &CompositionRegistry,
     time_events: TimeEventSchedule,
-    control: dioxuscut_rasterizer::RenderControl,
+    control: rust_motion_rasterizer::RenderControl,
 ) -> anyhow::Result<()> {
     let render_started = std::time::Instant::now();
     validate_composition_source(request.composition.as_deref(), request.script.as_ref())?;
@@ -1966,7 +1968,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
         if request.script.is_some() {
             anyhow::bail!(
                 "Rhai support is not compiled in. Rebuild with `--features rhai`:\n  \
-                 cargo build -p dioxuscut-cli --features rhai"
+                 cargo build -p rust-motion-cli --features rhai"
             );
         }
         registry
@@ -2009,10 +2011,9 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
         None => first_scene.audio_tracks(),
     };
     audio_tracks.extend(
-        request
-            .audio
-            .iter()
-            .map(|path| dioxuscut_rasterizer::AudioTrack::new(path.to_string_lossy().into_owned())),
+        request.audio.iter().map(|path| {
+            rust_motion_rasterizer::AudioTrack::new(path.to_string_lossy().into_owned())
+        }),
     );
     let first_scene_cache = std::sync::Arc::new(std::sync::Mutex::new(Some(first_scene)));
 
@@ -2027,11 +2028,11 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
 
     let security_policy = request.effective_security_policy();
     #[cfg(feature = "gpu")]
-    let mut gpu_profile_summary: Option<dioxuscut_rasterizer::ProfilingSummary> = None;
+    let mut gpu_profile_summary: Option<rust_motion_rasterizer::ProfilingSummary> = None;
 
     match request.backend {
         RenderBackend::Native => {
-            use dioxuscut_rasterizer::{
+            use rust_motion_rasterizer::{
                 render_still_fallible_scaled, render_to_ffmpeg_pipe_fallible, PipeConfig,
                 TinySkiaBackend,
             };
@@ -2039,7 +2040,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
             let rasterizer = TinySkiaBackend::new()
                 .with_image_cache_bytes(
                     native_image_cache_bytes()
-                        .unwrap_or(dioxuscut_rasterizer::DEFAULT_IMAGE_CACHE_BYTES),
+                        .unwrap_or(rust_motion_rasterizer::DEFAULT_IMAGE_CACHE_BYTES),
                 )
                 .with_security_policy(security_policy.clone());
             if let Some(format) = request.codec.still_format() {
@@ -2105,16 +2106,16 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
             }
         }
         RenderBackend::Browser => {
-            use dioxuscut_rasterizer::{
+            use rust_motion_rasterizer::{
                 render_still_fallible_scaled, render_web_to_ffmpeg_pipe_fallible,
                 BrowserFrameBackend, PipeConfig,
             };
-            let worker = std::env::var_os("DIOXUSCUT_BROWSER_WORKER").ok_or_else(|| {
-                anyhow::anyhow!("Browser backend requires DIOXUSCUT_BROWSER_WORKER")
+            let worker = std::env::var_os("RUST_MOTION_BROWSER_WORKER").ok_or_else(|| {
+                anyhow::anyhow!("Browser backend requires RUST_MOTION_BROWSER_WORKER")
             })?;
-            let url = std::env::var("DIOXUSCUT_BROWSER_URL")
+            let url = std::env::var("RUST_MOTION_BROWSER_URL")
                 .unwrap_or_else(|_| "http://localhost:1420".to_string());
-            let browser_capacity = std::env::var("DIOXUSCUT_BROWSER_CONCURRENCY")
+            let browser_capacity = std::env::var("RUST_MOTION_BROWSER_CONCURRENCY")
                 .ok()
                 .and_then(|value| value.parse::<usize>().ok())
                 .unwrap_or_else(|| {
@@ -2123,18 +2124,19 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                         .unwrap_or(1)
                 });
             let concurrency = request.effective_concurrency(browser_capacity);
-            let node = std::env::var_os("DIOXUSCUT_BROWSER_NODE").unwrap_or_else(|| "node".into());
+            let node =
+                std::env::var_os("RUST_MOTION_BROWSER_NODE").unwrap_or_else(|| "node".into());
             let mut rasterizer =
                 BrowserFrameBackend::with_concurrency(node, worker, url, concurrency)
                     .map_err(|error| anyhow::anyhow!("Browser backend init failed: {error}"))?
                     .with_frame_cache_bytes(
-                        std::env::var("DIOXUSCUT_FRAME_CACHE_BYTES")
+                        std::env::var("RUST_MOTION_FRAME_CACHE_BYTES")
                             .ok()
                             .and_then(|value| value.parse::<usize>().ok())
                             .filter(|value| *value > 0)
-                            .unwrap_or(dioxuscut_rasterizer::DEFAULT_MAX_CACHE_BYTES),
+                            .unwrap_or(rust_motion_rasterizer::DEFAULT_MAX_CACHE_BYTES),
                     );
-            if !std::env::var("DIOXUSCUT_BROWSER_TRANSPORT")
+            if !std::env::var("RUST_MOTION_BROWSER_TRANSPORT")
                 .ok()
                 .is_some_and(|value| value.trim().eq_ignore_ascii_case("base64"))
             {
@@ -2151,7 +2153,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                 time_events
                     .to_events()
                     .into_iter()
-                    .map(|event| dioxuscut_rasterizer::WebTimeEvent {
+                    .map(|event| rust_motion_rasterizer::WebTimeEvent {
                         id: event.id,
                         frame: event.frame,
                     })
@@ -2170,7 +2172,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                     request.scale,
                     // BrowserFrameBackend owns the browser request; the Scene
                     // value is intentionally empty for this backend.
-                    |_| Ok::<_, std::convert::Infallible>(dioxuscut_rasterizer::Scene::new()),
+                    |_| Ok::<_, std::convert::Infallible>(rust_motion_rasterizer::Scene::new()),
                 )?;
             } else {
                 let pipe_config = PipeConfig::new(
@@ -2197,17 +2199,17 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
             #[cfg(not(feature = "gpu"))]
             anyhow::bail!(
                 "GPU backend is not compiled in. Rebuild with `--features gpu`:\n  \
-                 cargo build -p dioxuscut-cli --features gpu"
+                 cargo build -p rust-motion-cli --features gpu"
             );
 
             #[cfg(feature = "gpu")]
             {
-                use dioxuscut_rasterizer::{
+                use rust_motion_rasterizer::{
                     render_still_fallible_scaled, render_to_ffmpeg_pipe_fallible, PipeConfig,
                     WgpuBackend,
                 };
 
-                let profile_enabled = std::env::var("DIOXUSCUT_PROFILE")
+                let profile_enabled = std::env::var("RUST_MOTION_PROFILE")
                     .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                     .unwrap_or(false);
 
@@ -2215,7 +2217,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                     .map_err(|error| anyhow::anyhow!("GPU backend init failed: {error}"))?
                     .with_image_cache_bytes(
                         native_image_cache_bytes()
-                            .unwrap_or(dioxuscut_rasterizer::DEFAULT_IMAGE_CACHE_BYTES),
+                            .unwrap_or(rust_motion_rasterizer::DEFAULT_IMAGE_CACHE_BYTES),
                     )
                     .with_profiling(profile_enabled);
                 if let Some(format) = request.codec.still_format() {
@@ -2290,7 +2292,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
     }
 
     tracing::info!(output = %request.output.display(), "Render completed");
-    if std::env::var_os("DIOXUSCUT_JSON").is_some() {
+    if std::env::var_os("RUST_MOTION_JSON").is_some() {
         #[allow(unused_mut)]
         let mut json_obj = serde_json::json!({
             "ok": true,

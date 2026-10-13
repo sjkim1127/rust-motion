@@ -1,16 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use dioxuscut_cli::{
+use rust_motion_cli::{
     execute_project_render_command_with_control, RenderBackend, RenderCodec, RenderRequest,
 };
-use dioxuscut_project::{JobStatus, JobStore, Project, RenderJob};
-use dioxuscut_rasterizer::{
+use rust_motion_project::{JobStatus, JobStore, Project, RenderJob};
+use rust_motion_rasterizer::{
     make_cancel_signal, render_still_fallible_scaled, render_web_to_ffmpeg_pipe_fallible,
     BackendCapabilities, BrowserFrameBackend, EncodingProgress, PipeConfig,
     RenderCancellationToken, RenderControl, RenderDiagnostics, StillImageFormat, VideoCodec,
     WebFrameRequest, WebTimelineClip, WebWorkerMessage, WEB_WORKER_PROTOCOL_VERSION,
 };
-use dioxuscut_renderer::spawn_server;
+use rust_motion_renderer::spawn_server;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -50,11 +50,11 @@ fn project_video_codec(path: &std::path::Path) -> VideoCodec {
 }
 
 fn browser_frame_cache_bytes() -> usize {
-    std::env::var("DIOXUSCUT_FRAME_CACHE_BYTES")
+    std::env::var("RUST_MOTION_FRAME_CACHE_BYTES")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .filter(|value| *value > 0)
-        .unwrap_or(dioxuscut_rasterizer::DEFAULT_MAX_CACHE_BYTES)
+        .unwrap_or(rust_motion_rasterizer::DEFAULT_MAX_CACHE_BYTES)
 }
 
 fn default_browser_concurrency() -> usize {
@@ -99,13 +99,13 @@ fn selected_output_frame_count(
 
 fn create_render_job_temp_dir() -> Result<tempfile::TempDir, String> {
     tempfile::Builder::new()
-        .prefix("dioxuscut-render-job-")
+        .prefix("rust-motion-render-job-")
         .tempdir()
         .map_err(|error| format!("failed to create render job temp directory: {error}"))
 }
 
 fn browser_worker_path() -> Result<PathBuf, String> {
-    if let Some(path) = std::env::var_os("DIOXUSCUT_BROWSER_WORKER") {
+    if let Some(path) = std::env::var_os("RUST_MOTION_BROWSER_WORKER") {
         return Ok(PathBuf::from(path));
     }
 
@@ -126,7 +126,7 @@ fn browser_worker_path() -> Result<PathBuf, String> {
         .into_iter()
         .find(|path| path.is_file())
         .ok_or_else(|| {
-            "Browser backend requires DIOXUSCUT_BROWSER_WORKER or a bundled three-render-worker.mjs"
+            "Browser backend requires RUST_MOTION_BROWSER_WORKER or a bundled three-render-worker.mjs"
                 .to_string()
         })
 }
@@ -155,15 +155,15 @@ struct AppState {
 const DEFAULT_MAX_TOTAL_REMOTE_ASSET_BYTES: usize = 1024 * 1024 * 1024;
 
 fn max_total_remote_asset_bytes() -> Result<usize, String> {
-    let Some(value) = std::env::var_os("DIOXUSCUT_MAX_TOTAL_REMOTE_ASSET_BYTES") else {
+    let Some(value) = std::env::var_os("RUST_MOTION_MAX_TOTAL_REMOTE_ASSET_BYTES") else {
         return Ok(DEFAULT_MAX_TOTAL_REMOTE_ASSET_BYTES);
     };
     let value = value
         .into_string()
-        .map_err(|_| "DIOXUSCUT_MAX_TOTAL_REMOTE_ASSET_BYTES must be valid UTF-8".to_string())?;
+        .map_err(|_| "RUST_MOTION_MAX_TOTAL_REMOTE_ASSET_BYTES must be valid UTF-8".to_string())?;
     value
         .parse::<usize>()
-        .map_err(|error| format!("invalid DIOXUSCUT_MAX_TOTAL_REMOTE_ASSET_BYTES value: {error}"))
+        .map_err(|error| format!("invalid RUST_MOTION_MAX_TOTAL_REMOTE_ASSET_BYTES value: {error}"))
 }
 
 #[tauri::command]
@@ -201,7 +201,7 @@ fn start_render_job(
             .project
     };
     let backend_kind = project.settings.backend;
-    let max_total_asset_bytes = (backend_kind != dioxuscut_project::BackendKind::Browser)
+    let max_total_asset_bytes = (backend_kind != rust_motion_project::BackendKind::Browser)
         .then(max_total_remote_asset_bytes)
         .transpose()?;
     let render_frame_start = project.settings.frame_start.unwrap_or(0);
@@ -209,9 +209,9 @@ fn start_render_job(
         .settings
         .frame_end
         .unwrap_or(project.settings.duration.saturating_sub(1));
-    let browser_preflight = if backend_kind == dioxuscut_project::BackendKind::Browser {
+    let browser_preflight = if backend_kind == rust_motion_project::BackendKind::Browser {
         let worker = browser_worker_path()?;
-        let configured_url = std::env::var("DIOXUSCUT_BROWSER_URL").ok();
+        let configured_url = std::env::var("RUST_MOTION_BROWSER_URL").ok();
         let frontend_path = if configured_url.is_none() {
             Some(browser_frontend_path()?)
         } else {
@@ -239,7 +239,7 @@ fn start_render_job(
             .try_update(&id, JobStatus::Preparing, 0)
             .map_err(|error| error.to_string())?;
     }
-    if backend_kind != dioxuscut_project::BackendKind::Browser {
+    if backend_kind != rust_motion_project::BackendKind::Browser {
         let max_total_asset_bytes = max_total_asset_bytes.expect("native asset limit was read");
         let state_jobs = Arc::clone(&state.jobs);
         let state_cancellations = Arc::clone(&state.cancellations);
@@ -271,16 +271,16 @@ fn start_render_job(
                     script: None,
                     props: Some(props_path.clone()),
                     output: output_path.clone(),
-                    audio: dioxuscut_cli::project_audio_assets(&project),
+                    audio: rust_motion_cli::project_audio_assets(&project),
                     width: project.settings.width,
                     height: project.settings.height,
                     scale: project.settings.scale,
                     fps: project.settings.fps,
                     duration: project.settings.duration,
                     backend: match project.settings.backend {
-                        dioxuscut_project::BackendKind::Native => RenderBackend::Native,
-                        dioxuscut_project::BackendKind::Gpu => RenderBackend::Gpu,
-                        dioxuscut_project::BackendKind::Browser => unreachable!(),
+                        rust_motion_project::BackendKind::Native => RenderBackend::Native,
+                        rust_motion_project::BackendKind::Gpu => RenderBackend::Gpu,
+                        rust_motion_project::BackendKind::Browser => unreachable!(),
                     },
                     codec: project_render_codec(&output_path),
                     frame_start: project.settings.frame_start.unwrap_or(0),
@@ -294,7 +294,7 @@ fn start_render_job(
                         .preset
                         .clone()
                         .unwrap_or_else(|| "fast".into()),
-                    hw_accel: dioxuscut_rasterizer::HwAccel::Auto,
+                    hw_accel: rust_motion_rasterizer::HwAccel::Auto,
                     sandbox_roots: vec![],
                     permissive: true,
                 };
@@ -375,7 +375,7 @@ fn start_render_job(
         .concurrency
         .map(|value| value as usize)
         .or_else(|| {
-            std::env::var("DIOXUSCUT_BROWSER_CONCURRENCY")
+            std::env::var("RUST_MOTION_BROWSER_CONCURRENCY")
                 .ok()
                 .and_then(|value| value.parse().ok())
         })
@@ -399,7 +399,8 @@ fn start_render_job(
                 .clone()
                 .or_else(|| local_server.as_ref().map(|server| server.url().to_string()))
                 .ok_or_else(|| "browser rendering URL is unavailable".to_string())?;
-            let node = std::env::var_os("DIOXUSCUT_BROWSER_NODE").unwrap_or_else(|| "node".into());
+            let node =
+                std::env::var_os("RUST_MOTION_BROWSER_NODE").unwrap_or_else(|| "node".into());
             let mut backend = BrowserFrameBackend::with_concurrency(node, worker, url, concurrency)
                 .map_err(|error| error.to_string())?
                 .with_frame_cache_bytes(browser_frame_cache_bytes());
@@ -454,7 +455,7 @@ fn start_render_job(
                     project
                         .events
                         .iter()
-                        .map(|event| dioxuscut_rasterizer::WebTimeEvent {
+                        .map(|event| rust_motion_rasterizer::WebTimeEvent {
                             id: event.id.clone(),
                             frame: event.frame,
                         })
@@ -504,7 +505,7 @@ fn start_render_job(
                     format,
                     &control,
                     project.settings.scale,
-                    |_| Ok::<_, std::convert::Infallible>(dioxuscut_rasterizer::Scene::new()),
+                    |_| Ok::<_, std::convert::Infallible>(rust_motion_rasterizer::Scene::new()),
                 )
                 .map_err(|error| error.to_string())?;
             } else {
@@ -528,9 +529,9 @@ fn start_render_job(
                         .unwrap_or_else(|| "fast".into()),
                 )
                 .with_audio_tracks(
-                    dioxuscut_cli::project_audio_assets(&project)
+                    rust_motion_cli::project_audio_assets(&project)
                         .into_iter()
-                        .map(|path| dioxuscut_rasterizer::AudioTrack::new(path.to_string_lossy()))
+                        .map(|path| rust_motion_rasterizer::AudioTrack::new(path.to_string_lossy()))
                         .collect::<Vec<_>>(),
                 )
                 .with_control(control);
@@ -589,7 +590,7 @@ fn validate_project(source: String) -> Result<Project, String> {
 #[tauri::command]
 fn project_schema() -> Result<serde_json::Value, String> {
     serde_json::from_str(include_str!(
-        "../../../../schemas/dioxuscut-project-v1.schema.json"
+        "../../../../schemas/rust-motion-project-v1.schema.json"
     ))
     .map_err(|error| format!("embedded project schema is invalid: {error}"))
 }
@@ -694,9 +695,9 @@ fn web_worker_protocol() -> serde_json::Value {
 #[tauri::command]
 fn list_browser_compositions() -> Result<Vec<String>, String> {
     let worker = browser_worker_path()?;
-    let url = std::env::var("DIOXUSCUT_BROWSER_URL")
+    let url = std::env::var("RUST_MOTION_BROWSER_URL")
         .unwrap_or_else(|_| "http://localhost:1420".to_string());
-    let node = std::env::var_os("DIOXUSCUT_BROWSER_NODE").unwrap_or_else(|| "node".into());
+    let node = std::env::var_os("RUST_MOTION_BROWSER_NODE").unwrap_or_else(|| "node".into());
     let backend = BrowserFrameBackend::with_concurrency(node, worker, url, 1)
         .map_err(|error| error.to_string())?
         .with_frame_cache_bytes(browser_frame_cache_bytes());
@@ -752,7 +753,7 @@ fn main() {
             retry_render_job
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Dioxuscut Studio");
+        .expect("error while running Rust Motion Studio");
 }
 
 #[cfg(test)]

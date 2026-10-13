@@ -1,4 +1,4 @@
-use dioxuscut_cli::{
+use rust_motion_cli::{
     execute_render_command, RenderBackend, RenderCodec, RenderRequest, ValidationError,
 };
 use std::path::{Path, PathBuf};
@@ -12,7 +12,7 @@ fn unique_temp_dir() -> PathBuf {
         .expect("system clock before Unix epoch")
         .as_nanos();
     std::env::temp_dir().join(format!(
-        "dioxuscut_cli_formats_{}_{}_{}",
+        "rust_motion_cli_formats_{}_{}_{}",
         std::process::id(),
         nonce,
         NEXT_ID.fetch_add(1, Ordering::Relaxed)
@@ -40,7 +40,7 @@ fn request(output: &Path, codec: RenderCodec) -> RenderRequest {
         timeout_seconds: None,
         crf: 18,
         preset: "fast".into(),
-        hw_accel: dioxuscut_rasterizer::HwAccel::Disabled,
+        hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
         sandbox_roots: Vec::new(),
         permissive: false,
     }

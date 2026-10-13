@@ -1,4 +1,4 @@
-use dioxuscut_rasterizer::{fit_text, measure_text_width};
+use rust_motion_rasterizer::{fit_text, measure_text_width};
 
 // ── 1. Empty and Single-Character Inputs ──────────────────────────────────────
 
@@ -60,7 +60,10 @@ fn test_fit_text_huge_strings_stress() {
 #[test]
 fn test_fit_text_unicode_scripts() {
     let test_cases = [
-        ("Korean Hangul", "안녕하세요 Dioxuscut 비디오 렌더러 테스트"),
+        (
+            "Korean Hangul",
+            "안녕하세요 Rust Motion 비디오 렌더러 테스트",
+        ),
         (
             "Japanese Kanji/Kana",
             "こんにちは世界、Rustで高速な動画生成",
@@ -174,7 +177,7 @@ fn test_fit_text_tight_constraints_and_monotonicity() {
     );
 
     // Monotonicity test: As width increases, fitted font size must never decrease
-    let text = "Dioxuscut Declarative Video Engine";
+    let text = "Rust Motion Declarative Video Engine";
     let widths = [50.0, 100.0, 200.0, 300.0, 500.0, 800.0, 1200.0, 2000.0];
     let mut prev_size = 0.0f64;
 

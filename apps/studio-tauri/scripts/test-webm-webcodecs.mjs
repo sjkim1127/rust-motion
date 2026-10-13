@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const root = process.cwd();
-const temp = join(tmpdir(), `dioxuscut-webm-e2e-${process.pid}`);
+const temp = join(tmpdir(), `rust-motion-webm-e2e-${process.pid}`);
 mkdirSync(temp, { recursive: true });
 const source = join(temp, 'fixture.webm');
 const server = spawn('npm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', '1421'], {

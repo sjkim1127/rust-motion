@@ -10,16 +10,16 @@
 //! - Tier 3: Pairwise cross-feature combinations
 //! - Tier 4: Real-world video application scenario (Cyberpunk Title Card)
 
-use dioxuscut_rasterizer::backend::{FrameConfig, RasterizerBackend};
-use dioxuscut_rasterizer::font::{
+use rust_motion_rasterizer::backend::{FrameConfig, RasterizerBackend};
+use rust_motion_rasterizer::font::{
     fit_text, layout_text_box, measure_text_width, TextBox, TextHorizontalAlign, TextOverflow,
     TextVerticalAlign,
 };
-use dioxuscut_rasterizer::frame_cache::{FrameCacheConfig, FrameCacheKey, FrameCacheManager};
-use dioxuscut_rasterizer::scene::{
+use rust_motion_rasterizer::frame_cache::{FrameCacheConfig, FrameCacheKey, FrameCacheManager};
+use rust_motion_rasterizer::scene::{
     BlendMode, ClipRegion, Color, MaskMode, Scene, SceneFilter, SceneNode, SceneShadow, Transform2D,
 };
-use dioxuscut_rasterizer::TinySkiaBackend;
+use rust_motion_rasterizer::TinySkiaBackend;
 
 fn make_test_config(w: u32, h: u32) -> FrameConfig {
     FrameConfig::new(w, h, 0, 30.0)
@@ -430,11 +430,11 @@ fn test_f7_t1_vignette_radial_gradient_overlay() {
         cy: 100.0,
         r: 100.0,
         stops: vec![
-            dioxuscut_rasterizer::scene::GradientStop {
+            rust_motion_rasterizer::scene::GradientStop {
                 position: 0.0,
                 color: Color::rgba(0, 0, 0, 0),
             },
-            dioxuscut_rasterizer::scene::GradientStop {
+            rust_motion_rasterizer::scene::GradientStop {
                 position: 1.0,
                 color: Color::rgba(0, 0, 0, 255),
             },
@@ -983,7 +983,7 @@ fn test_f12_t2_fit_text_huge_string_stress() {
 #[test]
 fn test_f12_t2_fit_text_multilingual_unicode_scripts() {
     let scripts = [
-        "안녕하세요 Dioxuscut",
+        "안녕하세요 Rust Motion",
         "こんにちは世界",
         "你好世界",
         "مرحبا بالعالم",

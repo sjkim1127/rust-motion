@@ -1,9 +1,9 @@
-use dioxuscut_composition::{
+use rust_motion_composition::{
     FlipDirection, LinearWipeDirection, NativeCompositionContext, SceneEmitter, SceneFrameContext,
     SceneRect, SceneTransitionSeries, TransitionKind, TransitionTiming,
 };
-use dioxuscut_rasterizer::{Color, Scene, SceneNode};
-use dioxuscut_transitions::{
+use rust_motion_rasterizer::{Color, Scene, SceneNode};
+use rust_motion_transitions::{
     bezier, ease, ease_in, ease_in_out, ease_out, ClockWipe, Dissolve, Flip,
     FlipDirection as FlipDir, Iris, LinearTiming, LinearWipe, SceneClockWipe, SceneDissolve,
     SceneFlip, SceneIris, SceneLinearWipe, SceneZoom, SpringConfig, SpringTiming,

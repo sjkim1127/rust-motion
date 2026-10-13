@@ -1,4 +1,4 @@
-//! Dioxuscut Noise — Pure-Rust procedural Simplex 2D/3D/4D noise generation,
+//! Rust Motion Noise — Pure-Rust procedural Simplex 2D/3D/4D noise generation,
 //! Fractal Brownian Motion (fBm), turbulent flow domain warping, and animated organic noise backgrounds.
 //!
 //! Ported directly from Remotion's `@remotion/noise`:

@@ -1,4 +1,4 @@
-# ⚔️ Remotion vs Dioxuscut: 3-Axis Benchmark Battle Report
+# ⚔️ Remotion vs Rust Motion: 3-Axis Benchmark Battle Report
 
 **Generated**: 2026-09-13 09:59:46
 **Platform**: macOS (Apple Silicon)
@@ -7,9 +7,9 @@
 
 ## 🥊 Round 1: Memory Footprint (Peak RSS) & Server Concurrency
 
-Remotion requires Node.js and Chromium renderer/GPU child processes, while Dioxuscut operates as a single multithreaded native binary with zero browser overhead.
+Remotion requires Node.js and Chromium renderer/GPU child processes, while Rust Motion operates as a single multithreaded native binary with zero browser overhead.
 
-| Workload | Remotion (Chromium 4 Workers) | **Dioxuscut (tiny-skia 4 Threads)** | Difference / Advantage |
+| Workload | Remotion (Chromium 4 Workers) | **Rust Motion (tiny-skia 4 Threads)** | Difference / Advantage |
 |:---|:---:|:---:|:---:|
 | **720p Spring Scene Peak RAM** | not measured | **143.84 MB** | **no memory ratio claim** |
 | **1080p Cyberpunk VFX Peak RAM**| not measured | **277.77 MB** | **no memory ratio claim** |
@@ -20,7 +20,7 @@ Remotion requires Node.js and Chromium renderer/GPU child processes, while Dioxu
 
 How many video renders can run concurrently on a single standard server before crashing out of memory (OOM)?
 
-| Server Specs | Remotion Concurrency | **Dioxuscut Concurrency** | Scale Multiplier |
+| Server Specs | Remotion Concurrency | **Rust Motion Concurrency** | Scale Multiplier |
 |:---|:---:|:---:|:---:|
 | **4GB RAM Server** (Usable: 3GB) | not measured | **21 concurrent renders** | **not comparable** |
 | **8GB RAM Server** (Usable: 7GB) | not measured | **49 concurrent renders** | **not comparable** |
@@ -37,7 +37,7 @@ Features exercised:
 - Fullscreen vignette edge falloff (`SceneFilter::Vignette`)
 - Animated procedural neon laser grid
 
-**Dioxuscut 1080p Result**:
+**Rust Motion 1080p Result**:
 - Duration: **9.683s** (180 frames @ 30fps)
 - Average Throughput: **18.6 FPS**
 - Peak Memory: **277.77 MB** (Completely immune to browser GC spikes)
@@ -48,7 +48,7 @@ Features exercised:
 
 Calculated using official AWS Lambda pricing ($0.0000133334/GB-s on ARM64 Graviton) across batch production runs:
 
-| Metric | Remotion model | **Dioxuscut model** | Status |
+| Metric | Remotion model | **Rust Motion model** | Status |
 |:---|:---:|:---:|:---:|
 | **Allocated memory / render time** | configured inputs | **configured inputs** | model input, not measured infrastructure |
 | **10,000 Videos Cost** | **$4.6** | **$0.15** | model output only |
@@ -60,6 +60,6 @@ Calculated using official AWS Lambda pricing ($0.0000133334/GB-s on ARM64 Gravit
 
 ## 🏆 Final Verdict
 
-1. **Efficiency**: Dioxuscut's native RSS is measured here; Remotion RSS requires a matching profile before a memory multiplier can be claimed.
+1. **Efficiency**: Rust Motion's native RSS is measured here; Remotion RSS requires a matching profile before a memory multiplier can be claimed.
 2. **Speed**: only paired workloads with recorded timings receive a speedup claim; the 1080p VFX result is reported without an unsupported Remotion comparison.
 3. **Economics**: cost figures remain model assumptions from `cost_calculator.py`; container size, cold start, and Remotion infrastructure RSS are not measured by this harness.

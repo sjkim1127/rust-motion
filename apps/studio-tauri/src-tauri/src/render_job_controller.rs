@@ -1,4 +1,4 @@
-use dioxuscut_project::{JobStatus, JobStore, Project, RenderJob};
+use rust_motion_project::{JobStatus, JobStore, Project, RenderJob};
 use std::sync::{Arc, Mutex};
 
 /// Host-neutral adapter for the Tauri render-job commands.
@@ -68,8 +68,8 @@ impl RenderJobController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dioxuscut_project::{BackendKind, ProjectSettings};
-    use dioxuscut_rasterizer::{
+    use rust_motion_project::{BackendKind, ProjectSettings};
+    use rust_motion_rasterizer::{
         render_to_ffmpeg_pipe, BrowserFrameBackend, Color, PipeConfig, RenderControl, Scene,
         SceneNode, TinySkiaBackend, VideoCodec, WebFrameRequest,
     };
@@ -92,7 +92,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!(
-            "dioxuscut_tauri_smoke_{}_{}.gif",
+            "rust_motion_tauri_smoke_{}_{}.gif",
             std::process::id(),
             nonce
         ))
@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn real_chrome_worker_frames_decode_in_rust_backend() {
-        let Ok(url) = std::env::var("DIOXUSCUT_BROWSER_SMOKE_URL") else {
+        let Ok(url) = std::env::var("RUST_MOTION_BROWSER_SMOKE_URL") else {
             return;
         };
         let worker =

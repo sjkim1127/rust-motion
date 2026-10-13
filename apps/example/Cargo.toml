@@ -1,6 +1,6 @@
 [package]
 name        = "example"
-description = "Dioxuscut Hello World example composition"
+description = "Rust Motion Hello World example composition"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -15,16 +15,16 @@ path = "src/main.rs"
 [dependencies]
 dioxus              = { workspace = true }
 dioxus-web          = { workspace = true }
-dioxuscut-core      = { workspace = true }
-dioxuscut-animation = { workspace = true }
-dioxuscut-player    = { workspace = true }
-dioxuscut-transitions = { workspace = true }
-dioxuscut-shapes      = { workspace = true, features = ["dioxus"] }
+rust-motion-core      = { workspace = true }
+rust-motion-animation = { workspace = true }
+rust-motion-player    = { workspace = true }
+rust-motion-transitions = { workspace = true }
+rust-motion-shapes      = { workspace = true, features = ["dioxus"] }
 tracing-subscriber  = { workspace = true }
 serde               = { workspace = true }
 serde_json          = { workspace = true }
 
 [features]
 default = []
-web     = ["dioxus/web", "dioxuscut-core/web"]
-desktop = ["dioxus/desktop", "dioxuscut-core/desktop"]
+web     = ["dioxus/web", "rust-motion-core/web"]
+desktop = ["dioxus/desktop", "rust-motion-core/desktop"]

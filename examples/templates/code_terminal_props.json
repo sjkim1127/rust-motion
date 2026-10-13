@@ -1,5 +1,5 @@
 {
-  "terminal_title": "dioxuscut — zsh — 80x24",
-  "command": "cargo run --release -p dioxuscut-cli",
+  "terminal_title": "rust-motion — zsh — 80x24",
+  "command": "cargo run --release -p rust-motion-cli",
   "bg": "#0c0e17"
 }

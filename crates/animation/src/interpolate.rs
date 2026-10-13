@@ -5,7 +5,7 @@
 //!
 //! # Example
 //! ```rust
-//! use dioxuscut_animation::interpolate::{interpolate, InterpolateOptions};
+//! use rust_motion_animation::interpolate::{interpolate, InterpolateOptions};
 //!
 //! // Scale from 0→1 as frame goes 0→30
 //! let frame = 15.0_f64;

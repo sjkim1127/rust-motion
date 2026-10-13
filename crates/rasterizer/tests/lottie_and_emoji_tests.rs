@@ -1,4 +1,4 @@
-use dioxuscut_rasterizer::{
+use rust_motion_rasterizer::{
     backend::{FrameConfig, RasterizerBackend},
     Color, LoopBehavior, Scene, SceneNode, TinySkiaBackend,
 };
@@ -106,7 +106,7 @@ fn test_render_scene_with_lottie() {
     let lottie_path = temp_dir.join("test_pulse.json");
     std::fs::write(&lottie_path, lottie_json).unwrap();
 
-    let metadata = dioxuscut_rasterizer::get_lottie_metadata(&lottie_path)
+    let metadata = rust_motion_rasterizer::get_lottie_metadata(&lottie_path)
         .expect("Lottie metadata should load");
     assert_eq!(metadata.width, 100.0);
     assert_eq!(metadata.height, 100.0);

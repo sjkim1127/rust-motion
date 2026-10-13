@@ -3,7 +3,7 @@
 //! Tests edge cases: empty composition name, missing props file, zero/odd resolutions,
 //! zero FPS/duration, and malformed props JSON.
 
-use dioxuscut_cli::{
+use rust_motion_cli::{
     execute_render_command, validate_composition_source, validate_render_params, RenderBackend,
     RenderRequest, ValidationError,
 };
@@ -100,7 +100,7 @@ fn test_boundary_zero_duration() {
 #[tokio::test]
 async fn test_boundary_valid_props_file_check() {
     let temp_dir = std::env::temp_dir().join(format!(
-        "dioxuscut_test_boundary_{}",
+        "rust_motion_test_boundary_{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -119,7 +119,7 @@ async fn test_boundary_valid_props_file_check() {
 #[tokio::test]
 async fn test_boundary_malformed_props_fail_before_rendering() {
     let temp_dir = std::env::temp_dir().join(format!(
-        "dioxuscut_test_malformed_props_{}",
+        "rust_motion_test_malformed_props_{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -141,7 +141,7 @@ async fn test_boundary_malformed_props_fail_before_rendering() {
         fps: 30.0,
         duration: 1,
         backend: RenderBackend::Native,
-        codec: dioxuscut_cli::RenderCodec::H264,
+        codec: rust_motion_cli::RenderCodec::H264,
         frame_start: 0,
         frame_end: None,
         frame_step: 1,
@@ -149,7 +149,7 @@ async fn test_boundary_malformed_props_fail_before_rendering() {
         timeout_seconds: None,
         crf: 18,
         preset: "fast".into(),
-        hw_accel: dioxuscut_rasterizer::HwAccel::Disabled,
+        hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
         sandbox_roots: Vec::new(),
         permissive: false,
     };
@@ -175,7 +175,7 @@ async fn test_boundary_missing_audio_fails_before_rendering() {
         fps: 30.0,
         duration: 1,
         backend: RenderBackend::Native,
-        codec: dioxuscut_cli::RenderCodec::H264,
+        codec: rust_motion_cli::RenderCodec::H264,
         frame_start: 0,
         frame_end: None,
         frame_step: 1,
@@ -183,7 +183,7 @@ async fn test_boundary_missing_audio_fails_before_rendering() {
         timeout_seconds: None,
         crf: 18,
         preset: "fast".into(),
-        hw_accel: dioxuscut_rasterizer::HwAccel::Disabled,
+        hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
         sandbox_roots: Vec::new(),
         permissive: false,
     };
