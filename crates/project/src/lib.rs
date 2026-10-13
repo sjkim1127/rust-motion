@@ -25,6 +25,12 @@ pub struct Project {
     pub assets: Vec<AssetRef>,
     #[serde(default)]
     pub tracks: Vec<Track>,
+    /// Named frame markers used by composition timing APIs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<TimeEvent>,
+    /// Optional project audio asset to audition while retiming named events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voice_over_asset_id: Option<String>,
 }
 
 fn default_props() -> serde_json::Value {
@@ -137,6 +143,14 @@ pub struct Clip {
     pub props: serde_json::Value,
 }
 
+/// A stable named point on the project frame timeline.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TimeEvent {
+    pub id: String,
+    pub frame: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum JobStatus {
@@ -206,6 +220,18 @@ pub enum ProjectError {
     DuplicateAssetId(String),
     #[error("project references unknown asset '{0}'")]
     UnknownAssetReference(String),
+    #[error("time event name cannot be empty")]
+    EmptyTimeEventId,
+    #[error("time event '{0}' is duplicated")]
+    DuplicateTimeEvent(String),
+    #[error("time event '{event}' is at frame {frame}, outside project duration {duration}")]
+    InvalidTimeEventFrame {
+        event: String,
+        frame: u32,
+        duration: u32,
+    },
+    #[error("voice-over asset '{0}' must reference an audio asset in the project")]
+    InvalidVoiceOverAsset(String),
     #[error("project asset '{asset}' could not be read: {reason}")]
     AssetRead { asset: String, reason: String },
     #[error("project asset '{0}' resolves outside the project directory")]
@@ -317,6 +343,31 @@ impl Project {
             }
             if !asset_ids.insert(asset.id.as_str()) {
                 return Err(ProjectError::DuplicateAssetId(asset.id.clone()));
+            }
+        }
+        let mut event_ids = BTreeSet::new();
+        for event in &self.events {
+            if event.id.trim().is_empty() {
+                return Err(ProjectError::EmptyTimeEventId);
+            }
+            if !event_ids.insert(event.id.as_str()) {
+                return Err(ProjectError::DuplicateTimeEvent(event.id.clone()));
+            }
+            if event.frame >= self.settings.duration {
+                return Err(ProjectError::InvalidTimeEventFrame {
+                    event: event.id.clone(),
+                    frame: event.frame,
+                    duration: self.settings.duration,
+                });
+            }
+        }
+        if let Some(asset_id) = &self.voice_over_asset_id {
+            if !self
+                .assets
+                .iter()
+                .any(|asset| asset.id == *asset_id && asset.kind == AssetKind::Audio)
+            {
+                return Err(ProjectError::InvalidVoiceOverAsset(asset_id.clone()));
             }
         }
         for track in &self.tracks {
@@ -1243,6 +1294,8 @@ mod tests {
             props: serde_json::json!({"title":"hello"}),
             assets: vec![],
             tracks: vec![],
+            events: vec![],
+            voice_over_asset_id: None,
         }
     }
     #[test]

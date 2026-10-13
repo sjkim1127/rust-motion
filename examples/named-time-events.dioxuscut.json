@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "composition": "NamedTimeEventsDemo",
+  "settings": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 150,
+    "backend": "browser"
+  },
+  "props": {},
+  "assets": [],
+  "tracks": [],
+  "events": [
+    { "id": "voice_start", "frame": 30 },
+    { "id": "voice_end", "frame": 90 }
+  ],
+  "voice_over_asset_id": null
+}

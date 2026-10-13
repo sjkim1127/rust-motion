@@ -12,6 +12,7 @@ pub use composition::{
     CompositionRegistryError, CyberpunkGridComposition, HelloWorldComposition,
     KaraokeCaptionsComposition, NativeComposition, NativeCompositionContext,
     PodcastWaveformComposition, PreparedComposition, ShapesAndFiltersComposition,
+    TimeEventSchedule,
 };
 pub use dioxuscut_media::{
     get_audio_metadata, get_video_metadata, parse_media, static_file, AudioMetadata,
@@ -144,6 +145,8 @@ mod project_asset_tests {
             props: serde_json::json!({}),
             assets: vec![],
             tracks: vec![],
+            events: vec![],
+            voice_over_asset_id: None,
         }
     }
 
@@ -187,6 +190,8 @@ mod project_asset_tests {
                 },
             ],
             tracks: vec![],
+            events: vec![],
+            voice_over_asset_id: None,
         };
 
         assert_eq!(
@@ -385,6 +390,7 @@ struct ProjectTimelineComposition {
 struct ProjectTimelinePrepared<'a> {
     composition: &'a ProjectTimelineComposition,
     context: NativeCompositionContext,
+    time_events: TimeEventSchedule,
 }
 
 impl dioxuscut_composition::PreparedComposition for ProjectTimelinePrepared<'_> {
@@ -403,8 +409,9 @@ impl dioxuscut_composition::PreparedComposition for ProjectTimelinePrepared<'_> 
                 duration_in_frames: clip.duration,
                 ..self.context
             };
+            let clip_events = self.time_events.within_clip(clip.start, clip.duration);
             let prepared = composition
-                .prepare(&clip.props, clip_context)
+                .prepare_with_time_events(&clip.props, clip_context, clip_events)
                 .map_err(|error| CompositionError::render(frame, error.to_string()))?;
             let clip_scene = prepared
                 .render(frame - clip.start)
@@ -428,8 +435,9 @@ impl dioxuscut_composition::PreparedComposition for ProjectTimelinePrepared<'_> 
                 duration_in_frames: clip.duration,
                 ..self.context
             };
+            let clip_events = self.time_events.within_clip(clip.start, clip.duration);
             let prepared = composition
-                .prepare(&clip.props, clip_context)
+                .prepare_with_time_events(&clip.props, clip_context, clip_events)
                 .map_err(|error| CompositionError::render(clip.start, error.to_string()))?;
             let clip_tracks = match prepared.audio_tracks()? {
                 Some(tracks) => tracks,
@@ -467,6 +475,20 @@ impl Composition for ProjectTimelineComposition {
         Ok(Box::new(ProjectTimelinePrepared {
             composition: self,
             context,
+            time_events: TimeEventSchedule::default(),
+        }))
+    }
+
+    fn prepare_with_time_events(
+        &self,
+        _props: &serde_json::Value,
+        context: NativeCompositionContext,
+        time_events: TimeEventSchedule,
+    ) -> Result<Box<dyn dioxuscut_composition::PreparedComposition + '_>, CompositionError> {
+        Ok(Box::new(ProjectTimelinePrepared {
+            composition: self,
+            context,
+            time_events,
         }))
     }
 }
@@ -1199,10 +1221,13 @@ pub async fn execute_project_render_command_with_control(
     project: &Project,
     control: dioxuscut_rasterizer::RenderControl,
 ) -> anyhow::Result<()> {
+    let time_events = TimeEventSchedule::new(project.events.clone())
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     if !uses_project_timeline(request.backend, !project.tracks.is_empty()) {
-        return execute_render_command_with_registry_and_control(
+        return execute_render_command_with_registry_and_time_events_and_control(
             request,
             &built_in_registry(),
+            time_events,
             control,
         )
         .await;
@@ -1217,7 +1242,13 @@ pub async fn execute_project_render_command_with_control(
             .collect(),
         registry: built_in_registry(),
     })?;
-    execute_render_command_with_registry_and_control(request, &registry, control).await
+    execute_render_command_with_registry_and_time_events_and_control(
+        request,
+        &registry,
+        time_events,
+        control,
+    )
+    .await
 }
 
 fn uses_project_timeline(backend: RenderBackend, has_tracks: bool) -> bool {
@@ -1288,6 +1319,21 @@ pub async fn execute_render_command_with_control(
 pub async fn execute_render_command_with_registry_and_control(
     request: &RenderRequest,
     registry: &CompositionRegistry,
+    control: dioxuscut_rasterizer::RenderControl,
+) -> anyhow::Result<()> {
+    execute_render_command_with_registry_and_time_events_and_control(
+        request,
+        registry,
+        TimeEventSchedule::default(),
+        control,
+    )
+    .await
+}
+
+async fn execute_render_command_with_registry_and_time_events_and_control(
+    request: &RenderRequest,
+    registry: &CompositionRegistry,
+    time_events: TimeEventSchedule,
     control: dioxuscut_rasterizer::RenderControl,
 ) -> anyhow::Result<()> {
     let render_started = std::time::Instant::now();
@@ -1387,7 +1433,7 @@ pub async fn execute_render_command_with_registry_and_control(
             })?
     };
 
-    let prepared = composition.prepare(&props, context)?;
+    let prepared = composition.prepare_with_time_events(&props, context, time_events.clone())?;
 
     // Validate the first frame before starting FFmpeg. Dynamic compositions
     // therefore report syntax, type, and API errors without creating an output.
@@ -1549,6 +1595,16 @@ pub async fn execute_render_command_with_registry_and_control(
                     .unwrap_or("BrowserComposition"),
             )?;
             rasterizer.set_props(props.clone())?;
+            rasterizer.set_time_events(
+                time_events
+                    .to_events()
+                    .into_iter()
+                    .map(|event| dioxuscut_rasterizer::WebTimeEvent {
+                        id: event.id,
+                        frame: event.frame,
+                    })
+                    .collect(),
+            )?;
             if let Some(format) = request.codec.still_format() {
                 render_still_fallible_scaled(
                     &rasterizer,
