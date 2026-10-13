@@ -1929,6 +1929,8 @@ dependencies = [
  "dioxuscut-rasterizer",
  "dioxuscut-renderer",
  "dioxuscut-shapes",
+ "filetime",
+ "futures-util",
  "image",
  "notify",
  "reqwest",
@@ -1936,8 +1938,10 @@ dependencies = [
  "serde",
  "serde_json",
  "taffy",
+ "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-tungstenite",
  "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
@@ -1948,6 +1952,7 @@ name = "dioxuscut-composition"
 version = "0.2.0"
 dependencies = [
  "dioxuscut-animation",
+ "dioxuscut-project",
  "dioxuscut-rasterizer",
  "serde",
  "serde_json",

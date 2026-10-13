@@ -131,7 +131,7 @@ fn test_scene_loop_zero_duration_guard_never_divides_by_zero() {
         Ok(())
     };
 
-    // Duration = 0 must be clamped to 1, avoiding panic
+    // A zero-duration loop emits nothing and must not divide by zero.
     let looper = SceneLoop::new(0, child);
 
     for &f in &[0, 1, 5, 100, 1_000_000, u32::MAX] {
@@ -143,21 +143,11 @@ fn test_scene_loop_zero_duration_guard_never_divides_by_zero() {
         let mut scene = Scene::new();
         let res = looper.emit(ctx, &Value::Null, &mut scene);
         assert!(res.is_ok(), "Zero-duration loop must not fail or panic");
+        assert!(scene.nodes.is_empty());
     }
 
     let results = captured.lock().unwrap().clone();
-    // With clamped duration = 1, local frame is always f % 1 = 0
-    assert_eq!(
-        results,
-        vec![
-            (0, 0),
-            (0, 1),
-            (0, 5),
-            (0, 100),
-            (0, 1_000_000),
-            (0, u32::MAX),
-        ]
-    );
+    assert!(results.is_empty());
 }
 
 // ── 4. Bounded Repetitions (times: u32) ────────────────────────────────────────

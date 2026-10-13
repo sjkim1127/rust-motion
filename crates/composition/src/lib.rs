@@ -4,6 +4,7 @@ pub mod layout;
 pub mod mesh3d;
 pub mod safe_area;
 mod scene_emitter;
+mod time_events;
 
 pub use layout::{LayoutBox, LayoutChild, SceneFlex, SceneGrid};
 pub use mesh3d::{Mesh3DPrimitive, SceneMesh3D};
@@ -16,6 +17,7 @@ pub use scene_emitter::{
     SceneSeries, SceneSeriesEntry, SceneStack, SceneText, SceneTextBlock, SceneTrail,
     SceneTrailOpacity, SceneTransitionSeries, TransitionKind, TransitionTiming,
 };
+pub use time_events::{TimeEventError, TimeEventSchedule};
 
 use dioxuscut_animation::{spring_with_options, SpringConfig, SpringOptions};
 use dioxuscut_rasterizer::{
@@ -92,6 +94,18 @@ pub trait Composition: Send + Sync {
         props: &Value,
         context: NativeCompositionContext,
     ) -> Result<Box<dyn PreparedComposition + '_>, CompositionError>;
+
+    /// Prepare against the project's immutable named-event schedule.
+    /// Existing compositions remain compatible and can opt in by overriding
+    /// this method or by implementing [`NativeComposition::render_with_time_events`].
+    fn prepare_with_time_events(
+        &self,
+        props: &Value,
+        context: NativeCompositionContext,
+        _events: TimeEventSchedule,
+    ) -> Result<Box<dyn PreparedComposition + '_>, CompositionError> {
+        self.prepare(props, context)
+    }
 }
 
 /// A browser-free Rust composition that produces one rasterizer scene per frame.
@@ -107,12 +121,25 @@ pub trait NativeComposition: Send + Sync {
         props: &Value,
         context: NativeCompositionContext,
     ) -> Result<Scene, CompositionError>;
+
+    /// Render with a prepared named-event schedule. The default preserves
+    /// existing frame-based compositions unchanged.
+    fn render_with_time_events(
+        &self,
+        frame: u32,
+        props: &Value,
+        context: NativeCompositionContext,
+        _events: &TimeEventSchedule,
+    ) -> Result<Scene, CompositionError> {
+        self.render(frame, props, context)
+    }
 }
 
 struct PreparedNativeComposition<'a, C> {
     composition: &'a C,
     props: Value,
     context: NativeCompositionContext,
+    events: TimeEventSchedule,
 }
 
 impl<C> PreparedComposition for PreparedNativeComposition<'_, C>
@@ -120,7 +147,8 @@ where
     C: NativeComposition,
 {
     fn render(&self, frame: u32) -> Result<Scene, CompositionError> {
-        self.composition.render(frame, &self.props, self.context)
+        self.composition
+            .render_with_time_events(frame, &self.props, self.context, &self.events)
     }
 }
 
@@ -141,6 +169,21 @@ where
             composition: self,
             props: props.clone(),
             context,
+            events: TimeEventSchedule::default(),
+        }))
+    }
+
+    fn prepare_with_time_events(
+        &self,
+        props: &Value,
+        context: NativeCompositionContext,
+        events: TimeEventSchedule,
+    ) -> Result<Box<dyn PreparedComposition + '_>, CompositionError> {
+        Ok(Box::new(PreparedNativeComposition {
+            composition: self,
+            props: props.clone(),
+            context,
+            events,
         }))
     }
 }
@@ -201,6 +244,9 @@ pub fn built_in_registry() -> CompositionRegistry {
         .register(HelloWorldComposition)
         .expect("built-in composition IDs must be unique");
     registry
+        .register(NamedTimeEventsDemo)
+        .expect("built-in composition IDs must be unique");
+    registry
         .register(SpringRectsComposition)
         .expect("built-in composition IDs must be unique");
     registry
@@ -229,6 +275,69 @@ pub fn built_in_registry() -> CompositionRegistry {
 
 /// Built-in native composition used by the quickstart and acceptance tests.
 pub struct HelloWorldComposition;
+
+/// Small native sample showing how named event positions drive frame output.
+pub struct NamedTimeEventsDemo;
+
+impl NativeComposition for NamedTimeEventsDemo {
+    fn id(&self) -> &str {
+        "NamedTimeEventsDemo"
+    }
+
+    fn render(
+        &self,
+        frame: u32,
+        props: &Value,
+        context: NativeCompositionContext,
+    ) -> Result<Scene, CompositionError> {
+        self.render_with_time_events(frame, props, context, &TimeEventSchedule::default())
+    }
+
+    fn render_with_time_events(
+        &self,
+        frame: u32,
+        _props: &Value,
+        context: NativeCompositionContext,
+        events: &TimeEventSchedule,
+    ) -> Result<Scene, CompositionError> {
+        let start = events
+            .wait_until("voice_start")
+            .map_err(|error| CompositionError::render(frame, error.to_string()))?;
+        let duration = events
+            .duration_between("voice_start", "voice_end")
+            .map_err(|error| CompositionError::render(frame, error.to_string()))?;
+        let progress =
+            (frame.saturating_sub(start) as f32 / duration.max(1) as f32).clamp(0.0, 1.0);
+        let width = context.width as f32;
+        let height = context.height as f32;
+        let padding = width * 0.1;
+        let bar_width = width - padding * 2.0;
+        let bar_height = (height * 0.08).max(12.0);
+        let y = (height - bar_height) / 2.0;
+        let mut scene = Scene::new();
+        scene.push(SceneNode::Rect {
+            x: padding,
+            y,
+            w: bar_width,
+            h: bar_height,
+            fill: Color::rgb(30, 41, 59),
+            stroke: None,
+            stroke_width: 0.0,
+            corner_radius: bar_height / 2.0,
+        });
+        scene.push(SceneNode::Rect {
+            x: padding,
+            y,
+            w: bar_width * progress,
+            h: bar_height,
+            fill: Color::rgb(249, 115, 62),
+            stroke: None,
+            stroke_width: 0.0,
+            corner_radius: bar_height / 2.0,
+        });
+        Ok(scene)
+    }
+}
 
 /// Deterministic 2D parity fixture shared with the browser `SpringRects`
 /// composition. It deliberately uses only opaque rectangles so CPU, WGPU,
