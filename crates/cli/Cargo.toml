@@ -45,6 +45,8 @@ taffy              = { workspace = true }
 dioxuscut-renderer = { workspace = true }
 reqwest            = { workspace = true }
 serde_json         = { workspace = true }
+futures-util       = "0.3"
+tokio-tungstenite   = "0.24"
 
 [[test]]
 name    = "e2e_cli_subprocess"

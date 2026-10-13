@@ -84,8 +84,8 @@ pub struct ServeConfig {
 
 #[derive(Clone)]
 struct AppState {
-    /// Sender side of the broadcast channel.  Receivers get new PNG frames.
-    tx: broadcast::Sender<Arc<FrameMsg>>,
+    /// Source-change notifications; each client re-renders its current frame.
+    tx: broadcast::Sender<()>,
     config: Arc<ServeConfig>,
     frame_cache: Arc<Mutex<VecDeque<CachedFrame>>>,
 }
@@ -97,15 +97,6 @@ struct CachedFrame {
     png: Arc<Vec<u8>>,
 }
 
-/// A rendered frame pushed to all connected WebSocket clients.
-#[derive(Debug, Clone)]
-struct FrameMsg {
-    /// Base64-encoded PNG bytes.
-    png_b64: String,
-    /// Composition frame index that was rendered.
-    frame: u32,
-}
-
 // ──────────────────────────────────────────────────────────────
 // Entry point
 // ──────────────────────────────────────────────────────────────
@@ -114,13 +105,15 @@ struct FrameMsg {
 pub async fn run(config: ServeConfig) -> anyhow::Result<()> {
     let config = Arc::new(config);
     let frame_cache = Arc::new(Mutex::new(VecDeque::new()));
-    let (tx, _) = broadcast::channel::<Arc<FrameMsg>>(CHANNEL_CAPACITY);
+    let (tx, _) = broadcast::channel::<()>(CHANNEL_CAPACITY);
 
     // Render the initial frame immediately so the page is never blank.
-    render_and_broadcast(&tx, &config, config.default_frame, &frame_cache);
+    if let Err(error) = cached_frame(&config, config.default_frame, &frame_cache) {
+        error!(frame = config.default_frame, error = %error, "Initial frame render failed");
+    }
 
     // Spawn the file-watcher task.
-    spawn_watcher(tx.clone(), config.clone(), frame_cache.clone());
+    spawn_watcher(tx.clone(), config.clone());
 
     let state = AppState {
         tx,
@@ -128,12 +121,7 @@ pub async fn run(config: ServeConfig) -> anyhow::Result<()> {
         frame_cache,
     };
 
-    let app = Router::new()
-        .route("/", get(index_handler))
-        .route("/health", get(health_handler))
-        .route("/frame", get(frame_handler))
-        .route("/ws", get(ws_handler))
-        .with_state(state);
+    let app = serve_router(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], config.port));
     info!(
@@ -146,6 +134,15 @@ pub async fn run(config: ServeConfig) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+fn serve_router(state: AppState) -> Router {
+    Router::new()
+        .route("/", get(index_handler))
+        .route("/health", get(health_handler))
+        .route("/frame", get(frame_handler))
+        .route("/ws", get(ws_handler))
+        .with_state(state)
 }
 
 async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
@@ -213,24 +210,29 @@ async fn frame_handler(
 // Render helper
 // ──────────────────────────────────────────────────────────────
 
-/// Render a single frame and broadcast the PNG to all connected clients.
-fn render_and_broadcast(
-    tx: &broadcast::Sender<Arc<FrameMsg>>,
+/// Render a frame and send it only to the WebSocket connection requesting it.
+async fn render_and_send(
+    socket: &mut WebSocket,
     config: &ServeConfig,
     frame: u32,
     cache: &Mutex<VecDeque<CachedFrame>>,
-) {
+) -> anyhow::Result<()> {
     match cached_frame(config, frame, cache) {
         Ok(png_bytes) => {
             let png_b64 = BASE64.encode(&*png_bytes);
-            let msg = Arc::new(FrameMsg { png_b64, frame });
-            // It's OK if there are no receivers yet.
-            let _ = tx.send(msg);
+            let payload = serde_json::json!({
+                "type": "frame",
+                "data": png_b64,
+                "frame": frame,
+            })
+            .to_string();
+            socket.send(Message::Text(payload)).await?;
         }
         Err(e) => {
             error!(frame, error = %e, "Render failed");
         }
     }
+    Ok(())
 }
 
 fn source_stamp(config: &ServeConfig) -> u128 {
@@ -348,23 +350,15 @@ fn load_props(config: &ServeConfig) -> anyhow::Result<serde_json::Value> {
 // File watcher
 // ──────────────────────────────────────────────────────────────
 
-fn spawn_watcher(
-    tx: broadcast::Sender<Arc<FrameMsg>>,
-    config: Arc<ServeConfig>,
-    cache: Arc<Mutex<VecDeque<CachedFrame>>>,
-) {
+fn spawn_watcher(tx: broadcast::Sender<()>, config: Arc<ServeConfig>) {
     std::thread::spawn(move || {
-        if let Err(e) = watch_loop(tx, config, cache) {
+        if let Err(e) = watch_loop(tx, config) {
             error!(error = %e, "File watcher terminated with error");
         }
     });
 }
 
-fn watch_loop(
-    tx: broadcast::Sender<Arc<FrameMsg>>,
-    config: Arc<ServeConfig>,
-    cache: Arc<Mutex<VecDeque<CachedFrame>>>,
-) -> anyhow::Result<()> {
+fn watch_loop(tx: broadcast::Sender<()>, config: Arc<ServeConfig>) -> anyhow::Result<()> {
     let (notify_tx, notify_rx) = std::sync::mpsc::channel::<notify::Result<Event>>();
 
     let mut watcher: RecommendedWatcher = notify::recommended_watcher(move |res| {
@@ -406,11 +400,8 @@ fn watch_loop(
         // Drain rapid successive events (debounce).
         while notify_rx.recv_timeout(debounce).is_ok() {}
 
-        info!(
-            "Source changed — re-rendering frame {}",
-            config.default_frame
-        );
-        render_and_broadcast(&tx, &config, config.default_frame, &cache);
+        info!("Source changed — notifying clients to re-render their current frames");
+        let _ = tx.send(());
     }
 
     Ok(())
@@ -468,50 +459,37 @@ fn parse_ws_seek(value: &serde_json::Value) -> Result<Option<u32>, u64> {
 /// Handle an individual WebSocket connection.
 async fn handle_socket(
     mut socket: WebSocket,
-    tx: broadcast::Sender<Arc<FrameMsg>>,
+    tx: broadcast::Sender<()>,
     config: Arc<ServeConfig>,
     requested_frame: u32,
     frame_cache: Arc<Mutex<VecDeque<CachedFrame>>>,
 ) {
     let mut rx = tx.subscribe();
+    let mut current_frame = requested_frame;
 
     // Send the current frame immediately on connect (render synchronously).
-    match cached_frame(&config, requested_frame, &frame_cache) {
-        Ok(png_bytes) => {
-            let png_b64 = BASE64.encode(&*png_bytes);
-            let payload = serde_json::json!({
-                "type": "frame",
-                "data": png_b64,
-                "frame": requested_frame,
-            })
-            .to_string();
-            if socket.send(Message::Text(payload)).await.is_err() {
-                return;
-            }
-        }
-        Err(e) => {
-            error!(error = %e, "Initial render failed for new WS client");
-        }
+    if render_and_send(&mut socket, &config, current_frame, &frame_cache)
+        .await
+        .is_err()
+    {
+        return;
     }
 
-    // Forward subsequent broadcast frames to this client.
+    // Refresh this client's current frame after source changes.
     loop {
         tokio::select! {
-            msg = rx.recv() => {
-                match msg {
-                    Ok(frame_msg) => {
-                        let payload = serde_json::json!({
-                            "type": "frame",
-                            "data": frame_msg.png_b64,
-                            "frame": frame_msg.frame,
-                        })
-                        .to_string();
-                        if socket.send(Message::Text(payload)).await.is_err() {
+            event = rx.recv() => {
+                match event {
+                    Ok(()) => {
+                        if render_and_send(&mut socket, &config, current_frame, &frame_cache).await.is_err() {
                             break;
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {
-                        warn!(skipped = n, "WS client lagged, skipping frames");
+                        warn!(skipped = n, "WS client lagged, refreshing its current frame");
+                        if render_and_send(&mut socket, &config, current_frame, &frame_cache).await.is_err() {
+                            break;
+                        }
                     }
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
@@ -525,7 +503,10 @@ async fn handle_socket(
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
                             match parse_ws_seek(&v) {
                                 Ok(Some(frame)) => {
-                                    render_and_broadcast(&tx, &config, frame, &frame_cache);
+                                    current_frame = frame;
+                                    if render_and_send(&mut socket, &config, current_frame, &frame_cache).await.is_err() {
+                                        break;
+                                    }
                                 }
                                 Err(frame) => {
                                     let payload = serde_json::json!({
@@ -749,7 +730,7 @@ fn player_html(port: u16, default_frame: u32, width: u32, height: u32) -> String
 
 #[cfg(test)]
 mod tests {
-    use super::parse_ws_seek;
+    use super::{parse_ws_seek, serve_router, AppState, ServeConfig, CHANNEL_CAPACITY};
     use serde_json::json;
 
     #[test]
@@ -767,5 +748,114 @@ mod tests {
             parse_ws_seek(&json!({ "seek": u64::from(u32::MAX) + 1 })),
             Err(u64::from(u32::MAX) + 1)
         );
+    }
+
+    #[cfg(feature = "rhai")]
+    #[tokio::test]
+    async fn websocket_seeks_and_source_refreshes_are_connection_local() {
+        use futures_util::{SinkExt, StreamExt};
+        use std::{
+            collections::VecDeque,
+            fs,
+            sync::{Arc, Mutex},
+            time::Duration,
+        };
+        use tokio_tungstenite::{connect_async, tungstenite::Message as ClientMessage};
+
+        async fn next_json<S>(
+            socket: &mut tokio_tungstenite::WebSocketStream<S>,
+        ) -> serde_json::Value
+        where
+            S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+        {
+            match tokio::time::timeout(Duration::from_secs(5), socket.next())
+                .await
+                .expect("timed out waiting for WebSocket frame")
+                .expect("WebSocket closed")
+                .expect("WebSocket receive failed")
+            {
+                ClientMessage::Text(text) => serde_json::from_str(&text).unwrap(),
+                message => panic!("expected a text frame, got {message:?}"),
+            }
+        }
+
+        let directory = std::env::temp_dir().join(format!(
+            "rust_motion_serve_ws_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let script = directory.join("composition.rhai");
+        let props = directory.join("props.json");
+        fs::write(
+            &script,
+            "fn render(ctx, props) { let output = scene(); output.rect(0.0, 0.0, ctx.width.to_float(), ctx.height.to_float(), props.color); output }",
+        )
+        .unwrap();
+        fs::write(&props, r##"{"color":"#ff0000"}"##).unwrap();
+
+        let config = Arc::new(ServeConfig {
+            script,
+            props: Some(props),
+            port: 0,
+            default_frame: 0,
+            width: 16,
+            height: 16,
+            fps: 30.0,
+            duration: 100,
+        });
+        let (tx, _) = tokio::sync::broadcast::channel::<()>(CHANNEL_CAPACITY);
+        let app = serve_router(AppState {
+            tx: tx.clone(),
+            config,
+            frame_cache: Arc::new(Mutex::new(VecDeque::new())),
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let (mut client_a, _) = connect_async(format!("ws://{address}/ws?frame=10"))
+            .await
+            .unwrap();
+        let (mut client_b, _) = connect_async(format!("ws://{address}/ws?frame=50"))
+            .await
+            .unwrap();
+        assert_eq!(next_json(&mut client_a).await["frame"], 10);
+        assert_eq!(next_json(&mut client_b).await["frame"], 50);
+
+        client_a
+            .send(ClientMessage::Text(r#"{"seek":20}"#.into()))
+            .await
+            .unwrap();
+        assert_eq!(next_json(&mut client_a).await["frame"], 20);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), client_b.next())
+                .await
+                .is_err()
+        );
+
+        client_b
+            .send(ClientMessage::Text(r#"{"seek":70}"#.into()))
+            .await
+            .unwrap();
+        assert_eq!(next_json(&mut client_b).await["frame"], 70);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), client_a.next())
+                .await
+                .is_err()
+        );
+
+        tx.send(()).unwrap();
+        let (frame_a, frame_b) = tokio::join!(next_json(&mut client_a), next_json(&mut client_b));
+        assert_eq!(frame_a["frame"], 20);
+        assert_eq!(frame_b["frame"], 70);
+
+        server.abort();
+        let _ = fs::remove_dir_all(directory);
     }
 }
