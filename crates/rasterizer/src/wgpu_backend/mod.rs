@@ -204,6 +204,12 @@ impl WgpuBackend {
         self
     }
 
+    /// Configure the rendered Lottie frame cache budget in bytes.
+    pub fn with_lottie_cache_bytes(mut self, max_bytes: usize) -> Self {
+        self.fallback = self.fallback.with_lottie_cache_bytes(max_bytes);
+        self
+    }
+
     /// Number of R8 atlas bytes uploaded since backend creation.
     pub fn text_atlas_upload_bytes(&self) -> u64 {
         self.text_atlas_upload_bytes.load(Ordering::Relaxed)

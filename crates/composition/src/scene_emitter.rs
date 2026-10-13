@@ -231,14 +231,17 @@ impl<E: SceneEmitter> SceneEmitter for SceneSeries<E> {
     ) -> Result<(), CompositionError> {
         let mut current_start: i64 = 0;
         for entry in &self.entries {
-            let from = (current_start + entry.offset as i64).max(0) as u32;
-            let end = from.saturating_add(entry.duration_in_frames);
-            if context.frame >= from && context.frame < end {
-                entry
-                    .emitter
-                    .emit(context.with_local_frame(context.frame - from), props, scene)?;
+            let from = current_start.saturating_add(i64::from(entry.offset)).max(0);
+            let end = from.saturating_add(i64::from(entry.duration_in_frames));
+            let frame = i64::from(context.frame);
+            if frame >= from && frame < end {
+                entry.emitter.emit(
+                    context.with_local_frame((frame - from) as u32),
+                    props,
+                    scene,
+                )?;
             }
-            current_start = from as i64 + entry.duration_in_frames as i64;
+            current_start = end;
         }
         Ok(())
     }
@@ -686,7 +689,7 @@ pub struct SceneLinearGradient {
 /// Equivalent to Remotion's `<Loop durationInFrames={n} times={m}>` component.
 ///
 /// # Fields
-/// - `duration_in_frames`: length of one loop iteration in frames
+/// - `duration_in_frames`: length of one loop iteration in frames (0 emits no content)
 /// - `times`: number of repetitions (0 = infinite)
 /// - `child`: the emitter to loop
 #[derive(Debug, Clone, PartialEq)]
@@ -738,7 +741,11 @@ impl<E: SceneEmitter> SceneEmitter for SceneLoop<E> {
         props: &Value,
         scene: &mut Scene,
     ) -> Result<(), CompositionError> {
-        let duration = self.duration_in_frames.max(1);
+        if self.duration_in_frames == 0 {
+            return Ok(());
+        }
+
+        let duration = self.duration_in_frames;
         let frame = context.frame;
 
         // If times > 0, check if we've exceeded the total duration
@@ -1455,6 +1462,69 @@ mod tests {
     }
 
     #[test]
+    fn series_keeps_later_entries_outside_the_u32_frame_domain() {
+        let series = SceneSeries::new()
+            .sequence(u32::MAX, frame_text())
+            .sequence_with_offset(1, 1, frame_text())
+            .sequence_with_offset(1, -1, frame_text());
+        let mut scene = Scene::new();
+
+        series
+            .emit(
+                SceneFrameContext::new(0, context()),
+                &Value::Null,
+                &mut scene,
+            )
+            .unwrap();
+
+        assert_eq!(scene.nodes.len(), 1);
+        assert!(matches!(
+            &scene.nodes[0],
+            SceneNode::Text { content, .. } if content == "0"
+        ));
+    }
+
+    #[test]
+    fn series_does_not_wrap_after_large_positive_offset() {
+        let series = SceneSeries::new()
+            .sequence(i32::MAX as u32 + 2, frame_text())
+            .sequence_with_offset(1, i32::MAX, frame_text());
+        let mut scene = Scene::new();
+
+        series
+            .emit(
+                SceneFrameContext::new(0, context()),
+                &Value::Null,
+                &mut scene,
+            )
+            .unwrap();
+
+        assert_eq!(scene.nodes.len(), 1);
+    }
+
+    #[test]
+    fn series_can_render_a_one_frame_entry_at_u32_max() {
+        let series = SceneSeries::new()
+            .sequence(u32::MAX, frame_text())
+            .sequence_with_offset(1, 0, frame_text());
+        let mut scene = Scene::new();
+
+        series
+            .emit(
+                SceneFrameContext::new(u32::MAX, context()),
+                &Value::Null,
+                &mut scene,
+            )
+            .unwrap();
+
+        assert_eq!(scene.nodes.len(), 1);
+        assert!(matches!(
+            &scene.nodes[0],
+            SceneNode::Text { content, .. } if content == "0"
+        ));
+    }
+
+    #[test]
     fn freeze_replaces_only_the_local_frame() {
         let composition = SceneEmitterComposition::new("freeze", SceneFreeze::new(7, frame_text()));
         let scene = composition.render(42, &Value::Null, context()).unwrap();
@@ -1729,7 +1799,7 @@ mod tests {
     }
 
     #[test]
-    fn scene_loop_zero_duration_guard() {
+    fn scene_loop_zero_duration_emits_nothing_at_frames_zero_and_one() {
         let captured = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
         let captured_clone = captured.clone();
         let child = move |ctx: SceneFrameContext, _props: &Value, _scene: &mut Scene| {
@@ -1737,7 +1807,7 @@ mod tests {
             Ok(())
         };
         let looper = SceneLoop::new(0, child);
-        for frame in [0, 5, 10] {
+        for frame in [0, 1] {
             let ctx = SceneFrameContext {
                 frame,
                 global_frame: frame,
@@ -1745,9 +1815,9 @@ mod tests {
             };
             let mut scene = Scene::new();
             looper.emit(ctx, &Value::Null, &mut scene).unwrap();
+            assert!(scene.nodes.is_empty());
         }
-        // When duration is 0, duration is clamped to 1 so frame % 1 = 0
-        assert_eq!(*captured.lock().unwrap(), vec![0, 0, 0]);
+        assert!(captured.lock().unwrap().is_empty());
     }
 
     #[test]

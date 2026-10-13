@@ -13,6 +13,13 @@ pub struct WebTimelineClip {
     pub props: serde_json::Value,
 }
 
+/// A named project frame marker forwarded to browser compositions.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WebTimeEvent {
+    pub id: String,
+    pub frame: u32,
+}
+
 /// Deterministic request sent to a browser-backed renderer.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WebFrameRequest {
@@ -30,6 +37,8 @@ pub struct WebFrameRequest {
     pub assets: Vec<String>,
     #[serde(default)]
     pub timeline: Vec<WebTimelineClip>,
+    #[serde(default)]
+    pub time_events: Vec<WebTimeEvent>,
     /// Browser screenshot transport. Defaults to PNG for lossless compatibility.
     #[serde(default)]
     pub image_format: Option<String>,
@@ -230,6 +239,7 @@ mod tests {
             props: serde_json::json!({"seed": 7}),
             assets: vec![],
             timeline: vec![],
+            time_events: vec![],
             image_format: None,
             jpeg_quality: None,
             transparent: true,

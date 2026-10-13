@@ -93,6 +93,14 @@ pub struct SeriesSequenceProps {
     pub children: Element,
 }
 
+fn offset_frame(prev_cursor: u32, offset: i32) -> u32 {
+    if offset < 0 {
+        prev_cursor.saturating_sub(offset.unsigned_abs())
+    } else {
+        prev_cursor.saturating_add(offset as u32)
+    }
+}
+
 /// A single segment inside a `<Series>`.
 #[component]
 pub fn SeriesSequence(props: SeriesSequenceProps) -> Element {
@@ -102,11 +110,7 @@ pub fn SeriesSequence(props: SeriesSequenceProps) -> Element {
 
     // Determine current start frame
     let prev_cursor = coord.cursor.load(Ordering::SeqCst);
-    let start_frame = if props.offset < 0 {
-        prev_cursor.saturating_sub((-props.offset) as u32)
-    } else {
-        prev_cursor.saturating_add(props.offset as u32)
-    };
+    let start_frame = offset_frame(prev_cursor, props.offset);
 
     let duration = props.duration_in_frames;
     let next_cursor = start_frame.saturating_add(duration);
@@ -152,4 +156,21 @@ fn SeriesSequenceInner(props: SeriesSequenceInnerProps) -> Element {
         timeline.set(props.ctx);
     }
     rsx! { {props.children} }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::offset_frame;
+
+    #[test]
+    fn offset_frame_handles_signed_boundaries_without_overflow() {
+        assert_eq!(offset_frame(30, i32::MIN), 0);
+        assert_eq!(offset_frame(u32::MAX, i32::MIN), u32::MAX - (1 << 31));
+        assert_eq!(offset_frame(1, i32::MAX), 1 + i32::MAX as u32);
+    }
+
+    #[test]
+    fn offset_frame_saturates_when_negative_offset_exceeds_cursor() {
+        assert_eq!(offset_frame(5, -6), 0);
+    }
 }

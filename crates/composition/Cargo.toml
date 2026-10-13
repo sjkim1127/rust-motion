@@ -10,6 +10,7 @@ readme.workspace      = true
 
 [dependencies]
 dioxuscut-animation  = { workspace = true }
+dioxuscut-project    = { workspace = true }
 dioxuscut-rasterizer = { workspace = true }
 serde                = { workspace = true }
 serde_json           = { workspace = true }
