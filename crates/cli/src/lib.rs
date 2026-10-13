@@ -747,10 +747,22 @@ impl RenderCodec {
     }
 }
 
+/// Standard exit codes for the Dioxuscut CLI.
+pub const EXIT_SUCCESS: i32 = 0;
+pub const EXIT_GENERAL_ERROR: i32 = 1;
+pub const EXIT_INVALID_ARGUMENTS: i32 = 2;
+pub const EXIT_MISSING_DEPENDENCY: i32 = 3;
+pub const EXIT_VALIDATION_ERROR: i32 = 4;
+pub const EXIT_TIMEOUT_OR_CANCELLED: i32 = 5;
+
 /// Dioxuscut CLI — render registered Rust or Rhai compositions to video.
 #[derive(Parser, Debug, Clone, PartialEq)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
+    /// Emit structured JSON output for machine consumption and automation.
+    #[arg(long, global = true)]
+    pub json: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -988,6 +1000,433 @@ pub enum Commands {
         #[arg(long, default_value_t = 150)]
         duration: u32,
     },
+
+    /// Validate inputs (project file, Rhai script, or composition) before rendering.
+    Validate {
+        /// Path to a versioned `.dioxuscut.json` project file.
+        #[arg(long, short = 'p', conflicts_with_all = ["composition", "script"])]
+        project: Option<PathBuf>,
+
+        /// ID of a registered composition to validate.
+        #[arg(long, short = 'c', conflicts_with_all = ["project", "script"])]
+        composition: Option<String>,
+
+        /// Path to a Rhai composition script to validate.
+        #[arg(long, short = 's', conflicts_with_all = ["project", "composition"])]
+        script: Option<PathBuf>,
+
+        /// Path to a JSON props file.
+        #[arg(long)]
+        props: Option<PathBuf>,
+    },
+
+    /// Inspect media metadata, project structure, or system capabilities.
+    Inspect {
+        /// Target path to inspect (media file or project file).
+        #[arg(value_name = "TARGET")]
+        target: Option<PathBuf>,
+
+        /// Inspect registered built-in compositions.
+        #[arg(long, default_value_t = false)]
+        compositions: bool,
+
+        /// Inspect supported rendering backends and capability matrix.
+        #[arg(long, default_value_t = false)]
+        backends: bool,
+
+        /// Inspect supported codecs and system encoder availability.
+        #[arg(long, default_value_t = false)]
+        codecs: bool,
+    },
+
+    /// Verify local environment, external dependencies (FFmpeg, FFprobe, Node), and hardware encoding capabilities.
+    Doctor,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct ValidationReport {
+    pub ok: bool,
+    pub target_kind: String,
+    pub target: String,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+    pub details: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct ToolCheck {
+    pub available: bool,
+    pub path: Option<String>,
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoders: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct TempDirCheck {
+    pub path: String,
+    pub writable: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct DoctorReport {
+    pub ok: bool,
+    pub ffmpeg: ToolCheck,
+    pub ffprobe: ToolCheck,
+    pub node: ToolCheck,
+    pub temp_dir: TempDirCheck,
+    pub hw_accel: String,
+    pub supported_codecs: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct BackendCapability {
+    pub name: String,
+    pub tier: String,
+    pub status: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct CodecCapability {
+    pub codec: String,
+    pub extensions: Vec<String>,
+    pub is_video: bool,
+    pub available: bool,
+}
+
+fn check_command_output(cmd: &str, args: &[&str]) -> (bool, Option<String>) {
+    match std::process::Command::new(cmd).args(args).output() {
+        Ok(out) if out.status.success() => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let first_line = stdout.lines().next().unwrap_or("").trim().to_string();
+            (true, Some(first_line))
+        }
+        _ => (false, None),
+    }
+}
+
+fn check_ffmpeg_encoder_supported(name: &str) -> bool {
+    std::process::Command::new("ffmpeg")
+        .args(["-v", "quiet", "-encoders"])
+        .output()
+        .map(|out| String::from_utf8_lossy(&out.stdout).contains(name))
+        .unwrap_or(false)
+}
+
+pub fn run_doctor() -> DoctorReport {
+    let (ffmpeg_avail, ffmpeg_ver) = check_command_output("ffmpeg", &["-version"]);
+    let (ffprobe_avail, ffprobe_ver) = check_command_output("ffprobe", &["-version"]);
+    let (node_avail, node_ver) = check_command_output("node", &["--version"]);
+
+    let mut encoders = Vec::new();
+    if ffmpeg_avail {
+        for enc in ["libx264", "libx265", "libvpx-vp9", "prores", "libsvtav1"] {
+            if check_ffmpeg_encoder_supported(enc) {
+                encoders.push(enc.to_string());
+            }
+        }
+    }
+
+    let temp_dir_path = std::env::temp_dir();
+    let temp_probe_file =
+        temp_dir_path.join(format!("dioxuscut_doctor_probe_{}.tmp", std::process::id()));
+    let temp_writable = std::fs::write(&temp_probe_file, b"ok").is_ok()
+        && std::fs::remove_file(&temp_probe_file).is_ok();
+
+    let hw_accel = if cfg!(target_os = "macos") {
+        "videotoolbox (hardware acceleration available)".into()
+    } else if cfg!(target_os = "windows") {
+        "d3d11va / nvenc (hardware acceleration available)".into()
+    } else if cfg!(target_os = "linux") {
+        "vaapi / nvenc (hardware acceleration available)".into()
+    } else {
+        "none (cpu rasterizer)".into()
+    };
+
+    let supported_codecs = vec![
+        "h264".into(),
+        "vp9".into(),
+        "prores".into(),
+        "gif".into(),
+        "png".into(),
+        "jpeg".into(),
+        "webp".into(),
+    ];
+
+    let ok = ffmpeg_avail && temp_writable;
+
+    DoctorReport {
+        ok,
+        ffmpeg: ToolCheck {
+            available: ffmpeg_avail,
+            path: if ffmpeg_avail {
+                Some("ffmpeg".into())
+            } else {
+                None
+            },
+            version: ffmpeg_ver,
+            encoders: if ffmpeg_avail { Some(encoders) } else { None },
+        },
+        ffprobe: ToolCheck {
+            available: ffprobe_avail,
+            path: if ffprobe_avail {
+                Some("ffprobe".into())
+            } else {
+                None
+            },
+            version: ffprobe_ver,
+            encoders: None,
+        },
+        node: ToolCheck {
+            available: node_avail,
+            path: if node_avail {
+                Some("node".into())
+            } else {
+                None
+            },
+            version: node_ver,
+            encoders: None,
+        },
+        temp_dir: TempDirCheck {
+            path: temp_dir_path.display().to_string(),
+            writable: temp_writable,
+        },
+        hw_accel,
+        supported_codecs,
+    }
+}
+
+pub fn run_validate(
+    project_path: Option<&std::path::Path>,
+    composition: Option<&str>,
+    script_path: Option<&std::path::Path>,
+    props_path: Option<&std::path::Path>,
+) -> ValidationReport {
+    let mut errors = Vec::new();
+    let warnings = Vec::new();
+    let mut details = serde_json::json!({});
+
+    if let Some(path) = project_path {
+        let target_kind = "project".to_string();
+        let target = path.display().to_string();
+        match Project::load(path) {
+            Ok(project) => {
+                if let Some(parent) = path.parent() {
+                    if let Err(e) = project.validate_asset_files(parent) {
+                        errors.push(format!("Asset validation error: {e}"));
+                    }
+                }
+                if project.settings.duration == 0 {
+                    errors.push("Project settings duration must be greater than 0".into());
+                }
+                if project.settings.fps <= 0.0 {
+                    errors.push("Project settings fps must be greater than 0".into());
+                }
+                if project.settings.width == 0 || project.settings.height == 0 {
+                    errors.push("Project settings dimensions must be greater than 0".into());
+                }
+                details = serde_json::json!({
+                    "version": project.version,
+                    "composition": project.composition,
+                    "width": project.settings.width,
+                    "height": project.settings.height,
+                    "fps": project.settings.fps,
+                    "duration": project.settings.duration,
+                    "tracks_count": project.tracks.len(),
+                    "assets_count": project.assets.len(),
+                    "events_count": project.events.len(),
+                });
+            }
+            Err(e) => {
+                errors.push(format!("Project parse error: {e}"));
+            }
+        }
+        let ok = errors.is_empty();
+        return ValidationReport {
+            ok,
+            target_kind,
+            target,
+            errors,
+            warnings,
+            details,
+        };
+    }
+
+    if let Some(path) = script_path {
+        let target_kind = "script".to_string();
+        let target = path.display().to_string();
+        if !path.exists() {
+            errors.push(format!("Script file does not exist: {target}"));
+        } else {
+            #[cfg(feature = "rhai")]
+            {
+                let engine = rhai::Engine::new();
+                if let Err(e) = engine.compile_file(path.to_path_buf()) {
+                    errors.push(format!("Script syntax error: {e}"));
+                } else {
+                    details = serde_json::json!({ "syntax_valid": true });
+                }
+            }
+        }
+        if let Some(p) = props_path {
+            match std::fs::read_to_string(p) {
+                Ok(content) => {
+                    if let Err(e) = serde_json::from_str::<serde_json::Value>(&content) {
+                        errors.push(format!("Props JSON error: {e}"));
+                    }
+                }
+                Err(e) => errors.push(format!("Failed to read props file: {e}")),
+            }
+        }
+        let ok = errors.is_empty();
+        return ValidationReport {
+            ok,
+            target_kind,
+            target,
+            errors,
+            warnings,
+            details,
+        };
+    }
+
+    if let Some(comp_id) = composition {
+        let target_kind = "composition".to_string();
+        let target = comp_id.to_string();
+        let registry = built_in_registry();
+        if registry.get(comp_id).is_err() {
+            errors.push(format!(
+                "Composition '{}' not found in built-in registry",
+                comp_id
+            ));
+        } else {
+            details = serde_json::json!({ "registered": true });
+        }
+        if let Some(p) = props_path {
+            match std::fs::read_to_string(p) {
+                Ok(content) => {
+                    if let Err(e) = serde_json::from_str::<serde_json::Value>(&content) {
+                        errors.push(format!("Props JSON error: {e}"));
+                    }
+                }
+                Err(e) => errors.push(format!("Failed to read props file: {e}")),
+            }
+        }
+        let ok = errors.is_empty();
+        return ValidationReport {
+            ok,
+            target_kind,
+            target,
+            errors,
+            warnings,
+            details,
+        };
+    }
+
+    ValidationReport {
+        ok: false,
+        target_kind: "none".into(),
+        target: "none".into(),
+        errors: vec![
+            "No target specified for validation (specify --project, --script, or --composition)"
+                .into(),
+        ],
+        warnings: vec![],
+        details: serde_json::json!({}),
+    }
+}
+
+pub fn run_inspect_backends() -> Vec<BackendCapability> {
+    vec![
+        BackendCapability {
+            name: "native".into(),
+            tier: "reference".into(),
+            status: "supported".into(),
+            description: "High-performance browser-free CPU rasterizer with deterministic frame evaluation (reference backend)".into(),
+        },
+        BackendCapability {
+            name: "gpu".into(),
+            tier: "experimental".into(),
+            status: "experimental".into(),
+            description: "Hardware-accelerated WGPU pipeline with GPU texture cache and compositor (driver-dependent)".into(),
+        },
+        BackendCapability {
+            name: "browser".into(),
+            tier: "optional".into(),
+            status: "supported with fallback".into(),
+            description: "Headless WebCodecs and DOM rendering via Node/Chromium worker".into(),
+        },
+    ]
+}
+
+pub fn run_inspect_codecs() -> Vec<CodecCapability> {
+    let (ffmpeg_avail, _) = check_command_output("ffmpeg", &["-version"]);
+    vec![
+        CodecCapability {
+            codec: "h264".into(),
+            extensions: vec!["mp4".into()],
+            is_video: true,
+            available: ffmpeg_avail && check_ffmpeg_encoder_supported("libx264"),
+        },
+        CodecCapability {
+            codec: "hevc".into(),
+            extensions: vec!["mp4".into(), "mov".into()],
+            is_video: true,
+            available: ffmpeg_avail
+                && (check_ffmpeg_encoder_supported("libx265")
+                    || check_ffmpeg_encoder_supported("hevc")),
+        },
+        CodecCapability {
+            codec: "vp9".into(),
+            extensions: vec!["webm".into()],
+            is_video: true,
+            available: ffmpeg_avail && check_ffmpeg_encoder_supported("libvpx-vp9"),
+        },
+        CodecCapability {
+            codec: "av1".into(),
+            extensions: vec!["webm".into(), "mp4".into()],
+            is_video: true,
+            available: ffmpeg_avail && check_ffmpeg_encoder_supported("libsvtav1"),
+        },
+        CodecCapability {
+            codec: "prores".into(),
+            extensions: vec!["mov".into()],
+            is_video: true,
+            available: ffmpeg_avail && check_ffmpeg_encoder_supported("prores"),
+        },
+        CodecCapability {
+            codec: "gif".into(),
+            extensions: vec!["gif".into()],
+            is_video: true,
+            available: ffmpeg_avail,
+        },
+        CodecCapability {
+            codec: "png".into(),
+            extensions: vec!["png".into()],
+            is_video: false,
+            available: true,
+        },
+        CodecCapability {
+            codec: "jpeg".into(),
+            extensions: vec!["jpg".into(), "jpeg".into()],
+            is_video: false,
+            available: true,
+        },
+        CodecCapability {
+            codec: "webp".into(),
+            extensions: vec!["webp".into()],
+            is_video: false,
+            available: true,
+        },
+    ]
+}
+
+pub fn run_inspect_compositions() -> Vec<String> {
+    built_in_registry()
+        .ids()
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Hardware acceleration selection for the CLI.

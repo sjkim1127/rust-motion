@@ -1,7 +1,8 @@
 use clap::Parser;
 use dioxuscut_cli::{
-    default_render_control, execute_render_command_with_control, serve::ServeConfig, Cli, Commands,
-    RenderRequest,
+    default_render_control, execute_render_command_with_control, run_doctor, run_inspect_backends,
+    run_inspect_codecs, run_inspect_compositions, run_validate, serve::ServeConfig, Cli, Commands,
+    RenderRequest, EXIT_MISSING_DEPENDENCY, EXIT_TIMEOUT_OR_CANCELLED, EXIT_VALIDATION_ERROR,
 };
 use std::time::Instant;
 
@@ -24,7 +25,16 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter("info,dioxuscut_renderer=debug,dioxuscut_rasterizer=debug")
         .init();
 
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+    if std::env::var("DIOXUSCUT_JSON")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        cli.json = true;
+    }
+    if cli.json {
+        std::env::set_var("DIOXUSCUT_JSON", "1");
+    }
 
     match &cli.command {
         Commands::Render {
@@ -101,6 +111,17 @@ async fn main() -> anyhow::Result<()> {
                             "codec": format!("{:?}", request.codec).to_ascii_lowercase(),
                         })
                     );
+                }
+                let err_str = error.to_string();
+                if err_str.contains("ffmpeg") || err_str.contains("FFmpeg") {
+                    eprintln!("Error: {error}");
+                    std::process::exit(EXIT_MISSING_DEPENDENCY);
+                } else if err_str.contains("timed out")
+                    || err_str.contains("timeout")
+                    || err_str.contains("cancelled")
+                {
+                    eprintln!("Error: {error}");
+                    std::process::exit(EXIT_TIMEOUT_OR_CANCELLED);
                 }
                 return Err(error);
             }
@@ -523,6 +544,234 @@ async fn main() -> anyhow::Result<()> {
                 duration: *duration,
             })
             .await?;
+        }
+        Commands::Validate {
+            project,
+            composition,
+            script,
+            props,
+        } => {
+            let report = run_validate(
+                project.as_deref(),
+                composition.as_deref(),
+                script.as_deref(),
+                props.as_deref(),
+            );
+            if cli.json || std::env::var_os("DIOXUSCUT_JSON").is_some() {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!(
+                    "Validation target: {} ({})",
+                    report.target, report.target_kind
+                );
+                println!("Status: {}", if report.ok { "PASSED" } else { "FAILED" });
+                if !report.errors.is_empty() {
+                    println!("Errors:");
+                    for err in &report.errors {
+                        println!("  - {err}");
+                    }
+                }
+                if !report.warnings.is_empty() {
+                    println!("Warnings:");
+                    for warn in &report.warnings {
+                        println!("  - {warn}");
+                    }
+                }
+            }
+            if !report.ok {
+                std::process::exit(EXIT_VALIDATION_ERROR);
+            }
+        }
+        Commands::Inspect {
+            target,
+            compositions,
+            backends,
+            codecs,
+        } => {
+            let json_mode = cli.json || std::env::var_os("DIOXUSCUT_JSON").is_some();
+            if *backends {
+                let list = run_inspect_backends();
+                if json_mode {
+                    println!("{}", serde_json::to_string_pretty(&list)?);
+                } else {
+                    println!("Supported Backends:");
+                    for b in list {
+                        println!(
+                            "  • {} [{}] - {} ({})",
+                            b.name, b.tier, b.status, b.description
+                        );
+                    }
+                }
+                return Ok(());
+            }
+            if *codecs {
+                let list = run_inspect_codecs();
+                if json_mode {
+                    println!("{}", serde_json::to_string_pretty(&list)?);
+                } else {
+                    println!("Supported Codecs:");
+                    for c in list {
+                        println!(
+                            "  • {} (ext: {}) - {} (available: {})",
+                            c.codec,
+                            c.extensions.join(", "),
+                            if c.is_video { "video" } else { "image" },
+                            if c.available { "yes" } else { "no" }
+                        );
+                    }
+                }
+                return Ok(());
+            }
+            if *compositions {
+                let list = run_inspect_compositions();
+                if json_mode {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "ok": true,
+                            "compositions": list,
+                        }))?
+                    );
+                } else {
+                    println!("Registered Compositions:");
+                    for comp in list {
+                        println!("  • {comp}");
+                    }
+                }
+                return Ok(());
+            }
+            if let Some(target_path) = target {
+                if target_path.extension().and_then(|s| s.to_str()) == Some("json") {
+                    if let Ok(project) = dioxuscut_project::Project::load(target_path) {
+                        if json_mode {
+                            println!("{}", serde_json::to_string_pretty(&project)?);
+                        } else {
+                            println!("Project: {}", target_path.display());
+                            println!("Version: {}", project.version);
+                            println!("Composition: {}", project.composition);
+                            println!(
+                                "Dimensions: {}x{} @ {}fps",
+                                project.settings.width,
+                                project.settings.height,
+                                project.settings.fps
+                            );
+                            println!("Duration: {} frames", project.settings.duration);
+                            println!("Tracks: {}", project.tracks.len());
+                            println!("Assets: {}", project.assets.len());
+                        }
+                        return Ok(());
+                    }
+                }
+                match dioxuscut_cli::parse_media(target_path, 30.0) {
+                    Ok(meta) => {
+                        println!("{}", serde_json::to_string_pretty(&meta)?);
+                        return Ok(());
+                    }
+                    Err(_) => match dioxuscut_cli::get_video_metadata(target_path) {
+                        Ok(meta) => {
+                            println!("{}", serde_json::to_string_pretty(&meta)?);
+                            return Ok(());
+                        }
+                        Err(e) => match dioxuscut_cli::get_audio_metadata(target_path, 30.0) {
+                            Ok(ameta) => {
+                                println!("{}", serde_json::to_string_pretty(&ameta)?);
+                                return Ok(());
+                            }
+                            Err(_) => {
+                                anyhow::bail!("Inspect failed for {target_path:?}: {e}");
+                            }
+                        },
+                    },
+                }
+            } else {
+                let b_list = run_inspect_backends();
+                let c_list = run_inspect_codecs();
+                if json_mode {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "backends": b_list,
+                            "codecs": c_list,
+                        }))?
+                    );
+                } else {
+                    println!("Dioxuscut Engine Capabilities");
+                    println!("=============================");
+                    println!("Backends:");
+                    for b in b_list {
+                        println!(
+                            "  • {} [{}] - {} ({})",
+                            b.name, b.tier, b.status, b.description
+                        );
+                    }
+                    println!("\nCodecs:");
+                    for c in c_list {
+                        println!(
+                            "  • {} (ext: {}) - (available: {})",
+                            c.codec,
+                            c.extensions.join(", "),
+                            if c.available { "yes" } else { "no" }
+                        );
+                    }
+                }
+            }
+        }
+        Commands::Doctor => {
+            let report = run_doctor();
+            if cli.json || std::env::var_os("DIOXUSCUT_JSON").is_some() {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!("Dioxuscut Environment Doctor");
+                println!("============================");
+                println!(
+                    "FFmpeg:      {} ({})",
+                    if report.ffmpeg.available {
+                        "AVAILABLE"
+                    } else {
+                        "MISSING"
+                    },
+                    report.ffmpeg.version.as_deref().unwrap_or("not found")
+                );
+                if let Some(ref encoders) = report.ffmpeg.encoders {
+                    println!("             Encoders: {}", encoders.join(", "));
+                }
+                println!(
+                    "FFprobe:     {} ({})",
+                    if report.ffprobe.available {
+                        "AVAILABLE"
+                    } else {
+                        "MISSING"
+                    },
+                    report.ffprobe.version.as_deref().unwrap_or("not found")
+                );
+                println!(
+                    "Node.js:     {} ({})",
+                    if report.node.available {
+                        "AVAILABLE"
+                    } else {
+                        "MISSING"
+                    },
+                    report.node.version.as_deref().unwrap_or("not found")
+                );
+                println!(
+                    "Temp Dir:    {} (writable: {})",
+                    report.temp_dir.path, report.temp_dir.writable
+                );
+                println!("HW Accel:    {}", report.hw_accel);
+                println!("Codecs:      {}", report.supported_codecs.join(", "));
+                println!("----------------------------");
+                println!(
+                    "System Status: {}",
+                    if report.ok {
+                        "READY"
+                    } else {
+                        "INCOMPLETE (ffmpeg or writable temp dir missing)"
+                    }
+                );
+            }
+            if !report.ok {
+                std::process::exit(EXIT_MISSING_DEPENDENCY);
+            }
         }
     }
 
