@@ -3,17 +3,32 @@
 </p>
 
 <p align="center">
-  <b>Browser-free, code-driven video rendering in Rust, with optional Dioxus authoring and preview.</b>
+  <b>Rust Motion 1.0 is a stable, deterministic, browser-free programmatic video rendering platform for Rust, Python, and coding agents, with optional browser and GPU backends for explicitly documented capabilities.</b>
 </p>
 
 <p align="center">
   <a href="https://github.com/sjkim1127/rust-motion/actions/workflows/ci.yml"><img src="https://github.com/sjkim1127/rust-motion/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-4ec9b0?style=flat-square" alt="License" /></a>
   <a href="https://dioxuslabs.com/"><img src="https://img.shields.io/badge/Dioxus-0.6-e05c4b?style=flat-square&logo=rust&logoColor=white" alt="Dioxus 0.6" /></a>
-  <img src="https://img.shields.io/badge/status-early%20development-f59e0b?style=flat-square" alt="Early development" />
+  <img src="https://img.shields.io/badge/status-production--ready-22c55e?style=flat-square" alt="Status: Production Ready" />
 </p>
 
-Rust Motion is an early-stage programmatic video toolkit written in Rust. Its current published Rust and Python packages retain the dioxuscut naming. Its native export path renders a registered `NativeComposition` into a small scene graph, rasterizes frames with `tiny-skia` or `wgpu`, and streams a bounded window of ordered RGBA frames to FFmpeg while rendering subsequent frames. Local video frames are decoded through FFmpeg, and declared audio tracks are mixed into the encoded output. The same native scene can be displayed in the Dioxus Player through `NativeCompositionPreview`.
+### 📚 Documentation
+
+- [Quickstart Guide](docs/quickstart.md) — Get up and running in under 5 minutes.
+- [Hello World Tutorial](docs/hello-world.md) — Step-by-step composition tutorial.
+- [CLI & Agent Reference](docs/cli.md) — Complete CLI reference, exit codes, and JSON automation.
+- [Python Guide](docs/python.md) — Python bindings, NumPy buffer exports, and usage.
+- [Backend Capabilities](docs/backends.md) — Determinism guarantees, native CPU reference, GPU, and browser tiers.
+- [Project Format](docs/project-format.md) — `.dioxuscut.json` schema v1 specification.
+- [API Stability](docs/stability.md) — SemVer 1.x policy, MSRV, and OS support matrix.
+- [Security & Advisories](docs/security.md) — Threat model, sandboxing, and reachability analysis.
+- [1.0 Migration Guide](docs/migration-1.0.md) — Migration steps from pre-1.0 and Remotion.
+- [Release Runbook](docs/release-runbook.md) — Official release engineering procedures.
+
+---
+
+Rust Motion is a production-quality programmatic video rendering platform. Its native export path renders a registered `Composition` into a deterministic scene graph, rasterizes frames with `tiny-skia` or `wgpu`, and streams a bounded window of ordered RGBA frames to FFmpeg while rendering subsequent frames. Local video frames are decoded through FFmpeg, and declared audio tracks are mixed into the encoded output. The same native scene can be previewed in the Dioxus Player through `NativeCompositionPreview` or edited in the interactive Studio shell.
 
 The repository also contains Dioxus timeline, media, shape, transition, player, and Studio-preview components. The opt-in `dioxuscut-vdom` adapter can translate ordinary Dioxus elements, a documented CSS subset, text, local media elements, and basic SVG shapes into the native scene graph. Existing explicit `Scene` and `SceneEmitter` APIs remain available for precise rendering control.
 
