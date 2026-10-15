@@ -19,9 +19,9 @@ members = [
     "crates/python",
     "crates/project",
     "apps/studio",
-    "apps/studio-tauri/src-tauri",
     "apps/example",
 ]
+
 
 [workspace.package]
 version      = "1.0.0"

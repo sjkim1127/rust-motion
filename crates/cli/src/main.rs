@@ -376,7 +376,9 @@ async fn main() -> anyhow::Result<()> {
                         rust_motion_cli::RenderBackend::Browser
                     }
                     rust_motion_project::BackendKind::Gpu => rust_motion_cli::RenderBackend::Gpu,
+                    rust_motion_project::BackendKind::Auto => rust_motion_cli::RenderBackend::Auto,
                 },
+
                 codec: project_codec(output)?,
                 frame_start: project.settings.frame_start.unwrap_or(0),
                 frame_end: project.settings.frame_end,
@@ -549,6 +551,14 @@ async fn main() -> anyhow::Result<()> {
             })
             .await?;
         }
+        Commands::Studio {
+            port,
+            open,
+            project,
+        } => {
+            rust_motion_cli::studio::run_studio(*port, *open, project.as_deref()).await?;
+        }
+
         Commands::Validate {
             project,
             composition,

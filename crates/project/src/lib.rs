@@ -97,6 +97,7 @@ pub enum BackendKind {
     Native,
     Browser,
     Gpu,
+    Auto,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

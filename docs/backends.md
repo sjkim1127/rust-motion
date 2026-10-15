@@ -7,8 +7,10 @@ Rust Motion provides a multi-backend rendering architecture designed around dete
 | Backend | Tier | Release Status | Determinism Guarantee | Primary Use Case |
 | :--- | :--- | :--- | :--- | :--- |
 | **`native`** | **Reference (Tier 1)** | **Supported (Production Ready)** | **100% Deterministic (Bit-exact CPU)** | Default CLI & server renders, CI/CD, headless automated pipelines |
+| **`browser`** | **Compatibility (Tier 2)** | **Supported with Fallback** | Browser engine dependent | Complex Web/DOM animations, Remotion parity, Three.js/WebGL exports |
+| **`auto`** | **Hybrid Orchestrator** | **Supported (Production Ready)** | Dynamic by sub-scene | Automatic routing: Native for motion graphics/subtitles (10x faster), Chromium for Web/3D |
 | **`gpu`** | **Accelerated (Tier 2)** | **Experimental** | Hardware- & driver-dependent | Real-time interactive previews, high-throughput batch encoding |
-| **`browser`** | **Compatibility (Tier 2)** | **Supported with Fallback** | Browser engine dependent | Complex Web/DOM animations, Remotion parity, WebCodecs exports |
+
 
 ---
 

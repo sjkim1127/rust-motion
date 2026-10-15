@@ -34,7 +34,7 @@ jobs:
         run: cargo check --locked -p rust-motion-core --features web --target wasm32-unknown-unknown
 
   platform_contracts:
-    name: Dioxus and Tauri platform contracts
+    name: Dioxus platform contracts
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -46,7 +46,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Install desktop and Tauri dependencies
+      - name: Install desktop dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -62,11 +62,6 @@ jobs:
       - name: Check Dioxus Desktop host contract
         run: cargo check --locked -p example --features desktop
 
-      - name: Prepare Tauri frontend directory for macro checks
-        run: mkdir -p apps/studio-tauri/dist
-
-      - name: Check Tauri host contract
-        run: cargo check --locked -p rust-motion-studio-tauri
 
   # ── 1. Code Formatting & Clippy Lints ─────────────────────────────────────
   fmt_clippy:
@@ -95,8 +90,6 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
-      - name: Prepare Tauri frontend directory for macro checks
-        run: mkdir -p apps/studio-tauri/dist
 
       - name: Check Formatting
         run: cargo fmt --all -- --check

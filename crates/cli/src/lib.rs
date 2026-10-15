@@ -5,6 +5,7 @@ pub mod migrate;
 #[cfg(feature = "rhai")]
 pub mod rhai_runtime;
 pub mod serve;
+pub mod studio;
 
 pub use composition::{
     built_in_registry, BarChartRaceComposition, CodeTerminalComposition,
@@ -690,10 +691,12 @@ pub enum RenderBackend {
     /// Pure-Rust CPU rasterizer via tiny-skia. Default.
     #[default]
     Native,
-    /// Browser-backed Three.js/WebGL renderer. Requires a worker path in `RUST_MOTION_BROWSER_WORKER`.
+    /// Browser-backed Three.js/WebGL renderer.
     Browser,
     /// GPU rasterizer via wgpu. Requires `--features gpu`.
     Gpu,
+    /// Automatic hybrid dispatch (Native for motion graphics/subtitles, Chromium Browser for Three.js/DOM).
+    Auto,
 }
 
 /// Output codec or still-image format.
@@ -743,6 +746,96 @@ impl RenderCodec {
             Self::Png => &["png"],
             Self::Jpeg => &["jpg", "jpeg"],
             Self::Webp => &["webp"],
+        }
+    }
+}
+
+/// Resolve the browser worker script path, checking environment variables,
+/// project-relative directories, and installation roots.
+pub fn resolve_browser_worker_path() -> anyhow::Result<std::path::PathBuf> {
+    if let Some(worker) = std::env::var_os("RUST_MOTION_BROWSER_WORKER") {
+        let path = std::path::PathBuf::from(worker);
+        if path.exists() {
+            return Ok(path);
+        }
+        anyhow::bail!(
+            "RUST_MOTION_BROWSER_WORKER path does not exist: {}",
+            path.display()
+        );
+    }
+
+    let candidates = [
+        "scripts/three-render-worker.mjs",
+        "apps/studio-tauri/scripts/three-render-worker.mjs",
+        "../scripts/three-render-worker.mjs",
+        "../../scripts/three-render-worker.mjs",
+    ];
+
+    for candidate in &candidates {
+        let p = std::path::Path::new(candidate);
+        if p.exists() {
+            return Ok(p.canonicalize().unwrap_or_else(|_| p.to_path_buf()));
+        }
+    }
+
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            let relative_candidates = [
+                exe_dir.join("scripts/three-render-worker.mjs"),
+                exe_dir.join("../scripts/three-render-worker.mjs"),
+                exe_dir.join("../../scripts/three-render-worker.mjs"),
+                exe_dir.join("../../../scripts/three-render-worker.mjs"),
+            ];
+            for candidate in &relative_candidates {
+                if candidate.exists() {
+                    return Ok(candidate.clone());
+                }
+            }
+        }
+    }
+
+    anyhow::bail!(
+        "Browser backend requires a worker script. Set RUST_MOTION_BROWSER_WORKER or ensure 'scripts/three-render-worker.mjs' exists."
+    )
+}
+
+/// Automatically select the optimal rendering backend based on composition and asset requirements.
+/// Web-exclusive scenes (Three.js, DOM) dispatch to Chromium, while general motion graphics,
+/// captions, and video scenes run 10x faster on Rust native (tiny-skia / wgpu).
+pub fn resolve_hybrid_backend(
+    backend: RenderBackend,
+    composition_id: Option<&str>,
+    script_path: Option<&std::path::Path>,
+    registry: &CompositionRegistry,
+) -> RenderBackend {
+    match backend {
+        RenderBackend::Native => RenderBackend::Native,
+        RenderBackend::Browser => RenderBackend::Browser,
+        RenderBackend::Gpu => RenderBackend::Gpu,
+        RenderBackend::Auto => {
+            if script_path.is_some() {
+                return RenderBackend::Native;
+            }
+            if let Some(id) = composition_id {
+                let id_lower = id.to_ascii_lowercase();
+                if id_lower.starts_with("three_")
+                    || id_lower.starts_with("web_")
+                    || id_lower.starts_with("browser_")
+                    || id_lower.starts_with("dom_")
+                    || id_lower.ends_with(".tsx")
+                    || id_lower.ends_with(".jsx")
+                    || id_lower.ends_with(".html")
+                {
+                    return RenderBackend::Browser;
+                }
+                if registry.get(id).is_ok() {
+                    return RenderBackend::Native;
+                }
+
+                // Fallback for custom/unregistered web compositions
+                return RenderBackend::Browser;
+            }
+            RenderBackend::Native
         }
     }
 }
@@ -1041,6 +1134,21 @@ pub enum Commands {
 
     /// Verify local environment, external dependencies (FFmpeg, FFprobe, Node), and hardware encoding capabilities.
     Doctor,
+
+    /// Launch the lightweight web studio in your default browser.
+    Studio {
+        /// TCP port to bind on.
+        #[arg(long, default_value_t = 1420)]
+        port: u16,
+
+        /// Automatically open the browser.
+        #[arg(long, default_value_t = true)]
+        open: bool,
+
+        /// Path to an optional project file or script to load on start.
+        #[arg(long, short)]
+        project: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -1937,6 +2045,13 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
         .map(RhaiComposition::from_file)
         .transpose()?;
 
+    let effective_backend = resolve_hybrid_backend(
+        request.backend,
+        request.composition.as_deref(),
+        request.script.as_deref(),
+        registry,
+    );
+
     let browser_fallback = BrowserComposition {
         id: request
             .composition
@@ -1955,7 +2070,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                     .expect("validated native composition ID"),
             )
             .or_else(|error| {
-                if request.backend == RenderBackend::Browser {
+                if effective_backend == RenderBackend::Browser {
                     Ok(&browser_fallback as &dyn Composition)
                 } else {
                     Err(error)
@@ -1979,7 +2094,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                     .expect("validated native composition ID"),
             )
             .or_else(|error| {
-                if request.backend == RenderBackend::Browser {
+                if effective_backend == RenderBackend::Browser {
                     Ok(&browser_fallback as &dyn Composition)
                 } else {
                     Err(error)
@@ -1994,7 +2109,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
     let first_scene = prepared.render(0)?;
     let mut audio_tracks = match prepared.audio_tracks()? {
         Some(tracks) => tracks,
-        None if request.backend != RenderBackend::Browser
+        None if effective_backend != RenderBackend::Browser
             && request.codec.still_format().is_none()
             && request.codec != RenderCodec::Gif =>
         {
@@ -2019,7 +2134,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
 
     tracing::info!(
         composition = composition.id(),
-        backend = ?request.backend,
+        backend = ?effective_backend,
         codec = ?request.codec,
         frame_start,
         frame_end,
@@ -2030,7 +2145,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
     #[cfg(feature = "gpu")]
     let mut gpu_profile_summary: Option<rust_motion_rasterizer::ProfilingSummary> = None;
 
-    match request.backend {
+    match effective_backend {
         RenderBackend::Native => {
             use rust_motion_rasterizer::{
                 render_still_fallible_scaled, render_to_ffmpeg_pipe_fallible, PipeConfig,
@@ -2110,9 +2225,8 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                 render_still_fallible_scaled, render_web_to_ffmpeg_pipe_fallible,
                 BrowserFrameBackend, PipeConfig,
             };
-            let worker = std::env::var_os("RUST_MOTION_BROWSER_WORKER").ok_or_else(|| {
-                anyhow::anyhow!("Browser backend requires RUST_MOTION_BROWSER_WORKER")
-            })?;
+            let worker = resolve_browser_worker_path()?;
+
             let url = std::env::var("RUST_MOTION_BROWSER_URL")
                 .unwrap_or_else(|_| "http://localhost:1420".to_string());
             let browser_capacity = std::env::var("RUST_MOTION_BROWSER_CONCURRENCY")
@@ -2288,6 +2402,9 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                     gpu_profile_summary = Some(summary);
                 }
             }
+        }
+        RenderBackend::Auto => {
+            unreachable!("effective_backend is always resolved before rendering")
         }
     }
 
