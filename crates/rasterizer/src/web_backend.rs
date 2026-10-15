@@ -180,13 +180,38 @@ impl BrowserWorker {
         worker: &Path,
         url: &str,
     ) -> Result<(WorkerProcess, Vec<String>), RasterError> {
-        let mut child = Command::new(node)
-            .arg(worker)
+        let mut cmd = Command::new(node);
+        cmd.arg(worker)
             .arg(format!("--url={url}"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()?;
+            .stderr(Stdio::inherit());
+
+        // Ensure node can resolve modules from workspace or apps/studio-tauri
+        if let Ok(current_dir) = std::env::current_dir() {
+            let candidates = [
+                current_dir.join("node_modules"),
+                current_dir.join("apps/studio-tauri/node_modules"),
+                current_dir.join("apps/studio-web/node_modules"),
+            ];
+            let existing = std::env::var("NODE_PATH").unwrap_or_default();
+            let sep = if cfg!(windows) { ";" } else { ":" };
+            let mut paths = vec![];
+            for c in &candidates {
+                if c.is_dir() {
+                    paths.push(c.display().to_string());
+                }
+            }
+            if !existing.is_empty() {
+                paths.push(existing);
+            }
+            if !paths.is_empty() {
+                cmd.env("NODE_PATH", paths.join(sep));
+            }
+        }
+
+        let mut child = cmd.spawn()?;
+
         let stdin = child
             .stdin
             .take()

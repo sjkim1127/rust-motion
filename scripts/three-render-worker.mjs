@@ -11,7 +11,8 @@ const args = new Map(process.argv.slice(2).flatMap((arg) => {
   return key.startsWith('--') ? [[key.slice(2), value ?? '']] : [];
 }));
 const url = args.get('url') ?? 'http://localhost:1420';
-const compositionModule = args.get('composition-module') ?? process.env.RUST_MOTION_BROWSER_COMPOSITION_MODULE;
+const compositionModule = args.get('composition-module') ?? process.env.RUST_MOTION_BROWSER_COMPOSITION_MODULE ?? `${url}/src/three-lifecycle-composition.js`;
+
 const executablePath = args.get('browser') ?? process.env.CHROME_PATH ?? findBrowserExecutable();
 const configuredFrameTimeoutMs = Number(args.get('frame-timeout-ms') ?? process.env.RUST_MOTION_BROWSER_FRAME_TIMEOUT_MS ?? 30000);
 const frameTimeoutMs = Number.isFinite(configuredFrameTimeoutMs) && configuredFrameTimeoutMs > 0
@@ -60,7 +61,23 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
 let viewportWidth = 1280;
 let viewportHeight = 720;
-await page.addInitScript(() => { window.__RUST_MOTION_HEADLESS_RENDER__ = true; });
+await page.addInitScript(() => {
+  window.__RUST_MOTION_HEADLESS_RENDER__ = true;
+  const style = document.createElement('style');
+  style.textContent = `
+    html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000 !important; width: 100vw !important; height: 100vh !important; }
+    header, section.toolbar, section.timeline, section.timeline-editor, .voice-over-controls { display: none !important; }
+    section.preview { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; padding: 0 !important; margin: 0 !important; border: none !important; }
+    canvas { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; display: block !important; }
+  `;
+  const inject = () => document.head && document.head.appendChild(style);
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', inject);
+  } else {
+    inject();
+  }
+});
+
 // Dev servers keep HMR/websocket connections open, so networkidle can never
 // settle. The explicit renderFrame readiness check below is the real gate.
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: frameTimeoutMs });
@@ -197,6 +214,8 @@ rl.on('line', (line) => { queue = queue.then(async () => {
     const screenshot = await page.screenshot({ type: imageType, ...(fileTransport || rgbaTransport ? {} : { encoding: 'base64' }),
       omitBackground: imageType === 'png' && request.transparent === true,
       quality: imageType === 'jpeg' ? (request.jpeg_quality ?? 90) : undefined });
+
+
     if (fileTransport) {
       const path = `${tmpdir()}/rust-motion-frame-${process.pid}-${request.frame}-${Date.now()}.${imageType}`;
       writeFileSync(path, screenshot);

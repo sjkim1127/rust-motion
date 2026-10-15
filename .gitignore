@@ -19,6 +19,7 @@ target/
 vendor/
 
 # JavaScript dependencies and generated benchmark reports
+node_modules
 node_modules/
 benchmarks/render-*.json
 
@@ -37,6 +38,7 @@ dist/
 *.mp4
 *.webm
 *.mov
+frame_*.png
 
 # AI agent swarm scratchpads and logs
 .agents/
