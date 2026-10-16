@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/animation",
+    "crates/apv",
     "crates/audio-dsp",
     "crates/composition",
     "crates/core",
@@ -93,6 +94,7 @@ reqwest           = { version = "0.12", features = ["json", "blocking"] }
 
 # Internal crates
 rust-motion-animation   = { version = "1.0.0", path = "crates/animation" }
+rust-motion-apv         = { version = "1.0.0", path = "crates/apv" }
 rust-motion-audio-dsp   = { version = "1.0.0", path = "crates/audio-dsp" }
 rust-motion-cli         = { version = "1.0.0", path = "crates/cli" }
 rust-motion-composition = { version = "1.0.0", path = "crates/composition" }

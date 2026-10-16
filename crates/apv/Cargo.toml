@@ -1,0 +1,17 @@
+[package]
+name        = "rust-motion-apv"
+description = "Clean-room Advanced Professional Video (APV, IETF RFC 9924) 10-16bit HDR decoder and encoder"
+version.workspace     = true
+edition.workspace     = true
+authors.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+readme.workspace      = true
+
+[features]
+default = ["threads"]
+threads = ["dep:rayon"]
+
+[dependencies]
+rayon = { workspace = true, optional = true }
+thiserror = { workspace = true }

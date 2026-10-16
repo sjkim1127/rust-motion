@@ -5326,6 +5326,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-apv"
+version = "1.0.0"
+dependencies = [
+ "rayon",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "rust-motion-audio-dsp"
 version = "1.0.0"
 
