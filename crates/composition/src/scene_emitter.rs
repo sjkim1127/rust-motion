@@ -318,6 +318,63 @@ impl<E: SceneEmitter> SceneEmitter for SceneGroup<E> {
     }
 }
 
+/// Native counterpart to After Effects Null Object guide layer.
+///
+/// Drives parented or nested child emitters spatially without drawing any pixels.
+pub struct SceneNullObject<E> {
+    pub id: Option<String>,
+    pub transform: Transform2D,
+    pub opacity: f32,
+    pub child: E,
+}
+
+impl<E> SceneNullObject<E> {
+    pub fn new(child: E) -> Self {
+        Self {
+            id: None,
+            transform: Transform2D::default(),
+            opacity: 1.0,
+            child,
+        }
+    }
+
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn with_transform(mut self, transform: Transform2D) -> Self {
+        self.transform = transform;
+        self
+    }
+
+    pub fn with_opacity(mut self, opacity: f32) -> Self {
+        self.opacity = opacity.clamp(0.0, 1.0);
+        self
+    }
+}
+
+impl<E: SceneEmitter> SceneEmitter for SceneNullObject<E> {
+    fn emit(
+        &self,
+        context: SceneFrameContext,
+        props: &Value,
+        scene: &mut Scene,
+    ) -> Result<(), CompositionError> {
+        let mut child_scene = Scene::new();
+        self.child.emit(context, props, &mut child_scene)?;
+        if !child_scene.nodes.is_empty() {
+            scene.push(SceneNode::NullObject {
+                id: self.id.clone(),
+                transform: self.transform,
+                opacity: self.opacity,
+                children: child_scene.nodes,
+            });
+        }
+        Ok(())
+    }
+}
+
 /// Creates an offscreen compositing boundary around emitted children.
 pub struct SceneLayer<E> {
     pub opacity: f32,

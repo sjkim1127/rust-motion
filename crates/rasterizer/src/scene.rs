@@ -533,6 +533,18 @@ pub enum SceneNode {
         mode: TrackMatteMode,
     },
 
+    /// After Effects Null Object: an invisible guide layer that applies its
+    /// spatial transform and opacity to all child layers, but draws no pixels.
+    NullObject {
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        transform: Transform2D,
+        #[serde(default = "default_opacity")]
+        opacity: f32,
+        children: Vec<SceneNode>,
+    },
+
     /// Animated GIF scene node.
     ///
     /// Equivalent to Remotion's `<Gif>` from `@remotion/gif`.

@@ -13,7 +13,7 @@ pub use safe_area::{
 };
 pub use scene_emitter::{
     FlipDirection, LinearWipeDirection, SceneEmitter, SceneEmitterComposition, SceneFrameContext,
-    SceneFreeze, SceneGroup, SceneLayer, SceneLinearGradient, SceneLoop, SceneRect, SceneSequence,
+    SceneFreeze, SceneGroup, SceneLayer, SceneLinearGradient, SceneLoop, SceneNullObject, SceneRect, SceneSequence,
     SceneSeries, SceneSeriesEntry, SceneStack, SceneText, SceneTextBlock, SceneTrail,
     SceneTrailOpacity, SceneTransitionSeries, TransitionKind, TransitionTiming,
 };

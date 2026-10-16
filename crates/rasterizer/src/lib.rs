@@ -38,6 +38,7 @@ pub mod gltf;
 mod image_cache;
 pub(crate) mod lottie_cache;
 pub mod mesh3d;
+pub mod parenting;
 pub mod particles;
 pub mod render;
 pub mod scene;
@@ -93,6 +94,7 @@ pub use web_backend::BrowserFrameBackend;
 pub use gif_cache::{GifFrame, GifFrameCache, LoopBehavior};
 pub use image_cache::DEFAULT_IMAGE_CACHE_BYTES;
 pub use lottie_cache::{get_lottie_metadata, LottieMetadata};
+pub use parenting::{LayerNode, LayerTransform, Matrix4, ParentingError, ParentingGraph};
 pub use scene::{
     AudioTrack, BlendMode, ClipRegion, Color, GradientStop, ImageFit, MaskMode, Scene, SceneFilter,
     SceneNode, SceneShadow, Transform2D, VisualizerStyle,

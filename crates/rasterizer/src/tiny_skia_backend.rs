@@ -667,6 +667,12 @@ fn render_node(
             transform: group_transform,
             opacity: group_opacity,
             children,
+        }
+        | SceneNode::NullObject {
+            transform: group_transform,
+            opacity: group_opacity,
+            children,
+            ..
         } => {
             let new_transform = transform.post_concat(group_transform.to_tiny_skia());
             let new_opacity = opacity * group_opacity;
@@ -2429,7 +2435,7 @@ fn parse_f32(tokens: &[String], pos: &mut usize) -> Option<f32> {
 mod tests {
     use super::*;
     use crate::backend::FrameConfig;
-    use crate::scene::{Color, ImageFit, Scene, SceneNode};
+    use crate::scene::{Color, ImageFit, Scene, SceneNode, Transform2D};
     use image::Rgba;
 
     fn render(scene: &Scene, w: u32, h: u32) -> RgbaImage {
@@ -2840,6 +2846,28 @@ mod tests {
         let img_luma_inv = render(&scene_luma_inv, 64, 64);
         assert_eq!(img_luma_inv.get_pixel(16, 32)[3], 0);
         assert_eq!(img_luma_inv.get_pixel(48, 32), &Rgba([0, 0, 255, 255]));
+    }
+
+    #[test]
+    fn null_object_transforms_children_without_pixel_overhead() {
+        let scene = Scene {
+            nodes: vec![SceneNode::NullObject {
+                id: Some("controller".into()),
+                transform: Transform2D::translate(20.0, 10.0),
+                opacity: 0.5,
+                children: vec![solid_rect(Color::rgb(255, 0, 0), 0.0, 0.0, 20.0, 20.0)],
+            }],
+        };
+        let img = render(&scene, 64, 64);
+
+        // Outside child: NullObject draws NO pixels itself
+        assert_eq!(img.get_pixel(5, 5)[3], 0);
+        assert_eq!(img.get_pixel(50, 50)[3], 0);
+
+        // Inside transformed child (translated by (20, 10)):
+        let child_px = img.get_pixel(25, 15);
+        assert!((child_px[0] as i32 - 128).abs() <= 2, "premultiplied red should be ~128");
+        assert!((child_px[3] as i32 - 128).abs() <= 2, "alpha should be ~128 due to opacity 0.5");
     }
 
     #[test]
