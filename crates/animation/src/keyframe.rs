@@ -206,11 +206,12 @@ pub fn solve_ae_bezier_1d(
         return v1;
     }
 
+    let linear_speed = (v1 - v0) / delta_t_sec;
     let i_out = out_ease.map_or(0.3333333333333333, |e| e.normalized_influence());
-    let s_out = out_ease.map_or(0.0, |e| e.speed);
+    let s_out = out_ease.map_or(linear_speed, |e| e.speed);
 
     let i_in = in_ease.map_or(0.3333333333333333, |e| e.normalized_influence());
-    let s_in = in_ease.map_or(0.0, |e| e.speed);
+    let s_in = in_ease.map_or(linear_speed, |e| e.speed);
 
     // Control points in normalized time [0..1]
     let x1 = i_out;
@@ -244,11 +245,12 @@ pub fn solve_ae_bezier_derivative_1d(
     }
     let x_target = x_target.clamp(0.0, 1.0);
 
+    let linear_speed = (v1 - v0) / delta_t_sec;
     let i_out = out_ease.map_or(0.3333333333333333, |e| e.normalized_influence());
-    let s_out = out_ease.map_or(0.0, |e| e.speed);
+    let s_out = out_ease.map_or(linear_speed, |e| e.speed);
 
     let i_in = in_ease.map_or(0.3333333333333333, |e| e.normalized_influence());
-    let s_in = in_ease.map_or(0.0, |e| e.speed);
+    let s_in = in_ease.map_or(linear_speed, |e| e.speed);
 
     let x1 = i_out;
     let x2 = 1.0 - i_in;
@@ -610,21 +612,38 @@ impl<T: Animatable> KeyframeTrack<T> {
             return self.default_value.interpolate_linear(&self.default_value, 0.0);
         }
 
-        if k0.interpolation_out == InterpolationType::Linear
+        let (out_e, in_e) = if k0.interpolation_out == InterpolationType::Linear
             && k1.interpolation_in == InterpolationType::Linear
         {
-            // Linear constant velocity: (v1 - v0) / delta_t_sec
-            let diff = k0.value.interpolate_linear(&k1.value, 1.0);
-            diff.interpolate_linear(&k0.value, 1.0)
+            (None, None)
         } else {
-            k0.value.velocity_ae_curve(
-                &k1.value,
-                k0.out_ease,
-                k1.in_ease,
-                t_norm,
-                delta_t_sec,
-            )
-        }
+            (k0.out_ease, k1.in_ease)
+        };
+        k0.value.velocity_ae_curve(&k1.value, out_e, in_e, t_norm, delta_t_sec)
+    }
+
+    /// Samples the track value at time in seconds (`time_sec * fps`).
+    #[inline]
+    pub fn value_at_time(&self, time_sec: f64) -> T {
+        self.evaluate(time_sec * self.fps)
+    }
+
+    /// Samples the instantaneous velocity at time in seconds (`time_sec * fps`).
+    #[inline]
+    pub fn velocity_at_time(&self, time_sec: f64) -> T {
+        self.velocity(time_sec * self.fps)
+    }
+}
+
+impl KeyframeTrack<f64> {
+    /// Evaluates After Effects `loopOut(type, numKeyframes)` on this track.
+    pub fn loop_out(&self, loop_type: crate::expressions::LoopType, num_keyframes: usize, time_sec: f64) -> f64 {
+        crate::expressions::loop_out(self, loop_type, num_keyframes, time_sec)
+    }
+
+    /// Evaluates After Effects `loopIn(type, numKeyframes)` on this track.
+    pub fn loop_in(&self, loop_type: crate::expressions::LoopType, num_keyframes: usize, time_sec: f64) -> f64 {
+        crate::expressions::loop_in(self, loop_type, num_keyframes, time_sec)
     }
 }
 

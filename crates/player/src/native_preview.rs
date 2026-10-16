@@ -624,6 +624,40 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
                 }
             }
         }
+        SceneNode::NullObject {
+            transform,
+            opacity,
+            children,
+            ..
+        } => {
+            let transform_css = transform_css(transform);
+            rsx! {
+                g {
+                    transform: "{transform_css}",
+                    opacity,
+                    for (child_index, child) in children.iter().enumerate() {
+                        SceneNodeView {
+                            node: child.clone(),
+                            node_path: format!("{}.{}", props.node_path, child_index),
+                            timeline_time: props.timeline_time,
+                            inherited_volume: props.inherited_volume,
+                        }
+                    }
+                }
+            }
+        }
+        SceneNode::TrackMatte { target, .. } => {
+            rsx! {
+                g {
+                    SceneNodeView {
+                        node: (*target).clone(),
+                        node_path: format!("{}.target", props.node_path),
+                        timeline_time: props.timeline_time,
+                        inherited_volume: props.inherited_volume,
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -664,8 +698,8 @@ struct LayerMaskViewProps {
 #[component]
 fn LayerMaskView(props: LayerMaskViewProps) -> Element {
     let style = match props.mode {
-        MaskMode::Alpha => "mask-type:alpha;",
-        MaskMode::Luminance => "mask-type:luminance;",
+        MaskMode::Alpha | MaskMode::AlphaInverted => "mask-type:alpha;",
+        MaskMode::Luminance | MaskMode::LuminanceInverted => "mask-type:luminance;",
     };
     rsx! {
         defs {
