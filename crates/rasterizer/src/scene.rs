@@ -267,7 +267,7 @@ pub enum SceneFilter {
     ///
     /// Equivalent to Remotion's `<CameraMotionBlur shutterAngle={180} samples={10}>`.
     /// Accumulates `samples` renders at sub-frame time offsets determined by `shutter_angle`
-    /// and `shutter_phase`, blending them together with equal opacity weights.
+    /// and `shutter_phase`, blending them together with weighted temporal filter kernels.
     CameraMotionBlur {
         /// Opening angle of the virtual camera shutter in degrees (0–360).
         /// 180° = half-frame exposure (cinematic standard). 360° = maximum blur.
@@ -276,6 +276,25 @@ pub enum SceneFilter {
         samples: u32,
         /// Phase offset as a fraction of the shutter interval (-0.5 centres on current frame).
         shutter_phase: f32,
+        /// Optional motion blur direction angle in degrees (default horizontal 0.0°).
+        #[serde(default)]
+        angle_deg: Option<f32>,
+        /// Temporal filter weighting kernel (default Box).
+        #[serde(default)]
+        kernel: crate::motion_blur::TemporalFilterKernel,
+    },
+    /// Directional 2D motion blur along a specific angle and distance.
+    DirectionalMotionBlur {
+        /// Motion angle in degrees (0 = horizontal, 90 = vertical).
+        angle_deg: f32,
+        /// Blur length in pixels.
+        length: f32,
+        /// Sub-samples along the blur vector.
+        #[serde(default = "default_motion_samples")]
+        samples: u32,
+        /// Temporal filter weighting kernel.
+        #[serde(default)]
+        kernel: crate::motion_blur::TemporalFilterKernel,
     },
 }
 
@@ -646,6 +665,10 @@ pub enum SceneNode {
 
 const fn default_playback_rate() -> f32 {
     1.0
+}
+
+const fn default_motion_samples() -> u32 {
+    16
 }
 
 /// Affine 2D transform (scale + rotation + translation).

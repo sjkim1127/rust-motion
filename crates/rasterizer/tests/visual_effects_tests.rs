@@ -393,3 +393,83 @@ fn test_invalid_filter_parameters_rejected() {
     });
     assert!(backend.render_frame(&scene2, &frame_cfg(10, 10)).is_err());
 }
+
+#[test]
+fn test_camera_motion_blur_shutter_angle_and_phase() {
+    let backend = TinySkiaBackend::headless();
+    let mut scene = Scene::new();
+    // A vertical white block in the center of 64x64 canvas
+    scene.push(SceneNode::Layer {
+        opacity: 1.0,
+        blend_mode: BlendMode::Normal,
+        clip: None,
+        mask: None,
+        mask_mode: rust_motion_rasterizer::MaskMode::Alpha,
+        filters: vec![SceneFilter::CameraMotionBlur {
+            shutter_angle: 180.0,
+            samples: 16,
+            shutter_phase: -90.0,
+            angle_deg: Some(0.0),
+            kernel: rust_motion_rasterizer::TemporalFilterKernel::Gaussian,
+        }],
+        shadow: None,
+        children: vec![SceneNode::Rect {
+            x: 28.0,
+            y: 20.0,
+            w: 8.0,
+            h: 24.0,
+            fill: Color::WHITE,
+            stroke: None,
+            stroke_width: 0.0,
+            corner_radius: 0.0,
+        }],
+    });
+
+    let img = backend.render_frame(&scene, &frame_cfg(64, 64)).unwrap();
+    // Center pixel should be white
+    let center = img.get_pixel(32, 32);
+    assert!(center[3] > 100);
+
+    // Trail should spread horizontally to left and right
+    let left = img.get_pixel(26, 32);
+    assert!(left[3] > 0, "motion blur should produce horizontal trail");
+    let right = img.get_pixel(38, 32);
+    assert!(right[3] > 0, "motion blur should produce horizontal trail");
+}
+
+#[test]
+fn test_directional_motion_blur_diagonal() {
+    let backend = TinySkiaBackend::headless();
+    let mut scene = Scene::new();
+    // 8x8 white square at (28, 28)
+    scene.push(SceneNode::Layer {
+        opacity: 1.0,
+        blend_mode: BlendMode::Normal,
+        clip: None,
+        mask: None,
+        mask_mode: rust_motion_rasterizer::MaskMode::Alpha,
+        filters: vec![SceneFilter::DirectionalMotionBlur {
+            angle_deg: 45.0, // 45° diagonal
+            length: 16.0,
+            samples: 16,
+            kernel: rust_motion_rasterizer::TemporalFilterKernel::Triangle,
+        }],
+        shadow: None,
+        children: vec![SceneNode::Rect {
+            x: 28.0,
+            y: 28.0,
+            w: 8.0,
+            h: 8.0,
+            fill: Color::WHITE,
+            stroke: None,
+            stroke_width: 0.0,
+            corner_radius: 0.0,
+        }],
+    });
+
+    let img = backend.render_frame(&scene, &frame_cfg(64, 64)).unwrap();
+    // Diagonal blur spreads along dx=dy: pixel (38, 38) should receive blur
+    let diag = img.get_pixel(38, 38);
+    assert!(diag[3] > 0, "diagonal blur should spread along x=y");
+}
+

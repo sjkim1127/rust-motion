@@ -1622,68 +1622,45 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             shutter_angle,
             samples,
             shutter_phase,
+            angle_deg,
+            kernel,
         } => {
-            // Validate inputs
             if !shutter_angle.is_finite() || !shutter_phase.is_finite() {
                 return Err(RasterError::Scene(
                     "CameraMotionBlur parameters must be finite".into(),
                 ));
             }
-            let n = samples.max(1) as usize;
             let angle_clamped = shutter_angle.clamp(0.0, 360.0);
-
-            // If angle is effectively zero, nothing to blur
-            if angle_clamped < 0.01 || n == 1 {
+            if angle_clamped < 0.01 || samples <= 1 {
                 return Ok(());
             }
 
-            // The shutter covers `shutter_angle / 360` of a frame duration.
-            // `shutter_phase` offsets where the exposure window starts
-            // (−0.5 = centred on current frame, 0.0 = trailing blur).
-            //
-            // We sample at fractional pixel displacements: each sample i
-            // corresponds to time offset t_i = (phase + i/(n−1) * exposure) within frame.
-            // We encode this as a horizontal pixel shift proportional to t_i.
-            // The maximum shift (at t = 1 full frame) is a small fraction of width.
-            let w = pixmap.width() as i32;
-            let h = pixmap.height() as i32;
-            let exposure = angle_clamped / 360.0; // fraction of one frame
-            let max_shift_px = (w as f32 * 0.04 * exposure).max(1.0); // ≤4% of width
+            let angle = angle_deg.unwrap_or(0.0);
+            let w = pixmap.width() as f32;
+            let exposure = angle_clamped / 360.0;
+            let length = (w * 0.2 * exposure).max(4.0);
 
-            // Snapshot the original pixel data before accumulation
-            let src = pixmap.data().to_vec();
-            // Accumulator: f32 RGBA per pixel
-            let mut acc: Vec<f32> = vec![0.0; (w * h * 4) as usize];
-            let weight = 1.0 / n as f32;
-
-            for i in 0..n {
-                // Fractional position within the exposure window [0, 1]
-                let frac = if n == 1 {
-                    0.5
-                } else {
-                    i as f32 / (n - 1) as f32
-                };
-                // Time offset within the frame (can be negative)
-                let t = shutter_phase + frac * exposure;
-                let shift = (t * max_shift_px).round() as i32;
-
-                for y in 0..h {
-                    for x in 0..w {
-                        let sx = (x + shift).clamp(0, w - 1);
-                        let src_idx = ((y * w + sx) * 4) as usize;
-                        let dst_idx = ((y * w + x) * 4) as usize;
-                        for c in 0..4 {
-                            acc[dst_idx + c] += src[src_idx + c] as f32 * weight;
-                        }
-                    }
-                }
-            }
-
-            // Write accumulated result back into pixmap
-            let dst = pixmap.data_mut();
-            for (i, v) in acc.iter().enumerate() {
-                dst[i] = v.round().clamp(0.0, 255.0) as u8;
-            }
+            crate::motion_blur::apply_directional_motion_blur(
+                pixmap,
+                angle,
+                length,
+                samples,
+                kernel,
+            )?;
+        }
+        SceneFilter::DirectionalMotionBlur {
+            angle_deg,
+            length,
+            samples,
+            kernel,
+        } => {
+            crate::motion_blur::apply_directional_motion_blur(
+                pixmap,
+                angle_deg,
+                length,
+                samples,
+                kernel,
+            )?;
         }
     }
     Ok(())

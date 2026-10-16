@@ -821,10 +821,14 @@ fn layer_filter_css(filters: &[SceneFilter], shadow: Option<&SceneShadow>) -> St
                 format!("contrast({}) saturate({})", contrast.max(0.0), saturation.max(0.0))
             }
             SceneFilter::ColorKey { .. } => String::new(),
-            SceneFilter::CameraMotionBlur { shutter_angle, samples: _, shutter_phase: _ } => {
+            SceneFilter::CameraMotionBlur { shutter_angle, .. } => {
                 // CSS doesn't have a native shutter blur; approximate with motion blur
                 // using a small horizontal blur proportional to shutter angle.
                 let blur_px = (shutter_angle.clamp(0.0, 360.0) / 360.0 * 4.0).max(0.0);
+                if blur_px < 0.1 { String::new() } else { format!("blur({blur_px:.1}px)") }
+            }
+            SceneFilter::DirectionalMotionBlur { length, .. } => {
+                let blur_px = (length * 0.5).max(0.0);
                 if blur_px < 0.1 { String::new() } else { format!("blur({blur_px:.1}px)") }
             }
         })
