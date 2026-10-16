@@ -5434,6 +5434,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-dng"
+version = "1.0.0"
+dependencies = [
+ "rayon",
+ "rust-motion-dng",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "rust-motion-h264enc"
 version = "1.0.0"
 dependencies = [
