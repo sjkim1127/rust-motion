@@ -22,6 +22,8 @@ members = [
     "crates/mxf",
     "crates/python",
     "crates/project",
+    "crates/bitstream",
+    "crates/hevc",
     "apps/studio",
     "apps/example",
 ]
@@ -113,6 +115,8 @@ rust-motion-charts      = { version = "1.0.0", path = "crates/charts" }
 rust-motion-h264enc     = { version = "1.0.0", path = "crates/h264enc" }
 rust-motion-mxf         = { version = "1.0.0", path = "crates/mxf" }
 rust-motion-project     = { version = "1.0.0", path = "crates/project" }
+rust-motion-bitstream   = { version = "1.0.0", path = "crates/bitstream" }
+rust-motion-hevc        = { version = "1.0.0", path = "crates/hevc" }
 
 
 

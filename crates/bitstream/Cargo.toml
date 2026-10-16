@@ -1,0 +1,8 @@
+[package]
+name = "rust-motion-bitstream"
+version = "1.0.0"
+edition = "2021"
+description = "Bit-level reading and writing for video codecs (Exp-Golomb, RBSP, NAL)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]

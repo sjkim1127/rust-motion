@@ -5338,6 +5338,10 @@ name = "rust-motion-audio-dsp"
 version = "1.0.0"
 
 [[package]]
+name = "rust-motion-bitstream"
+version = "1.0.0"
+
+[[package]]
 name = "rust-motion-captions"
 version = "1.0.0"
 dependencies = [
@@ -5434,6 +5438,15 @@ name = "rust-motion-h264enc"
 version = "1.0.0"
 dependencies = [
  "rayon",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "rust-motion-hevc"
+version = "1.0.0"
+dependencies = [
+ "rayon",
+ "rust-motion-bitstream",
  "thiserror 1.0.69",
 ]
 

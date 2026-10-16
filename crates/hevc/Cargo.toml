@@ -1,0 +1,15 @@
+[package]
+name = "rust-motion-hevc"
+description = "Clean-room pure-Rust H.265/HEVC decoder (ITU-T H.265)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["threads"]
+threads = ["dep:rayon"]
+
+[dependencies]
+rust-motion-bitstream = { workspace = true }
+thiserror = { workspace = true }
+rayon = { workspace = true, optional = true }
