@@ -5326,6 +5326,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-audio-dsp"
+version = "1.0.0"
+
+[[package]]
 name = "rust-motion-captions"
 version = "1.0.0"
 dependencies = [
@@ -5424,6 +5428,7 @@ dependencies = [
  "dioxus",
  "hound",
  "image",
+ "rust-motion-audio-dsp",
  "rust-motion-composition",
  "rust-motion-core",
  "rust-motion-rasterizer",

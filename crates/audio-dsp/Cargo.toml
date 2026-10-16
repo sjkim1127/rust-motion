@@ -1,0 +1,11 @@
+[package]
+name        = "rust-motion-audio-dsp"
+description = "Pure Rust Audio DSP Engine: Parametric EQ, Dynamics Compressor, Limiter, Reverb, True Peak & ITU-R BS.1770 Loudness"
+version.workspace     = true
+edition.workspace     = true
+authors.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+readme.workspace      = true
+
+[dependencies]

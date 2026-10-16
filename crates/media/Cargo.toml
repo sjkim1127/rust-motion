@@ -13,6 +13,7 @@ dioxus             = { workspace = true, optional = true }
 rust-motion-core     = { workspace = true, optional = true }
 rust-motion-composition = { workspace = true }
 rust-motion-rasterizer  = { workspace = true }
+rust-motion-audio-dsp   = { workspace = true }
 serde              = { workspace = true }
 serde_json         = { workspace = true }
 tracing            = { workspace = true }
