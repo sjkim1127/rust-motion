@@ -186,7 +186,24 @@ pub enum ClipRegion {
 pub enum MaskMode {
     #[default]
     Alpha,
+    AlphaInverted,
     Luminance,
+    LuminanceInverted,
+}
+
+/// After Effects Track Matte mode.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TrackMatteMode {
+    /// Target alpha is modulated by matte alpha.
+    #[default]
+    Alpha,
+    /// Target alpha is modulated by inverted matte alpha (1 - alpha).
+    AlphaInverted,
+    /// Target alpha is modulated by matte luminance (0.2126R + 0.7152G + 0.0722B).
+    Luma,
+    /// Target alpha is modulated by inverted matte luminance (1 - luma).
+    LumaInverted,
 }
 
 /// Pixel filter applied to an offscreen layer in declaration order.
@@ -506,6 +523,14 @@ pub enum SceneNode {
         #[serde(default)]
         shadow: Option<SceneShadow>,
         children: Vec<SceneNode>,
+    },
+
+    /// After Effects Track Matte: modulates target layer opacity with a matte layer.
+    TrackMatte {
+        target: Box<SceneNode>,
+        matte: Box<SceneNode>,
+        #[serde(default)]
+        mode: TrackMatteMode,
     },
 
     /// Animated GIF scene node.

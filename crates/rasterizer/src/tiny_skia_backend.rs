@@ -9,6 +9,7 @@ use crate::image_cache::ImageCache;
 
 use crate::scene::{
     BlendMode, ClipRegion, Color, ImageFit, MaskMode, Scene, SceneFilter, SceneNode, SceneShadow,
+    TrackMatteMode,
 };
 use crate::video_cache::VideoFrameCache;
 use image::{imageops, RgbaImage};
@@ -17,7 +18,7 @@ use rayon::prelude::*;
 use std::sync::Arc;
 use tiny_skia::{
     BlendMode as SkBlendMode, FillRule, IntSize, Mask, MaskType, Paint, Path, PathBuilder, Pixmap,
-    PixmapPaint, Rect, Stroke, Transform,
+    PixmapPaint, PremultipliedColorU8, Rect, Stroke, Transform,
 };
 
 const MAX_IMAGE_NODE_PIXELS: u64 = 16 * 1024 * 1024;
@@ -732,10 +733,40 @@ fn render_node(
                 let mut mask_pixmap = Pixmap::new(pixmap.width(), pixmap.height())
                     .ok_or_else(|| RasterError::Scene("failed to allocate mask surface".into()))?;
                 render_nodes(&mut mask_pixmap, mask_nodes, transform, 1.0, resources)?;
-                let mask_type = match mask_mode {
-                    MaskMode::Alpha => MaskType::Alpha,
-                    MaskMode::Luminance => MaskType::Luminance,
+                let (mask_type, invert) = match mask_mode {
+                    MaskMode::Alpha => (MaskType::Alpha, false),
+                    MaskMode::AlphaInverted => (MaskType::Alpha, true),
+                    MaskMode::Luminance => (MaskType::Luminance, false),
+                    MaskMode::LuminanceInverted => (MaskType::Luminance, true),
                 };
+
+                if invert {
+                    match mask_mode {
+                        MaskMode::AlphaInverted => {
+                            for pixel in mask_pixmap.pixels_mut() {
+                                let inv_a = 255 - pixel.alpha();
+                                *pixel = PremultipliedColorU8::from_rgba(0, 0, 0, inv_a)
+                                    .unwrap_or(PremultipliedColorU8::TRANSPARENT);
+                            }
+                        }
+                        MaskMode::LuminanceInverted => {
+                            for pixel in mask_pixmap.pixels_mut() {
+                                let a = pixel.alpha();
+                                if a == 0 {
+                                    *pixel = PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap();
+                                } else {
+                                    let r = 255 - pixel.red();
+                                    let g = 255 - pixel.green();
+                                    let b = 255 - pixel.blue();
+                                    *pixel = PremultipliedColorU8::from_rgba(r, g, b, 255)
+                                        .unwrap_or(PremultipliedColorU8::TRANSPARENT);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
                 layer.apply_mask(&Mask::from_pixmap(mask_pixmap.as_ref(), mask_type));
             }
 
@@ -961,6 +992,64 @@ fn render_node(
                     pixmap.draw_pixmap(0, 0, sm_pixmap.as_ref(), &paint, shader_transform, None);
                 }
             }
+        }
+
+        SceneNode::TrackMatte { target, matte, mode } => {
+            if opacity <= 0.0 {
+                return Ok(());
+            }
+
+            let mut target_pixmap = Pixmap::new(pixmap.width(), pixmap.height())
+                .ok_or_else(|| RasterError::Scene("failed to allocate track matte target surface".into()))?;
+            render_node(&mut target_pixmap, target, transform, opacity, resources)?;
+
+            let mut matte_pixmap = Pixmap::new(pixmap.width(), pixmap.height())
+                .ok_or_else(|| RasterError::Scene("failed to allocate track matte surface".into()))?;
+            render_node(&mut matte_pixmap, matte, transform, 1.0, resources)?;
+
+            let (mask_type, invert) = match mode {
+                TrackMatteMode::Alpha => (MaskType::Alpha, false),
+                TrackMatteMode::AlphaInverted => (MaskType::Alpha, true),
+                TrackMatteMode::Luma => (MaskType::Luminance, false),
+                TrackMatteMode::LumaInverted => (MaskType::Luminance, true),
+            };
+
+            if invert {
+                match mode {
+                    TrackMatteMode::AlphaInverted => {
+                        for pixel in matte_pixmap.pixels_mut() {
+                            let inv_a = 255 - pixel.alpha();
+                            *pixel = PremultipliedColorU8::from_rgba(0, 0, 0, inv_a)
+                                .unwrap_or(PremultipliedColorU8::TRANSPARENT);
+                        }
+                    }
+                    TrackMatteMode::LumaInverted => {
+                        for pixel in matte_pixmap.pixels_mut() {
+                            let a = pixel.alpha();
+                            if a == 0 {
+                                *pixel = PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap();
+                            } else {
+                                let r = 255 - pixel.red();
+                                let g = 255 - pixel.green();
+                                let b = 255 - pixel.blue();
+                                *pixel = PremultipliedColorU8::from_rgba(r, g, b, 255)
+                                    .unwrap_or(PremultipliedColorU8::TRANSPARENT);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            let mask = Mask::from_pixmap(matte_pixmap.as_ref(), mask_type);
+            target_pixmap.apply_mask(&mask);
+
+            let composite_paint = PixmapPaint {
+                opacity: 1.0,
+                blend_mode: tiny_skia::BlendMode::SourceOver,
+                ..Default::default()
+            };
+            pixmap.draw_pixmap(0, 0, target_pixmap.as_ref(), &composite_paint, Transform::identity(), None);
         }
     }
     Ok(())
@@ -2631,6 +2720,126 @@ mod tests {
 
         assert_eq!(image.get_pixel(16, 32), &Rgba([0, 0, 255, 255]));
         assert_eq!(image.get_pixel(48, 32)[3], 0);
+    }
+
+    #[test]
+    fn layer_alpha_inverted_mask_inverts_coverage() {
+        let mut layer = composited_layer(vec![solid_rect(
+            Color::rgb(255, 0, 0),
+            0.0,
+            0.0,
+            64.0,
+            64.0,
+        )]);
+        let SceneNode::Layer {
+            mask, mask_mode, ..
+        } = &mut layer
+        else {
+            unreachable!();
+        };
+        *mask_mode = MaskMode::AlphaInverted;
+        *mask = Some(vec![solid_rect(Color::WHITE, 0.0, 0.0, 32.0, 64.0)]);
+        let image = render(&Scene { nodes: vec![layer] }, 64, 64);
+
+        // x: 0..32 is masked out (inverted alpha)
+        assert_eq!(image.get_pixel(16, 32)[3], 0);
+        // x: 32..64 remains visible
+        assert_eq!(image.get_pixel(48, 32), &Rgba([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn layer_luminance_inverted_mask_inverts_luma() {
+        let mut layer = composited_layer(vec![solid_rect(
+            Color::rgb(0, 255, 0),
+            0.0,
+            0.0,
+            64.0,
+            64.0,
+        )]);
+        let SceneNode::Layer {
+            mask, mask_mode, ..
+        } = &mut layer
+        else {
+            unreachable!();
+        };
+        *mask_mode = MaskMode::LuminanceInverted;
+        *mask = Some(vec![
+            solid_rect(Color::WHITE, 0.0, 0.0, 32.0, 64.0),
+            solid_rect(Color::BLACK, 32.0, 0.0, 32.0, 64.0),
+        ]);
+        let image = render(&Scene { nodes: vec![layer] }, 64, 64);
+
+        // White has luma 1.0 -> inverted luma 0.0 -> masked out
+        assert_eq!(image.get_pixel(16, 32)[3], 0);
+        // Black has luma 0.0 -> inverted luma 1.0 -> full opacity
+        assert_eq!(image.get_pixel(48, 32), &Rgba([0, 255, 0, 255]));
+    }
+
+    #[test]
+    fn track_matte_alpha_and_inverted() {
+        let target = solid_rect(Color::rgb(255, 0, 0), 0.0, 0.0, 64.0, 64.0);
+        let matte = solid_rect(Color::WHITE, 0.0, 0.0, 32.0, 64.0);
+
+        // Alpha mode
+        let scene_alpha = Scene {
+            nodes: vec![SceneNode::TrackMatte {
+                target: Box::new(target.clone()),
+                matte: Box::new(matte.clone()),
+                mode: TrackMatteMode::Alpha,
+            }],
+        };
+        let img_alpha = render(&scene_alpha, 64, 64);
+        assert_eq!(img_alpha.get_pixel(16, 32), &Rgba([255, 0, 0, 255]));
+        assert_eq!(img_alpha.get_pixel(48, 32)[3], 0);
+
+        // AlphaInverted mode
+        let scene_inv = Scene {
+            nodes: vec![SceneNode::TrackMatte {
+                target: Box::new(target),
+                matte: Box::new(matte),
+                mode: TrackMatteMode::AlphaInverted,
+            }],
+        };
+        let img_inv = render(&scene_inv, 64, 64);
+        assert_eq!(img_inv.get_pixel(16, 32)[3], 0);
+        assert_eq!(img_inv.get_pixel(48, 32), &Rgba([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn track_matte_luma_and_inverted() {
+        let target = solid_rect(Color::rgb(0, 0, 255), 0.0, 0.0, 64.0, 64.0);
+        let matte = SceneNode::Group {
+            transform: Default::default(),
+            opacity: 1.0,
+            children: vec![
+                solid_rect(Color::WHITE, 0.0, 0.0, 32.0, 64.0),
+                solid_rect(Color::BLACK, 32.0, 0.0, 32.0, 64.0),
+            ],
+        };
+
+        // Luma mode: White passes target, Black blocks
+        let scene_luma = Scene {
+            nodes: vec![SceneNode::TrackMatte {
+                target: Box::new(target.clone()),
+                matte: Box::new(matte.clone()),
+                mode: TrackMatteMode::Luma,
+            }],
+        };
+        let img_luma = render(&scene_luma, 64, 64);
+        assert_eq!(img_luma.get_pixel(16, 32), &Rgba([0, 0, 255, 255]));
+        assert_eq!(img_luma.get_pixel(48, 32)[3], 0);
+
+        // LumaInverted mode: White blocks, Black passes target
+        let scene_luma_inv = Scene {
+            nodes: vec![SceneNode::TrackMatte {
+                target: Box::new(target),
+                matte: Box::new(matte),
+                mode: TrackMatteMode::LumaInverted,
+            }],
+        };
+        let img_luma_inv = render(&scene_luma_inv, 64, 64);
+        assert_eq!(img_luma_inv.get_pixel(16, 32)[3], 0);
+        assert_eq!(img_luma_inv.get_pixel(48, 32), &Rgba([0, 0, 255, 255]));
     }
 
     #[test]
