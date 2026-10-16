@@ -5355,6 +5355,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-cfb"
+version = "1.0.0"
+
+[[package]]
 name = "rust-motion-charts"
 version = "1.0.0"
 dependencies = [
@@ -5518,6 +5522,7 @@ name = "rust-motion-project"
 version = "1.0.0"
 dependencies = [
  "reqwest",
+ "rust-motion-cfb",
  "serde",
  "serde_json",
  "sha2",

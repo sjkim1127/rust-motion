@@ -315,8 +315,20 @@ fn extract_rational_seconds(tag_str: &str, attr: &str) -> Option<f64> {
 }
 
 // -------------------------------------------------------------------------------------------------
-// AAF Metadata Summary Descriptor
+// AAF Metadata Summary Descriptor & MS-CFB Compound File Storage
 // -------------------------------------------------------------------------------------------------
+
+use rust_motion_cfb::{CompoundFile, Version, Writer};
+
+pub const AAF_ROOT_CLASS_ID: [u8; 16] = [
+    0x0D, 0x01, 0x01, 0x01, 0x01, 0x01, 0x3F, 0x00, 0x06, 0x0E, 0x2B, 0x34, 0x02, 0x06, 0x01, 0x01,
+];
+pub const AAF_HEADER_CLASS_ID: [u8; 16] = [
+    0x0D, 0x01, 0x01, 0x01, 0x01, 0x01, 0x2F, 0x00, 0x06, 0x0E, 0x2B, 0x34, 0x02, 0x06, 0x01, 0x01,
+];
+pub const AAF_COMPOSITION_MOB_CLASS_ID: [u8; 16] = [
+    0x0D, 0x01, 0x01, 0x01, 0x01, 0x01, 0x37, 0x00, 0x06, 0x0E, 0x2B, 0x34, 0x02, 0x06, 0x01, 0x01,
+];
 
 /// AAF Project summary and composition mob structure for Avid / Premiere interchange.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -343,6 +355,113 @@ pub fn export_aaf_metadata(timeline: &NleTimeline) -> AafMetadata {
         audio_tracks_count,
         total_clips,
     }
+}
+
+/// Export an NLE timeline into an MS-CFB Compound File Binary AAF container.
+pub fn export_aaf_cfb(timeline: &NleTimeline, small_sectors: bool) -> Result<Vec<u8>, InterchangeError> {
+    let ver = if small_sectors { Version::V3 } else { Version::V4 };
+    let mut writer = Writer::new(ver);
+    writer.set_clsid(Writer::ROOT, AAF_ROOT_CLASS_ID);
+
+    // Create AAF Header storage
+    let header_id = writer.storage(Writer::ROOT, "Header", AAF_HEADER_CLASS_ID)
+        .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
+
+    // Create Identification storage
+    let _ident_id = writer.storage(header_id, "Identification", [0; 16])
+        .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
+
+    // Create Content storage
+    let content_id = writer.storage(header_id, "Content", [0; 16])
+        .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
+
+    // Create CompositionMob storage
+    let comp_id = writer.storage(content_id, "CompositionMob", AAF_COMPOSITION_MOB_CLASS_ID)
+        .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
+
+    // Write properties stream for Header: little-endian 0x4C, format 0x20
+    let mut header_props = Vec::new();
+    header_props.push(0x4C); // Little-endian
+    header_props.push(0x20); // Format version
+    header_props.extend_from_slice(&1u16.to_le_bytes()); // Entry count = 1
+    // PID 0x0002 (ByteOrder), SF_DATA = 0x82, length = 2
+    header_props.extend_from_slice(&0x0002u16.to_le_bytes());
+    header_props.extend_from_slice(&0x0082u16.to_le_bytes());
+    header_props.extend_from_slice(&2u16.to_le_bytes());
+    header_props.extend_from_slice(&0x4949u16.to_le_bytes()); // 'II'
+
+    writer.stream(header_id, "properties", header_props)
+        .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
+
+    // Serialize NLE Timeline metadata & structure into AAF streams
+    let metadata = export_aaf_metadata(timeline);
+    let meta_json = serde_json::to_vec_pretty(&metadata)
+        .map_err(|e| InterchangeError::InvalidFormat(e.to_string()))?;
+    writer.stream(comp_id, "RustMotionAafMeta", meta_json)
+        .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
+
+    let timeline_json = serde_json::to_vec_pretty(timeline)
+        .map_err(|e| InterchangeError::InvalidFormat(e.to_string()))?;
+    writer.stream(comp_id, "NleTimelineData", timeline_json)
+        .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
+
+    // Also write a standard AAF mob summary stream
+    let mut mob_summary = Vec::new();
+    mob_summary.extend_from_slice(&(timeline.duration_frames).to_le_bytes());
+    mob_summary.extend_from_slice(&(timeline.fps as f32).to_le_bytes());
+    mob_summary.extend_from_slice(&(timeline.width).to_le_bytes());
+    mob_summary.extend_from_slice(&(timeline.height).to_le_bytes());
+    writer.stream(comp_id, "MobSummary", mob_summary)
+        .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
+
+    Ok(writer.finish())
+}
+
+/// Import an NLE timeline from an MS-CFB Compound File Binary AAF container.
+pub fn import_aaf_cfb(data: &[u8]) -> Result<NleTimeline, InterchangeError> {
+    let cfb = CompoundFile::open(data)
+        .map_err(|e| InterchangeError::InvalidFormat(format!("Failed to parse CFB container: {e:?}")))?;
+
+    // Verify AAF Header storage exists
+    let _header_entry = cfb.find("/Header")
+        .map_err(|_| InterchangeError::InvalidFormat("AAF /Header storage not found in CFB".into()))?;
+
+    // Try reading embedded NleTimelineData if available
+    if let Ok(timeline_data) = cfb.read_path("/Header/Content/CompositionMob/NleTimelineData") {
+        if let Ok(timeline) = serde_json::from_slice::<NleTimeline>(&timeline_data) {
+            return Ok(timeline);
+        }
+    }
+
+    // Otherwise reconstruct from MobSummary and metadata
+    let mut title = "AAF Imported Sequence".to_string();
+    let mut fps = 24.0;
+    let mut width = 1920;
+    let mut height = 1080;
+
+    if let Ok(meta_data) = cfb.read_path("/Header/Content/CompositionMob/RustMotionAafMeta") {
+        if let Ok(meta) = serde_json::from_slice::<AafMetadata>(&meta_data) {
+            title = meta.name;
+            if meta.edit_rate.1 > 0 {
+                fps = meta.edit_rate.0 as f64 / meta.edit_rate.1 as f64;
+            }
+        }
+    }
+
+    if let Ok(summary) = cfb.read_path("/Header/Content/CompositionMob/MobSummary") {
+        if summary.len() >= 16 {
+            let _dur = u32::from_le_bytes([summary[0], summary[1], summary[2], summary[3]]);
+            fps = f32::from_le_bytes([summary[4], summary[5], summary[6], summary[7]]) as f64;
+            width = u32::from_le_bytes([summary[8], summary[9], summary[10], summary[11]]);
+            height = u32::from_le_bytes([summary[12], summary[13], summary[14], summary[15]]);
+        }
+    }
+
+    let mut timeline = NleTimeline::new(title, fps, width, height);
+    timeline.tracks.push(NleTrack::new("v1", "Video Track", TrackKind::Video));
+    timeline.tracks.push(NleTrack::new("a1", "Audio Track", TrackKind::Audio));
+    timeline.update_duration();
+    Ok(timeline)
 }
 
 #[cfg(test)]
@@ -419,5 +538,34 @@ mod tests {
         assert_eq!(aaf.audio_tracks_count, 1);
         assert_eq!(aaf.total_clips, 2);
         assert_eq!(aaf.duration_frames, 100);
+    }
+
+    #[test]
+    fn test_aaf_cfb_roundtrip() {
+        let mut timeline = NleTimeline::new("Avid / Premiere Film", 24.0, 1920, 1080);
+        let mut v_track = NleTrack::new("v1", "Main Video", TrackKind::Video);
+        v_track.clips.push(NleClip::new("c1", "Scene 1", 0, 120, 0));
+        v_track.clips.push(NleClip::new("c2", "Scene 2", 120, 240, 50));
+        let mut a_track = NleTrack::new("a1", "Dialogue", TrackKind::Audio);
+        a_track.clips.push(NleClip::new("c3", "Audio 1", 0, 360, 0));
+        timeline.tracks.push(v_track);
+        timeline.tracks.push(a_track);
+        timeline.update_duration();
+
+        for small_sectors in [true, false] {
+            let aaf_bytes = export_aaf_cfb(&timeline, small_sectors).expect("export AAF CFB");
+            assert!(!aaf_bytes.is_empty());
+            assert_eq!(&aaf_bytes[..8], &rust_motion_cfb::SIGNATURE);
+
+            let imported = import_aaf_cfb(&aaf_bytes).expect("import AAF CFB");
+            assert_eq!(imported.title, "Avid / Premiere Film");
+            assert_eq!(imported.fps, 24.0);
+            assert_eq!(imported.width, 1920);
+            assert_eq!(imported.height, 1080);
+            assert_eq!(imported.tracks.len(), 2);
+            assert_eq!(imported.tracks[0].clips.len(), 2);
+            assert_eq!(imported.tracks[1].clips.len(), 1);
+            assert_eq!(imported.duration_frames, 360);
+        }
     }
 }
