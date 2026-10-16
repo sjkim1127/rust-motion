@@ -1,0 +1,11 @@
+[package]
+name        = "rust-motion-mxf"
+description = "Clean-room MXF (SMPTE ST 377-1) demuxer and streaming writer for broadcast & cinema (OP1a & OP-Atom)"
+version.workspace     = true
+edition.workspace     = true
+authors.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+readme.workspace      = true
+
+[dependencies]

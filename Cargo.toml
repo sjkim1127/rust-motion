@@ -18,6 +18,7 @@ members = [
     "crates/vdom",
     "crates/charts",
     "crates/h264enc",
+    "crates/mxf",
     "crates/python",
     "crates/project",
     "apps/studio",
@@ -108,6 +109,7 @@ rust-motion-rasterizer  = { version = "1.0.0", path = "crates/rasterizer" }
 rust-motion-vdom        = { version = "1.0.0", path = "crates/vdom" }
 rust-motion-charts      = { version = "1.0.0", path = "crates/charts" }
 rust-motion-h264enc     = { version = "1.0.0", path = "crates/h264enc" }
+rust-motion-mxf         = { version = "1.0.0", path = "crates/mxf" }
 rust-motion-project     = { version = "1.0.0", path = "crates/project" }
 
 
