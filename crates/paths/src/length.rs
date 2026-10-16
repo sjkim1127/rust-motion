@@ -88,7 +88,7 @@ pub fn get_instructions_length(instructions: &[Instruction]) -> f64 {
     total_length
 }
 
-fn cubic_bezier_length(
+pub(crate) fn cubic_bezier_length(
     (x0, y0): (f64, f64),
     (x1, y1): (f64, f64),
     (x2, y2): (f64, f64),
