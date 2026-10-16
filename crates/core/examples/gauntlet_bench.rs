@@ -58,6 +58,8 @@ fn scene(frame: u32) -> Scene {
         h: 337.5,
         fit: ImageFit::Cover,
         opacity: 1.0,
+        interpolation: Default::default(),
+        time_remap: None,
     });
 
     // Right Video PiP (offset playback rate)
@@ -81,6 +83,8 @@ fn scene(frame: u32) -> Scene {
         h: 337.5,
         fit: ImageFit::Cover,
         opacity: 0.9,
+        interpolation: Default::default(),
+        time_remap: None,
     });
 
     // 2. 20 High-Res Image Tiles with Sinusoidal Floating

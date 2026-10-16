@@ -48,6 +48,7 @@ pub mod security;
 pub mod shader;
 pub(crate) mod text_atlas;
 pub mod text_layout;
+pub mod time_remap;
 pub mod tiny_skia_backend;
 mod video_cache;
 pub mod vfx;
@@ -120,6 +121,9 @@ pub use scene::{
 pub use text_layout::{
     LayoutLine, PositionedGlyph, TextAlignment, TextDirection, TextLayout, TextLayoutEngine,
     TextStyle,
+};
+pub use time_remap::{
+    FrameInterpolationMode, OpticalFlowEngine, TimeRemapCurve, TimeRemapPoint,
 };
 pub use tiny_skia_backend::TinySkiaBackend;
 pub use video_cache::{probe_video_metadata, VideoMetadata};

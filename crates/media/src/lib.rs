@@ -43,5 +43,8 @@ pub use metadata::{
 };
 pub use sample::{read_encoded_sample, read_encoded_samples, EncodedSample};
 pub use scene::{SceneAudio, SceneGif, SceneImage, SceneVideo};
+pub use rust_motion_rasterizer::{
+    FrameInterpolationMode, OpticalFlowEngine, TimeRemapCurve, TimeRemapPoint,
+};
 #[cfg(feature = "dioxus")]
 pub use video::{Html5Video, OffthreadVideo, Video, VideoProps};

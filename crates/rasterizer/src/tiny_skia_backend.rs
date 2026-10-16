@@ -436,14 +436,90 @@ fn render_node(
             h,
             fit,
             opacity: node_opacity,
+            interpolation,
+            time_remap,
         } => {
-            let source = resources.videos.load_with_policy(
-                src,
-                *time,
-                resources.sampling_fps,
-                *looped,
-                resources.security,
-            )?;
+            let eff_time = match time_remap {
+                Some(ref curve) => curve.eval(*time),
+                None => *time,
+            };
+
+            let source = match interpolation {
+                crate::time_remap::FrameInterpolationMode::FrameRepeat => {
+                    resources.videos.load_with_policy(
+                        src,
+                        eff_time,
+                        resources.sampling_fps,
+                        *looped,
+                        resources.security,
+                    )?
+                }
+                crate::time_remap::FrameInterpolationMode::FrameBlend
+                | crate::time_remap::FrameInterpolationMode::PixelMotion => {
+                    let fps = resources.sampling_fps;
+                    let exact_frame = eff_time * fps;
+                    let f0 = exact_frame.floor();
+                    let alpha = (exact_frame - f0) as f32;
+                    let t0 = f0 / fps;
+                    let t1 = (f0 + 1.0) / fps;
+
+                    let img0 = resources.videos.load_with_policy(
+                        src,
+                        t0,
+                        fps,
+                        *looped,
+                        resources.security,
+                    )?;
+
+                    if alpha <= 0.001 {
+                        img0
+                    } else if alpha >= 0.999 {
+                        resources.videos.load_with_policy(
+                            src,
+                            t1,
+                            fps,
+                            *looped,
+                            resources.security,
+                        )?
+                    } else {
+                        let img1 = resources.videos.load_with_policy(
+                            src,
+                            t1,
+                            fps,
+                            *looped,
+                            resources.security,
+                        )?;
+
+                        let p0 = Pixmap::from_vec(
+                            img0.as_raw().clone(),
+                            tiny_skia::IntSize::from_wh(img0.width(), img0.height()).unwrap(),
+                        );
+                        let p1 = Pixmap::from_vec(
+                            img1.as_raw().clone(),
+                            tiny_skia::IntSize::from_wh(img1.width(), img1.height()).unwrap(),
+                        );
+
+                        if let (Some(px0), Some(px1)) = (p0, p1) {
+                            let interpolated = crate::time_remap::OpticalFlowEngine::interpolate_frames(
+                                &px0,
+                                &px1,
+                                alpha,
+                                *interpolation,
+                            );
+                            let rgba = image::RgbaImage::from_raw(
+                                interpolated.width(),
+                                interpolated.height(),
+                                interpolated.take(),
+                            )
+                            .unwrap();
+                            std::sync::Arc::new(rgba)
+                        } else {
+                            img0
+                        }
+                    }
+                }
+            };
+
             draw_video_media(
                 pixmap,
                 &source,
@@ -3197,6 +3273,8 @@ mod tests {
                 h: 16.0,
                 fit: ImageFit::Cover,
                 opacity: 1.0,
+                interpolation: Default::default(),
+                time_remap: None,
             }],
         };
         let backend = TinySkiaBackend::headless();

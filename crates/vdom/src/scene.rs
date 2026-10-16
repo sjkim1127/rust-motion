@@ -452,6 +452,8 @@ fn emit_element_media(
                     h: height,
                     fit: style.object_fit,
                     opacity: 1.0,
+                    interpolation: Default::default(),
+                    time_remap: None,
                 });
             }
         }

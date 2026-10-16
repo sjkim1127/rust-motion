@@ -313,6 +313,7 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
             h,
             fit,
             opacity,
+            ..
         } => {
             let media_id = format!("rust-motion-media-{}", props.node_path);
             let style = format!(
@@ -658,6 +659,18 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
                 }
             }
         }
+        SceneNode::FractalNoise { x, y, w, h, opacity, .. } => {
+            rsx! {
+                rect {
+                    x: "{x}",
+                    y: "{y}",
+                    width: "{w}",
+                    height: "{h}",
+                    fill: "#808080",
+                    opacity: "{opacity}",
+                }
+            }
+        }
     }
 }
 
@@ -831,6 +844,11 @@ fn layer_filter_css(filters: &[SceneFilter], shadow: Option<&SceneShadow>) -> St
                 let blur_px = (length * 0.5).max(0.0);
                 if blur_px < 0.1 { String::new() } else { format!("blur({blur_px:.1}px)") }
             }
+            SceneFilter::OpticalGlow { radius, intensity, .. } => {
+                let blur_px = (radius * 0.25).max(0.0);
+                format!("drop-shadow(0 0 {blur_px:.1}px rgba(255,255,255,{intensity:.2}))")
+            }
+            SceneFilter::DisplacementMap { .. } | SceneFilter::FractalNoise { .. } => String::new(),
         })
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>();
@@ -1200,6 +1218,8 @@ mod tests {
                 h: 100.0,
                 fit: ImageFit::Cover,
                 opacity: 1.0,
+                interpolation: Default::default(),
+                time_remap: None,
             }],
         };
 

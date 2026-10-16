@@ -427,6 +427,8 @@ fn bench_gpu_video_frames(c: &mut Criterion) {
             h: 1080.0,
             fit: rust_motion_rasterizer::scene::ImageFit::Cover,
             opacity: 1.0,
+            interpolation: Default::default(),
+            time_remap: None,
         }],
     };
     let warm_config = FrameConfig::new(1920, 1080, 0, 30.0);
@@ -455,6 +457,8 @@ fn bench_gpu_video_frames(c: &mut Criterion) {
                         h: 1080.0,
                         fit: rust_motion_rasterizer::scene::ImageFit::Cover,
                         opacity: 1.0,
+                        interpolation: Default::default(),
+                        time_remap: None,
                     }],
                 };
                 backend
@@ -482,6 +486,8 @@ fn bench_gpu_video_frames(c: &mut Criterion) {
                                 h: 1080.0,
                                 fit: rust_motion_rasterizer::scene::ImageFit::Cover,
                                 opacity: 1.0,
+                                interpolation: Default::default(),
+                                time_remap: None,
                             }],
                         })
                     },

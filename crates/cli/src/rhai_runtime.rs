@@ -487,6 +487,8 @@ impl SceneBuilder {
             h: non_negative_f32("height", h)?,
             fit: parse_image_fit(fit)?,
             opacity,
+            interpolation: Default::default(),
+            time_remap: None,
         });
         Ok(())
     }

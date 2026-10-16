@@ -553,6 +553,12 @@ pub enum SceneNode {
         h: f32,
         fit: ImageFit,
         opacity: f32,
+        /// Frame interpolation mode when slowing down or time remapping (Repeat, Blend, PixelMotion).
+        #[serde(default)]
+        interpolation: crate::time_remap::FrameInterpolationMode,
+        /// Optional arbitrary non-linear cubic time remapping curve.
+        #[serde(default)]
+        time_remap: Option<crate::time_remap::TimeRemapCurve>,
     },
 
     /// Non-visual audio track collected by the output encoder.

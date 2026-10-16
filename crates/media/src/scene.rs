@@ -3,7 +3,8 @@
 use crate::img::ImageFit;
 use rust_motion_composition::{CompositionError, SceneEmitter, SceneFrameContext};
 use rust_motion_rasterizer::{
-    gif_cache::LoopBehavior, AudioTrack, ImageFit as SceneImageFit, Scene, SceneNode,
+    gif_cache::LoopBehavior, AudioTrack, FrameInterpolationMode, ImageFit as SceneImageFit, Scene,
+    SceneNode, TimeRemapCurve,
 };
 use serde_json::Value;
 
@@ -147,6 +148,8 @@ pub struct SceneVideo {
     pub duration: Option<f64>,
     pub playback_rate: f64,
     pub looped: bool,
+    pub interpolation: FrameInterpolationMode,
+    pub time_remap: Option<TimeRemapCurve>,
 }
 
 impl SceneVideo {
@@ -164,6 +167,8 @@ impl SceneVideo {
             duration: None,
             playback_rate: 1.0,
             looped: false,
+            interpolation: FrameInterpolationMode::FrameRepeat,
+            time_remap: None,
         }
     }
 }
@@ -195,6 +200,8 @@ impl SceneEmitter for SceneVideo {
             h: self.height.max(0.0),
             fit: self.fit.into(),
             opacity: self.opacity.clamp(0.0, 1.0),
+            interpolation: self.interpolation,
+            time_remap: self.time_remap.clone(),
         });
         Ok(())
     }

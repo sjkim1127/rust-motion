@@ -76,6 +76,8 @@ fn native_video_frames_and_audio_are_encoded_together() {
             h: 64.0,
             fit: ImageFit::Cover,
             opacity: 1.0,
+            interpolation: Default::default(),
+            time_remap: None,
         }],
     })
     .unwrap();
