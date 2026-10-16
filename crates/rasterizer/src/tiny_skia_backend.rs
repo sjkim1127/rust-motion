@@ -1057,6 +1057,56 @@ fn render_node(
             };
             pixmap.draw_pixmap(0, 0, target_pixmap.as_ref(), &composite_paint, Transform::identity(), None);
         }
+
+        SceneNode::FractalNoise {
+            x,
+            y,
+            w,
+            h,
+            noise_type,
+            fractal_type,
+            contrast,
+            brightness,
+            complexity,
+            scale_x,
+            scale_y,
+            evolution,
+            seed,
+            opacity: node_opacity,
+        } => {
+            let eff_opacity = opacity * node_opacity;
+            if eff_opacity <= 0.0 || *w <= 0.0 || *h <= 0.0 {
+                return Ok(());
+            }
+            let config = crate::vfx::FractalNoise {
+                noise_type: *noise_type,
+                fractal_type: *fractal_type,
+                contrast: *contrast,
+                brightness: *brightness,
+                complexity: *complexity,
+                scale_x: *scale_x,
+                scale_y: *scale_y,
+                evolution: *evolution,
+                seed: *seed,
+            };
+            let noise_pixmap = crate::vfx::generate_fractal_noise_pixmap(
+                (w.round() as u32).max(1),
+                (h.round() as u32).max(1),
+                &config,
+            );
+            let paint = PixmapPaint {
+                opacity: eff_opacity.clamp(0.0, 1.0),
+                ..Default::default()
+            };
+            pixmap.draw_pixmap(
+                x.round() as i32,
+                y.round() as i32,
+                noise_pixmap.as_ref(),
+                &paint,
+                transform,
+                None,
+            );
+        }
     }
     Ok(())
 }
@@ -1661,6 +1711,82 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
                 samples,
                 kernel,
             )?;
+        }
+        SceneFilter::OpticalGlow {
+            threshold,
+            radius,
+            intensity,
+            anamorphic_ratio,
+            tint,
+            blend_mode,
+        } => {
+            let glow = crate::vfx::OpticalGlow {
+                threshold,
+                radius,
+                intensity,
+                anamorphic_ratio,
+                tint,
+                blend_mode,
+            };
+            crate::vfx::apply_optical_glow(pixmap, &glow)?;
+        }
+        SceneFilter::DisplacementMap {
+            channel_x,
+            channel_y,
+            max_horizontal,
+            max_vertical,
+            wrap_mode,
+            ref map_source,
+            map_width,
+            map_height,
+        } => {
+            let disp = crate::vfx::DisplacementMap {
+                channel_x,
+                channel_y,
+                max_horizontal,
+                max_vertical,
+                wrap_mode,
+                map_source: map_source.clone(),
+                map_width,
+                map_height,
+            };
+            crate::vfx::apply_displacement_map(pixmap, &disp)?;
+        }
+        SceneFilter::FractalNoise {
+            noise_type,
+            fractal_type,
+            contrast,
+            brightness,
+            complexity,
+            scale_x,
+            scale_y,
+            evolution,
+            seed,
+            blend_mode,
+            opacity,
+        } => {
+            let config = crate::vfx::FractalNoise {
+                noise_type,
+                fractal_type,
+                contrast,
+                brightness,
+                complexity,
+                scale_x,
+                scale_y,
+                evolution,
+                seed,
+            };
+            let noise_pixmap = crate::vfx::generate_fractal_noise_pixmap(
+                pixmap.width(),
+                pixmap.height(),
+                &config,
+            );
+            let paint = PixmapPaint {
+                opacity: opacity.clamp(0.0, 1.0),
+                blend_mode: tiny_skia_blend_mode(blend_mode),
+                ..Default::default()
+            };
+            pixmap.draw_pixmap(0, 0, noise_pixmap.as_ref(), &paint, Transform::identity(), None);
         }
     }
     Ok(())

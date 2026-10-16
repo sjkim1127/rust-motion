@@ -3,10 +3,13 @@
 //! Replaces heavy browser canvas-confetti with a deterministic,
 //! hardware-accelerated 2D/3D particle emitter running at 0.05ms per frame.
 
+use crate::mesh3d::Vec3;
 use crate::scene::{Color, SceneNode, Transform2D};
+use serde::{Deserialize, Serialize};
 
 /// Shape of confetti particle flakes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ConfettiShape {
     #[default]
     Rectangle,
@@ -246,6 +249,218 @@ impl ConfettiEmitter {
     }
 }
 
+// ─── General 2D/3D Particle Emitter System ───────────────────────────────────
+
+/// Emitter spatial geometry defining where particles are initially spawned.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum EmitterGeometry {
+    /// Single point emitter.
+    Point { position: Vec3 },
+    /// Bounding box emitter.
+    Box {
+        min: Vec3,
+        max: Vec3,
+    },
+    /// Spherical emitter.
+    Sphere {
+        center: Vec3,
+        radius: f32,
+    },
+}
+
+impl Default for EmitterGeometry {
+    fn default() -> Self {
+        Self::Point {
+            position: Vec3::new(960.0, 540.0, 0.0),
+        }
+    }
+}
+
+/// Advanced 2D/3D Particle Emitter System matching After Effects Particle Systems.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ParticleEmitter {
+    pub geometry: EmitterGeometry,
+    /// Continuous birth rate (particles per second). Default `50.0`.
+    pub birth_rate: f32,
+    /// Lifetime of each particle in seconds. Default `2.0`.
+    pub lifespan: f32,
+    /// Central emission direction in degrees (0 = right, 90 = down, 270 = up). Default `270.0`.
+    pub direction_deg: f32,
+    /// Angular dispersion cone spread in degrees (0 to 360). Default `60.0`.
+    pub spread_deg: f32,
+    /// Initial launch speed in pixels/sec. Default `300.0`.
+    pub speed: f32,
+    /// Random speed variation in pixels/sec. Default `100.0`.
+    pub speed_variance: f32,
+    /// Gravity vector. Default `(0.0, 400.0, 0.0)`.
+    pub gravity: Vec3,
+    /// Lateral wind force vector. Default `(0.0, 0.0, 0.0)`.
+    pub wind: Vec3,
+    /// Particle color at birth.
+    pub start_color: Color,
+    /// Particle color at end of life.
+    pub end_color: Color,
+    /// Particle radius at birth in pixels. Default `6.0`.
+    pub start_size: f32,
+    /// Particle radius at end of life in pixels. Default `0.5`.
+    pub end_size: f32,
+    /// Particle shapes.
+    pub shapes: Vec<ConfettiShape>,
+    /// Deterministic seed. Default `42`.
+    pub seed: u64,
+}
+
+impl Default for ParticleEmitter {
+    fn default() -> Self {
+        Self {
+            geometry: EmitterGeometry::default(),
+            birth_rate: 50.0,
+            lifespan: 2.0,
+            direction_deg: 270.0,
+            spread_deg: 60.0,
+            speed: 300.0,
+            speed_variance: 100.0,
+            gravity: Vec3::new(0.0, 400.0, 0.0),
+            wind: Vec3::new(0.0, 0.0, 0.0),
+            start_color: Color::rgb(255, 200, 50),
+            end_color: Color::rgba(255, 50, 0, 0),
+            start_size: 6.0,
+            end_size: 0.5,
+            shapes: vec![ConfettiShape::Circle],
+            seed: 42,
+        }
+    }
+}
+
+impl ParticleEmitter {
+    /// Renders active particles at a continuous timeline timestamp `time_sec`.
+    pub fn render_at_time(&self, time_sec: f32) -> Vec<SceneNode> {
+        if time_sec < 0.0 || self.birth_rate <= 0.0 || self.lifespan <= 0.0 {
+            return Vec::new();
+        }
+
+        let max_k = (time_sec * self.birth_rate).floor() as i64;
+        let min_k = ((time_sec - self.lifespan) * self.birth_rate).floor().max(0.0) as i64;
+        let active_count = (max_k - min_k + 1).max(0) as usize;
+        let mut nodes = Vec::with_capacity(active_count);
+
+        let half_spread = (self.spread_deg * 0.5).to_radians();
+        let center_angle = self.direction_deg.to_radians();
+
+        for k in min_k..=max_k {
+            let birth_time = k as f32 / self.birth_rate;
+            let age = time_sec - birth_time;
+            if age < 0.0 || age > self.lifespan {
+                continue;
+            }
+            let tau = (age / self.lifespan).clamp(0.0, 1.0);
+
+            // Deterministic particle pseudo-random properties derived from seed and index k
+            let mut rng = SimpleRng::new(self.seed.wrapping_add((k as u64).wrapping_mul(0x517cc1b727220a95)));
+
+            // Initial spawn position from geometry
+            let p0 = match self.geometry {
+                EmitterGeometry::Point { position } => position,
+                EmitterGeometry::Box { min, max } => Vec3::new(
+                    min.x + rng.next_f32() * (max.x - min.x),
+                    min.y + rng.next_f32() * (max.y - min.y),
+                    min.z + rng.next_f32() * (max.z - min.z),
+                ),
+                EmitterGeometry::Sphere { center, radius } => {
+                    let theta = rng.next_f32() * std::f32::consts::PI * 2.0;
+                    let phi = (rng.next_f32() * 2.0 - 1.0).acos();
+                    let r = radius * rng.next_f32().cbrt();
+                    Vec3::new(
+                        center.x + r * phi.sin() * theta.cos(),
+                        center.y + r * phi.sin() * theta.sin(),
+                        center.z + r * phi.cos(),
+                    )
+                }
+            };
+
+            // Initial velocity
+            let angle_offset = (rng.next_f32() * 2.0 - 1.0) * half_spread;
+            let theta = center_angle + angle_offset;
+            let vel = self.speed + (rng.next_f32() * 2.0 - 1.0) * self.speed_variance;
+            let vx = vel * theta.cos();
+            let vy = vel * theta.sin();
+            let vz = (rng.next_f32() * 2.0 - 1.0) * 50.0;
+
+            // Physics integration: P(t) = P0 + V0*t + 0.5*A*t^2
+            let ax = self.gravity.x + self.wind.x;
+            let ay = self.gravity.y + self.wind.y;
+            let az = self.gravity.z + self.wind.z;
+
+            let cur_x = p0.x + vx * age + 0.5 * ax * age * age;
+            let cur_y = p0.y + vy * age + 0.5 * ay * age * age;
+            let cur_z = p0.z + vz * age + 0.5 * az * age * age;
+
+            // Size over life
+            let size = (self.start_size * (1.0 - tau) + self.end_size * tau).max(0.1);
+
+            // Color over life
+            let r = ((self.start_color.r as f32 * (1.0 - tau) + self.end_color.r as f32 * tau).round()).clamp(0.0, 255.0) as u8;
+            let g = ((self.start_color.g as f32 * (1.0 - tau) + self.end_color.g as f32 * tau).round()).clamp(0.0, 255.0) as u8;
+            let b = ((self.start_color.b as f32 * (1.0 - tau) + self.end_color.b as f32 * tau).round()).clamp(0.0, 255.0) as u8;
+            let a = ((self.start_color.a as f32 * (1.0 - tau) + self.end_color.a as f32 * tau).round()).clamp(0.0, 255.0) as u8;
+            let color = Color::rgba(r, g, b, a);
+
+            // Perspective scale
+            let cam_dist = 600.0f32;
+            let p_scale = (cam_dist / (cam_dist + cur_z).max(10.0)).clamp(0.2, 3.0);
+            let final_r = size * p_scale;
+
+            let shape = self.shapes.get((k as usize) % self.shapes.len().max(1)).copied().unwrap_or(ConfettiShape::Circle);
+
+            let node = match shape {
+                ConfettiShape::Circle => SceneNode::Circle {
+                    cx: cur_x,
+                    cy: cur_y,
+                    r: final_r,
+                    fill: color,
+                    stroke: None,
+                    stroke_width: 0.0,
+                },
+                ConfettiShape::Rectangle => SceneNode::Rect {
+                    x: cur_x - final_r,
+                    y: cur_y - final_r,
+                    w: final_r * 2.0,
+                    h: final_r * 2.0,
+                    fill: color,
+                    stroke: None,
+                    stroke_width: 0.0,
+                    corner_radius: 0.0,
+                },
+                ConfettiShape::Star => {
+                    let r1 = final_r * 1.5;
+                    let r2 = r1 * 0.4;
+                    let d = format!(
+                        "M {:.1} {:.1} L {:.1} {:.1} L {:.1} {:.1} L {:.1} {:.1} L {:.1} {:.1} L {:.1} {:.1} Z",
+                        cur_x, cur_y - r1,
+                        cur_x + r2 * 0.5, cur_y - r2 * 0.5,
+                        cur_x + r1, cur_y,
+                        cur_x + r2 * 0.5, cur_y + r2 * 0.5,
+                        cur_x, cur_y + r1,
+                        cur_x - r2 * 0.5, cur_y + r2 * 0.5,
+                    );
+                    SceneNode::Path {
+                        d,
+                        fill: Some(color),
+                        stroke: None,
+                        stroke_width: 0.0,
+                        opacity: (a as f32 / 255.0),
+                    }
+                }
+            };
+
+            nodes.push(node);
+        }
+
+        nodes
+    }
+}
+
 /// Minimal deterministic 64-bit PRNG (SplitMix64).
 struct SimpleRng {
     state: u64,
@@ -312,5 +527,22 @@ mod tests {
             y30 > y0,
             "Particles should fall downwards over time: y0={y0}, y30={y30}"
         );
+    }
+
+    #[test]
+    fn test_particle_emitter_continuous_simulation() {
+        let emitter = ParticleEmitter {
+            birth_rate: 100.0,
+            lifespan: 1.0,
+            ..Default::default()
+        };
+
+        // At t = 0.5s, active particles should be approx 50
+        let nodes_half = emitter.render_at_time(0.5);
+        assert!((nodes_half.len() as i32 - 50).abs() <= 2);
+
+        // At t = 2.0s, active window is [1.0, 2.0] so approx 100 particles alive
+        let nodes_two = emitter.render_at_time(2.0);
+        assert!((nodes_two.len() as i32 - 100).abs() <= 2);
     }
 }

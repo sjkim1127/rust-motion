@@ -473,3 +473,107 @@ fn test_directional_motion_blur_diagonal() {
     assert!(diag[3] > 0, "diagonal blur should spread along x=y");
 }
 
+#[test]
+fn test_optical_glow_filter_halo() {
+    let backend = TinySkiaBackend::headless();
+    let mut scene = Scene::new();
+    scene.push(SceneNode::Layer {
+        opacity: 1.0,
+        blend_mode: BlendMode::Normal,
+        clip: None,
+        mask: None,
+        mask_mode: rust_motion_rasterizer::MaskMode::Alpha,
+        filters: vec![SceneFilter::OpticalGlow {
+            threshold: 0.5,
+            radius: 12.0,
+            intensity: 2.0,
+            anamorphic_ratio: 1.0,
+            tint: None,
+            blend_mode: rust_motion_rasterizer::GlowBlendMode::Add,
+        }],
+        shadow: None,
+        children: vec![SceneNode::Rect {
+            x: 24.0,
+            y: 24.0,
+            w: 16.0,
+            h: 16.0,
+            fill: Color::WHITE,
+            stroke: None,
+            stroke_width: 0.0,
+            corner_radius: 0.0,
+        }],
+    });
+
+    let img = backend.render_frame(&scene, &frame_cfg(64, 64)).unwrap();
+    // Pixel outside core (e.g. at (16, 32)) should receive optical glow
+    let halo = img.get_pixel(16, 32);
+    assert!(halo[0] > 0, "optical glow halo should extend outside core rect");
+}
+
+#[test]
+fn test_displacement_map_filter_shift() {
+    let backend = TinySkiaBackend::headless();
+    let mut scene = Scene::new();
+    scene.push(SceneNode::Layer {
+        opacity: 1.0,
+        blend_mode: BlendMode::Normal,
+        clip: None,
+        mask: None,
+        mask_mode: rust_motion_rasterizer::MaskMode::Alpha,
+        filters: vec![SceneFilter::DisplacementMap {
+            channel_x: rust_motion_rasterizer::DisplacementChannel::Red,
+            channel_y: rust_motion_rasterizer::DisplacementChannel::Green,
+            max_horizontal: 10.0,
+            max_vertical: 0.0,
+            wrap_mode: rust_motion_rasterizer::DisplacementWrap::Clamp,
+            map_source: Some(vec![255; 64 * 64 * 4]),
+            map_width: 64,
+            map_height: 64,
+        }],
+        shadow: None,
+        children: vec![SceneNode::Rect {
+            x: 32.0,
+            y: 0.0,
+            w: 32.0,
+            h: 64.0,
+            fill: Color::WHITE,
+            stroke: None,
+            stroke_width: 0.0,
+            corner_radius: 0.0,
+        }],
+    });
+
+    let img = backend.render_frame(&scene, &frame_cfg(64, 64)).unwrap();
+    // Shifted right: pixel at x = 25 should sample from x = 35 (white)
+    let shifted = img.get_pixel(25, 32);
+    assert_eq!(shifted[0], 255, "pixel at x=25 should be shifted from x=35");
+}
+
+#[test]
+fn test_fractal_noise_node_rendering() {
+    let backend = TinySkiaBackend::headless();
+    let mut scene = Scene::new();
+    scene.push(SceneNode::FractalNoise {
+        x: 0.0,
+        y: 0.0,
+        w: 64.0,
+        h: 64.0,
+        noise_type: rust_motion_rasterizer::FractalNoiseType::Simplex,
+        fractal_type: rust_motion_rasterizer::FractalType::Basic,
+        contrast: 1.0,
+        brightness: 0.0,
+        complexity: 4,
+        scale_x: 20.0,
+        scale_y: 20.0,
+        evolution: 0.0,
+        seed: 42,
+        opacity: 1.0,
+    });
+
+    let img = backend.render_frame(&scene, &frame_cfg(64, 64)).unwrap();
+    assert_eq!(img.width(), 64);
+    assert_eq!(img.height(), 64);
+    let p0 = img.get_pixel(0, 0);
+    assert_eq!(p0[3], 255);
+}
+

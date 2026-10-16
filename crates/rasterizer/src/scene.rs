@@ -296,6 +296,65 @@ pub enum SceneFilter {
         #[serde(default)]
         kernel: crate::motion_blur::TemporalFilterKernel,
     },
+    /// After Effects Optical Glow with threshold, exponential falloff, and anamorphic stretch.
+    OpticalGlow {
+        #[serde(default = "default_glow_threshold")]
+        threshold: f32,
+        #[serde(default = "default_glow_radius")]
+        radius: f32,
+        #[serde(default = "default_glow_intensity")]
+        intensity: f32,
+        #[serde(default = "default_glow_anamorphic")]
+        anamorphic_ratio: f32,
+        #[serde(default)]
+        tint: Option<[u8; 4]>,
+        #[serde(default)]
+        blend_mode: crate::vfx::GlowBlendMode,
+    },
+    /// After Effects Displacement Map geometric warping.
+    DisplacementMap {
+        #[serde(default)]
+        channel_x: crate::vfx::DisplacementChannel,
+        #[serde(default)]
+        channel_y: crate::vfx::DisplacementChannel,
+        #[serde(default = "default_displacement_amount")]
+        max_horizontal: f32,
+        #[serde(default = "default_displacement_amount")]
+        max_vertical: f32,
+        #[serde(default)]
+        wrap_mode: crate::vfx::DisplacementWrap,
+        #[serde(default)]
+        map_source: Option<Vec<u8>>,
+        #[serde(default)]
+        map_width: u32,
+        #[serde(default)]
+        map_height: u32,
+    },
+    /// Fractal Noise procedural texture overlay filter.
+    FractalNoise {
+        #[serde(default)]
+        noise_type: crate::vfx::FractalNoiseType,
+        #[serde(default)]
+        fractal_type: crate::vfx::FractalType,
+        #[serde(default = "default_contrast_1")]
+        contrast: f32,
+        #[serde(default)]
+        brightness: f32,
+        #[serde(default = "default_noise_complexity")]
+        complexity: u32,
+        #[serde(default = "default_noise_scale")]
+        scale_x: f32,
+        #[serde(default = "default_noise_scale")]
+        scale_y: f32,
+        #[serde(default)]
+        evolution: f32,
+        #[serde(default = "default_noise_seed")]
+        seed: u64,
+        #[serde(default)]
+        blend_mode: BlendMode,
+        #[serde(default = "default_opacity")]
+        opacity: f32,
+    },
 }
 
 /// Drop shadow generated from the filtered and masked layer alpha.
@@ -661,6 +720,34 @@ pub enum SceneNode {
         #[serde(default = "default_opacity")]
         opacity: f32,
     },
+
+    /// Procedural Fractal Noise generator node.
+    FractalNoise {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        #[serde(default)]
+        noise_type: crate::vfx::FractalNoiseType,
+        #[serde(default)]
+        fractal_type: crate::vfx::FractalType,
+        #[serde(default = "default_contrast_1")]
+        contrast: f32,
+        #[serde(default)]
+        brightness: f32,
+        #[serde(default = "default_noise_complexity")]
+        complexity: u32,
+        #[serde(default = "default_noise_scale")]
+        scale_x: f32,
+        #[serde(default = "default_noise_scale")]
+        scale_y: f32,
+        #[serde(default)]
+        evolution: f32,
+        #[serde(default = "default_noise_seed")]
+        seed: u64,
+        #[serde(default = "default_opacity")]
+        opacity: f32,
+    },
 }
 
 const fn default_playback_rate() -> f32 {
@@ -669,6 +756,42 @@ const fn default_playback_rate() -> f32 {
 
 const fn default_motion_samples() -> u32 {
     16
+}
+
+const fn default_glow_threshold() -> f32 {
+    0.5
+}
+
+const fn default_glow_radius() -> f32 {
+    20.0
+}
+
+const fn default_glow_intensity() -> f32 {
+    1.5
+}
+
+const fn default_glow_anamorphic() -> f32 {
+    1.0
+}
+
+const fn default_displacement_amount() -> f32 {
+    20.0
+}
+
+const fn default_contrast_1() -> f32 {
+    1.0
+}
+
+const fn default_noise_complexity() -> u32 {
+    4
+}
+
+const fn default_noise_scale() -> f32 {
+    100.0
+}
+
+const fn default_noise_seed() -> u64 {
+    42
 }
 
 /// Affine 2D transform (scale + rotation + translation).
