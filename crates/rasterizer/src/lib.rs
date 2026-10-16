@@ -30,6 +30,7 @@
 
 pub mod audio_cache;
 pub mod backend;
+pub mod camera3d;
 pub mod emoji;
 pub mod font;
 pub mod frame_cache;
@@ -57,6 +58,10 @@ pub mod wgpu_backend;
 pub use security::MediaSecurityPolicy;
 
 pub use audio_cache::AudioData;
+pub use camera3d::{
+    planar_shadow_matrix, shade_surface, BokehShape, Camera3D, CameraType, DepthOfField,
+    LightSource, Material3D,
+};
 pub use emoji::{is_emoji_char, is_emoji_grapheme, render_emoji, split_text_and_emojis, TextRun};
 pub use gltf::{parse_glb, parse_gltf, GltfModel};
 pub use mesh3d::{Mat4, Mesh3D, Quat, SkinnedVertex, Vec3};

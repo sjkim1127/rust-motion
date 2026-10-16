@@ -4,14 +4,26 @@
 //! the 2D scene graph with perspective projection, backface culling, and Lambertian lighting.
 
 use crate::scene::{Color, Scene, SceneNode};
+use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 
 /// 3D Vector with basic geometric operations.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct Vec3 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+}
+
+impl std::ops::Neg for Vec3 {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
+    }
 }
 
 impl Vec3 {
@@ -84,7 +96,7 @@ impl Vec3 {
 }
 
 /// A 4-component Quaternion representing 3D rotation.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Quat {
     pub x: f32,
     pub y: f32,
@@ -189,7 +201,7 @@ impl Quat {
 }
 
 /// A 4x4 column-major matrix for 3D affine transforms.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Mat4(pub [f32; 16]);
 
 impl Default for Mat4 {
@@ -280,10 +292,14 @@ impl Mat4 {
         let z = self.0[2] * v.x + self.0[6] * v.y + self.0[10] * v.z;
         Vec3::new(x, y, z)
     }
+
+    pub fn transform_vec3(&self, p: Vec3) -> Vec3 {
+        self.transform_point(p)
+    }
 }
 
 /// Vertex with skeletal bone joint influences for GPU/CPU vertex skinning.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct SkinnedVertex {
     pub position: Vec3,
     pub normal: Vec3,
@@ -292,7 +308,7 @@ pub struct SkinnedVertex {
 }
 
 /// A 3D procedural mesh (SOP - Surface Operator).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Mesh3D {
     pub vertices: Vec<Vec3>,
     pub faces: Vec<Vec<usize>>,
