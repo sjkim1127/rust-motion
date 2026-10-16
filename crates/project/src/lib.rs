@@ -3,6 +3,24 @@
 //! Dioxus, Tauri, CLI, and Python integrations should exchange these models
 //! instead of depending on one another's UI state.
 
+pub mod interchange;
+pub mod nle;
+pub mod scopes;
+
+pub use interchange::{
+    export_aaf_metadata, export_cmx3600_edl, export_fcpxml, frames_to_smpte, parse_cmx3600_edl,
+    parse_fcpxml, smpte_to_frames, AafMetadata, InterchangeError,
+};
+pub use nle::{
+    insert_clip, overwrite_clip, ripple_delete, roll_edit, slide_clip, slip_clip, split_clip_at,
+    trim_clip, NleClip, NleError, NleTimeline, NleTrack, NleTransition, TrackKind,
+    TransitionAlignment, TransitionKind, TrimEdge, TrimMode,
+};
+pub use scopes::{
+    analyze_frame_scopes, rgb_to_luma_rec709, rgb_to_ycbcr_rec709, ChannelHistogram, ScopeGrid,
+    ScopeType, VideoHistogram, VideoScopesAnalysis,
+};
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
