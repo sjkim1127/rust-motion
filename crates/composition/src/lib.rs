@@ -4,6 +4,7 @@ pub mod layout;
 pub mod mesh3d;
 pub mod safe_area;
 mod scene_emitter;
+pub mod time;
 mod time_events;
 
 pub use layout::{LayoutBox, LayoutChild, SceneFlex, SceneGrid};
@@ -16,6 +17,10 @@ pub use scene_emitter::{
     SceneFreeze, SceneGroup, SceneLayer, SceneLinearGradient, SceneLoop, SceneNullObject, SceneRect, SceneSequence,
     SceneSeries, SceneSeriesEntry, SceneStack, SceneText, SceneTextBlock, SceneTrail,
     SceneTrailOpacity, SceneTransitionSeries, TransitionKind, TransitionTiming,
+};
+pub use time::{
+    fields_to_frames, format_time, format_timecode_frames, frames_to_fields, parse_timecode,
+    FrameRate, ParseError, Tick, TimeDisplay, TimeRange, SAMPLE_RATES, TICKS_PER_SECOND,
 };
 pub use time_events::{TimeEventError, TimeEventSchedule};
 
@@ -42,6 +47,31 @@ impl NativeCompositionContext {
     pub fn progress(self, frame: u32) -> f32 {
         let last_frame = self.duration_in_frames.saturating_sub(1).max(1);
         (frame.min(last_frame) as f32 / last_frame as f32).clamp(0.0, 1.0)
+    }
+
+    /// Exact rational frame rate for this composition.
+    pub fn frame_rate(self) -> FrameRate {
+        FrameRate::from_f64(self.fps)
+    }
+
+    /// Total duration in exact zero-drift integer ticks.
+    pub fn duration_ticks(self) -> Tick {
+        self.frame_rate().tick_of(self.duration_in_frames as i64)
+    }
+
+    /// Convert a composition frame number to exact integer ticks.
+    pub fn frame_to_tick(self, frame: u32) -> Tick {
+        self.frame_rate().tick_of(frame as i64)
+    }
+
+    /// Convert exact ticks to composition frame number (floored).
+    pub fn tick_to_frame(self, tick: Tick) -> u32 {
+        self.frame_rate().frame_at(tick).max(0) as u32
+    }
+
+    /// Format a frame number as SMPTE timecode string (e.g. `HH:MM:SS:FF` or `HH;MM;SS;FF`).
+    pub fn format_timecode(self, frame: u32, drop_frame: bool) -> String {
+        format_timecode_frames(frame as i64, self.frame_rate(), drop_frame)
     }
 }
 

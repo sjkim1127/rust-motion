@@ -35,6 +35,21 @@ impl SceneFrameContext {
         self.global_frame as f64 / self.composition.fps
     }
 
+    /// Zero-drift exact media time in integer ticks.
+    pub fn time_ticks(self) -> crate::Tick {
+        self.composition.frame_to_tick(self.frame)
+    }
+
+    /// Zero-drift global media time in integer ticks.
+    pub fn global_time_ticks(self) -> crate::Tick {
+        self.composition.frame_to_tick(self.global_frame)
+    }
+
+    /// Format current local frame as SMPTE timecode.
+    pub fn format_timecode(self, drop_frame: bool) -> String {
+        self.composition.format_timecode(self.frame, drop_frame)
+    }
+
     fn with_local_frame(self, frame: u32) -> Self {
         Self { frame, ..self }
     }
