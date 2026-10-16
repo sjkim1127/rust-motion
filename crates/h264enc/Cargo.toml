@@ -1,0 +1,17 @@
+[package]
+name        = "rust-motion-h264enc"
+description = "Clean-room pure-Rust H.264/AVC video encoder (High/Main/Baseline, CABAC/CAVLC, B-frames, rate control)"
+version.workspace     = true
+edition.workspace     = true
+authors.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+readme.workspace      = true
+
+[features]
+default = ["threads"]
+threads = ["dep:rayon"]
+
+[dependencies]
+thiserror = { workspace = true }
+rayon = { workspace = true, optional = true }

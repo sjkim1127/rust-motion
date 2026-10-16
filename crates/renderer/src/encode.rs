@@ -122,33 +122,40 @@ pub fn build_ffmpeg_args(config: &EncodeConfig) -> Vec<String> {
 ///
 /// Logs invocation details and captures stderr output using `tracing`.
 pub async fn encode_mp4(config: &EncodeConfig) -> Result<(), RenderError> {
+    if config.codec == "pure-rust" || config.codec == "h264enc" {
+        tracing::info!("Using zero-dependency pure-Rust H.264 encoder");
+        return encode_h264_pure_rust(config);
+    }
+
     let args = build_ffmpeg_args(config);
     let cmd_line = format!("ffmpeg {}", args.join(" "));
 
     tracing::info!("Invoking FFmpeg CLI: {cmd_line}");
 
-    let output = tokio::process::Command::new("ffmpeg")
+    let res = tokio::process::Command::new("ffmpeg")
         .args(&args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
-        .await
-        .map_err(|e| RenderError::Encode(format!("Failed to execute ffmpeg process: {e}")))?;
+        .await;
+
+    let output = match res {
+        Ok(out) => out,
+        Err(e) => {
+            tracing::warn!("FFmpeg not available ({e}), falling back to pure-Rust H.264 encoder");
+            return encode_h264_pure_rust(config);
+        }
+    };
 
     let stderr_text = String::from_utf8_lossy(&output.stderr);
 
     if !output.status.success() {
-        tracing::error!(
-            "FFmpeg execution failed with status {}\nCommand: {}\nStderr:\n{}",
+        tracing::warn!(
+            "FFmpeg failed ({}). Falling back to pure-Rust H.264 encoder...\nStderr:\n{}",
             output.status,
-            cmd_line,
             stderr_text
         );
-        return Err(RenderError::Encode(format!(
-            "ffmpeg exited with status {}: {}",
-            output.status,
-            stderr_text.trim()
-        )));
+        return encode_h264_pure_rust(config);
     }
 
     if !stderr_text.is_empty() {
@@ -160,6 +167,116 @@ pub async fn encode_mp4(config: &EncodeConfig) -> Result<(), RenderError> {
         cleanup_frames(&config.frames_dir)?;
     }
 
+    Ok(())
+}
+
+/// Pure-Rust standalone H.264 encoder implementation (zero external FFmpeg dependencies).
+/// Converts rendered PNG frames to YUV420p and encodes them via `rust_motion_h264enc`.
+pub fn encode_h264_pure_rust(config: &EncodeConfig) -> Result<(), RenderError> {
+    use rust_motion_h264enc::{Encoder, EncoderConfig, RateControl, YuvFrame};
+    use std::fs::File;
+    use std::io::Write;
+
+    let mut frame_paths = Vec::new();
+    let entries = std::fs::read_dir(&config.frames_dir)
+        .map_err(|e| RenderError::Encode(format!("Failed to read frames dir: {e}")))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| RenderError::Encode(e.to_string()))?;
+        let p = entry.path();
+        if p.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("png")) {
+            frame_paths.push(p);
+        }
+    }
+    frame_paths.sort();
+    if frame_paths.is_empty() {
+        return Err(RenderError::Encode("No PNG frames found to encode".into()));
+    }
+
+    let first_img = image::open(&frame_paths[0])
+        .map_err(|e| RenderError::Encode(format!("Failed to open image {:?}: {e}", frame_paths[0])))?
+        .to_rgba8();
+    let width = config.width.unwrap_or(first_img.width());
+    let height = config.height.unwrap_or(first_img.height());
+    // H.264 macroblocks require even dimensions
+    let width = (width / 2) * 2;
+    let height = (height / 2) * 2;
+
+    let fps_round = config.fps.round().max(1.0) as u32;
+    let mut enc_cfg = EncoderConfig::new(width, height, fps_round, 1);
+    enc_cfg.rate = RateControl::Crf(config.crf as f32);
+
+    let mut encoder = Encoder::new(enc_cfg)
+        .map_err(|e| RenderError::Encode(format!("Failed to initialize H.264 encoder: {e}")))?;
+
+    let mut out_file = File::create(&config.output)
+        .map_err(|e| RenderError::Encode(format!("Failed to create output file: {e}")))?;
+
+    let y_stride = width as usize;
+    let uv_stride = (width as usize) / 2;
+    let y_len = y_stride * (height as usize);
+    let uv_len = uv_stride * ((height as usize) / 2);
+
+    let mut y_plane = vec![0u8; y_len];
+    let mut u_plane = vec![0u8; uv_len];
+    let mut v_plane = vec![0u8; uv_len];
+
+    for (f_idx, path) in frame_paths.iter().enumerate() {
+        let raw_img = image::open(path)
+            .map_err(|e| RenderError::Encode(format!("Failed to open frame {:?}: {e}", path)))?
+            .to_rgba8();
+
+        let img = if raw_img.width() != width || raw_img.height() != height {
+            image::imageops::resize(&raw_img, width, height, image::imageops::FilterType::Nearest)
+        } else {
+            raw_img
+        };
+
+        for r in 0..height as usize {
+            for c in 0..width as usize {
+                let p = img.get_pixel(c as u32, r as u32);
+                let (r_val, g_val, b_val) = (p[0] as f32, p[1] as f32, p[2] as f32);
+                let y_val = 0.299 * r_val + 0.587 * g_val + 0.114 * b_val;
+                y_plane[r * y_stride + c] = y_val.clamp(0.0, 255.0) as u8;
+
+                if r % 2 == 0 && c % 2 == 0 {
+                    let u_val = -0.169 * r_val - 0.331 * g_val + 0.500 * b_val + 128.0;
+                    let v_val = 0.500 * r_val - 0.419 * g_val - 0.081 * b_val + 128.0;
+                    let uv_idx = (r / 2) * uv_stride + (c / 2);
+                    u_plane[uv_idx] = u_val.clamp(0.0, 255.0) as u8;
+                    v_plane[uv_idx] = v_val.clamp(0.0, 255.0) as u8;
+                }
+            }
+        }
+
+        let yuv = YuvFrame {
+            y: &y_plane,
+            u: &u_plane,
+            v: &v_plane,
+            y_stride,
+            uv_stride,
+        };
+
+        let packets = encoder.encode(&yuv, f_idx as i64)
+            .map_err(|e| RenderError::Encode(format!("H.264 encode error: {e}")))?;
+        for pkt in packets {
+            out_file.write_all(&pkt.data)
+                .map_err(|e| RenderError::Encode(e.to_string()))?;
+        }
+    }
+
+    let flushed = encoder.flush();
+    for pkt in flushed {
+        out_file.write_all(&pkt.data)
+            .map_err(|e| RenderError::Encode(e.to_string()))?;
+    }
+    out_file.flush()
+        .map_err(|e| RenderError::Encode(e.to_string()))?;
+
+    if config.cleanup_after_encode {
+        cleanup_frames(&config.frames_dir)?;
+    }
+
+    tracing::info!("Pure Rust H.264 encode complete -> {}", config.output.display());
     Ok(())
 }
 
@@ -312,6 +429,37 @@ mod tests {
         assert!(res.is_ok(), "encode_mp4 failed on synthetic frames");
         assert!(output_mp4.exists(), "Output MP4 file was not created");
         assert!(!frames_dir.exists(), "Frames directory was not cleaned up");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_encode_pure_rust_synthetic_frames() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "rust_motion_test_purerust_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let frames_dir = temp_dir.join("frames");
+        fs::create_dir_all(&frames_dir).unwrap();
+
+        for idx in 0..6 {
+            let path = frames_dir.join(format!("frame_{idx:06}.png"));
+            fs::write(&path, MINIMAL_PNG).expect("Failed to write synthetic PNG frame");
+        }
+
+        let output_h264 = temp_dir.join("output.h264");
+        let mut config = EncodeConfig::h264(&frames_dir, &output_h264, 30.0)
+            .with_resolution(64, 64)
+            .with_cleanup(true);
+        config.codec = "pure-rust".to_string();
+
+        let res = encode_mp4(&config).await;
+        assert!(res.is_ok(), "encode_mp4 pure-rust failed: {res:?}");
+        assert!(output_h264.exists(), "Output pure-rust H.264 file was not created");
+        assert!(output_h264.metadata().unwrap().len() > 0, "Output file is empty");
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

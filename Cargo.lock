@@ -5422,6 +5422,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-h264enc"
+version = "1.0.0"
+dependencies = [
+ "rayon",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "rust-motion-media"
 version = "1.0.0"
 dependencies = [
@@ -5540,6 +5548,7 @@ dependencies = [
  "futures",
  "image",
  "reqwest",
+ "rust-motion-h264enc",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
