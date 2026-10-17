@@ -900,6 +900,18 @@ pub enum SceneNode {
         #[serde(default = "default_opacity")]
         opacity: f32,
     },
+
+    /// Professional Photoshop-grade vector shape with boolean operations, fill, stroke, and winding rules.
+    VectorShape {
+        path: photocraft_doc::Path,
+        fill: Option<Color>,
+        #[serde(default)]
+        stroke_color: Option<Color>,
+        #[serde(default)]
+        stroke_width: f32,
+        #[serde(default = "default_opacity")]
+        opacity: f32,
+    },
 }
 
 const fn default_one() -> f32 {

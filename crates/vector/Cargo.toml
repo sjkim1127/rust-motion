@@ -1,0 +1,16 @@
+[package]
+name = "rust-motion-vector"
+description = "Vector paths, boolean operations, non-affine mesh warping, and contour auto-tracing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "photocraft_vector"
+
+[dependencies]
+photocraft-geom = { workspace = true }
+photocraft-color = { workspace = true }
+photocraft-raster = { workspace = true }
+photocraft-doc = { workspace = true }
+rayon = { workspace = true }

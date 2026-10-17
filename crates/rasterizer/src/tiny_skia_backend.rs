@@ -1261,6 +1261,70 @@ fn render_node(
                 pixmap.draw_pixmap(0, 0, patch, &paint, patch_trans, None);
             }
         }
+
+        SceneNode::VectorShape {
+            path,
+            fill,
+            stroke_color,
+            stroke_width,
+            opacity: node_opacity,
+        } => {
+            let eff_opacity = opacity * node_opacity;
+            if eff_opacity <= 0.0 {
+                return Ok(());
+            }
+
+            let shape = photocraft_doc::ShapeLayer {
+                path: path.clone(),
+                fill: fill.map(|c| photocraft_doc::Fill::Solid(photocraft_color::Color::rgba(c.r as f32 / 255.0, c.g as f32 / 255.0, c.b as f32 / 255.0, c.a as f32 / 255.0))),
+                stroke: if let Some(sc) = stroke_color {
+                    if *stroke_width > 0.0 {
+                        Some(photocraft_doc::ShapeStroke {
+                            width: *stroke_width,
+                            paint: photocraft_doc::Fill::Solid(photocraft_color::Color::rgba(sc.r as f32 / 255.0, sc.g as f32 / 255.0, sc.b as f32 / 255.0, sc.a as f32 / 255.0)),
+                            ..Default::default()
+                        })
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                },
+                live: None,
+                cache: None,
+                psd_raw: None,
+            };
+
+            let canvas_rect = photocraft_geom::Rect::from_xywh(0, 0, pixmap.width(), pixmap.height());
+            let compiled = photocraft_vector::CompiledShape::new(&shape, photocraft_vector::DEFAULT_TOLERANCE, canvas_rect);
+            if let Some(bounds) = compiled.bounds() {
+                let r = bounds.intersect(&canvas_rect);
+                if !r.is_empty() {
+                    let surface = compiled.render(photocraft_color::PixelFormat::RGBA8, canvas_rect);
+                    let mut buf = vec![[0u8; 4]; r.width() as usize * r.height() as usize];
+                    surface.read_rgba8_into(r, &mut buf);
+
+                    let mut premul = Vec::with_capacity(buf.len() * 4);
+                    for px in buf {
+                        let a = (px[3] as f32 / 255.0) * eff_opacity;
+                        let red = ((px[0] as f32 / 255.0) * a * 255.0).round() as u8;
+                        let grn = ((px[1] as f32 / 255.0) * a * 255.0).round() as u8;
+                        let blu = ((px[2] as f32 / 255.0) * a * 255.0).round() as u8;
+                        let alf = (a * 255.0).round() as u8;
+                        premul.extend_from_slice(&[red, grn, blu, alf]);
+                    }
+
+                    if let Some(patch) = PixmapRef::from_bytes(&premul, r.width(), r.height()) {
+                        let paint = PixmapPaint {
+                            opacity: 1.0,
+                            ..Default::default()
+                        };
+                        let patch_trans = transform.pre_translate(r.x0 as f32, r.y0 as f32);
+                        pixmap.draw_pixmap(0, 0, patch, &paint, patch_trans, None);
+                    }
+                }
+            }
+        }
     }
     Ok(())
 }

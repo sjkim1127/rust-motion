@@ -5609,6 +5609,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-doc"
+version = "1.0.0"
+dependencies = [
+ "rust-motion-color",
+ "rust-motion-geom",
+ "rust-motion-raster",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rust-motion-geom"
 version = "1.0.0"
 dependencies = [
@@ -5765,11 +5776,13 @@ dependencies = [
  "rayon",
  "resvg",
  "rust-motion-color",
+ "rust-motion-doc",
  "rust-motion-geom",
  "rust-motion-paint",
  "rust-motion-psd",
  "rust-motion-raster",
  "rust-motion-tablet",
+ "rust-motion-vector",
  "rustybuzz",
  "serde",
  "serde_json",
@@ -5855,6 +5868,17 @@ dependencies = [
  "serde_json",
  "taffy",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "rust-motion-vector"
+version = "1.0.0"
+dependencies = [
+ "rayon",
+ "rust-motion-color",
+ "rust-motion-doc",
+ "rust-motion-geom",
+ "rust-motion-raster",
 ]
 
 [[package]]

@@ -59,8 +59,11 @@ pub mod web_backend;
 pub mod wgpu_backend;
 
 pub extern crate rust_motion_color as photocraft_color;
+pub use photocraft_geom as geom;
 pub use photocraft_paint as paint;
 pub use photocraft_tablet as tablet;
+pub use photocraft_doc as doc;
+pub use photocraft_vector as vector;
 
 pub use security::MediaSecurityPolicy;
 
