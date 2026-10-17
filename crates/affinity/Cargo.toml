@@ -1,0 +1,20 @@
+[package]
+name = "rust-motion-affinity"
+description = "Bounded reader for native Serif Affinity documents (.af, .afdesign, .afphoto, .afpub)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "photocraft_affinity"
+
+[features]
+synth = []
+
+[dependencies]
+crc32fast = "1.5"
+flate2 = { workspace = true }
+ruzstd = "0.9"
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -35,6 +35,7 @@ members = [
     "crates/tablet",
     "crates/doc",
     "crates/vector",
+    "crates/affinity",
     "apps/studio",
     "apps/example",
 ]
@@ -141,6 +142,7 @@ rust-motion-paint       = { version = "1.0.0", path = "crates/paint" }
 rust-motion-tablet      = { version = "1.0.0", path = "crates/tablet" }
 rust-motion-doc         = { version = "1.0.0", path = "crates/doc" }
 rust-motion-vector      = { version = "1.0.0", path = "crates/vector" }
+rust-motion-affinity    = { version = "1.0.0", path = "crates/affinity" }
 
 photocraft-geom         = { version = "1.0.0", path = "crates/geom", package = "rust-motion-geom" }
 photocraft-color        = { version = "1.0.0", path = "crates/color", package = "rust-motion-color" }
@@ -149,6 +151,7 @@ photocraft-paint        = { version = "1.0.0", path = "crates/paint", package = 
 photocraft-tablet       = { version = "1.0.0", path = "crates/tablet", package = "rust-motion-tablet" }
 photocraft-doc          = { version = "1.0.0", path = "crates/doc", package = "rust-motion-doc" }
 photocraft-vector       = { version = "1.0.0", path = "crates/vector", package = "rust-motion-vector" }
+photocraft-affinity     = { version = "1.0.0", path = "crates/affinity", package = "rust-motion-affinity" }
 
 
 
