@@ -2396,6 +2396,58 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
                 pixmap.data_mut().copy_from_slice(new_pixmap.data());
             }
         }
+        SceneFilter::Lut3D {
+            cube_content,
+            amount,
+            tetrahedral,
+        } => {
+            let lut = if let Some(registered) = crate::lut3d::get(&cube_content) {
+                (*registered).clone()
+            } else if cube_content.starts_with("3DMESH") || cube_content.contains("Mesh") {
+                crate::lut3d::Lut3d::parse_3dl(&cube_content)
+                    .map_err(|e| RasterError::Scene(format!("failed to parse .3dl LUT: {e}")))?
+            } else {
+                crate::lut3d::Lut3d::parse_cube(&cube_content)
+                    .map_err(|e| RasterError::Scene(format!("failed to parse .cube LUT: {e}")))?
+            };
+            lut.apply_to_pixmap(pixmap, amount, tetrahedral);
+        }
+        SceneFilter::LensCorrection {
+            distortion,
+            vignette,
+            tca,
+            center,
+        } => {
+            crate::lens_correction::apply_lens_correction(
+                pixmap,
+                distortion,
+                vignette,
+                tca,
+                center,
+            );
+        }
+        SceneFilter::FilmEmulation {
+            grain_amount,
+            grain_size,
+            grain_roughness,
+            grain_seed,
+            halation_intensity,
+            halation_threshold,
+            halation_radius,
+            halation_color,
+        } => {
+            crate::film_emulation::apply_film_emulation(
+                pixmap,
+                grain_amount,
+                grain_size,
+                grain_roughness,
+                grain_seed,
+                halation_intensity,
+                halation_threshold,
+                halation_radius,
+                halation_color,
+            );
+        }
     }
     Ok(())
 }

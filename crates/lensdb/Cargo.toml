@@ -1,0 +1,13 @@
+[package]
+name = "rust-motion-lensdb"
+description = "Lens correction profiles: distortion, TCA and vignetting models, lensfun-format database loader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "lightcraft_lensdb"
+
+[dependencies]
+quick-xml = "0.42"
+serde = { workspace = true }

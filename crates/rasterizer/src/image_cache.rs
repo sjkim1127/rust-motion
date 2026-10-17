@@ -135,6 +135,35 @@ impl ImageCache {
             .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
         {
             rasterize_svg(&bytes, &canonical.display().to_string())?
+        } else if canonical
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("dng"))
+            || rust_motion_dng::sniff(&bytes)
+        {
+            let dng_img = rust_motion_dng::decode(&bytes).map_err(|e| RasterError::ImageAsset {
+                path: canonical.display().to_string(),
+                reason: format!("failed to decode DNG: {e}"),
+            })?;
+            let mut rgba_bytes = Vec::with_capacity(dng_img.width * dng_img.height * 4);
+            for px in dng_img.rgba.chunks_exact(4) {
+                let to_srgb = |c: f32| -> u8 {
+                    let s = if c <= 0.0031308 {
+                        12.92 * c
+                    } else {
+                        1.055 * c.powf(1.0 / 2.4) - 0.055
+                    };
+                    (s * 255.0).clamp(0.0, 255.0).round() as u8
+                };
+                rgba_bytes.push(to_srgb(px[0]));
+                rgba_bytes.push(to_srgb(px[1]));
+                rgba_bytes.push(to_srgb(px[2]));
+                rgba_bytes.push((px[3] * 255.0).clamp(0.0, 255.0).round() as u8);
+            }
+            RgbaImage::from_raw(dng_img.width as u32, dng_img.height as u32, rgba_bytes)
+                .ok_or_else(|| RasterError::ImageAsset {
+                    path: canonical.display().to_string(),
+                    reason: "failed to construct RGBA image from DNG".into(),
+                })?
         } else {
             image::load_from_memory(&bytes)
                 .map_err(|error| RasterError::ImageAsset {

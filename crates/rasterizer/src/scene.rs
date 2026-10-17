@@ -554,6 +554,59 @@ pub enum SceneFilter {
         #[serde(default)]
         params: serde_json::Value,
     },
+    /// 3D LUT (Look-Up Table) color transformation (.cube or .3dl).
+    Lut3D {
+        /// Raw LUT file content (.cube or .3dl format).
+        cube_content: String,
+        /// Blend amount (0.0 = original, 1.0 = fully graded).
+        #[serde(default = "default_one")]
+        amount: f32,
+        /// Optional interpolation method: Trilinear or Tetrahedral.
+        #[serde(default)]
+        tetrahedral: bool,
+    },
+    /// Lens distortion and chromatic aberration correction from lens calibration database.
+    LensCorrection {
+        /// Radial distortion coefficients [k1, k2, k3, k4].
+        #[serde(default)]
+        distortion: [f32; 4],
+        /// Vignetting compensation coefficients [k1, k2, k3].
+        #[serde(default)]
+        vignette: [f32; 3],
+        /// Lateral chromatic aberration [kr, kb] (red and blue scale relative to green).
+        #[serde(default)]
+        tca: [f32; 2],
+        /// Optical center (default 0.5, 0.5).
+        #[serde(default = "default_half_pair")]
+        center: [f32; 2],
+    },
+    /// Film Emulation: procedural film grain and halation.
+    FilmEmulation {
+        /// Film grain amount (0..100%).
+        #[serde(default)]
+        grain_amount: f32,
+        /// Film grain particle size (0..100%).
+        #[serde(default = "default_grain_size")]
+        grain_size: f32,
+        /// Film grain roughness (0..100%).
+        #[serde(default = "default_grain_roughness")]
+        grain_roughness: f32,
+        /// Stable random seed for grain.
+        #[serde(default)]
+        grain_seed: u32,
+        /// Halation glow intensity around bright edges (0..2).
+        #[serde(default)]
+        halation_intensity: f32,
+        /// Halation threshold for highlights (0..1).
+        #[serde(default = "default_halation_threshold")]
+        halation_threshold: f32,
+        /// Halation radius (spread in pixels).
+        #[serde(default = "default_halation_radius")]
+        halation_radius: f32,
+        /// Halation color tint (typically warm orange/red [255, 60, 20, 255]).
+        #[serde(default = "default_halation_tint")]
+        halation_color: [u8; 4],
+    },
 }
 
 /// Drop shadow generated from the filtered and masked layer alpha.
@@ -1035,6 +1088,30 @@ const fn default_half() -> f32 {
 
 const fn default_ripple_size() -> f32 {
     10.0
+}
+
+const fn default_grain_size() -> f32 {
+    25.0
+}
+
+const fn default_grain_roughness() -> f32 {
+    50.0
+}
+
+const fn default_halation_threshold() -> f32 {
+    0.75
+}
+
+const fn default_halation_radius() -> f32 {
+    12.0
+}
+
+const fn default_halation_tint() -> [u8; 4] {
+    [255, 60, 20, 255]
+}
+
+const fn default_half_pair() -> [f32; 2] {
+    [0.5, 0.5]
 }
 
 /// Affine 2D transform (scale + rotation + translation).

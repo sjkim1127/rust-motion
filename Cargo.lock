@@ -5682,6 +5682,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-lensdb"
+version = "1.0.0"
+dependencies = [
+ "quick-xml",
+ "serde",
+]
+
+[[package]]
 name = "rust-motion-media"
 version = "1.0.0"
 dependencies = [
@@ -5831,8 +5839,10 @@ dependencies = [
  "rust-motion-affinity",
  "rust-motion-algo",
  "rust-motion-color",
+ "rust-motion-dng",
  "rust-motion-doc",
  "rust-motion-geom",
+ "rust-motion-lensdb",
  "rust-motion-paint",
  "rust-motion-plugins",
  "rust-motion-psd",
