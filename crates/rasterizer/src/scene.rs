@@ -487,6 +487,62 @@ pub enum SceneFilter {
     },
     /// Direct Adjustment parameter object from `rust_motion_color::Adjustment`.
     Adjustment(Box<rust_motion_color::adjust::Adjustment>),
+    /// Photoshop Box Blur filter.
+    BoxBlur {
+        radius: f32,
+    },
+    /// Photoshop Radial Blur (Spin or Zoom).
+    RadialBlur {
+        amount: f32,
+        #[serde(default)]
+        spin: bool,
+        #[serde(default = "default_half")]
+        center_x: f32,
+        #[serde(default = "default_half")]
+        center_y: f32,
+    },
+    /// Photoshop Surface Blur (edge-preserving blur).
+    SurfaceBlur {
+        radius: f32,
+        threshold: f32,
+    },
+    /// Photoshop Unsharp Mask (amount %, radius px, threshold levels).
+    UnsharpMask {
+        amount: f32,
+        radius: f32,
+        threshold: f32,
+    },
+    /// Photoshop Smart Sharpen (amount %, radius px, reduce noise %).
+    SmartSharpen {
+        amount: f32,
+        radius: f32,
+        #[serde(default)]
+        reduce_noise: f32,
+    },
+    /// Photoshop High Pass filter (radius in pixels).
+    HighPass {
+        radius: f32,
+    },
+    /// Distortion: Twirl vortex around center (angle in degrees).
+    Twirl {
+        angle: f32,
+    },
+    /// Distortion: Spherize 3D spherical lens distortion (amount -100..100%).
+    Spherize {
+        amount: f32,
+    },
+    /// Distortion: Pinch center pull (amount -100..100%).
+    Pinch {
+        amount: f32,
+    },
+    /// Distortion: Ripple periodic wave displacement.
+    Ripple {
+        amount: f32,
+        #[serde(default = "default_ripple_size")]
+        size: f32,
+    },
+    /// Direct PhotoCraft FilterParams algorithm execution.
+    PhotoFilter(Box<photocraft_algo::FilterParams>),
 }
 
 /// Drop shadow generated from the filtered and masked layer alpha.
@@ -960,6 +1016,14 @@ const fn default_noise_scale() -> f32 {
 
 const fn default_noise_seed() -> u64 {
     42
+}
+
+const fn default_half() -> f32 {
+    0.5
+}
+
+const fn default_ripple_size() -> f32 {
+    10.0
 }
 
 /// Affine 2D transform (scale + rotation + translation).

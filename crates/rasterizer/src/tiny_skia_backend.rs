@@ -2244,7 +2244,195 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
         SceneFilter::Adjustment(adj) => {
             apply_adjustment_to_pixmap(pixmap, &adj);
         }
+        SceneFilter::BoxBlur { radius } => {
+            if !radius.is_finite() || radius < 0.0 {
+                return Err(RasterError::Scene("box blur radius must be non-negative finite".into()));
+            }
+            let params = photocraft_algo::FilterParams::BoxBlur { radius };
+            apply_photo_filter(pixmap, &params)?;
+        }
+        SceneFilter::RadialBlur {
+            amount,
+            spin,
+            center_x,
+            center_y,
+        } => {
+            if !amount.is_finite() || amount < 0.0 {
+                return Err(RasterError::Scene("radial blur amount must be non-negative finite".into()));
+            }
+            let method = if spin {
+                photocraft_algo::RadialMethod::Spin
+            } else {
+                photocraft_algo::RadialMethod::Zoom
+            };
+            let params = photocraft_algo::FilterParams::RadialBlur {
+                amount: amount.clamp(1.0, 100.0),
+                method,
+                quality: photocraft_algo::RadialQuality::Good,
+                center_x,
+                center_y,
+            };
+            apply_photo_filter(pixmap, &params)?;
+        }
+        SceneFilter::SurfaceBlur { radius, threshold } => {
+            if !radius.is_finite() || radius < 0.0 || !threshold.is_finite() || threshold < 0.0 {
+                return Err(RasterError::Scene("surface blur parameters must be non-negative finite".into()));
+            }
+            let params = photocraft_algo::FilterParams::SurfaceBlur {
+                radius,
+                threshold,
+            };
+            apply_photo_filter(pixmap, &params)?;
+        }
+        SceneFilter::UnsharpMask {
+            amount,
+            radius,
+            threshold,
+        } => {
+            if !amount.is_finite() || !radius.is_finite() || !threshold.is_finite() {
+                return Err(RasterError::Scene("unsharp mask parameters must be finite".into()));
+            }
+            let params = photocraft_algo::FilterParams::UnsharpMask {
+                amount,
+                radius,
+                threshold,
+            };
+            apply_photo_filter(pixmap, &params)?;
+        }
+        SceneFilter::SmartSharpen {
+            amount,
+            radius,
+            reduce_noise,
+        } => {
+            if !amount.is_finite() || !radius.is_finite() {
+                return Err(RasterError::Scene("smart sharpen parameters must be finite".into()));
+            }
+            let params = photocraft_algo::FilterParams::SmartSharpen {
+                amount,
+                radius,
+                reduce_noise,
+            };
+            apply_photo_filter(pixmap, &params)?;
+        }
+        SceneFilter::HighPass { radius } => {
+            if !radius.is_finite() || radius <= 0.0 {
+                return Err(RasterError::Scene("high pass radius must be positive finite".into()));
+            }
+            let params = photocraft_algo::FilterParams::HighPass { radius };
+            apply_photo_filter(pixmap, &params)?;
+        }
+        SceneFilter::Twirl { angle } => {
+            if !angle.is_finite() {
+                return Err(RasterError::Scene("twirl angle must be finite".into()));
+            }
+            let params = photocraft_algo::FilterParams::Twirl { angle };
+            apply_photo_filter(pixmap, &params)?;
+        }
+        SceneFilter::Spherize { amount } => {
+            if !amount.is_finite() {
+                return Err(RasterError::Scene("spherize amount must be finite".into()));
+            }
+            let params = photocraft_algo::FilterParams::Spherize {
+                amount: amount.clamp(-100.0, 100.0),
+                mode: photocraft_algo::SpherizeMode::Normal,
+            };
+            apply_photo_filter(pixmap, &params)?;
+        }
+        SceneFilter::Pinch { amount } => {
+            if !amount.is_finite() {
+                return Err(RasterError::Scene("pinch amount must be finite".into()));
+            }
+            let params = photocraft_algo::FilterParams::Pinch {
+                amount: amount.clamp(-100.0, 100.0),
+            };
+            apply_photo_filter(pixmap, &params)?;
+        }
+        SceneFilter::Ripple { amount, size } => {
+            if !amount.is_finite() {
+                return Err(RasterError::Scene("ripple amount must be finite".into()));
+            }
+            let ripple_size = if size < 5.0 {
+                photocraft_algo::RippleSize::Small
+            } else if size > 20.0 {
+                photocraft_algo::RippleSize::Large
+            } else {
+                photocraft_algo::RippleSize::Medium
+            };
+            let params = photocraft_algo::FilterParams::Ripple {
+                amount,
+                size: ripple_size,
+            };
+            apply_photo_filter(pixmap, &params)?;
+        }
+        SceneFilter::PhotoFilter(params) => {
+            apply_photo_filter(pixmap, &params)?;
+        }
     }
+    Ok(())
+}
+
+fn pixmap_to_surface(pixmap: &Pixmap) -> photocraft_raster::Surface {
+    use photocraft_color::{ColorMode, PixelFormat, SampleType};
+    use photocraft_geom::Rect;
+    let w = pixmap.width() as i32;
+    let h = pixmap.height() as i32;
+    let rect = Rect::new(0, 0, w, h);
+    let mut straight = vec![0u8; (w * h * 4) as usize];
+    for (src_px, dst_px) in pixmap.pixels().iter().zip(straight.chunks_exact_mut(4)) {
+        let a = src_px.alpha();
+        if a > 0 {
+            let inv_a = 255.0 / a as f32;
+            dst_px[0] = (src_px.red() as f32 * inv_a).round().min(255.0) as u8;
+            dst_px[1] = (src_px.green() as f32 * inv_a).round().min(255.0) as u8;
+            dst_px[2] = (src_px.blue() as f32 * inv_a).round().min(255.0) as u8;
+            dst_px[3] = a;
+        } else {
+            dst_px.fill(0);
+        }
+    }
+    photocraft_raster::Surface::from_interleaved(
+        PixelFormat::new(ColorMode::Rgb, SampleType::U8, true),
+        rect,
+        &straight,
+    )
+}
+
+fn surface_to_pixmap(
+    surface: &photocraft_raster::Surface,
+    width: u32,
+    height: u32,
+) -> Result<Pixmap, RasterError> {
+    use photocraft_geom::Rect;
+    let rect = Rect::new(0, 0, width as i32, height as i32);
+    let bytes = surface.to_interleaved(rect);
+    let mut pixmap = Pixmap::new(width, height)
+        .ok_or_else(|| RasterError::Scene("failed to allocate Pixmap".into()))?;
+    for (src_px, dst_px) in bytes.chunks_exact(4).zip(pixmap.pixels_mut()) {
+        let a = src_px[3] as f32 / 255.0;
+        let r = ((src_px[0] as f32 / 255.0) * a * 255.0).round() as u8;
+        let g = ((src_px[1] as f32 / 255.0) * a * 255.0).round() as u8;
+        let b = ((src_px[2] as f32 / 255.0) * a * 255.0).round() as u8;
+        *dst_px = tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, src_px[3])
+            .unwrap_or(tiny_skia::PremultipliedColorU8::TRANSPARENT);
+    }
+    Ok(pixmap)
+}
+
+pub fn apply_photo_filter(
+    pixmap: &mut Pixmap,
+    params: &photocraft_algo::FilterParams,
+) -> Result<(), RasterError> {
+    use photocraft_geom::Rect;
+    let w = pixmap.width();
+    let h = pixmap.height();
+    if w == 0 || h == 0 {
+        return Ok(());
+    }
+    let rect = Rect::new(0, 0, w as i32, h as i32);
+    let surf = pixmap_to_surface(pixmap);
+    let out_surf = photocraft_algo::apply_in(&surf, params, rect, rect, None, rect);
+    let new_pixmap = surface_to_pixmap(&out_surf, w, h)?;
+    pixmap.data_mut().copy_from_slice(new_pixmap.data());
     Ok(())
 }
 
