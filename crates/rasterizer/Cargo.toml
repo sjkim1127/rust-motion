@@ -37,6 +37,7 @@ rust-motion-doc    = { workspace = true }
 rust-motion-vector = { workspace = true }
 rust-motion-affinity = { workspace = true }
 rust-motion-algo     = { workspace = true }
+rust-motion-plugins  = { workspace = true }
 wgpu       = { version = "22", optional = true }
 pollster   = { version = "0.4", optional = true }
 lyon_tessellation = { workspace = true, optional = true }

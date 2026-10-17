@@ -2367,6 +2367,35 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
         SceneFilter::PhotoFilter(params) => {
             apply_photo_filter(pixmap, &params)?;
         }
+        SceneFilter::WasmPlugin {
+            plugin_name,
+            wasm_bytes,
+            params,
+        } => {
+            let bytes = if let Some(b) = wasm_bytes {
+                b.clone()
+            } else {
+                let candidate_path = std::path::Path::new("plugins").join(&plugin_name);
+                std::fs::read(&candidate_path).map_err(|e| {
+                    RasterError::Scene(format!(
+                        "failed to load wasm plugin '{plugin_name}' from {candidate_path:?}: {e}"
+                    ))
+                })?
+            };
+            let plugin = photocraft_plugins::Plugin::load(&bytes, photocraft_plugins::Limits::default())
+                .map_err(|e| RasterError::Scene(format!("wasm plugin validation error: {e}")))?;
+            let w = pixmap.width();
+            let h = pixmap.height();
+            if w > 0 && h > 0 {
+                let rect = photocraft_geom::Rect::new(0, 0, w as i32, h as i32);
+                let surf = pixmap_to_surface(pixmap);
+                let out_surf = plugin
+                    .apply(&surf, rect, None, &params)
+                    .map_err(|e| RasterError::Scene(format!("wasm plugin execution failed: {e}")))?;
+                let new_pixmap = surface_to_pixmap(&out_surf, w, h)?;
+                pixmap.data_mut().copy_from_slice(new_pixmap.data());
+            }
+        }
     }
     Ok(())
 }

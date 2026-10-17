@@ -543,6 +543,17 @@ pub enum SceneFilter {
     },
     /// Direct PhotoCraft FilterParams algorithm execution.
     PhotoFilter(Box<photocraft_algo::FilterParams>),
+    /// Sandboxed WebAssembly (Wasm) filter plugin.
+    WasmPlugin {
+        /// Name of the plugin file (e.g. "crt_scanlines.wasm").
+        plugin_name: String,
+        /// Optional raw WASM bytecode if embedded directly.
+        #[serde(default)]
+        wasm_bytes: Option<Vec<u8>>,
+        /// Custom parameters passed to the WASM plugin.
+        #[serde(default)]
+        params: serde_json::Value,
+    },
 }
 
 /// Drop shadow generated from the filtered and masked layer alpha.
