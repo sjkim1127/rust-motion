@@ -5682,6 +5682,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-inpaint"
+version = "1.0.0"
+dependencies = [
+ "rayon",
+ "serde",
+]
+
+[[package]]
 name = "rust-motion-lensdb"
 version = "1.0.0"
 dependencies = [
@@ -5842,6 +5850,7 @@ dependencies = [
  "rust-motion-dng",
  "rust-motion-doc",
  "rust-motion-geom",
+ "rust-motion-inpaint",
  "rust-motion-lensdb",
  "rust-motion-paint",
  "rust-motion-plugins",

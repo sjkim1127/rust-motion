@@ -2448,6 +2448,36 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
                 halation_color,
             );
         }
+        SceneFilter::Matte {
+            threshold,
+            temporal_smooth: _,
+        } => {
+            let matte = crate::ai_vision::VideoMatting::extract_matte(pixmap, threshold);
+            crate::ai_vision::VideoMatting::apply_matte(pixmap, &matte);
+        }
+        SceneFilter::Inpaint {
+            hole_rect,
+            patch_radius,
+        } => {
+            let w = pixmap.width();
+            let h = pixmap.height();
+            let hx = (hole_rect[0] * w as f32).round().max(0.0) as u32;
+            let hy = (hole_rect[1] * h as f32).round().max(0.0) as u32;
+            let hw = (hole_rect[2] * w as f32).round().max(1.0) as u32;
+            let hh = (hole_rect[3] * h as f32).round().max(1.0) as u32;
+
+            let mut hole_mask = vec![false; (w * h) as usize];
+            for y in hy..(hy + hh).min(h) {
+                for x in hx..(hx + hw).min(w) {
+                    hole_mask[(y * w + x) as usize] = true;
+                }
+            }
+            crate::ai_vision::Inpainter::inpaint(pixmap, &hole_mask, patch_radius);
+        }
+        SceneFilter::TemporalDenoise {
+            strength: _,
+            motion_threshold: _,
+        } => {}
     }
     Ok(())
 }

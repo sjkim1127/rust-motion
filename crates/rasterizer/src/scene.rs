@@ -607,6 +607,32 @@ pub enum SceneFilter {
         #[serde(default = "default_halation_tint")]
         halation_color: [u8; 4],
     },
+    /// AI Video Matting & Rotoscoping (Green-screen-less background removal).
+    Matte {
+        /// Contrast threshold for subject edge separation (0..1).
+        #[serde(default = "default_half")]
+        threshold: f32,
+        /// Optional temporal smoothing factor (0..1) against previous frame matte.
+        #[serde(default)]
+        temporal_smooth: f32,
+    },
+    /// Content-aware hole filling and object removal.
+    Inpaint {
+        /// Mask bounding box `[x, y, width, height]` in normalized coordinates (0..1) to remove.
+        hole_rect: [f32; 4],
+        /// Patch radius for PatchMatch multi-scale synthesis.
+        #[serde(default = "default_patch_radius")]
+        patch_radius: usize,
+    },
+    /// Multi-frame temporal recursive noise reduction for video footage.
+    TemporalDenoise {
+        /// Temporal blending strength (0..0.95).
+        #[serde(default = "default_half")]
+        strength: f32,
+        /// Motion detection threshold to preserve sharp moving edges.
+        #[serde(default = "default_motion_threshold")]
+        motion_threshold: f32,
+    },
 }
 
 /// Drop shadow generated from the filtered and masked layer alpha.
@@ -1112,6 +1138,14 @@ const fn default_halation_tint() -> [u8; 4] {
 
 const fn default_half_pair() -> [f32; 2] {
     [0.5, 0.5]
+}
+
+const fn default_patch_radius() -> usize {
+    3
+}
+
+const fn default_motion_threshold() -> f32 {
+    10.0
 }
 
 /// Affine 2D transform (scale + rotation + translation).

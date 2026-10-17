@@ -28,6 +28,7 @@
 #![allow(unknown_lints)]
 #![allow(clippy::chunks_exact_to_as_chunks)]
 
+pub mod ai_vision;
 pub mod audio_cache;
 pub mod backend;
 pub mod camera3d;
