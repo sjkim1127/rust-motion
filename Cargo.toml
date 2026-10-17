@@ -40,6 +40,7 @@ members = [
     "crates/plugins",
     "crates/lensdb",
     "crates/inpaint",
+    "crates/mcp",
     "apps/studio",
     "apps/example",
 ]
@@ -151,6 +152,7 @@ rust-motion-algo        = { version = "1.0.0", path = "crates/algo" }
 rust-motion-plugins     = { version = "1.0.0", path = "crates/plugins" }
 rust-motion-lensdb      = { version = "1.0.0", path = "crates/lensdb" }
 rust-motion-inpaint     = { version = "1.0.0", path = "crates/inpaint" }
+rust-motion-mcp         = { version = "1.0.0", path = "crates/mcp" }
 
 photocraft-geom         = { version = "1.0.0", path = "crates/geom", package = "rust-motion-geom" }
 photocraft-color        = { version = "1.0.0", path = "crates/color", package = "rust-motion-color" }
@@ -164,6 +166,7 @@ photocraft-algo         = { version = "1.0.0", path = "crates/algo", package = "
 photocraft-plugins      = { version = "1.0.0", path = "crates/plugins", package = "rust-motion-plugins" }
 lightcraft-lensdb       = { version = "1.0.0", path = "crates/lensdb", package = "rust-motion-lensdb" }
 lightcraft-inpaint      = { version = "1.0.0", path = "crates/inpaint", package = "rust-motion-inpaint" }
+lightcraft-mcp          = { version = "1.0.0", path = "crates/mcp", package = "rust-motion-mcp" }
 
 
 

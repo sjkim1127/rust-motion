@@ -5698,6 +5698,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-mcp"
+version = "1.0.0"
+dependencies = [
+ "base64",
+ "image",
+ "rust-motion-color",
+ "rust-motion-project",
+ "rust-motion-rasterizer",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
 name = "rust-motion-media"
 version = "1.0.0"
 dependencies = [

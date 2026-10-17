@@ -1,0 +1,23 @@
+[package]
+name = "rust-motion-mcp"
+description = "Model Context Protocol (MCP) server for autonomous AI video/audio editing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "lightcraft_mcp"
+
+[dependencies]
+rust-motion-project = { workspace = true }
+rust-motion-rasterizer = { workspace = true }
+rust-motion-color = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+thiserror = { workspace = true }
+image = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+
+[features]
+default = []
