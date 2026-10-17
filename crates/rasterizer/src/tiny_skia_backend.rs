@@ -18,7 +18,7 @@ use rayon::prelude::*;
 use std::sync::Arc;
 use tiny_skia::{
     BlendMode as SkBlendMode, FillRule, IntSize, Mask, MaskType, Paint, Path, PathBuilder, Pixmap,
-    PixmapPaint, PremultipliedColorU8, Rect, Stroke, Transform,
+    PixmapPaint, PixmapRef, PremultipliedColorU8, Rect, Stroke, Transform,
 };
 
 const MAX_IMAGE_NODE_PIXELS: u64 = 16 * 1024 * 1024;
@@ -1200,9 +1200,131 @@ fn render_node(
                 None,
             );
         }
+
+        SceneNode::AnimatedStroke {
+            stroke,
+            progress,
+            color,
+            opacity: node_opacity,
+        } => {
+            let eff_opacity = opacity * node_opacity;
+            if eff_opacity <= 0.0 || *progress <= 0.0 || stroke.points.is_empty() {
+                return Ok(());
+            }
+
+            let pts = interpolate_stroke_progress(&stroke.points, *progress);
+            if pts.is_empty() {
+                return Ok(());
+            }
+
+            let mut brush = stroke.brush.clone();
+            if let Some(c) = color {
+                brush.color = [
+                    c.r as f32 / 255.0,
+                    c.g as f32 / 255.0,
+                    c.b as f32 / 255.0,
+                    c.a as f32 / 255.0,
+                ];
+            }
+
+            let mut surface = photocraft_raster::Surface::new(photocraft_color::PixelFormat::RGBA8);
+            let damage = photocraft_paint::render_stroke(&mut surface, &brush, &pts, None, false, 1.0);
+            if damage.is_empty() {
+                return Ok(());
+            }
+
+            let canvas_rect = photocraft_geom::Rect::from_xywh(0, 0, pixmap.width(), pixmap.height());
+            let r = damage.intersect(&canvas_rect);
+            if r.is_empty() {
+                return Ok(());
+            }
+
+            let mut buf = vec![[0u8; 4]; r.width() as usize * r.height() as usize];
+            surface.read_rgba8_into(r, &mut buf);
+
+            let mut premul = Vec::with_capacity(buf.len() * 4);
+            for px in buf {
+                let a = (px[3] as f32 / 255.0) * eff_opacity;
+                let red = ((px[0] as f32 / 255.0) * a * 255.0).round() as u8;
+                let grn = ((px[1] as f32 / 255.0) * a * 255.0).round() as u8;
+                let blu = ((px[2] as f32 / 255.0) * a * 255.0).round() as u8;
+                let alf = (a * 255.0).round() as u8;
+                premul.extend_from_slice(&[red, grn, blu, alf]);
+            }
+
+            if let Some(patch) = PixmapRef::from_bytes(&premul, r.width(), r.height()) {
+                let paint = PixmapPaint {
+                    opacity: 1.0,
+                    ..Default::default()
+                };
+                let patch_trans = transform.pre_translate(r.x0 as f32, r.y0 as f32);
+                pixmap.draw_pixmap(0, 0, patch, &paint, patch_trans, None);
+            }
+        }
     }
     Ok(())
 }
+
+fn interpolate_stroke_progress(
+    points: &[photocraft_paint::StrokePoint],
+    progress: f32,
+) -> Vec<photocraft_paint::StrokePoint> {
+    let p = progress.clamp(0.0, 1.0);
+    if p <= 0.0 || points.is_empty() {
+        return Vec::new();
+    }
+    if p >= 1.0 || points.len() == 1 {
+        return points.to_vec();
+    }
+
+    let mut lengths = Vec::with_capacity(points.len());
+    lengths.push(0.0);
+    let mut total_len = 0.0;
+    for i in 1..points.len() {
+        let dx = points[i].x - points[i - 1].x;
+        let dy = points[i].y - points[i - 1].y;
+        let dist = (dx * dx + dy * dy).sqrt();
+        total_len += dist;
+        lengths.push(total_len);
+    }
+
+    if total_len <= 1e-6 {
+        let take_n = ((points.len() as f32 * p).ceil() as usize).clamp(1, points.len());
+        return points[..take_n].to_vec();
+    }
+
+    let target_len = total_len * (p as f64);
+    let mut out = Vec::new();
+
+    for i in 1..points.len() {
+        out.push(points[i - 1]);
+        if lengths[i] >= target_len {
+            let seg_len = lengths[i] - lengths[i - 1];
+            let t = if seg_len > 1e-6 {
+                ((target_len - lengths[i - 1]) / seg_len).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let p0 = &points[i - 1];
+            let p1 = &points[i];
+            let interp = photocraft_paint::StrokePoint {
+                x: p0.x + (p1.x - p0.x) * t,
+                y: p0.y + (p1.y - p0.y) * t,
+                pressure: (p0.pressure + (p1.pressure - p0.pressure) * (t as f32)).clamp(0.0, 1.0),
+                tilt_x: p0.tilt_x + (p1.tilt_x - p0.tilt_x) * (t as f32),
+                tilt_y: p0.tilt_y + (p1.tilt_y - p0.tilt_y) * (t as f32),
+                rotation: p0.rotation + (p1.rotation - p0.rotation) * (t as f32),
+                wheel: p0.wheel + (p1.wheel - p0.wheel) * (t as f32),
+                time: p0.time + (p1.time - p0.time) * t,
+            };
+            out.push(interp);
+            return out;
+        }
+    }
+
+    points.to_vec()
+}
+
 
 // --- Helpers ---
 

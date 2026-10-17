@@ -1,0 +1,18 @@
+[package]
+name = "rust-motion-paint"
+description = "Photoshop-grade brush simulation engine and deterministic stroke replay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "photocraft_paint"
+
+[dependencies]
+photocraft-geom = { workspace = true }
+photocraft-color = { workspace = true }
+photocraft-raster = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -29,6 +29,10 @@ rasterlottie = { version = "0.2.2", default-features = false }
 symphonia  = { workspace = true }
 rust-motion-color = { workspace = true }
 rust-motion-psd   = { workspace = true }
+rust-motion-geom  = { workspace = true }
+rust-motion-raster = { workspace = true }
+rust-motion-paint = { workspace = true }
+rust-motion-tablet = { workspace = true }
 wgpu       = { version = "22", optional = true }
 pollster   = { version = "0.4", optional = true }
 lyon_tessellation = { workspace = true, optional = true }

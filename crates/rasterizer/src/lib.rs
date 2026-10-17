@@ -58,6 +58,10 @@ pub mod web_backend;
 #[cfg(feature = "gpu")]
 pub mod wgpu_backend;
 
+pub extern crate rust_motion_color as photocraft_color;
+pub use photocraft_paint as paint;
+pub use photocraft_tablet as tablet;
+
 pub use security::MediaSecurityPolicy;
 
 pub use audio_cache::AudioData;

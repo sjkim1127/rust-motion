@@ -29,6 +29,10 @@ members = [
     "crates/cms",
     "crates/color",
     "crates/psd",
+    "crates/geom",
+    "crates/raster",
+    "crates/paint",
+    "crates/tablet",
     "apps/studio",
     "apps/example",
 ]
@@ -129,6 +133,16 @@ rust-motion-cfb         = { version = "1.0.0", path = "crates/cfb" }
 rust-motion-cms         = { version = "1.0.0", path = "crates/cms" }
 rust-motion-color       = { version = "1.0.0", path = "crates/color" }
 rust-motion-psd         = { version = "1.0.0", path = "crates/psd" }
+rust-motion-geom        = { version = "1.0.0", path = "crates/geom" }
+rust-motion-raster      = { version = "1.0.0", path = "crates/raster" }
+rust-motion-paint       = { version = "1.0.0", path = "crates/paint" }
+rust-motion-tablet      = { version = "1.0.0", path = "crates/tablet" }
+
+photocraft-geom         = { version = "1.0.0", path = "crates/geom", package = "rust-motion-geom" }
+photocraft-color        = { version = "1.0.0", path = "crates/color", package = "rust-motion-color" }
+photocraft-raster       = { version = "1.0.0", path = "crates/raster", package = "rust-motion-raster" }
+photocraft-paint        = { version = "1.0.0", path = "crates/paint", package = "rust-motion-paint" }
+photocraft-tablet       = { version = "1.0.0", path = "crates/tablet", package = "rust-motion-tablet" }
 
 
 

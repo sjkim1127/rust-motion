@@ -2377,6 +2377,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gethostname"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8"
+dependencies = [
+ "rustix",
+ "windows-link",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4126,8 +4136,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c"
 dependencies = [
  "bitflags 2.13.1",
+ "block2 0.6.2",
  "objc2 0.6.4",
  "objc2-core-foundation",
+ "objc2-core-graphics",
  "objc2-foundation 0.3.2",
 ]
 
@@ -4161,7 +4173,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e022c9d066895efa1345f8e33e584b9f958da2fd4cd116792e15e07e4720a807"
 dependencies = [
  "bitflags 2.13.1",
+ "dispatch2",
+ "objc2 0.6.4",
  "objc2-core-foundation",
+ "objc2-io-surface",
 ]
 
 [[package]]
@@ -4202,6 +4217,17 @@ checksum = "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272"
 dependencies = [
  "bitflags 2.13.1",
  "block2 0.6.2",
+ "objc2 0.6.4",
+ "objc2-core-foundation",
+]
+
+[[package]]
+name = "objc2-io-surface"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "180788110936d59bab6bd83b6060ffdfffb3b922ba1396b312ae795e1de9d81d"
+dependencies = [
+ "bitflags 2.13.1",
  "objc2 0.6.4",
  "objc2-core-foundation",
 ]
@@ -5583,6 +5609,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-geom"
+version = "1.0.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "rust-motion-h264enc"
 version = "1.0.0"
 dependencies = [
@@ -5628,6 +5661,17 @@ dependencies = [
  "dioxus",
  "rust-motion-core",
  "serde",
+]
+
+[[package]]
+name = "rust-motion-paint"
+version = "1.0.0"
+dependencies = [
+ "rust-motion-color",
+ "rust-motion-geom",
+ "rust-motion-raster",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -5698,6 +5742,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-raster"
+version = "1.0.0"
+dependencies = [
+ "proptest",
+ "rust-motion-color",
+ "rust-motion-geom",
+ "serde",
+]
+
+[[package]]
 name = "rust-motion-rasterizer"
 version = "1.0.0"
 dependencies = [
@@ -5711,7 +5765,11 @@ dependencies = [
  "rayon",
  "resvg",
  "rust-motion-color",
+ "rust-motion-geom",
+ "rust-motion-paint",
  "rust-motion-psd",
+ "rust-motion-raster",
+ "rust-motion-tablet",
  "rustybuzz",
  "serde",
  "serde_json",
@@ -5758,6 +5816,20 @@ dependencies = [
  "rust-motion-rasterizer",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "rust-motion-tablet"
+version = "1.0.0"
+dependencies = [
+ "block2 0.6.2",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-graphics",
+ "objc2-foundation 0.3.2",
+ "rust-motion-paint",
+ "serde",
+ "x11rb",
 ]
 
 [[package]]
@@ -8307,6 +8379,23 @@ dependencies = [
  "once_cell",
  "pkg-config",
 ]
+
+[[package]]
+name = "x11rb"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9993aa5be5a26815fe2c3eacfc1fde061fc1a1f094bf1ad2a18bf9c495dd7414"
+dependencies = [
+ "gethostname",
+ "rustix",
+ "x11rb-protocol",
+]
+
+[[package]]
+name = "x11rb-protocol"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "xdg-home"

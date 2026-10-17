@@ -886,6 +886,20 @@ pub enum SceneNode {
         #[serde(default = "default_opacity")]
         opacity: f32,
     },
+
+    /// Natural paint brush animated stroke (write-on animation).
+    AnimatedStroke {
+        /// Brush stroke data containing brush settings and sampled points.
+        stroke: photocraft_paint::Stroke,
+        /// Fraction of the stroke completed in `0.0..=1.0` (write-on timeline progress).
+        #[serde(default = "default_one")]
+        progress: f32,
+        /// Optional color override (if None, uses stroke.brush.color).
+        #[serde(default)]
+        color: Option<Color>,
+        #[serde(default = "default_opacity")]
+        opacity: f32,
+    },
 }
 
 const fn default_one() -> f32 {

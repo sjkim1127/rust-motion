@@ -1,0 +1,17 @@
+[package]
+name = "rust-motion-raster"
+description = "Sparse, copy-on-write tiled raster surfaces"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "photocraft_raster"
+
+[dependencies]
+photocraft-geom = { workspace = true }
+photocraft-color = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

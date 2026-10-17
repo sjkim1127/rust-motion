@@ -1,0 +1,12 @@
+[package]
+name = "rust-motion-geom"
+description = "2D geometry primitives, tiling, and non-affine mesh warping"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "photocraft_geom"
+
+[dependencies]
+serde = { workspace = true }
