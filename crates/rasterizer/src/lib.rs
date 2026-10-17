@@ -42,6 +42,7 @@ pub mod mesh3d;
 pub mod motion_blur;
 pub mod parenting;
 pub mod particles;
+pub mod psd;
 pub mod render;
 pub mod scene;
 pub mod security;
@@ -114,6 +115,7 @@ pub use motion_blur::{
     TemporalFilterKernel,
 };
 pub use parenting::{LayerNode, LayerTransform, Matrix4, ParentingError, ParentingGraph};
+pub use psd::{load_psd_as_scene, render_psd_to_image, render_psd_to_pixmap};
 pub use scene::{
     AudioTrack, BlendMode, ClipRegion, Color, GradientStop, ImageFit, MaskMode, Scene, SceneFilter,
     SceneNode, SceneShadow, Transform2D, VisualizerStyle,

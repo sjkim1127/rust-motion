@@ -1,0 +1,10 @@
+[package]
+name = "rust-motion-color"
+description = "Pure-Rust color spaces, color conversions, and 27 Photoshop blend modes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rust-motion-cms = { workspace = true }
+serde = { workspace = true }

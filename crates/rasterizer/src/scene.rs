@@ -147,22 +147,110 @@ pub enum ImageFit {
 }
 
 /// Layer blend mode shared by CPU rendering and SVG preview.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum BlendMode {
     #[default]
     Normal,
-    Multiply,
-    Screen,
-    Overlay,
+    Dissolve,
     Darken,
-    Lighten,
-    ColorDodge,
+    Multiply,
     ColorBurn,
-    HardLight,
+    LinearBurn,
+    DarkerColor,
+    Lighten,
+    Screen,
+    ColorDodge,
+    LinearDodge,
+    LighterColor,
+    Overlay,
     SoftLight,
+    HardLight,
+    VividLight,
+    LinearLight,
+    PinLight,
+    HardMix,
     Difference,
     Exclusion,
+    Subtract,
+    Divide,
+    Hue,
+    Saturation,
+    Color,
+    Luminosity,
+    PassThrough,
+}
+
+impl BlendMode {
+    /// Convert to rust-motion-color BlendMode.
+    pub fn to_color_blend_mode(self) -> rust_motion_color::BlendMode {
+        match self {
+            Self::Normal => rust_motion_color::BlendMode::Normal,
+            Self::Dissolve => rust_motion_color::BlendMode::Dissolve,
+            Self::Darken => rust_motion_color::BlendMode::Darken,
+            Self::Multiply => rust_motion_color::BlendMode::Multiply,
+            Self::ColorBurn => rust_motion_color::BlendMode::ColorBurn,
+            Self::LinearBurn => rust_motion_color::BlendMode::LinearBurn,
+            Self::DarkerColor => rust_motion_color::BlendMode::DarkerColor,
+            Self::Lighten => rust_motion_color::BlendMode::Lighten,
+            Self::Screen => rust_motion_color::BlendMode::Screen,
+            Self::ColorDodge => rust_motion_color::BlendMode::ColorDodge,
+            Self::LinearDodge => rust_motion_color::BlendMode::LinearDodge,
+            Self::LighterColor => rust_motion_color::BlendMode::LighterColor,
+            Self::Overlay => rust_motion_color::BlendMode::Overlay,
+            Self::SoftLight => rust_motion_color::BlendMode::SoftLight,
+            Self::HardLight => rust_motion_color::BlendMode::HardLight,
+            Self::VividLight => rust_motion_color::BlendMode::VividLight,
+            Self::LinearLight => rust_motion_color::BlendMode::LinearLight,
+            Self::PinLight => rust_motion_color::BlendMode::PinLight,
+            Self::HardMix => rust_motion_color::BlendMode::HardMix,
+            Self::Difference => rust_motion_color::BlendMode::Difference,
+            Self::Exclusion => rust_motion_color::BlendMode::Exclusion,
+            Self::Subtract => rust_motion_color::BlendMode::Subtract,
+            Self::Divide => rust_motion_color::BlendMode::Divide,
+            Self::Hue => rust_motion_color::BlendMode::Hue,
+            Self::Saturation => rust_motion_color::BlendMode::Saturation,
+            Self::Color => rust_motion_color::BlendMode::Color,
+            Self::Luminosity => rust_motion_color::BlendMode::Luminosity,
+            Self::PassThrough => rust_motion_color::BlendMode::PassThrough,
+        }
+    }
+}
+
+impl From<photocraft_psd::blend::BlendMode> for BlendMode {
+    fn from(m: photocraft_psd::blend::BlendMode) -> Self {
+        match m {
+            photocraft_psd::blend::BlendMode::Normal => Self::Normal,
+            photocraft_psd::blend::BlendMode::Dissolve => Self::Dissolve,
+            photocraft_psd::blend::BlendMode::Darken => Self::Darken,
+            photocraft_psd::blend::BlendMode::Multiply => Self::Multiply,
+            photocraft_psd::blend::BlendMode::ColorBurn => Self::ColorBurn,
+            photocraft_psd::blend::BlendMode::LinearBurn => Self::LinearBurn,
+            photocraft_psd::blend::BlendMode::DarkerColor => Self::DarkerColor,
+            photocraft_psd::blend::BlendMode::Lighten => Self::Lighten,
+            photocraft_psd::blend::BlendMode::Screen => Self::Screen,
+            photocraft_psd::blend::BlendMode::ColorDodge => Self::ColorDodge,
+            photocraft_psd::blend::BlendMode::LinearDodge => Self::LinearDodge,
+            photocraft_psd::blend::BlendMode::LighterColor => Self::LighterColor,
+            photocraft_psd::blend::BlendMode::Overlay => Self::Overlay,
+            photocraft_psd::blend::BlendMode::SoftLight => Self::SoftLight,
+            photocraft_psd::blend::BlendMode::HardLight => Self::HardLight,
+            photocraft_psd::blend::BlendMode::VividLight => Self::VividLight,
+            photocraft_psd::blend::BlendMode::LinearLight => Self::LinearLight,
+            photocraft_psd::blend::BlendMode::PinLight => Self::PinLight,
+            photocraft_psd::blend::BlendMode::HardMix => Self::HardMix,
+            photocraft_psd::blend::BlendMode::Difference => Self::Difference,
+            photocraft_psd::blend::BlendMode::Exclusion => Self::Exclusion,
+            photocraft_psd::blend::BlendMode::Subtract => Self::Subtract,
+            photocraft_psd::blend::BlendMode::Divide => Self::Divide,
+            photocraft_psd::blend::BlendMode::Hue => Self::Hue,
+            photocraft_psd::blend::BlendMode::Saturation => Self::Saturation,
+            photocraft_psd::blend::BlendMode::Color => Self::Color,
+            photocraft_psd::blend::BlendMode::Luminosity => Self::Luminosity,
+            photocraft_psd::blend::BlendMode::PassThrough => Self::PassThrough,
+            photocraft_psd::blend::BlendMode::Unknown(_) => Self::Normal,
+        }
+    }
 }
 
 /// Geometric clip applied to a composited layer.
@@ -355,6 +443,50 @@ pub enum SceneFilter {
         #[serde(default = "default_opacity")]
         opacity: f32,
     },
+    /// Photoshop Curves adjustment filter.
+    Curves {
+        #[serde(default)]
+        master: Vec<[f32; 2]>,
+        #[serde(default)]
+        red: Vec<[f32; 2]>,
+        #[serde(default)]
+        green: Vec<[f32; 2]>,
+        #[serde(default)]
+        blue: Vec<[f32; 2]>,
+    },
+    /// Photoshop Levels adjustment filter.
+    Levels {
+        #[serde(default)]
+        in_black: f32,
+        #[serde(default = "default_one")]
+        in_white: f32,
+        #[serde(default = "default_one")]
+        gamma: f32,
+        #[serde(default)]
+        out_black: f32,
+        #[serde(default = "default_one")]
+        out_white: f32,
+    },
+    /// Photoshop Vibrance and Saturation adjustment filter.
+    Vibrance {
+        #[serde(default)]
+        vibrance: f32,
+        #[serde(default)]
+        saturation: f32,
+    },
+    /// Photoshop Color Balance adjustment filter.
+    ColorBalance {
+        #[serde(default)]
+        shadows: [f32; 3],
+        #[serde(default)]
+        midtones: [f32; 3],
+        #[serde(default)]
+        highlights: [f32; 3],
+        #[serde(default)]
+        preserve_luminosity: bool,
+    },
+    /// Direct Adjustment parameter object from `rust_motion_color::Adjustment`.
+    Adjustment(Box<rust_motion_color::adjust::Adjustment>),
 }
 
 /// Drop shadow generated from the filtered and masked layer alpha.
@@ -754,6 +886,10 @@ pub enum SceneNode {
         #[serde(default = "default_opacity")]
         opacity: f32,
     },
+}
+
+const fn default_one() -> f32 {
+    1.0
 }
 
 const fn default_playback_rate() -> f32 {

@@ -1,0 +1,13 @@
+[package]
+name = "rust-motion-cms"
+description = "Pure-Rust ICC v2/v4 colour management: profile parsing and writing, transforms, rendering intents, black point compensation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["threads"]
+threads = ["dep:rayon"]
+
+[dependencies]
+rayon = { workspace = true, optional = true }
