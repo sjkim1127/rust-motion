@@ -7,7 +7,6 @@ use rust_motion_rasterizer::{
     Transform2D,
 };
 use serde_json::Value;
-use std::collections::BTreeMap;
 
 /// Timeline state passed through a native scene-emitter tree.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -258,19 +257,20 @@ impl SceneEmitter for SceneAuthoring {
         props: &Value,
         scene: &mut Scene,
     ) -> Result<(), CompositionError> {
-        let mut active = BTreeMap::new();
+        let mut active: Vec<(&str, &dyn SceneEmitter)> = Vec::new();
         for action in &self.schedule {
             match action {
                 ScheduledAction::Add { start, id, emitter } if *start <= context.frame => {
-                    active.insert(id.as_str(), emitter.as_ref());
+                    active.retain(|(active_id, _)| *active_id != id);
+                    active.push((id.as_str(), emitter.as_ref()));
                 }
                 ScheduledAction::Remove { start, id } if *start <= context.frame => {
-                    active.remove(id.as_str());
+                    active.retain(|(active_id, _)| *active_id != id);
                 }
                 _ => {}
             }
         }
-        for emitter in active.values() {
+        for (_, emitter) in active {
             emitter.emit(context, props, scene)?;
         }
         for action in &self.schedule {
@@ -2609,6 +2609,45 @@ mod tests {
             assert!((opacity - 0.5).abs() < 1e-4);
         } else {
             panic!("Expected group for layer 1");
+        }
+    }
+
+    #[test]
+    fn scene_authoring_preserves_add_order_and_moves_readded_objects_to_front() {
+        let authored = SceneAuthoringBuilder::new()
+            .add(
+                "z-background",
+                SceneRect::new(1.0, 0.0, 1.0, 1.0, Color::BLACK),
+            )
+            .add(
+                "a-foreground",
+                SceneRect::new(2.0, 0.0, 1.0, 1.0, Color::WHITE),
+            )
+            .wait(1)
+            .remove("z-background")
+            .add(
+                "z-background",
+                SceneRect::new(3.0, 0.0, 1.0, 1.0, Color::BLACK),
+            )
+            .compile();
+        for (frame, expected) in [(0, [1.0, 2.0]), (1, [2.0, 3.0])] {
+            let mut scene = Scene::new();
+            authored
+                .emit(
+                    SceneFrameContext::new(frame, context()),
+                    &Value::Null,
+                    &mut scene,
+                )
+                .unwrap();
+            let positions: Vec<_> = scene
+                .nodes
+                .iter()
+                .map(|node| match node {
+                    SceneNode::Rect { x, .. } => *x,
+                    _ => panic!("expected rectangle"),
+                })
+                .collect();
+            assert_eq!(positions, expected);
         }
     }
 
