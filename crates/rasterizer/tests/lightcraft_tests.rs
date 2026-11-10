@@ -54,7 +54,10 @@ fn test_lensdb_synthetic_profile_matching_and_correction() {
 
     let correction = lens.correction(&shot).expect("compute lens correction");
     assert!(correction.warp.is_some(), "distortion warp computed");
-    assert!(correction.vignette.is_some(), "vignette polynomial computed");
+    assert!(
+        correction.vignette.is_some(),
+        "vignette polynomial computed"
+    );
 
     let warp = correction.warp.unwrap();
     assert_eq!(warp.center.x, 0.5);
@@ -235,7 +238,10 @@ fn test_rasterizer_film_emulation_and_halation() {
 
     // Halation warm glow should be visible around the bright box (e.g. at (35, 50))
     let halo_px = img.get_pixel(35, 50);
-    assert!(halo_px[0] > halo_px[2], "warm halation red channel exceeds blue");
+    assert!(
+        halo_px[0] > halo_px[2],
+        "warm halation red channel exceeds blue"
+    );
 }
 
 #[test]
@@ -255,5 +261,8 @@ fn test_rasterizer_lens_correction_filter() {
     // Center should be brighter than edge due to vignette falloff
     let center_px = pix.pixel(50, 50).unwrap();
     let corner_px = pix.pixel(5, 5).unwrap();
-    assert!(corner_px.red() < center_px.red(), "vignette darkens outer edge");
+    assert!(
+        corner_px.red() < center_px.red(),
+        "vignette darkens outer edge"
+    );
 }

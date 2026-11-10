@@ -51,7 +51,11 @@ pub fn select_subject(sampler: &dyn Sampler, canvas: Rect) -> Option<Region> {
 
 /// [`select_subject`] that stops with `Err(Cancelled)` once `ctl` is cancelled, asked between
 /// stages and inside every min cut (the GrabCut iterations and the full-resolution re-cut).
-pub fn select_subject_with(sampler: &dyn Sampler, canvas: Rect, ctl: &Interrupt) -> Result<Option<Region>, Cancelled> {
+pub fn select_subject_with(
+    sampler: &dyn Sampler,
+    canvas: Rect,
+    ctl: &Interrupt,
+) -> Result<Option<Region>, Cancelled> {
     if canvas.width() < 4 || canvas.height() < 4 {
         return Ok(None);
     }
@@ -80,8 +84,13 @@ pub fn select_subject_with(sampler: &dyn Sampler, canvas: Rect, ctl: &Interrupt)
     if !any_fg {
         return Ok(None);
     }
-    let Some((fg, bg)) = grabcut::grabcut_with(&img, &mut trimap, 6, ctl)? else { return Ok(None) };
-    let low: Vec<bool> = trimap.iter().map(|v| *v == PR_FG || *v == grabcut::FG).collect();
+    let Some((fg, bg)) = grabcut::grabcut_with(&img, &mut trimap, 6, ctl)? else {
+        return Ok(None);
+    };
+    let low: Vec<bool> = trimap
+        .iter()
+        .map(|v| *v == PR_FG || *v == grabcut::FG)
+        .collect();
     let low = super::clean_mask(&low, w, h, 0.2, 0.0);
     if !low.iter().any(|v| *v) {
         return Ok(None);
@@ -99,7 +108,11 @@ pub fn select_subject_with(sampler: &dyn Sampler, canvas: Rect, ctl: &Interrupt)
 /// cannot account for, such as a cream shirt on a near-white wall) starts as probable
 /// foreground. `Ok(None)` when the frame cannot be modelled or the cut keeps nothing that
 /// touches the blob; `Err(Cancelled)` once `ctl` is cancelled, as in the first pass.
-fn backdrop_pass(img: &super::RgbImage, blob: &[bool], ctl: &Interrupt) -> Result<Option<(Vec<bool>, Gmm, Gmm)>, Cancelled> {
+fn backdrop_pass(
+    img: &super::RgbImage,
+    blob: &[bool],
+    ctl: &Interrupt,
+) -> Result<Option<(Vec<bool>, Gmm, Gmm)>, Cancelled> {
     let (w, h) = (img.w, img.h);
     let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0usize, 0usize);
     for (i, on) in blob.iter().enumerate() {
@@ -117,12 +130,26 @@ fn backdrop_pass(img: &super::RgbImage, blob: &[bool], ctl: &Interrupt) -> Resul
     let frame = ((w.min(h) as f32 * 0.06).round() as usize).max(2);
     let in_frame = |x: usize, y: usize| x < frame || y < frame || x + frame >= w || y + frame >= h;
     let near_blob = |x: usize, y: usize| (bx0..=bx1).contains(&x) && (by0..=by1).contains(&y);
-    let samples: Vec<[f32; 3]> = (0..w * h).filter(|i| in_frame(i % w, i / w) && !near_blob(i % w, i / w)).map(|i| img.px[i]).collect();
-    let Some(backdrop) = Gmm::fit(&super::subsample(&samples, 40_000), grabcut::K, super::gmm::DEFAULT_REG) else { return Ok(None) };
+    let samples: Vec<[f32; 3]> = (0..w * h)
+        .filter(|i| in_frame(i % w, i / w) && !near_blob(i % w, i / w))
+        .map(|i| img.px[i])
+        .collect();
+    let Some(backdrop) = Gmm::fit(
+        &super::subsample(&samples, 40_000),
+        grabcut::K,
+        super::gmm::DEFAULT_REG,
+    ) else {
+        return Ok(None);
+    };
     // What the frame itself costs under its own model bounds "explained well".
     let mut frame_costs: Vec<f32> = samples.iter().map(|p| backdrop.neg_log(*p)).collect();
     frame_costs.sort_by(|a, b| a.total_cmp(b));
-    let Some(limit) = frame_costs.get(frame_costs.len() * 99 / 100).map(|c| c + 4.0) else { return Ok(None) };
+    let Some(limit) = frame_costs
+        .get(frame_costs.len() * 99 / 100)
+        .map(|c| c + 4.0)
+    else {
+        return Ok(None);
+    };
     let mut trimap: Vec<u8> = (0..w * h)
         .map(|i| {
             let (x, y) = (i % w, i / w);
@@ -135,8 +162,13 @@ fn backdrop_pass(img: &super::RgbImage, blob: &[bool], ctl: &Interrupt) -> Resul
             }
         })
         .collect();
-    let Some((fg, bg)) = grabcut::grabcut_with(img, &mut trimap, 4, ctl)? else { return Ok(None) };
-    let cut: Vec<bool> = trimap.iter().map(|v| *v == PR_FG || *v == grabcut::FG).collect();
+    let Some((fg, bg)) = grabcut::grabcut_with(img, &mut trimap, 4, ctl)? else {
+        return Ok(None);
+    };
+    let cut: Vec<bool> = trimap
+        .iter()
+        .map(|v| *v == PR_FG || *v == grabcut::FG)
+        .collect();
     let low = super::keep_seeded(&cut, blob, w, h);
     Ok(low.iter().any(|v| *v).then_some((low, fg, bg)))
 }
@@ -168,8 +200,16 @@ pub fn saliency(img: &super::RgbImage) -> Vec<f32> {
             }
         }
     }
-    let mean: Vec<[f32; 3]> = mean.iter().zip(&cnt).map(|(m, c)| m.map(|v| (v / c.max(1.0)) as f32)).collect();
-    let pos: Vec<[f32; 2]> = pos.iter().zip(&cnt).map(|(p, c)| p.map(|v| (v / c.max(1.0)) as f32)).collect();
+    let mean: Vec<[f32; 3]> = mean
+        .iter()
+        .zip(&cnt)
+        .map(|(m, c)| m.map(|v| (v / c.max(1.0)) as f32))
+        .collect();
+    let pos: Vec<[f32; 2]> = pos
+        .iter()
+        .zip(&cnt)
+        .map(|(p, c)| p.map(|v| (v / c.max(1.0)) as f32))
+        .collect();
     let dapp = |a: usize, b: usize| super::d2(mean[a], mean[b]).sqrt();
     // Adjacency.
     let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
@@ -220,7 +260,14 @@ pub fn saliency(img: &super::RgbImage) -> Vec<f32> {
     let mx = wctr.iter().copied().fold(0.0f32, f32::max).max(1e-6);
     let wfg: Vec<f32> = wctr.iter().map(|v| v / mx).collect();
     // Saliency optimisation: min Σ wbg s² + Σ wfg (s−1)² + Σ_{i~j} w_ij (s_i − s_j)² (Gauss–Seidel).
-    let wij: Vec<Vec<f32>> = (0..n).map(|p| adj[p].iter().map(|&q| (-dapp(p, q).powi(2) / (2.0 * SIGMA_CLR * SIGMA_CLR)).exp() + 0.1).collect()).collect();
+    let wij: Vec<Vec<f32>> = (0..n)
+        .map(|p| {
+            adj[p]
+                .iter()
+                .map(|&q| (-dapp(p, q).powi(2) / (2.0 * SIGMA_CLR * SIGMA_CLR)).exp() + 0.1)
+                .collect()
+        })
+        .collect();
     let mut s = wfg.clone();
     for _ in 0..200 {
         for p in 0..n {
@@ -240,15 +287,30 @@ pub fn saliency(img: &super::RgbImage) -> Vec<f32> {
         }
     }
     let mean_all = mean_all.map(|v| (v / lab.len() as f64) as f32);
-    let blurred = super::RgbImage { w, h, px: lab.clone() };
+    let blurred = super::RgbImage {
+        w,
+        h,
+        px: lab.clone(),
+    };
     let blurred = blur_lab(&blurred);
-    let ft: Vec<f32> = blurred.px.iter().map(|c| super::d2(*c, mean_all).sqrt()).collect();
+    let ft: Vec<f32> = blurred
+        .px
+        .iter()
+        .map(|c| super::d2(*c, mean_all).sqrt())
+        .collect();
     let ftmax = ft.iter().copied().fold(0.0f32, f32::max).max(1e-6);
     let smin = s.iter().copied().fold(f32::MAX, f32::min);
     let smax = s.iter().copied().fold(f32::MIN, f32::max);
     let srange = (smax - smin).max(1e-6);
-    let mut out: Vec<f32> = sp.labels.iter().zip(&ft).map(|(l, f)| 0.75 * (s[*l as usize] - smin) / srange + 0.25 * f / ftmax).collect();
-    let (lo, hi) = out.iter().fold((f32::MAX, f32::MIN), |(a, b), v| (a.min(*v), b.max(*v)));
+    let mut out: Vec<f32> = sp
+        .labels
+        .iter()
+        .zip(&ft)
+        .map(|(l, f)| 0.75 * (s[*l as usize] - smin) / srange + 0.25 * f / ftmax)
+        .collect();
+    let (lo, hi) = out
+        .iter()
+        .fold((f32::MAX, f32::MIN), |(a, b), v| (a.min(*v), b.max(*v)));
     let r = (hi - lo).max(1e-6);
     for v in &mut out {
         *v = (*v - lo) / r;
@@ -263,13 +325,21 @@ fn blur_lab(img: &super::RgbImage) -> super::RgbImage {
         let mut tmp = cur.clone();
         for y in 0..h {
             for x in 0..w {
-                let (l, c, r) = (cur.at(x.saturating_sub(1), y), cur.at(x, y), cur.at((x + 1).min(w - 1), y));
+                let (l, c, r) = (
+                    cur.at(x.saturating_sub(1), y),
+                    cur.at(x, y),
+                    cur.at((x + 1).min(w - 1), y),
+                );
                 tmp.px[y * w + x] = [0, 1, 2].map(|k| (l[k] + 2.0 * c[k] + r[k]) / 4.0);
             }
         }
         for y in 0..h {
             for x in 0..w {
-                let (u, c, d) = (tmp.at(x, y.saturating_sub(1)), tmp.at(x, y), tmp.at(x, (y + 1).min(h - 1)));
+                let (u, c, d) = (
+                    tmp.at(x, y.saturating_sub(1)),
+                    tmp.at(x, y),
+                    tmp.at(x, (y + 1).min(h - 1)),
+                );
                 cur.px[y * w + x] = [0, 1, 2].map(|k| (u[k] + 2.0 * c[k] + d[k]) / 4.0);
             }
         }
@@ -317,7 +387,11 @@ pub fn otsu(v: &[f32]) -> f32 {
         hist[(x.clamp(0.0, 1.0) * 255.0).round() as usize] += 1;
     }
     let total = v.len() as f64;
-    let sum: f64 = hist.iter().enumerate().map(|(i, c)| i as f64 * *c as f64).sum();
+    let sum: f64 = hist
+        .iter()
+        .enumerate()
+        .map(|(i, c)| i as f64 * *c as f64)
+        .sum();
     let (mut wb, mut sb, mut best, mut bt) = (0.0f64, 0.0f64, -1.0f64, 0usize);
     for (t, c) in hist.iter().enumerate() {
         wb += *c as f64;

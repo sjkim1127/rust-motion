@@ -59,7 +59,9 @@ impl Default for OpticalGlow {
 /// Applies Optical Glow to a pixmap in-place.
 pub fn apply_optical_glow(pixmap: &mut Pixmap, glow: &OpticalGlow) -> Result<(), RasterError> {
     if !glow.threshold.is_finite() || !glow.radius.is_finite() || !glow.intensity.is_finite() {
-        return Err(RasterError::Scene("Optical glow parameters must be finite".into()));
+        return Err(RasterError::Scene(
+            "Optical glow parameters must be finite".into(),
+        ));
     }
     let threshold = glow.threshold.clamp(0.0, 0.999);
     let radius = glow.radius.clamp(1.0, 200.0);
@@ -115,7 +117,8 @@ pub fn apply_optical_glow(pixmap: &mut Pixmap, glow: &OpticalGlow) -> Result<(),
 
     for &(scale, weight) in &octaves {
         let rx = ((radius * scale * anamorphic).round() as usize).clamp(1, width.saturating_sub(1));
-        let ry = ((radius * scale / anamorphic).round() as usize).clamp(1, height.saturating_sub(1));
+        let ry =
+            ((radius * scale / anamorphic).round() as usize).clamp(1, height.saturating_sub(1));
 
         let blurred = separable_box_blur_f32(&highlight, width, height, rx, ry);
         for i in 0..accumulated_glow.len() {
@@ -313,9 +316,14 @@ impl Default for DisplacementMap {
 }
 
 /// Applies Displacement Map warping to a pixmap in-place.
-pub fn apply_displacement_map(pixmap: &mut Pixmap, map: &DisplacementMap) -> Result<(), RasterError> {
+pub fn apply_displacement_map(
+    pixmap: &mut Pixmap,
+    map: &DisplacementMap,
+) -> Result<(), RasterError> {
     if !map.max_horizontal.is_finite() || !map.max_vertical.is_finite() {
-        return Err(RasterError::Scene("Displacement parameters must be finite".into()));
+        return Err(RasterError::Scene(
+            "Displacement parameters must be finite".into(),
+        ));
     }
 
     let width = pixmap.width();
@@ -325,8 +333,16 @@ pub fn apply_displacement_map(pixmap: &mut Pixmap, map: &DisplacementMap) -> Res
     }
 
     let src = pixmap.data().to_vec();
-    let map_w = if map.map_width > 0 { map.map_width } else { width };
-    let map_h = if map.map_height > 0 { map.map_height } else { height };
+    let map_w = if map.map_width > 0 {
+        map.map_width
+    } else {
+        width
+    };
+    let map_h = if map.map_height > 0 {
+        map.map_height
+    } else {
+        height
+    };
 
     let sample_channel = |raw: &[u8], ch: DisplacementChannel, idx: usize| -> f32 {
         let r = raw[idx] as f32 / 255.0;
@@ -606,7 +622,13 @@ fn perlin_3d(x: f32, y: f32, z: f32) -> f32 {
     let grad = |ix: i32, iy: i32, iz: i32, fx: f32, fy: f32, fz: f32| -> f32 {
         let h = (hash_vec3(ix, iy, iz) * 16.0) as i32;
         let u = if h < 8 { fx } else { fy };
-        let v = if h < 4 { fy } else if h == 12 || h == 14 { fx } else { fz };
+        let v = if h < 4 {
+            fy
+        } else if h == 12 || h == 14 {
+            fx
+        } else {
+            fz
+        };
         (if (h & 1) == 0 { u } else { -u }) + (if (h & 2) == 0 { v } else { -v })
     };
 
@@ -677,8 +699,20 @@ fn simplex_3d(x: f32, y: f32, z: f32) -> f32 {
         } else {
             let t2 = t * t;
             let h = (hash_vec3(ix, iy, iz) * 12.0) as i32;
-            let u = if h < 4 { px } else if h == 12 || h == 13 { px } else { py };
-            let v = if h < 2 { py } else if h == 12 || h == 13 { pz } else { pz };
+            let u = if h < 4 {
+                px
+            } else if h == 12 || h == 13 {
+                px
+            } else {
+                py
+            };
+            let v = if h < 2 {
+                py
+            } else if h == 12 || h == 13 {
+                pz
+            } else {
+                pz
+            };
             let grad = (if (h & 1) == 0 { u } else { -u }) + (if (h & 2) == 0 { v } else { -v });
             t2 * t2 * grad
         }
@@ -754,7 +788,11 @@ mod tests {
 
         // At x = 25 (which was black before), displaced pixel should sample from x = 25 + 10 = 35 (white)
         let idx = ((32 * 64 + 25) * 4) as usize;
-        assert_eq!(pixmap.data()[idx], 255, "pixel at x=25 should have shifted from x=35");
+        assert_eq!(
+            pixmap.data()[idx],
+            255,
+            "pixel at x=25 should have shifted from x=35"
+        );
     }
 
     #[test]

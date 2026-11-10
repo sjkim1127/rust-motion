@@ -4,16 +4,20 @@
 use photocraft_geom::Rect;
 
 use crate::{
-    BlurShape, Ctx,
-    blur2::{Spans, shape_inside},
+    blur2::{shape_inside, Spans},
     fxutil::unpremul_px,
     image::Image,
+    BlurShape, Ctx,
 };
 
 /// The command supports at most 1000 px. Bound direct API input too, before
 /// halo arithmetic or O(r²) kernel rasterization. Nonfinite input uses zero radius.
 pub(crate) fn radius(r: f32) -> f32 {
-    if r.is_finite() { r.clamp(0.0, 1000.0) } else { 0.0 }
+    if r.is_finite() {
+        r.clamp(0.0, 1000.0)
+    } else {
+        0.0
+    }
 }
 
 pub(crate) struct Prepared {
@@ -22,7 +26,9 @@ pub(crate) struct Prepared {
 
 impl Prepared {
     pub(crate) fn new(r: f32, shape: BlurShape) -> Self {
-        Self { spans: Spans::new(radius(r), shape_inside(shape)) }
+        Self {
+            spans: Spans::new(radius(r), shape_inside(shape)),
+        }
     }
 
     pub(crate) fn run(&self, src: &Image, out: Rect, ctx: &Ctx) -> Vec<f32> {
@@ -55,13 +61,21 @@ impl Prepared {
         prefix.try_reserve_exact(prefix_len).ok()?;
         prefix.resize(prefix_len, 0.0f64);
         if input_row != 0 {
-            for (s, d) in src.data.chunks_exact(input_row).zip(prefix.chunks_exact_mut(stride)) {
+            for (s, d) in src
+                .data
+                .chunks_exact(input_row)
+                .zip(prefix.chunks_exact_mut(stride))
+            {
                 let mut sum = [0.0f64; crate::fxutil::MAXC];
                 for (px, dst) in s.chunks_exact(n).zip(d.get_mut(n..)?.chunks_exact_mut(n)) {
                     let alpha = if ctx.alpha { *px.last()? } else { 1.0 };
                     for (c, ((v, sum), dst)) in px.iter().zip(sum.iter_mut()).zip(dst).enumerate() {
                         // Multiplication stays f32, exactly as premul_window.
-                        let v = if ctx.alpha && c + 1 < n { *v * alpha } else { *v };
+                        let v = if ctx.alpha && c + 1 < n {
+                            *v * alpha
+                        } else {
+                            *v
+                        };
                         *sum += f64::from(v);
                         *dst = *sum;
                     }
@@ -84,7 +98,8 @@ impl Prepared {
                 if yy >= h {
                     continue;
                 }
-                let row = prefix.get(yy.checked_mul(stride)?..yy.checked_add(1)?.checked_mul(stride)?)?;
+                let row =
+                    prefix.get(yy.checked_mul(stride)?..yy.checked_add(1)?.checked_mul(stride)?)?;
                 let lo = x + i64::from(a);
                 let hi = x + i64::from(b) + 1;
                 let end = out.width() as i64;
@@ -102,7 +117,11 @@ impl Prepared {
                     for (i, px) in acc.chunks_exact_mut(n).enumerate() {
                         let low = (lo + i as i64).clamp(0, w as i64) as usize * n;
                         let high = (hi + i as i64).clamp(0, w as i64) as usize * n;
-                        for ((acc, hi), lo) in px.iter_mut().zip(row.get(high..high + n)?).zip(row.get(low..low + n)?) {
+                        for ((acc, hi), lo) in px
+                            .iter_mut()
+                            .zip(row.get(high..high + n)?)
+                            .zip(row.get(low..low + n)?)
+                        {
                             *acc += hi - lo;
                         }
                     }

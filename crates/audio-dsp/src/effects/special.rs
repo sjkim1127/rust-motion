@@ -3,10 +3,12 @@
 
 use super::multiband::soft_clip;
 use super::time::Reverb;
-use super::util::{DcBlock, DelayLine, OnePole, coef, lin_db};
+use super::util::{coef, lin_db, DcBlock, DelayLine, OnePole};
 use crate::biquad::{Biquad, Coeffs, FilterType};
 use crate::loudness::LoudnessMeter;
-use crate::{AudioEffect, ParamSpec, ParamValues, Smoothed, Unit, block_len, db_to_gain, param_plumbing};
+use crate::{
+    block_len, db_to_gain, param_plumbing, AudioEffect, ParamSpec, ParamValues, Smoothed, Unit,
+};
 use std::f32::consts::{FRAC_PI_2, PI};
 
 const SM: f32 = 20.0;
@@ -26,17 +28,52 @@ pub struct ChannelMixer {
 
 impl ChannelMixer {
     pub const PARAMS: &'static [ParamSpec] = &[
-        ParamSpec::new("l_from_l", "Left - Left", -100.0, 100.0, 100.0, Unit::Percent),
-        ParamSpec::new("l_from_r", "Left - Right", -100.0, 100.0, 0.0, Unit::Percent),
-        ParamSpec::new("r_from_l", "Right - Left", -100.0, 100.0, 0.0, Unit::Percent),
-        ParamSpec::new("r_from_r", "Right - Right", -100.0, 100.0, 100.0, Unit::Percent),
+        ParamSpec::new(
+            "l_from_l",
+            "Left - Left",
+            -100.0,
+            100.0,
+            100.0,
+            Unit::Percent,
+        ),
+        ParamSpec::new(
+            "l_from_r",
+            "Left - Right",
+            -100.0,
+            100.0,
+            0.0,
+            Unit::Percent,
+        ),
+        ParamSpec::new(
+            "r_from_l",
+            "Right - Left",
+            -100.0,
+            100.0,
+            0.0,
+            Unit::Percent,
+        ),
+        ParamSpec::new(
+            "r_from_r",
+            "Right - Right",
+            -100.0,
+            100.0,
+            100.0,
+            Unit::Percent,
+        ),
         ParamSpec::toggle("invert_l", "Invert Left", false),
         ParamSpec::toggle("invert_r", "Invert Right", false),
     ];
 
     pub fn new(sample_rate: f32, _channels: usize) -> Self {
-        let mut s =
-            ChannelMixer { pv: ParamValues::new(Self::PARAMS), g: [sm(1.0, sample_rate), sm(0.0, sample_rate), sm(0.0, sample_rate), sm(1.0, sample_rate)] };
+        let mut s = ChannelMixer {
+            pv: ParamValues::new(Self::PARAMS),
+            g: [
+                sm(1.0, sample_rate),
+                sm(0.0, sample_rate),
+                sm(0.0, sample_rate),
+                sm(1.0, sample_rate),
+            ],
+        };
         s.apply_params(true);
         s
     }
@@ -44,8 +81,12 @@ impl ChannelMixer {
     fn apply_params(&mut self, snap: bool) {
         let il = if self.pv.on("invert_l") { -1.0 } else { 1.0 };
         let ir = if self.pv.on("invert_r") { -1.0 } else { 1.0 };
-        let v =
-            [il * self.pv.v("l_from_l") / 100.0, il * self.pv.v("l_from_r") / 100.0, ir * self.pv.v("r_from_l") / 100.0, ir * self.pv.v("r_from_r") / 100.0];
+        let v = [
+            il * self.pv.v("l_from_l") / 100.0,
+            il * self.pv.v("l_from_r") / 100.0,
+            ir * self.pv.v("r_from_l") / 100.0,
+            ir * self.pv.v("r_from_r") / 100.0,
+        ];
         for (s, v) in self.g.iter_mut().zip(v) {
             s.set(v);
             if snap {
@@ -85,7 +126,12 @@ type Vec4 = [f32; 4];
 impl ChannelMixer {
     #[inline]
     fn tick(&mut self) -> Vec4 {
-        [self.g[0].tick(), self.g[1].tick(), self.g[2].tick(), self.g[3].tick()]
+        [
+            self.g[0].tick(),
+            self.g[1].tick(),
+            self.g[2].tick(),
+            self.g[3].tick(),
+        ]
     }
 }
 
@@ -155,7 +201,12 @@ impl Distortion {
         self.out.set(db_to_gain(self.pv.v("output")));
         self.mix.set(self.pv.v("mix") / 100.0);
         if snap {
-            for s in [&mut self.drive, &mut self.bias, &mut self.out, &mut self.mix] {
+            for s in [
+                &mut self.drive,
+                &mut self.bias,
+                &mut self.out,
+                &mut self.mix,
+            ] {
                 s.snap();
             }
         }
@@ -167,7 +218,12 @@ impl AudioEffect for Distortion {
     fn reset(&mut self) {
         self.dc.iter_mut().for_each(DcBlock::reset);
         self.lp.iter_mut().for_each(OnePole::reset);
-        for s in [&mut self.drive, &mut self.bias, &mut self.out, &mut self.mix] {
+        for s in [
+            &mut self.drive,
+            &mut self.bias,
+            &mut self.out,
+            &mut self.mix,
+        ] {
             s.snap();
         }
     }
@@ -179,7 +235,12 @@ impl AudioEffect for Distortion {
         let a = OnePole::alpha(tone, self.sr);
         let r = DcBlock::r(self.sr);
         for i in 0..n {
-            let (d, b, o, m) = (self.drive.tick(), self.bias.tick(), self.out.tick(), self.mix.tick());
+            let (d, b, o, m) = (
+                self.drive.tick(),
+                self.bias.tick(),
+                self.out.tick(),
+                self.mix.tick(),
+            );
             for ch in 0..nch {
                 let x = channels[ch][i];
                 let mut y = shape(kind, d * x + b) - shape(kind, b);
@@ -195,7 +256,13 @@ impl AudioEffect for Distortion {
 
 // -------------------------------------------------------------------------------- GuitarSuite
 
-pub const GS_AMPS: &[&str] = &["None", "Clean Combo", "British Stack", "Tweed", "Modern High Gain"];
+pub const GS_AMPS: &[&str] = &[
+    "None",
+    "Clean Combo",
+    "British Stack",
+    "Tweed",
+    "Modern High Gain",
+];
 pub const GS_FILTERS: &[&str] = &["None", "Low Pass", "High Pass", "Band Pass"];
 pub const GS_DIST: &[&str] = &["Soft", "Hard", "Fuzz"];
 
@@ -221,8 +288,22 @@ impl GuitarSuite {
         ParamSpec::choice("dist_type", "Distortion Type", GS_DIST, 0),
         ParamSpec::choice("amp", "Amplifier", GS_AMPS, 1),
         ParamSpec::choice("filter", "Filter", GS_FILTERS, 0),
-        ParamSpec::log("filter_freq", "Filter Frequency", 100.0, 10000.0, 2000.0, Unit::Hertz),
-        ParamSpec::new("filter_res", "Filter Resonance", 0.0, 100.0, 20.0, Unit::Percent),
+        ParamSpec::log(
+            "filter_freq",
+            "Filter Frequency",
+            100.0,
+            10000.0,
+            2000.0,
+            Unit::Hertz,
+        ),
+        ParamSpec::new(
+            "filter_res",
+            "Filter Resonance",
+            0.0,
+            100.0,
+            20.0,
+            Unit::Percent,
+        ),
         ParamSpec::new("mix", "Mix", 0.0, 100.0, 100.0, Unit::Percent),
         ParamSpec::new("output", "Output Gain", -24.0, 12.0, 0.0, Unit::Decibels),
     ];
@@ -251,10 +332,30 @@ impl GuitarSuite {
         use FilterType::*;
         self.cab = match self.pv.idx("amp") {
             0 => [Coeffs::IDENTITY; 4],
-            1 => [d(HighPass, 70.0, 0.7, 0.0), d(Peaking, 400.0, 0.8, -2.0), d(Peaking, 2500.0, 1.0, 3.0), d(LowPass, 6000.0, 0.8, 0.0)],
-            2 => [d(HighPass, 90.0, 0.7, 0.0), d(Peaking, 800.0, 0.7, 4.0), d(Peaking, 3000.0, 1.2, 2.0), d(LowPass, 4500.0, 0.9, 0.0)],
-            3 => [d(HighPass, 60.0, 0.7, 0.0), d(LowShelf, 200.0, 0.7, 3.0), d(Peaking, 1200.0, 0.8, 2.0), d(LowPass, 4000.0, 0.7, 0.0)],
-            _ => [d(HighPass, 100.0, 0.8, 0.0), d(Peaking, 500.0, 1.0, -5.0), d(Peaking, 2000.0, 0.8, 5.0), d(LowPass, 5000.0, 1.0, 0.0)],
+            1 => [
+                d(HighPass, 70.0, 0.7, 0.0),
+                d(Peaking, 400.0, 0.8, -2.0),
+                d(Peaking, 2500.0, 1.0, 3.0),
+                d(LowPass, 6000.0, 0.8, 0.0),
+            ],
+            2 => [
+                d(HighPass, 90.0, 0.7, 0.0),
+                d(Peaking, 800.0, 0.7, 4.0),
+                d(Peaking, 3000.0, 1.2, 2.0),
+                d(LowPass, 4500.0, 0.9, 0.0),
+            ],
+            3 => [
+                d(HighPass, 60.0, 0.7, 0.0),
+                d(LowShelf, 200.0, 0.7, 3.0),
+                d(Peaking, 1200.0, 0.8, 2.0),
+                d(LowPass, 4000.0, 0.7, 0.0),
+            ],
+            _ => [
+                d(HighPass, 100.0, 0.8, 0.0),
+                d(Peaking, 500.0, 1.0, -5.0),
+                d(Peaking, 2000.0, 0.8, 5.0),
+                d(LowPass, 5000.0, 1.0, 0.0),
+            ],
         };
         let q = 0.5 + 7.5 * self.pv.v("filter_res") / 100.0;
         let f = self.pv.v("filter_freq") as f64;
@@ -266,7 +367,8 @@ impl GuitarSuite {
         };
         self.mix.set(self.pv.v("mix") / 100.0);
         self.out.set(db_to_gain(self.pv.v("output")));
-        self.drive.set(db_to_gain(36.0 * self.pv.v("distortion") / 100.0));
+        self.drive
+            .set(db_to_gain(36.0 * self.pv.v("distortion") / 100.0));
         if snap {
             self.mix.snap();
             self.out.snap();
@@ -279,7 +381,9 @@ impl AudioEffect for GuitarSuite {
     param_plumbing!("guitar_suite");
     fn reset(&mut self) {
         self.env = 0.0;
-        self.st.iter_mut().for_each(|s| s.iter_mut().for_each(Biquad::reset));
+        self.st
+            .iter_mut()
+            .for_each(|s| s.iter_mut().for_each(Biquad::reset));
         self.dc.iter_mut().for_each(DcBlock::reset);
         self.mix.snap();
         self.out.snap();
@@ -299,9 +403,15 @@ impl AudioEffect for GuitarSuite {
         let r = DcBlock::r(self.sr);
         for i in 0..n {
             let (mix, out, drive) = (self.mix.tick(), self.out.tick(), self.drive.tick());
-            let peak = channels[..nch].iter().fold(0.0f32, |a, c| a.max(c[i].abs()));
+            let peak = channels[..nch]
+                .iter()
+                .fold(0.0f32, |a, c| a.max(c[i].abs()));
             let l = lin_db(peak);
-            let target = if comp > 0.0 && l > thr { (thr + (l - thr) / ratio) - l } else { 0.0 };
+            let target = if comp > 0.0 && l > thr {
+                (thr + (l - thr) / ratio) - l
+            } else {
+                0.0
+            };
             let c = if target < self.env { att } else { rel };
             self.env = c * self.env + (1.0 - c) * target;
             if self.env.abs() < 1e-7 {
@@ -356,14 +466,35 @@ pub struct Mastering {
 impl Mastering {
     pub const PARAMS: &'static [ParamSpec] = &[
         ParamSpec::new("eq_low", "Low Shelf Gain", -12.0, 12.0, 0.0, Unit::Decibels),
-        ParamSpec::log("eq_mid_freq", "Peak Frequency", 100.0, 10000.0, 1000.0, Unit::Hertz),
+        ParamSpec::log(
+            "eq_mid_freq",
+            "Peak Frequency",
+            100.0,
+            10000.0,
+            1000.0,
+            Unit::Hertz,
+        ),
         ParamSpec::new("eq_mid", "Peak Gain", -12.0, 12.0, 0.0, Unit::Decibels),
-        ParamSpec::new("eq_high", "High Shelf Gain", -12.0, 12.0, 0.0, Unit::Decibels),
+        ParamSpec::new(
+            "eq_high",
+            "High Shelf Gain",
+            -12.0,
+            12.0,
+            0.0,
+            Unit::Decibels,
+        ),
         ParamSpec::new("reverb", "Reverb Amount", 0.0, 100.0, 0.0, Unit::Percent),
         ParamSpec::new("exciter", "Exciter Amount", 0.0, 100.0, 0.0, Unit::Percent),
         ParamSpec::choice("exciter_mode", "Exciter Mode", EXCITER_MODES, 1),
         ParamSpec::new("widener", "Widener", 0.0, 200.0, 100.0, Unit::Percent),
-        ParamSpec::new("loudness", "Loudness Maximizer", 0.0, 100.0, 0.0, Unit::Percent),
+        ParamSpec::new(
+            "loudness",
+            "Loudness Maximizer",
+            0.0,
+            100.0,
+            0.0,
+            Unit::Percent,
+        ),
         ParamSpec::new("output", "Output Gain", -24.0, 12.0, 0.0, Unit::Decibels),
     ];
 
@@ -397,17 +528,42 @@ impl Mastering {
         let sr = self.sr as f64;
         let q = std::f64::consts::FRAC_1_SQRT_2;
         self.eq = [
-            Coeffs::design(FilterType::LowShelf, sr, 100.0, q, self.pv.v("eq_low") as f64),
-            Coeffs::design(FilterType::Peaking, sr, self.pv.v("eq_mid_freq") as f64, 1.0, self.pv.v("eq_mid") as f64),
-            Coeffs::design(FilterType::HighShelf, sr, 8000.0, q, self.pv.v("eq_high") as f64),
+            Coeffs::design(
+                FilterType::LowShelf,
+                sr,
+                100.0,
+                q,
+                self.pv.v("eq_low") as f64,
+            ),
+            Coeffs::design(
+                FilterType::Peaking,
+                sr,
+                self.pv.v("eq_mid_freq") as f64,
+                1.0,
+                self.pv.v("eq_mid") as f64,
+            ),
+            Coeffs::design(
+                FilterType::HighShelf,
+                sr,
+                8000.0,
+                q,
+                self.pv.v("eq_high") as f64,
+            ),
         ];
         self.rev_amt.set(0.4 * self.pv.v("reverb") / 100.0);
         self.exc.set(0.6 * self.pv.v("exciter") / 100.0);
         self.width.set(self.pv.v("widener") / 100.0);
-        self.boost.set(db_to_gain(12.0 * self.pv.v("loudness") / 100.0));
+        self.boost
+            .set(db_to_gain(12.0 * self.pv.v("loudness") / 100.0));
         self.out.set(db_to_gain(self.pv.v("output")));
         if snap {
-            for s in [&mut self.rev_amt, &mut self.exc, &mut self.width, &mut self.boost, &mut self.out] {
+            for s in [
+                &mut self.rev_amt,
+                &mut self.exc,
+                &mut self.width,
+                &mut self.boost,
+                &mut self.out,
+            ] {
                 s.snap();
             }
         }
@@ -417,14 +573,28 @@ impl Mastering {
 impl AudioEffect for Mastering {
     param_plumbing!("mastering");
     fn response_db(&self, freq: f64) -> Option<f64> {
-        Some(self.eq.iter().map(|c| c.magnitude_db(freq, self.sr as f64)).sum::<f64>() + self.pv.v("output") as f64)
+        Some(
+            self.eq
+                .iter()
+                .map(|c| c.magnitude_db(freq, self.sr as f64))
+                .sum::<f64>()
+                + self.pv.v("output") as f64,
+        )
     }
     fn reset(&mut self) {
-        self.st.iter_mut().for_each(|s| s.iter_mut().for_each(Biquad::reset));
+        self.st
+            .iter_mut()
+            .for_each(|s| s.iter_mut().for_each(Biquad::reset));
         self.rev.reset();
         self.hp.iter_mut().for_each(OnePole::reset);
         self.lim_env = 0.0;
-        for s in [&mut self.rev_amt, &mut self.exc, &mut self.width, &mut self.boost, &mut self.out] {
+        for s in [
+            &mut self.rev_amt,
+            &mut self.exc,
+            &mut self.width,
+            &mut self.boost,
+            &mut self.out,
+        ] {
             s.snap();
         }
     }
@@ -462,7 +632,13 @@ impl AudioEffect for Mastering {
                 self.rev.process(&mut [&mut a[..len], &mut b[..len]]);
             }
             for i in 0..len {
-                let (ra, ex, w, boost, out) = (self.rev_amt.tick(), self.exc.tick(), self.width.tick(), self.boost.tick(), self.out.tick());
+                let (ra, ex, w, boost, out) = (
+                    self.rev_amt.tick(),
+                    self.exc.tick(),
+                    self.width.tick(),
+                    self.boost.tick(),
+                    self.out.tick(),
+                );
                 let mut y = [0.0f32; 2];
                 for ch in 0..nch.min(2) {
                     let mut v = channels[ch][start + i];
@@ -543,9 +719,24 @@ impl VocalEnhancer {
         let d = |k, f, q, g| Coeffs::design(k, sr, f, q, g);
         use FilterType::*;
         self.eq = match self.pv.idx("mode") {
-            0 => [d(HighPass, 80.0, 0.707, 0.0), d(Peaking, 250.0, 1.0, -3.0), d(Peaking, 3000.0, 1.0, 3.0), d(HighShelf, 10000.0, 0.707, 1.5)],
-            1 => [d(HighPass, 120.0, 0.707, 0.0), d(Peaking, 400.0, 1.0, -2.0), d(Peaking, 5000.0, 1.0, 3.0), d(HighShelf, 10000.0, 0.707, 2.0)],
-            _ => [d(HighPass, 40.0, 0.707, 0.0), d(Peaking, 1500.0, 0.7, -4.0), d(Peaking, 3500.0, 1.0, -2.0), Coeffs::IDENTITY],
+            0 => [
+                d(HighPass, 80.0, 0.707, 0.0),
+                d(Peaking, 250.0, 1.0, -3.0),
+                d(Peaking, 3000.0, 1.0, 3.0),
+                d(HighShelf, 10000.0, 0.707, 1.5),
+            ],
+            1 => [
+                d(HighPass, 120.0, 0.707, 0.0),
+                d(Peaking, 400.0, 1.0, -2.0),
+                d(Peaking, 5000.0, 1.0, 3.0),
+                d(HighShelf, 10000.0, 0.707, 2.0),
+            ],
+            _ => [
+                d(HighPass, 40.0, 0.707, 0.0),
+                d(Peaking, 1500.0, 0.7, -4.0),
+                d(Peaking, 3500.0, 1.0, -2.0),
+                Coeffs::IDENTITY,
+            ],
         };
     }
 }
@@ -553,10 +744,17 @@ impl VocalEnhancer {
 impl AudioEffect for VocalEnhancer {
     param_plumbing!("vocal_enhancer");
     fn response_db(&self, freq: f64) -> Option<f64> {
-        Some(self.eq.iter().map(|c| c.magnitude_db(freq, self.sr as f64)).sum())
+        Some(
+            self.eq
+                .iter()
+                .map(|c| c.magnitude_db(freq, self.sr as f64))
+                .sum(),
+        )
     }
     fn reset(&mut self) {
-        self.st.iter_mut().for_each(|s| s.iter_mut().for_each(Biquad::reset));
+        self.st
+            .iter_mut()
+            .for_each(|s| s.iter_mut().for_each(Biquad::reset));
         self.env = 0.0;
     }
     fn process(&mut self, channels: &mut [&mut [f32]]) {
@@ -573,9 +771,15 @@ impl AudioEffect for VocalEnhancer {
                 channels[ch][i] = y as f32;
             }
             if voice {
-                let peak = channels[..nch].iter().fold(0.0f32, |a, c| a.max(c[i].abs()));
+                let peak = channels[..nch]
+                    .iter()
+                    .fold(0.0f32, |a, c| a.max(c[i].abs()));
                 let l = lin_db(peak);
-                let target = if l > -18.0 { (-18.0 + (l + 18.0) / 2.0) - l } else { 0.0 };
+                let target = if l > -18.0 {
+                    (-18.0 + (l + 18.0) / 2.0) - l
+                } else {
+                    0.0
+                };
                 let c = if target < self.env { att } else { rel };
                 self.env = c * self.env + (1.0 - c) * target;
                 if self.env.abs() < 1e-7 {
@@ -602,12 +806,24 @@ pub struct StereoExpander {
 
 impl StereoExpander {
     pub const PARAMS: &'static [ParamSpec] = &[
-        ParamSpec::new("center_pan", "Center Channel Pan", -100.0, 100.0, 0.0, Unit::Pan),
+        ParamSpec::new(
+            "center_pan",
+            "Center Channel Pan",
+            -100.0,
+            100.0,
+            0.0,
+            Unit::Pan,
+        ),
         ParamSpec::new("expand", "Stereo Expand", 0.0, 300.0, 100.0, Unit::Percent),
     ];
 
     pub fn new(sample_rate: f32, _channels: usize) -> Self {
-        let mut s = StereoExpander { pv: ParamValues::new(Self::PARAMS), gl: sm(1.0, sample_rate), gr: sm(1.0, sample_rate), side: sm(1.0, sample_rate) };
+        let mut s = StereoExpander {
+            pv: ParamValues::new(Self::PARAMS),
+            gl: sm(1.0, sample_rate),
+            gr: sm(1.0, sample_rate),
+            side: sm(1.0, sample_rate),
+        };
         s.apply_params(true);
         s
     }
@@ -670,7 +886,13 @@ impl Shadow {
         let k = 2.0 * sr;
         let t = k / (2.0 * w0);
         let a0 = 1.0 + t;
-        Shadow { b0: (1.0 + alpha * t) / a0, b1: (1.0 - alpha * t) / a0, a1: (1.0 - t) / a0, x1: 0.0, y1: 0.0 }
+        Shadow {
+            b0: (1.0 + alpha * t) / a0,
+            b1: (1.0 - alpha * t) / a0,
+            a1: (1.0 - t) / a0,
+            x1: 0.0,
+            y1: 0.0,
+        }
     }
     #[inline]
     fn tick(&mut self, x: f32) -> f32 {
@@ -793,7 +1015,12 @@ impl AmbisonicsPanner {
     pub fn new(sample_rate: f32, _channels: usize) -> Self {
         let mut s = AmbisonicsPanner {
             pv: ParamValues::new(Self::PARAMS),
-            m: [sm(1.0, sample_rate), sm(0.0, sample_rate), sm(0.0, sample_rate), sm(1.0, sample_rate)],
+            m: [
+                sm(1.0, sample_rate),
+                sm(0.0, sample_rate),
+                sm(0.0, sample_rate),
+                sm(1.0, sample_rate),
+            ],
         };
         s.apply_params(true);
         s
@@ -861,7 +1088,12 @@ impl AudioEffect for AmbisonicsPanner {
         let (a, b) = channels.split_at_mut(1);
         let (l, r) = (&mut a[0], &mut b[0]);
         for i in 0..n {
-            let g = [self.m[0].tick(), self.m[1].tick(), self.m[2].tick(), self.m[3].tick()];
+            let g = [
+                self.m[0].tick(),
+                self.m[1].tick(),
+                self.m[2].tick(),
+                self.m[3].tick(),
+            ];
             let (x, y) = (l[i], r[i]);
             l[i] = g[0] * x + g[1] * y;
             r[i] = g[2] * x + g[3] * y;
@@ -879,10 +1111,20 @@ pub struct LoudnessMeterFx {
 }
 
 impl LoudnessMeterFx {
-    pub const PARAMS: &'static [ParamSpec] = &[ParamSpec::new("target", "Target Loudness", -36.0, -5.0, -23.0, Unit::None)];
+    pub const PARAMS: &'static [ParamSpec] = &[ParamSpec::new(
+        "target",
+        "Target Loudness",
+        -36.0,
+        -5.0,
+        -23.0,
+        Unit::None,
+    )];
 
     pub fn new(sample_rate: f32, channels: usize) -> Self {
-        LoudnessMeterFx { pv: ParamValues::new(Self::PARAMS), meter: LoudnessMeter::new(sample_rate as f64, channels.clamp(1, 2)) }
+        LoudnessMeterFx {
+            pv: ParamValues::new(Self::PARAMS),
+            meter: LoudnessMeter::new(sample_rate as f64, channels.clamp(1, 2)),
+        }
     }
     fn apply_params(&mut self, _snap: bool) {}
 
@@ -923,7 +1165,10 @@ impl Mute {
     pub const PARAMS: &'static [ParamSpec] = &[ParamSpec::toggle("mute", "Mute", false)];
 
     pub fn new(sample_rate: f32, _channels: usize) -> Self {
-        let mut s = Mute { pv: ParamValues::new(Self::PARAMS), g: Smoothed::with_ms(1.0, sample_rate, 5.0) };
+        let mut s = Mute {
+            pv: ParamValues::new(Self::PARAMS),
+            g: Smoothed::with_ms(1.0, sample_rate, 5.0),
+        };
         s.apply_params(true);
         s
     }

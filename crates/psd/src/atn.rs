@@ -152,7 +152,12 @@ fn read_item(r: &mut Reader<'_>) -> Result<AtnItem> {
     let event = match &r.array::<4>()? {
         b"TEXT" => AtnEvent::Name(read_ascii(r)?),
         b"long" => AtnEvent::Code(r.array()?),
-        other => return Err(PsdError::invalid(format!("unknown event kind {:?}", String::from_utf8_lossy(other)))),
+        other => {
+            return Err(PsdError::invalid(format!(
+                "unknown event kind {:?}",
+                String::from_utf8_lossy(other)
+            )))
+        }
     };
     let dictionary = read_ascii(r)?;
     let descriptor = match r.i32()? {
@@ -160,7 +165,15 @@ fn read_item(r: &mut Reader<'_>) -> Result<AtnItem> {
         -1 => Some(Descriptor::read(r)?),
         n => return Err(PsdError::invalid(format!("bad descriptor flag {n}"))),
     };
-    Ok(AtnItem { expanded, enabled, with_dialog, dialog_options, event, dictionary, descriptor })
+    Ok(AtnItem {
+        expanded,
+        enabled,
+        with_dialog,
+        dialog_options,
+        event,
+        dictionary,
+        descriptor,
+    })
 }
 
 fn read_action(r: &mut Reader<'_>) -> Result<AtnAction> {
@@ -180,7 +193,15 @@ fn read_action(r: &mut Reader<'_>) -> Result<AtnAction> {
     for _ in 0..n {
         items.push(read_item(r)?);
     }
-    Ok(AtnAction { function_key, shift, command, color, name, expanded, items })
+    Ok(AtnAction {
+        function_key,
+        shift,
+        command,
+        color,
+        name,
+        expanded,
+        items,
+    })
 }
 
 /// Parses an `.atn` file.
@@ -188,7 +209,9 @@ pub fn parse(data: &[u8]) -> Result<AtnFile> {
     let mut r = Reader::new(data);
     let version = r.u32()?;
     if version != VERSION {
-        return Err(PsdError::Unsupported(format!("actions file version {version} (only version 16, Photoshop 6 and later, is supported)")));
+        return Err(PsdError::Unsupported(format!(
+            "actions file version {version} (only version 16, Photoshop 6 and later, is supported)"
+        )));
     }
     let name = UnicodeString::read(&mut r)?;
     let expanded = r.u8()? != 0;
@@ -206,7 +229,12 @@ pub fn parse(data: &[u8]) -> Result<AtnFile> {
     if !r.is_empty() {
         warnings.push(format!("{} trailing bytes ignored", r.remaining()));
     }
-    Ok(AtnFile { name, expanded, actions, warnings })
+    Ok(AtnFile {
+        name,
+        expanded,
+        actions,
+        warnings,
+    })
 }
 
 fn write_item(out: &mut Vec<u8>, item: &AtnItem) -> Result<()> {
@@ -267,7 +295,10 @@ mod tests {
     use crate::descriptor::Value;
 
     fn px(v: f64) -> Value {
-        Value::UnitFloat { unit: *b"#Pxl", value: v }
+        Value::UnitFloat {
+            unit: *b"#Pxl",
+            value: v,
+        }
     }
 
     fn set() -> AtnFile {
@@ -284,16 +315,28 @@ mod tests {
             event: AtnEvent::Name("trim".into()),
             dictionary: "Trim".into(),
             descriptor: Some(
-                Descriptor { name: UnicodeString::new_nul("Trim"), class_id: crate::descriptor::Id::Str(b"trim".to_vec()), items: Vec::new() }
-                    .with(
-                        "trimBasedOn",
-                        Value::Enumerated { type_id: crate::descriptor::Id::new("trimBasedOn"), value: crate::descriptor::Id::new("topLeftPixelColor") },
-                    )
-                    .with("Top ", Value::Boolean(true)),
+                Descriptor {
+                    name: UnicodeString::new_nul("Trim"),
+                    class_id: crate::descriptor::Id::Str(b"trim".to_vec()),
+                    items: Vec::new(),
+                }
+                .with(
+                    "trimBasedOn",
+                    Value::Enumerated {
+                        type_id: crate::descriptor::Id::new("trimBasedOn"),
+                        value: crate::descriptor::Id::new("topLeftPixelColor"),
+                    },
+                )
+                .with("Top ", Value::Boolean(true)),
             ),
             ..Default::default()
         };
-        let flatten = AtnItem { enabled: false, event: AtnEvent::Code(*b"Fltn"), dictionary: "Flatten Image".into(), ..Default::default() };
+        let flatten = AtnItem {
+            enabled: false,
+            event: AtnEvent::Code(*b"Fltn"),
+            dictionary: "Flatten Image".into(),
+            ..Default::default()
+        };
         AtnFile {
             name: UnicodeString::new_nul("Set ✓"),
             expanded: true,
@@ -307,8 +350,15 @@ mod tests {
                     expanded: true,
                     items: vec![blur, flatten],
                 },
-                AtnAction { name: UnicodeString::new_nul("Tidy"), items: vec![trim], ..Default::default() },
-                AtnAction { name: UnicodeString::new_nul("Empty"), ..Default::default() },
+                AtnAction {
+                    name: UnicodeString::new_nul("Tidy"),
+                    items: vec![trim],
+                    ..Default::default()
+                },
+                AtnAction {
+                    name: UnicodeString::new_nul("Empty"),
+                    ..Default::default()
+                },
             ],
             warnings: Vec::new(),
         }
@@ -378,7 +428,11 @@ mod tests {
     fn truncation_never_parses_and_never_panics() {
         let bytes = write(&set()).unwrap();
         for cut in 0..bytes.len() {
-            assert!(parse(&bytes[..cut]).is_err(), "cut at {cut}/{}", bytes.len());
+            assert!(
+                parse(&bytes[..cut]).is_err(),
+                "cut at {cut}/{}",
+                bytes.len()
+            );
         }
         let mut padded = bytes.clone();
         padded.extend_from_slice(b"junk");

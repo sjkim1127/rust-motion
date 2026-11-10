@@ -5,12 +5,12 @@
 //! feature) that publishes finished CTB rows into the picture's shared [`Frame`]; jobs of later pictures
 //! block per row on the reference data they read, so several pictures decode concurrently.
 
-use crate::dpb::{Dpb, Output, OutputMeta, PocState, RefPicSet, build_ref_lists};
-use crate::error::{Error, Result, ensure, invalid};
+use crate::dpb::{build_ref_lists, Dpb, Output, OutputMeta, PocState, RefPicSet};
+use crate::error::{ensure, invalid, Error, Result};
 use crate::params::{Layout, Pps, Sps, Vps};
-use crate::picture::{Frame, FrameRef, Sample, stores_u8};
-use crate::slice::{NalHeader, SliceHeader, nal_type};
-use crate::slicedec::{Blk, F_INTRA, F_SKIP, PicState, SliceDecoder, SliceJob};
+use crate::picture::{stores_u8, Frame, FrameRef, Sample};
+use crate::slice::{nal_type, NalHeader, SliceHeader};
+use crate::slicedec::{Blk, PicState, SliceDecoder, SliceJob, F_INTRA, F_SKIP};
 use crate::{ColorInfo, Picture};
 use filmcraft_bitstream::{annexb_nals, length_prefixed_nals, unescape_rbsp};
 use std::collections::VecDeque;
@@ -100,7 +100,10 @@ impl Default for Decoder {
 fn default_threads() -> usize {
     #[cfg(all(feature = "threads", not(target_arch = "wasm32")))]
     {
-        std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).min(16)
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .min(16)
     }
     #[cfg(not(all(feature = "threads", not(target_arch = "wasm32"))))]
     {
@@ -118,7 +121,11 @@ impl Decoder {
     pub fn with_threads(threads: usize) -> Self {
         #[cfg(feature = "threads")]
         let pool = if threads > 1 && cfg!(not(target_arch = "wasm32")) {
-            rayon::ThreadPoolBuilder::new().num_threads(threads).thread_name(|i| format!("hevc-{i}")).build().ok()
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .thread_name(|i| format!("hevc-{i}"))
+                .build()
+                .ok()
         } else {
             None
         };
@@ -208,7 +215,9 @@ impl Decoder {
             if !o.frame.is_complete() && self.out_queue.len() <= max_queue {
                 break;
             }
-            let Some(o) = self.out_queue.pop_front() else { break };
+            let Some(o) = self.out_queue.pop_front() else {
+                break;
+            };
             pics.push(make_picture(&o));
         }
         Ok(pics)
@@ -230,7 +239,11 @@ impl Decoder {
 
     /// Statistics accumulated so far.
     pub fn stats(&self) -> DecodeStats {
-        self.shared.stats.lock().map(|s| s.clone()).unwrap_or_default()
+        self.shared
+            .stats
+            .lock()
+            .map(|s| s.clone())
+            .unwrap_or_default()
     }
 
     fn stat(&self, f: impl FnOnce(&mut DecodeStats)) {
@@ -288,13 +301,26 @@ impl Decoder {
         Ok(())
     }
 
-    fn layout_for(&mut self, pps: &Arc<Pps>, sps: &Arc<Sps>) -> Result<(Arc<Layout>, Option<Arc<Vec<Vec<u8>>>>)> {
-        if let Some((_, _, l, s)) = self.layout_cache.iter().find(|(p, s, _, _)| Arc::ptr_eq(p, pps) && Arc::ptr_eq(s, sps)) {
+    fn layout_for(
+        &mut self,
+        pps: &Arc<Pps>,
+        sps: &Arc<Sps>,
+    ) -> Result<(Arc<Layout>, Option<Arc<Vec<Vec<u8>>>>)> {
+        if let Some((_, _, l, s)) = self
+            .layout_cache
+            .iter()
+            .find(|(p, s, _, _)| Arc::ptr_eq(p, pps) && Arc::ptr_eq(s, sps))
+        {
             return Ok((l.clone(), s.clone()));
         }
         let layout = Arc::new(Layout::new(sps, pps)?);
         let scaling = if sps.scaling_list_enabled {
-            let list = pps.scaling_list.as_ref().or(sps.scaling_list.as_ref()).cloned().unwrap_or_else(crate::params::ScalingList::default_lists);
+            let list = pps
+                .scaling_list
+                .as_ref()
+                .or(sps.scaling_list.as_ref())
+                .cloned()
+                .unwrap_or_else(crate::params::ScalingList::default_lists);
             let mut v = Vec::with_capacity(24);
             for size in 0..4 {
                 for m in 0..6 {
@@ -308,7 +334,8 @@ impl Decoder {
         if self.layout_cache.len() > 8 {
             self.layout_cache.remove(0);
         }
-        self.layout_cache.push((pps.clone(), sps.clone(), layout.clone(), scaling.clone()));
+        self.layout_cache
+            .push((pps.clone(), sps.clone(), layout.clone(), scaling.clone()));
         Ok((layout, scaling))
     }
 
@@ -332,8 +359,12 @@ impl Decoder {
             &rbsp,
             hdr,
             |id| {
-                let pps = ppss[id as usize].as_ref().ok_or_else(|| Error::MissingParameterSet(format!("PPS {id}")))?;
-                let sps = spss[pps.sps_id as usize].as_ref().ok_or_else(|| Error::MissingParameterSet(format!("SPS {}", pps.sps_id)))?;
+                let pps = ppss[id as usize]
+                    .as_ref()
+                    .ok_or_else(|| Error::MissingParameterSet(format!("PPS {id}")))?;
+                let sps = spss[pps.sps_id as usize]
+                    .as_ref()
+                    .ok_or_else(|| Error::MissingParameterSet(format!("SPS {}", pps.sps_id)))?;
                 Ok((pps.clone(), sps.clone()))
             },
             prev,
@@ -343,7 +374,9 @@ impl Decoder {
         if first {
             self.start_picture(&sh, &sps, &pps, pts)?;
         } else {
-            let Some(p) = &self.pending else { return invalid("slice segment without the first slice of its picture") };
+            let Some(p) = &self.pending else {
+                return invalid("slice segment without the first slice of its picture");
+            };
             ensure!(Arc::ptr_eq(&p.pps, &pps), "PPS changed within a picture");
         }
         let Some(pending) = self.pending.as_mut() else {
@@ -353,9 +386,22 @@ impl Decoder {
         if !sh.dependent {
             pending.last_sh = sh.clone();
         }
-        let (st, dependent, weighted, tmvp, sao, dbk_off, lt) =
-            (sh.slice_type, sh.dependent, sh.pwt.is_some(), sh.temporal_mvp, sh.sao_luma || sh.sao_chroma, sh.deblocking_disabled, !sh.lt.is_empty());
-        pending.slices.push(SliceJob { sh, pps, sps, rbsp, refs });
+        let (st, dependent, weighted, tmvp, sao, dbk_off, lt) = (
+            sh.slice_type,
+            sh.dependent,
+            sh.pwt.is_some(),
+            sh.temporal_mvp,
+            sh.sao_luma || sh.sao_chroma,
+            sh.deblocking_disabled,
+            !sh.lt.is_empty(),
+        );
+        pending.slices.push(SliceJob {
+            sh,
+            pps,
+            sps,
+            rbsp,
+            refs,
+        });
         self.stat(|s| {
             match st {
                 crate::slice::SliceType::I => s.slices_i += 1,
@@ -372,8 +418,17 @@ impl Decoder {
         Ok(())
     }
 
-    fn start_picture(&mut self, sh: &SliceHeader, sps: &Arc<Sps>, pps: &Arc<Pps>, pts: i64) -> Result<()> {
-        ensure!(sh.first_slice_segment_in_pic && !sh.dependent, "invalid first slice segment");
+    fn start_picture(
+        &mut self,
+        sh: &SliceHeader,
+        sps: &Arc<Sps>,
+        pps: &Arc<Pps>,
+        pts: i64,
+    ) -> Result<()> {
+        ensure!(
+            sh.first_slice_segment_in_pic && !sh.dependent,
+            "invalid first slice segment"
+        );
         let hdr = sh.nal;
         let changed = match &self.active_sps {
             None => true,
@@ -392,8 +447,13 @@ impl Decoder {
         self.active_sps = Some(sps.clone());
         self.dpb.max_dec_pic_buffering = sps.max_dec_pic_buffering as usize;
         self.dpb.max_num_reorder = sps.max_num_reorder as usize;
-        self.dpb.max_latency = if sps.max_latency_increase_plus1 != 0 { sps.max_num_reorder + sps.max_latency_increase_plus1 - 1 } else { 0 };
-        let irap_no_rasl = hdr.is_irap() && (hdr.is_idr() || hdr.is_bla() || self.first_picture || self.after_eos);
+        self.dpb.max_latency = if sps.max_latency_increase_plus1 != 0 {
+            sps.max_num_reorder + sps.max_latency_increase_plus1 - 1
+        } else {
+            0
+        };
+        let irap_no_rasl =
+            hdr.is_irap() && (hdr.is_idr() || hdr.is_bla() || self.first_picture || self.after_eos);
         if hdr.is_irap() {
             self.skip_rasl = irap_no_rasl;
             self.stat(|s| {
@@ -407,7 +467,15 @@ impl Decoder {
         let max_lsb = sps.max_poc_lsb();
         let poc = self.poc_state.compute(sh, max_lsb, irap_no_rasl);
         let (w, h) = (sps.width as usize, sps.height as usize);
-        let template = Frame::new(0, 0, w, h, sps.log2_ctb, sps.bit_depth_luma, sps.bit_depth_chroma);
+        let template = Frame::new(
+            0,
+            0,
+            w,
+            h,
+            sps.log2_ctb,
+            sps.bit_depth_luma,
+            sps.bit_depth_chroma,
+        );
         let next_id = &mut self.next_id;
         let mut missing = 0u64;
         let mut make_missing = |p: i32| -> FrameRef {
@@ -416,7 +484,9 @@ impl Decoder {
             *next_id += 1;
             Arc::new(Frame::gray(id, p, &template))
         };
-        let rps = self.dpb.apply_rps(sh, poc, max_lsb, irap_no_rasl, &mut make_missing)?;
+        let rps = self
+            .dpb
+            .apply_rps(sh, poc, max_lsb, irap_no_rasl, &mut make_missing)?;
         if missing > 0 {
             self.stat(|s| s.missing_refs += missing);
         }
@@ -434,11 +504,21 @@ impl Decoder {
         let _ = scaling;
         let id = self.next_id;
         self.next_id += 1;
-        let frame = Arc::new(Frame::new(id, poc, w, h, sps.log2_ctb, sps.bit_depth_luma, sps.bit_depth_chroma));
+        let frame = Arc::new(Frame::new(
+            id,
+            poc,
+            w,
+            h,
+            sps.log2_ctb,
+            sps.bit_depth_luma,
+            sps.bit_depth_chroma,
+        ));
         let output = sh.pic_output && !(hdr.is_rasl() && self.skip_rasl);
         // Draft mode: a sub-layer non-reference picture of the highest sub-layer is never used
         // for prediction, so its in-loop filters can be left out without changing anything else.
-        let draft = self.draft && hdr.is_sub_layer_non_ref() && hdr.temporal_id as u32 >= sps.max_sub_layers_minus1;
+        let draft = self.draft
+            && hdr.is_sub_layer_non_ref()
+            && hdr.temporal_id as u32 >= sps.max_sub_layers_minus1;
         if draft {
             self.stat(|s| s.draft_pictures += 1);
         }
@@ -470,8 +550,23 @@ impl Decoder {
     /// Start decoding the pending picture and insert it into the DPB.
     fn submit_pending(&mut self) {
         let Some(p) = self.pending.take() else { return };
-        let PendingPic { frame, sps, pps, layout, first_sh, poc, output, meta, slices, .. } = p;
-        let scaling = self.layout_cache.iter().find(|(pp, ss, _, _)| Arc::ptr_eq(pp, &pps) && Arc::ptr_eq(ss, &sps)).and_then(|(_, _, _, s)| s.clone());
+        let PendingPic {
+            frame,
+            sps,
+            pps,
+            layout,
+            first_sh,
+            poc,
+            output,
+            meta,
+            slices,
+            ..
+        } = p;
+        let scaling = self
+            .layout_cache
+            .iter()
+            .find(|(pp, ss, _, _)| Arc::ptr_eq(pp, &pps) && Arc::ptr_eq(ss, &sps))
+            .and_then(|(_, _, _, s)| s.clone());
         self.dispatch(frame.clone(), sps, pps, layout, scaling, slices, meta.draft);
         self.poc_state.update(&first_sh, poc);
         let mut outs = Vec::new();
@@ -500,7 +595,9 @@ impl Decoder {
                 }
             }
             self.in_flight.push_back(frame.clone());
-            pool.spawn_fifo(move || run_job(frame, sps, pps, layout, scaling, slices, draft, &shared));
+            pool.spawn_fifo(move || {
+                run_job(frame, sps, pps, layout, scaling, slices, draft, &shared)
+            });
             return;
         }
         run_job(frame, sps, pps, layout, scaling, slices, draft, &shared);
@@ -554,7 +651,9 @@ fn run_job_as<S: Sample>(
         Err(_) => {
             // make sure readers never block on this frame
             frame.publish_gray();
-            Some(Error::Invalid("internal error while decoding a picture".into()))
+            Some(Error::Invalid(
+                "internal error while decoding a picture".into(),
+            ))
         }
     };
     if let Ok(mut s) = shared.stats.lock() {
@@ -635,7 +734,14 @@ mod tests {
     /// The branch-free block counts classify every flag combination as the if / else-if chain did.
     #[test]
     fn block_counts_match_the_classification_chain() {
-        let blk: Vec<Blk> = (0..=255u8).flat_map(|f| [Blk { flags: f, ..Blk::default() }; 3]).collect();
+        let blk: Vec<Blk> = (0..=255u8)
+            .flat_map(|f| {
+                [Blk {
+                    flags: f,
+                    ..Blk::default()
+                }; 3]
+            })
+            .collect();
         let mut want = [0u64; 3];
         for b in &blk {
             if b.flags & F_INTRA != 0 {

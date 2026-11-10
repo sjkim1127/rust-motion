@@ -34,7 +34,13 @@ pub struct VideoData {
 
 impl VideoData {
     pub fn new(frames: Vec<Surface>, fps: f32) -> Self {
-        VideoData { frames, original_frames: None, source: VideoSource::Blank, fps, show_altered: true }
+        VideoData {
+            frames,
+            original_frames: None,
+            source: VideoSource::Blank,
+            fps,
+            show_altered: true,
+        }
     }
     pub fn len(&self) -> usize {
         self.frames.len()
@@ -49,7 +55,8 @@ impl VideoData {
 impl PartialEq for VideoData {
     fn eq(&self, o: &Self) -> bool {
         self.frames.len() == o.frames.len()
-            && self.original_frames.as_ref().map(Vec::len) == o.original_frames.as_ref().map(Vec::len)
+            && self.original_frames.as_ref().map(Vec::len)
+                == o.original_frames.as_ref().map(Vec::len)
             && self.source == o.source
             && self.fps == o.fps
             && self.show_altered == o.show_altered
@@ -75,7 +82,13 @@ pub struct Timeline {
 impl Timeline {
     pub fn new(duration: usize, fps: f32) -> Self {
         let d = duration.max(1);
-        Timeline { fps: valid_fps(fps), duration: d, current: 0, work_start: 0, work_end: d }
+        Timeline {
+            fps: valid_fps(fps),
+            duration: d,
+            current: 0,
+            work_start: 0,
+            work_end: d,
+        }
     }
 
     /// Keep every index inside `0..duration` and the work area non-empty.
@@ -91,7 +104,11 @@ impl Timeline {
     /// safe on any stored timeline, even one loaded with `duration` 0 or `usize::MAX` (#1009).
     pub fn step(&mut self, delta: i64) {
         let n = usize::try_from(delta.unsigned_abs()).unwrap_or(usize::MAX);
-        let moved = if delta < 0 { self.current.saturating_sub(n) } else { self.current.saturating_add(n) };
+        let moved = if delta < 0 {
+            self.current.saturating_sub(n)
+        } else {
+            self.current.saturating_add(n)
+        };
         self.current = moved.min(self.duration.saturating_sub(1));
     }
 
@@ -103,7 +120,11 @@ impl Timeline {
 
 /// A usable frame rate: positive and finite, else the 30 fps default.
 fn valid_fps(fps: f32) -> f32 {
-    if fps.is_finite() && fps > 0.0 { fps } else { 30.0 }
+    if fps.is_finite() && fps > 0.0 {
+        fps
+    } else {
+        30.0
+    }
 }
 
 #[cfg(test)]
@@ -136,7 +157,13 @@ mod tests {
         t.step(i64::MIN);
         assert_eq!(t.current, 0);
         for duration in [0, usize::MAX] {
-            let mut t = Timeline { fps: f32::INFINITY, duration, current: usize::MAX, work_start: 0, work_end: 0 };
+            let mut t = Timeline {
+                fps: f32::INFINITY,
+                duration,
+                current: usize::MAX,
+                work_start: 0,
+                work_end: 0,
+            };
             t.step(1);
             assert_eq!(t.current, duration.saturating_sub(1));
             t.clamp();

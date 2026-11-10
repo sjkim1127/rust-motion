@@ -11,11 +11,18 @@ const MAX_SAMPLES: usize = 128 * 1024 * 1024;
 const MAX_RADIUS: f32 = 15_446.0;
 
 pub(crate) fn valid_params(amount: f32, radius: f32, threshold: f32) -> bool {
-    amount.is_finite() && threshold.is_finite() && radius.is_finite() && (0.0..=MAX_RADIUS).contains(&radius)
+    amount.is_finite()
+        && threshold.is_finite()
+        && radius.is_finite()
+        && (0.0..=MAX_RADIUS).contains(&radius)
 }
 
 pub(crate) fn halo(radius: f32) -> i32 {
-    if radius.is_finite() && (0.0..=MAX_RADIUS).contains(&radius) { (radius * 3.0).ceil() as i32 + 1 } else { 0 }
+    if radius.is_finite() && (0.0..=MAX_RADIUS).contains(&radius) {
+        (radius * 3.0).ceil() as i32 + 1
+    } else {
+        0
+    }
 }
 
 pub(crate) fn valid_area(r: Rect) -> bool {
@@ -23,7 +30,9 @@ pub(crate) fn valid_area(r: Rect) -> bool {
         && r.y0 <= r.y1
         && r.width() <= 300_000
         && r.height() <= 300_000
-        && [r.x0, r.x1, r.y0, r.y1].iter().all(|v| (-1_000_000..=1_000_000).contains(v))
+        && [r.x0, r.x1, r.y0, r.y1]
+            .iter()
+            .all(|v| (-1_000_000..=1_000_000).contains(v))
 }
 
 fn zeros(len: usize) -> Option<Vec<f32>> {
@@ -47,25 +56,49 @@ fn read_row(src: &Image, x0: i32, x1: i32, y: i32, dst: &mut [f32]) -> Option<()
         return Some(());
     }
     let n = src.ch;
-    let count = usize::try_from(i64::from(hi) - i64::from(lo)).ok()?.checked_mul(n)?;
-    let offset = usize::try_from(i64::from(lo) - i64::from(x0)).ok()?.checked_mul(n)?;
+    let count = usize::try_from(i64::from(hi) - i64::from(lo))
+        .ok()?
+        .checked_mul(n)?;
+    let offset = usize::try_from(i64::from(lo) - i64::from(x0))
+        .ok()?
+        .checked_mul(n)?;
     let row = usize::try_from(i64::from(y) - i64::from(src.rect.y0)).ok()?;
     let col = usize::try_from(i64::from(lo) - i64::from(src.rect.x0)).ok()?;
-    let start = row.checked_mul(src.rect.width() as usize)?.checked_add(col)?.checked_mul(n)?;
-    dst.get_mut(offset..offset.checked_add(count)?)?.copy_from_slice(src.data.get(start..start.checked_add(count)?)?);
+    let start = row
+        .checked_mul(src.rect.width() as usize)?
+        .checked_add(col)?
+        .checked_mul(n)?;
+    dst.get_mut(offset..offset.checked_add(count)?)?
+        .copy_from_slice(src.data.get(start..start.checked_add(count)?)?);
     Some(())
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn run(src: &Image, out: Rect, ctx: &Ctx, amount: f32, radius: f32, threshold: f32, ctl: &Interrupt) -> Option<Vec<f32>> {
-    if ctl.cancelled() || !valid_params(amount, radius, threshold) || !valid_area(out) || !valid_area(src.rect) {
+pub(crate) fn run(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    amount: f32,
+    radius: f32,
+    threshold: f32,
+    ctl: &Interrupt,
+) -> Option<Vec<f32>> {
+    if ctl.cancelled()
+        || !valid_params(amount, radius, threshold)
+        || !valid_area(out)
+        || !valid_area(src.rect)
+    {
         return None;
     }
     let n = src.ch;
     if n == 0 || n > crate::fxutil::MAXC {
         return None;
     }
-    if src.data.len() != (src.rect.width() as usize).checked_mul(src.rect.height() as usize)?.checked_mul(n)? {
+    if src.data.len()
+        != (src.rect.width() as usize)
+            .checked_mul(src.rect.height() as usize)?
+            .checked_mul(n)?
+    {
         return None;
     }
     if out.is_empty() {
@@ -77,7 +110,11 @@ pub(crate) fn run(src: &Image, out: Rect, ctx: &Ctx, amount: f32, radius: f32, t
     let row_len = ow.checked_mul(n)?;
     let th = oh.checked_add(2 * r)?;
     let ww = ow.checked_add(2 * r)?;
-    let (x0, x1, y0) = (out.x0.checked_sub(r as i32)?, out.x1.checked_add(r as i32)?, out.y0.checked_sub(r as i32)?);
+    let (x0, x1, y0) = (
+        out.x0.checked_sub(r as i32)?,
+        out.x1.checked_add(r as i32)?,
+        out.y0.checked_sub(r as i32)?,
+    );
     let mut row = zeros(ww.checked_mul(n)?)?;
     let mut tmp = zeros(row_len.checked_mul(th)?)?;
     let mut result = zeros(row_len.checked_mul(oh)?)?;
@@ -111,7 +148,13 @@ pub(crate) fn run(src: &Image, out: Rect, ctx: &Ctx, amount: f32, radius: f32, t
             }
         }
         let originals = row.get_mut(..row_len)?;
-        read_row(src, out.x0, out.x1, out.y0.checked_add(y as i32)?, originals)?;
+        read_row(
+            src,
+            out.x0,
+            out.x1,
+            out.y0.checked_add(y as i32)?,
+            originals,
+        )?;
         for (blurred, original) in dst.chunks_exact_mut(n).zip(originals.chunks_exact(n)) {
             if ctx.alpha && *original.last()? <= 0.0 {
                 blurred.copy_from_slice(original);
@@ -121,9 +164,21 @@ pub(crate) fn run(src: &Image, out: Rect, ctx: &Ctx, amount: f32, radius: f32, t
             for (b, o) in blurred.iter_mut().zip(original).take(cc) {
                 // Keep the original unpremultiply cut-off and division, followed by
                 // the threshold epsilon and inclusive comparison, at every depth.
-                let b_value = if ctx.alpha { if a > 1e-7 { *b / a } else { 0.0 } } else { *b };
+                let b_value = if ctx.alpha {
+                    if a > 1e-7 {
+                        *b / a
+                    } else {
+                        0.0
+                    }
+                } else {
+                    *b
+                };
                 let d = o - b_value;
-                *b = if d.abs() + 1e-6 >= threshold { o + amount * d } else { *o };
+                *b = if d.abs() + 1e-6 >= threshold {
+                    o + amount * d
+                } else {
+                    *o
+                };
             }
             if ctx.alpha {
                 *blurred.last_mut()? = *original.last()?;

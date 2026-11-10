@@ -72,7 +72,11 @@ impl AcoColor {
             space::RGB => AcoColor::Rgb([v[0], v[1], v[2]]),
             space::HSB => AcoColor::Hsb([v[0], v[1], v[2]]),
             space::CMYK => AcoColor::Cmyk(v.map(|x| u16::MAX - x)),
-            space::LAB => AcoColor::Lab { l: v[0], a: v[1] as i16, b: v[2] as i16 },
+            space::LAB => AcoColor::Lab {
+                l: v[0],
+                a: v[1] as i16,
+                b: v[2] as i16,
+            },
             space::GRAY => AcoColor::Gray(v[0]),
             _ => AcoColor::Other { space, values: v },
         }
@@ -157,11 +161,20 @@ pub fn parse(data: &[u8]) -> Result<AcoFile> {
             if r.remaining() >= 4 && r.peek_rest().get(..2) == Some(&[0, 2]) {
                 r.u16()?;
                 let v2 = read_section(&mut r, true)?;
-                return Ok(AcoFile { swatches: v2, has_names: true });
+                return Ok(AcoFile {
+                    swatches: v2,
+                    has_names: true,
+                });
             }
-            Ok(AcoFile { swatches: v1, has_names: false })
+            Ok(AcoFile {
+                swatches: v1,
+                has_names: false,
+            })
         }
-        2 => Ok(AcoFile { swatches: read_section(&mut r, true)?, has_names: true }),
+        2 => Ok(AcoFile {
+            swatches: read_section(&mut r, true)?,
+            has_names: true,
+        }),
         v => Err(PsdError::UnsupportedVersion(v)),
     }
 }
@@ -169,7 +182,8 @@ pub fn parse(data: &[u8]) -> Result<AcoFile> {
 /// Write an `.aco` file: a version 1 section followed by a version 2 section with the names,
 /// as Photoshop writes them. Fails when there are more than [`MAX_SWATCHES`] swatches.
 pub fn write(swatches: &[AcoSwatch]) -> Result<Vec<u8>> {
-    let count = u16::try_from(swatches.len()).map_err(|_| PsdError::LimitExceeded("an .aco file holds at most 65535 swatches"))?;
+    let count = u16::try_from(swatches.len())
+        .map_err(|_| PsdError::LimitExceeded("an .aco file holds at most 65535 swatches"))?;
     let mut out = Vec::with_capacity(8 + swatches.len() * 40);
     for version in [1u16, 2] {
         out.put_u16(version);
@@ -200,13 +214,41 @@ mod tests {
 
     fn sample() -> Vec<AcoSwatch> {
         vec![
-            AcoSwatch { name: "Pure Red".into(), color: AcoColor::Rgb([65535, 0, 0]) },
-            AcoSwatch { name: "Hue".into(), color: AcoColor::Hsb([12000, 65535, 40000]) },
-            AcoSwatch { name: "Cyan ink".into(), color: AcoColor::Cmyk([65535, 0, 0, 1234]) },
-            AcoSwatch { name: "Lab −".into(), color: AcoColor::Lab { l: 5321, a: -12800, b: 12700 } },
-            AcoSwatch { name: "Gray".into(), color: AcoColor::Gray(5000) },
-            AcoSwatch { name: "Book 日本".into(), color: AcoColor::Other { space: 3, values: [1, 2, 3, 4] } },
-            AcoSwatch { name: String::new(), color: AcoColor::Rgb([1, 2, 3]) },
+            AcoSwatch {
+                name: "Pure Red".into(),
+                color: AcoColor::Rgb([65535, 0, 0]),
+            },
+            AcoSwatch {
+                name: "Hue".into(),
+                color: AcoColor::Hsb([12000, 65535, 40000]),
+            },
+            AcoSwatch {
+                name: "Cyan ink".into(),
+                color: AcoColor::Cmyk([65535, 0, 0, 1234]),
+            },
+            AcoSwatch {
+                name: "Lab −".into(),
+                color: AcoColor::Lab {
+                    l: 5321,
+                    a: -12800,
+                    b: 12700,
+                },
+            },
+            AcoSwatch {
+                name: "Gray".into(),
+                color: AcoColor::Gray(5000),
+            },
+            AcoSwatch {
+                name: "Book 日本".into(),
+                color: AcoColor::Other {
+                    space: 3,
+                    values: [1, 2, 3, 4],
+                },
+            },
+            AcoSwatch {
+                name: String::new(),
+                color: AcoColor::Rgb([1, 2, 3]),
+            },
         ]
     }
 
@@ -223,20 +265,44 @@ mod tests {
     #[test]
     fn decodes_the_spec_encodings() {
         // Pure cyan as the spec gives it: 0, 65535, 65535, 65535 (0 = 100 % ink).
-        assert_eq!(AcoColor::from_record(2, [0, 65535, 65535, 65535]), AcoColor::Cmyk([65535, 0, 0, 0]));
+        assert_eq!(
+            AcoColor::from_record(2, [0, 65535, 65535, 65535]),
+            AcoColor::Cmyk([65535, 0, 0, 0])
+        );
         // White Lab = 10000, 0, 0; negative chrominance is two's complement.
-        assert_eq!(AcoColor::from_record(7, [10000, 0xFF38, 200, 0]), AcoColor::Lab { l: 10000, a: -200, b: 200 });
-        assert_eq!(AcoColor::from_record(8, [10000, 0, 0, 0]), AcoColor::Gray(10000));
-        assert_eq!(AcoColor::from_record(9, [7, 8, 9, 10]), AcoColor::Other { space: 9, values: [7, 8, 9, 10] });
+        assert_eq!(
+            AcoColor::from_record(7, [10000, 0xFF38, 200, 0]),
+            AcoColor::Lab {
+                l: 10000,
+                a: -200,
+                b: 200
+            }
+        );
+        assert_eq!(
+            AcoColor::from_record(8, [10000, 0, 0, 0]),
+            AcoColor::Gray(10000)
+        );
+        assert_eq!(
+            AcoColor::from_record(9, [7, 8, 9, 10]),
+            AcoColor::Other {
+                space: 9,
+                values: [7, 8, 9, 10]
+            }
+        );
     }
 
     #[test]
     fn reads_version_1_only_and_version_2_only() {
         // Version 1: two RGB colours, no names.
-        let v1 = [0u8, 1, 0, 2, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0, 8, 0x13, 0x88, 0, 0, 0, 0, 0, 0];
+        let v1 = [
+            0u8, 1, 0, 2, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0, 8, 0x13, 0x88, 0, 0, 0, 0, 0, 0,
+        ];
         let f = parse(&v1).unwrap();
         assert!(!f.has_names);
-        assert_eq!(f.swatches.iter().map(|s| s.color).collect::<Vec<_>>(), vec![AcoColor::Rgb([65535, 0, 0]), AcoColor::Gray(5000)]);
+        assert_eq!(
+            f.swatches.iter().map(|s| s.color).collect::<Vec<_>>(),
+            vec![AcoColor::Rgb([65535, 0, 0]), AcoColor::Gray(5000)]
+        );
         // Trailing padding after a version 1 section is ignored.
         let mut padded = v1.to_vec();
         padded.extend_from_slice(&[0, 0, 0, 0]);
@@ -245,7 +311,13 @@ mod tests {
         let mut v2 = vec![0u8, 2, 0, 1, 0, 0, 0, 1, 0, 2, 0, 3, 0, 0];
         v2.extend_from_slice(&[0, 0, 0, 2, 0, b'O', 0, b'K']);
         let f = parse(&v2).unwrap();
-        assert_eq!(f.swatches, vec![AcoSwatch { name: "OK".into(), color: AcoColor::Rgb([1, 2, 3]) }]);
+        assert_eq!(
+            f.swatches,
+            vec![AcoSwatch {
+                name: "OK".into(),
+                color: AcoColor::Rgb([1, 2, 3])
+            }]
+        );
     }
 
     #[test]
@@ -286,13 +358,22 @@ mod tests {
 
     #[test]
     fn too_many_swatches_is_an_error() {
-        let many = vec![AcoSwatch { name: String::new(), color: AcoColor::Gray(0) }; MAX_SWATCHES + 1];
+        let many = vec![
+            AcoSwatch {
+                name: String::new(),
+                color: AcoColor::Gray(0)
+            };
+            MAX_SWATCHES + 1
+        ];
         assert!(write(&many).is_err());
     }
 
     #[test]
     fn long_names_are_capped() {
-        let long = AcoSwatch { name: "x".repeat(5000), color: AcoColor::Gray(0) };
+        let long = AcoSwatch {
+            name: "x".repeat(5000),
+            color: AcoColor::Gray(0),
+        };
         let f = parse(&write(&[long]).unwrap()).unwrap();
         assert_eq!(f.swatches[0].name.len(), MAX_NAME_UNITS);
     }

@@ -13,7 +13,11 @@ pub(crate) struct StftChannel {
 
 impl StftChannel {
     pub(crate) fn new(n: usize) -> Self {
-        StftChannel { input: vec![0.0; n], output: vec![0.0; n], pos: 0 }
+        StftChannel {
+            input: vec![0.0; n],
+            output: vec![0.0; n],
+            pos: 0,
+        }
     }
     pub(crate) fn reset(&mut self) {
         self.input.iter_mut().for_each(|v| *v = 0.0);
@@ -23,7 +27,12 @@ impl StftChannel {
     /// Push one sample and pop one output sample. Every `hop` samples `frame` is called with the
     /// last `n` input samples and must write an `n`-sample (windowed) frame that is overlap-added.
     #[inline]
-    pub(crate) fn tick(&mut self, x: f32, hop: usize, frame: &mut impl FnMut(&[f32], &mut [f32])) -> f32 {
+    pub(crate) fn tick(
+        &mut self,
+        x: f32,
+        hop: usize,
+        frame: &mut impl FnMut(&[f32], &mut [f32]),
+    ) -> f32 {
         let n = self.input.len();
         self.input[n - hop + self.pos] = x;
         let y = self.output[self.pos];
@@ -41,7 +50,9 @@ impl StftChannel {
 
 /// Periodic Hann window.
 pub(crate) fn hann(n: usize) -> Vec<f32> {
-    (0..n).map(|i| (0.5 - 0.5 * (2.0 * PI * i as f64 / n as f64).cos()) as f32).collect()
+    (0..n)
+        .map(|i| (0.5 - 0.5 * (2.0 * PI * i as f64 / n as f64).cos()) as f32)
+        .collect()
 }
 
 /// FFT size for spectral effects at a sample rate (~43 ms at 48 kHz).
@@ -72,7 +83,12 @@ impl Spectral {
         if sqrt_window {
             window.iter_mut().for_each(|w| *w = w.sqrt());
         }
-        Spectral { fft: Fft::new(n), window, re: vec![0.0; n], im: vec![0.0; n] }
+        Spectral {
+            fft: Fft::new(n),
+            window,
+            re: vec![0.0; n],
+            im: vec![0.0; n],
+        }
     }
     /// Window `input` into re/im and run the forward FFT.
     pub(crate) fn analyse(&mut self, input: &[f32]) {

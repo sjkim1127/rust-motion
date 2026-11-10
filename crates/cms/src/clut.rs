@@ -23,7 +23,10 @@ impl Clut {
     /// Builds a table from node data. Panics if `data` has the wrong length.
     pub fn new(grid: Vec<usize>, outputs: usize, data: Vec<f32>) -> Self {
         let inputs = grid.len();
-        assert!((1..=MAX_CHANNELS).contains(&inputs) && (1..=MAX_CHANNELS).contains(&outputs), "bad CLUT dimensions");
+        assert!(
+            (1..=MAX_CHANNELS).contains(&inputs) && (1..=MAX_CHANNELS).contains(&outputs),
+            "bad CLUT dimensions"
+        );
         let mut strides = vec![0usize; inputs];
         let mut s = outputs;
         for i in (0..inputs).rev() {
@@ -31,7 +34,13 @@ impl Clut {
             s *= grid[i].max(1);
         }
         assert_eq!(data.len(), s, "CLUT data length");
-        Clut { inputs, outputs, grid, data, strides }
+        Clut {
+            inputs,
+            outputs,
+            grid,
+            data,
+            strides,
+        }
     }
 
     /// Number of nodes.
@@ -53,7 +62,11 @@ impl Clut {
                 rem /= grid[d];
             }
             for d in 0..inputs {
-                inp[d] = if grid[d] > 1 { idx[d] as f32 / (grid[d] - 1) as f32 } else { 0.0 };
+                inp[d] = if grid[d] > 1 {
+                    idx[d] as f32 / (grid[d] - 1) as f32
+                } else {
+                    0.0
+                };
             }
             f(&inp, &mut data[node * outputs..(node + 1) * outputs]);
         }
@@ -92,7 +105,12 @@ impl Clut {
                 self.tetra(base, [s1, s2, s3], [r1, r2, r3], &mut lo[..self.outputs]);
                 if r0 > 0.0 && s0 > 0 {
                     let mut hi = [0.0f32; MAX_CHANNELS];
-                    self.tetra(base + s0, [s1, s2, s3], [r1, r2, r3], &mut hi[..self.outputs]);
+                    self.tetra(
+                        base + s0,
+                        [s1, s2, s3],
+                        [r1, r2, r3],
+                        &mut hi[..self.outputs],
+                    );
                     for (o, (l, h)) in out.iter_mut().zip(lo.iter().zip(&hi)) {
                         *o = l + (h - l) * r0;
                     }
@@ -224,7 +242,11 @@ mod tests {
         let c = Clut::sample(vec![3, 4, 5, 6], 1, f);
         let mut a = [0.0];
         let mut b = [0.0];
-        for p in [[0.1f32, 0.9, 0.3, 0.7], [1.0, 0.0, 0.5, 0.5], [0.33, 0.66, 0.99, 0.01]] {
+        for p in [
+            [0.1f32, 0.9, 0.3, 0.7],
+            [1.0, 0.0, 0.5, 0.5],
+            [0.33, 0.66, 0.99, 0.01],
+        ] {
             c.eval(&p, &mut a);
             c.eval_multilinear(&p, &mut b);
             let want = 0.1 * p[0] + 0.2 * p[1] + 0.3 * p[2] + 0.4 * p[3];

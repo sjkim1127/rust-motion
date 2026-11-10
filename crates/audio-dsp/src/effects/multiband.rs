@@ -5,7 +5,9 @@
 use super::dynamics::{compressor_curve, expander_curve};
 use super::util::{coef, lin_db};
 use crate::biquad::{Biquad, Coeffs, FilterType};
-use crate::{AudioEffect, ParamSpec, ParamValues, Smoothed, Unit, block_len, db_to_gain, param_plumbing};
+use crate::{
+    block_len, db_to_gain, param_plumbing, AudioEffect, ParamSpec, ParamValues, Smoothed, Unit,
+};
 
 /// Attenuation of a closed gate (dB).
 const GATE_RANGE: f32 = 80.0;
@@ -58,23 +60,107 @@ pub struct DynamicsRack {
 impl DynamicsRack {
     pub const PARAMS: &'static [ParamSpec] = &[
         ParamSpec::toggle("gate_on", "Auto Gate", false),
-        ParamSpec::new("gate_threshold", "Gate Threshold", -80.0, 0.0, -50.0, Unit::Decibels),
-        ParamSpec::log("gate_attack", "Gate Attack", 0.1, 100.0, 2.0, Unit::Milliseconds),
-        ParamSpec::log("gate_release", "Gate Release", 1.0, 3000.0, 100.0, Unit::Milliseconds),
-        ParamSpec::new("gate_hold", "Gate Hold", 0.0, 1000.0, 50.0, Unit::Milliseconds),
+        ParamSpec::new(
+            "gate_threshold",
+            "Gate Threshold",
+            -80.0,
+            0.0,
+            -50.0,
+            Unit::Decibels,
+        ),
+        ParamSpec::log(
+            "gate_attack",
+            "Gate Attack",
+            0.1,
+            100.0,
+            2.0,
+            Unit::Milliseconds,
+        ),
+        ParamSpec::log(
+            "gate_release",
+            "Gate Release",
+            1.0,
+            3000.0,
+            100.0,
+            Unit::Milliseconds,
+        ),
+        ParamSpec::new(
+            "gate_hold",
+            "Gate Hold",
+            0.0,
+            1000.0,
+            50.0,
+            Unit::Milliseconds,
+        ),
         ParamSpec::toggle("comp_on", "Compressor", true),
-        ParamSpec::new("comp_threshold", "Compressor Threshold", -60.0, 0.0, -20.0, Unit::Decibels),
-        ParamSpec::new("comp_ratio", "Compressor Ratio", 1.0, 30.0, 2.0, Unit::Ratio),
-        ParamSpec::log("comp_attack", "Compressor Attack", 0.1, 300.0, 10.0, Unit::Milliseconds),
-        ParamSpec::log("comp_release", "Compressor Release", 1.0, 3000.0, 100.0, Unit::Milliseconds),
+        ParamSpec::new(
+            "comp_threshold",
+            "Compressor Threshold",
+            -60.0,
+            0.0,
+            -20.0,
+            Unit::Decibels,
+        ),
+        ParamSpec::new(
+            "comp_ratio",
+            "Compressor Ratio",
+            1.0,
+            30.0,
+            2.0,
+            Unit::Ratio,
+        ),
+        ParamSpec::log(
+            "comp_attack",
+            "Compressor Attack",
+            0.1,
+            300.0,
+            10.0,
+            Unit::Milliseconds,
+        ),
+        ParamSpec::log(
+            "comp_release",
+            "Compressor Release",
+            1.0,
+            3000.0,
+            100.0,
+            Unit::Milliseconds,
+        ),
         ParamSpec::toggle("comp_auto", "Auto Makeup", false),
-        ParamSpec::new("comp_makeup", "Compressor Makeup", 0.0, 30.0, 0.0, Unit::Decibels),
+        ParamSpec::new(
+            "comp_makeup",
+            "Compressor Makeup",
+            0.0,
+            30.0,
+            0.0,
+            Unit::Decibels,
+        ),
         ParamSpec::toggle("exp_on", "Expander", false),
-        ParamSpec::new("exp_threshold", "Expander Threshold", -80.0, 0.0, -60.0, Unit::Decibels),
+        ParamSpec::new(
+            "exp_threshold",
+            "Expander Threshold",
+            -80.0,
+            0.0,
+            -60.0,
+            Unit::Decibels,
+        ),
         ParamSpec::new("exp_ratio", "Expander Ratio", 1.0, 30.0, 2.0, Unit::Ratio),
         ParamSpec::toggle("lim_on", "Limiter", false),
-        ParamSpec::new("lim_threshold", "Limiter Threshold", -30.0, 0.0, -1.0, Unit::Decibels),
-        ParamSpec::log("lim_release", "Limiter Release", 1.0, 1000.0, 50.0, Unit::Milliseconds),
+        ParamSpec::new(
+            "lim_threshold",
+            "Limiter Threshold",
+            -30.0,
+            0.0,
+            -1.0,
+            Unit::Decibels,
+        ),
+        ParamSpec::log(
+            "lim_release",
+            "Limiter Release",
+            1.0,
+            1000.0,
+            50.0,
+            Unit::Milliseconds,
+        ),
         ParamSpec::toggle("soft_clip", "Soft Clip", false),
         ParamSpec::new("output", "Output Gain", -30.0, 30.0, 0.0, Unit::Decibels),
     ];
@@ -153,7 +239,8 @@ impl DynamicsRack {
 impl AudioEffect for DynamicsRack {
     param_plumbing!("dynamics_rack");
     fn transfer_db(&self, band: usize, input_db: f32) -> Option<f32> {
-        (band == 0).then(|| input_db + self.static_gain(input_db) + self.pv.v("output") + self.makeup_db())
+        (band == 0)
+            .then(|| input_db + self.static_gain(input_db) + self.pv.v("output") + self.makeup_db())
     }
     fn reset(&mut self) {
         self.gate_env = 0.0;
@@ -216,7 +303,11 @@ impl AudioEffect for DynamicsRack {
             for ch in channels.iter_mut() {
                 let mut y = ch[i] * gain;
                 if lim_on {
-                    y = if clip { soft_clip(y, ceiling) } else { y.clamp(-ceiling, ceiling) };
+                    y = if clip {
+                        soft_clip(y, ceiling)
+                    } else {
+                        y.clamp(-ceiling, ceiling)
+                    };
                 }
                 ch[i] = y * o;
             }
@@ -232,13 +323,56 @@ pub const MB_BANDS: usize = 4;
 macro_rules! mb_band {
     ($n:literal) => {
         [
-            ParamSpec::new(concat!("b", $n, "_threshold"), concat!("Band ", $n, " Threshold"), -60.0, 0.0, -18.0, Unit::Decibels),
-            ParamSpec::new(concat!("b", $n, "_ratio"), concat!("Band ", $n, " Ratio"), 1.0, 30.0, 3.0, Unit::Ratio),
-            ParamSpec::log(concat!("b", $n, "_attack"), concat!("Band ", $n, " Attack"), 0.1, 500.0, 10.0, Unit::Milliseconds),
-            ParamSpec::log(concat!("b", $n, "_release"), concat!("Band ", $n, " Release"), 1.0, 5000.0, 100.0, Unit::Milliseconds),
-            ParamSpec::new(concat!("b", $n, "_gain"), concat!("Band ", $n, " Gain"), -18.0, 18.0, 0.0, Unit::Decibels),
-            ParamSpec::toggle(concat!("b", $n, "_solo"), concat!("Band ", $n, " Solo"), false),
-            ParamSpec::toggle(concat!("b", $n, "_bypass"), concat!("Band ", $n, " Bypass"), false),
+            ParamSpec::new(
+                concat!("b", $n, "_threshold"),
+                concat!("Band ", $n, " Threshold"),
+                -60.0,
+                0.0,
+                -18.0,
+                Unit::Decibels,
+            ),
+            ParamSpec::new(
+                concat!("b", $n, "_ratio"),
+                concat!("Band ", $n, " Ratio"),
+                1.0,
+                30.0,
+                3.0,
+                Unit::Ratio,
+            ),
+            ParamSpec::log(
+                concat!("b", $n, "_attack"),
+                concat!("Band ", $n, " Attack"),
+                0.1,
+                500.0,
+                10.0,
+                Unit::Milliseconds,
+            ),
+            ParamSpec::log(
+                concat!("b", $n, "_release"),
+                concat!("Band ", $n, " Release"),
+                1.0,
+                5000.0,
+                100.0,
+                Unit::Milliseconds,
+            ),
+            ParamSpec::new(
+                concat!("b", $n, "_gain"),
+                concat!("Band ", $n, " Gain"),
+                -18.0,
+                18.0,
+                0.0,
+                Unit::Decibels,
+            ),
+            ParamSpec::toggle(
+                concat!("b", $n, "_solo"),
+                concat!("Band ", $n, " Solo"),
+                false,
+            ),
+            ParamSpec::toggle(
+                concat!("b", $n, "_bypass"),
+                concat!("Band ", $n, " Bypass"),
+                false,
+            ),
         ]
     };
 }
@@ -247,14 +381,35 @@ const fn mb_params() -> [ParamSpec; 3 + 4 * 7 + 5] {
     let head = [
         ParamSpec::log("xo1", "Low Crossover", 20.0, 1000.0, 120.0, Unit::Hertz),
         ParamSpec::log("xo2", "Mid Crossover", 100.0, 8000.0, 2000.0, Unit::Hertz),
-        ParamSpec::log("xo3", "High Crossover", 1000.0, 20000.0, 10000.0, Unit::Hertz),
+        ParamSpec::log(
+            "xo3",
+            "High Crossover",
+            1000.0,
+            20000.0,
+            10000.0,
+            Unit::Hertz,
+        ),
     ];
     let bands = [mb_band!("1"), mb_band!("2"), mb_band!("3"), mb_band!("4")];
     let tail = [
         ParamSpec::new("output", "Output Gain", -18.0, 18.0, 0.0, Unit::Decibels),
         ParamSpec::toggle("lim_on", "Limiter", false),
-        ParamSpec::new("lim_threshold", "Limiter Threshold", -30.0, 0.0, -0.1, Unit::Decibels),
-        ParamSpec::log("lim_release", "Limiter Release", 1.0, 1000.0, 50.0, Unit::Milliseconds),
+        ParamSpec::new(
+            "lim_threshold",
+            "Limiter Threshold",
+            -30.0,
+            0.0,
+            -0.1,
+            Unit::Decibels,
+        ),
+        ParamSpec::log(
+            "lim_release",
+            "Limiter Release",
+            1.0,
+            1000.0,
+            50.0,
+            Unit::Milliseconds,
+        ),
         ParamSpec::toggle("link", "Link Channels", true),
     ];
     let mut out = [ParamSpec::new("", "", 0.0, 0.0, 0.0, Unit::None); 3 + 4 * 7 + 5];
@@ -284,10 +439,42 @@ const MB_PARAMS: [ParamSpec; 36] = mb_params();
 
 /// Parameter ids of band `b` (0-based): threshold, ratio, attack, release, gain, solo, bypass.
 pub const MB_IDS: [[&str; 7]; MB_BANDS] = [
-    ["b1_threshold", "b1_ratio", "b1_attack", "b1_release", "b1_gain", "b1_solo", "b1_bypass"],
-    ["b2_threshold", "b2_ratio", "b2_attack", "b2_release", "b2_gain", "b2_solo", "b2_bypass"],
-    ["b3_threshold", "b3_ratio", "b3_attack", "b3_release", "b3_gain", "b3_solo", "b3_bypass"],
-    ["b4_threshold", "b4_ratio", "b4_attack", "b4_release", "b4_gain", "b4_solo", "b4_bypass"],
+    [
+        "b1_threshold",
+        "b1_ratio",
+        "b1_attack",
+        "b1_release",
+        "b1_gain",
+        "b1_solo",
+        "b1_bypass",
+    ],
+    [
+        "b2_threshold",
+        "b2_ratio",
+        "b2_attack",
+        "b2_release",
+        "b2_gain",
+        "b2_solo",
+        "b2_bypass",
+    ],
+    [
+        "b3_threshold",
+        "b3_ratio",
+        "b3_attack",
+        "b3_release",
+        "b3_gain",
+        "b3_solo",
+        "b3_bypass",
+    ],
+    [
+        "b4_threshold",
+        "b4_ratio",
+        "b4_attack",
+        "b4_release",
+        "b4_gain",
+        "b4_solo",
+        "b4_bypass",
+    ],
 ];
 
 /// Per-channel crossover filter state.
@@ -341,7 +528,11 @@ impl MultibandCompressor {
             pv: ParamValues::new(Self::PARAMS),
             sr: sample_rate,
             xo: [sm(1.0), sm(1.0), sm(1.0)],
-            xc: XoCoeffs { lp: [Coeffs::IDENTITY; 3], hp: [Coeffs::IDENTITY; 3], ap: [Coeffs::IDENTITY; 3] },
+            xc: XoCoeffs {
+                lp: [Coeffs::IDENTITY; 3],
+                hp: [Coeffs::IDENTITY; 3],
+                ap: [Coeffs::IDENTITY; 3],
+            },
             state: vec![XoState::default(); channels.max(1)],
             env: vec![[0.0; MB_BANDS]; channels.max(1)],
             lim_env: 0.0,
@@ -402,7 +593,11 @@ impl MultibandCompressor {
         if any_solo && !self.pv.on(ids[5]) {
             return 0.0;
         }
-        if self.pv.on(ids[6]) { 1.0 } else { db_to_gain(self.pv.v(ids[4])) }
+        if self.pv.on(ids[6]) {
+            1.0
+        } else {
+            db_to_gain(self.pv.v(ids[4]))
+        }
     }
 
     #[inline]
@@ -430,7 +625,10 @@ impl AudioEffect for MultibandCompressor {
         if self.pv.on(ids[6]) {
             return Some(input_db);
         }
-        Some(compressor_curve(input_db, self.pv.v(ids[0]), self.pv.v(ids[1]), 0.0) + self.pv.v(ids[4]))
+        Some(
+            compressor_curve(input_db, self.pv.v(ids[0]), self.pv.v(ids[1]), 0.0)
+                + self.pv.v(ids[4]),
+        )
     }
     fn reset(&mut self) {
         self.xo.iter_mut().for_each(Smoothed::snap);
@@ -481,7 +679,8 @@ impl AudioEffect for MultibandCompressor {
                     continue;
                 }
                 if link {
-                    let peak = (0..nch.min(8)).fold(0.0f32, |a, ch| a.max(bands[ch][b].abs() as f32));
+                    let peak =
+                        (0..nch.min(8)).fold(0.0f32, |a, ch| a.max(bands[ch][b].abs() as f32));
                     let l = lin_db(peak);
                     let target = compressor_curve(l, thr[b], ratio[b], 0.0) - l;
                     smooth(&mut self.env[0][b], target, self.att[b], self.rel[b]);
@@ -583,7 +782,14 @@ impl TubeCompressor {
 impl AudioEffect for TubeCompressor {
     param_plumbing!("tube_compressor");
     fn transfer_db(&self, band: usize, input_db: f32) -> Option<f32> {
-        (band == 0).then(|| compressor_curve(input_db, self.pv.v("threshold"), self.pv.v("ratio"), TUBE_KNEE) + self.pv.v("output"))
+        (band == 0).then(|| {
+            compressor_curve(
+                input_db,
+                self.pv.v("threshold"),
+                self.pv.v("ratio"),
+                TUBE_KNEE,
+            ) + self.pv.v("output")
+        })
     }
     fn reset(&mut self) {
         self.ms = 0.0;

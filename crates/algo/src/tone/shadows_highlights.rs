@@ -145,7 +145,11 @@ fn tonal_mask(tone: f32) -> [f32; 256] {
 /// Curve strength for Amount `a` (0..=100): 0 at 0, 1 near 15, 2 at 50, 3 at 100.
 fn strength(a: f32) -> f32 {
     let u = (a.clamp(0.0, 100.0) / 100.0).powf(0.6216);
-    if u <= 0.3 { u / 0.3 } else { (1.0 + 20.0 * u) / 7.0 }
+    if u <= 0.3 {
+        u / 0.3
+    } else {
+        (1.0 + 20.0 * u) / 7.0
+    }
 }
 
 /// The full-strength curve of strength `s`: 1 − (1 − v)^q between q = 2^⌊s⌋ and 2^(⌊s⌋+1).
@@ -160,7 +164,9 @@ fn lift(s: f32, v: f32) -> f32 {
 
 /// Linear interpolation in a table of `(x, y)` sorted by `x`.
 fn interp(table: &[(f32, f32)], x: f32) -> f32 {
-    let Some(&(x0, y0)) = table.first() else { return 0.0 };
+    let Some(&(x0, y0)) = table.first() else {
+        return 0.0;
+    };
     if x <= x0 {
         return y0;
     }
@@ -189,8 +195,17 @@ const COLOR_UP: [(f32, f32); 12] = [
     (100.0, 2.7193),
 ];
 /// … and for negative values (1 + h · F), by −Color.
-const COLOR_DOWN: [(f32, f32); 9] =
-    [(0.0, 0.0), (1.0, -0.0145), (5.0, -0.0709), (10.0, -0.1373), (20.0, -0.2570), (30.0, -0.3612), (50.0, -0.5312), (75.0, -0.6866), (100.0, -0.7968)];
+const COLOR_DOWN: [(f32, f32); 9] = [
+    (0.0, 0.0),
+    (1.0, -0.0145),
+    (5.0, -0.0709),
+    (10.0, -0.1373),
+    (20.0, -0.2570),
+    (30.0, -0.3612),
+    (50.0, -0.5312),
+    (75.0, -0.6866),
+    (100.0, -0.7968),
+];
 
 /// Midtone: (value, k, p) of k · (Y − ½) · (4Y(1 − Y))^p.
 const MIDTONE: [(f32, f32, f32); 11] = [
@@ -227,7 +242,10 @@ pub fn shadows_highlights(px: &mut [[f32; 4]], w: usize, h: usize, p: &ShadowsHi
         return;
     }
     let (sa, ha) = (p.shadow_amount, p.highlight_amount);
-    let lum: Vec<f32> = px.iter().map(|q| (q[0].max(q[1]).max(q[2]) + luma([q[0], q[1], q[2]])) / 2.0).collect();
+    let lum: Vec<f32> = px
+        .iter()
+        .map(|q| (q[0].max(q[1]).max(q[2]) + luma([q[0], q[1], q[2]])) / 2.0)
+        .collect();
     let ls = (sa > 0.0).then(|| neighbourhood(&lum, w, h, p.shadow_radius));
     let lh = (ha > 0.0).then(|| match &ls {
         Some(l) if (p.highlight_radius - p.shadow_radius).abs() < 1e-3 => l.clone(),
@@ -259,7 +277,11 @@ pub fn shadows_highlights(px: &mut [[f32; 4]], w: usize, h: usize, p: &ShadowsHi
     });
     clip_levels(&mut y2, px, p.black_clip, p.white_clip);
     let gain = |f: f32| {
-        if p.color >= 0.0 { (interp(&COLOR_UP, p.color) * f).exp() } else { 1.0 + interp(&COLOR_DOWN, -p.color) * f }
+        if p.color >= 0.0 {
+            (interp(&COLOR_UP, p.color) * f).exp()
+        } else {
+            1.0 + interp(&COLOR_DOWN, -p.color) * f
+        }
     };
     par_rows(px, w, 1, |y, row| {
         for (x, q) in row.iter_mut().enumerate() {
@@ -314,9 +336,16 @@ fn clip_levels(y2: &mut [f32], px: &[[f32; 4]], black: f32, white: f32) {
                 return i as f32 / 4095.0;
             }
         }
-        if rev { 0.0 } else { 1.0 }
+        if rev {
+            0.0
+        } else {
+            1.0
+        }
     };
-    let (lo, hi) = (if black > 0.0 { find(black, false) } else { 0.0 }, if white > 0.0 { find(white, true) } else { 1.0 });
+    let (lo, hi) = (
+        if black > 0.0 { find(black, false) } else { 0.0 },
+        if white > 0.0 { find(white, true) } else { 1.0 },
+    );
     if hi - lo < 1e-3 {
         return;
     }
@@ -345,18 +374,34 @@ mod tests {
     }
 
     fn off(a: [f32; 3], b: [f32; 3]) -> f32 {
-        a.iter().zip(b).map(|(x, y)| (x - y).abs() * 255.0).fold(0.0, f32::max)
+        a.iter()
+            .zip(b)
+            .map(|(x, y)| (x - y).abs() * 255.0)
+            .fold(0.0, f32::max)
     }
 
     /// Photoshop 25.4's results (16-bit levels of 32768) for grey pixels lifted by the default
     /// Shadows (35 %, Tone 50 %, Radius 30 px; Color 0), in black surroundings and in grey 0.5.
     #[test]
     fn grey_matches_photoshop() {
-        let p = ShadowsHighlights { color: 0.0, black_clip: 0.0, white_clip: 0.0, ..Default::default() };
-        for (bg, want) in [(0.0, [11389, 19422, 28451, 31931]), (0.5, [5211, 9909, 18229, 25700])] {
+        let p = ShadowsHighlights {
+            color: 0.0,
+            black_clip: 0.0,
+            white_clip: 0.0,
+            ..Default::default()
+        };
+        for (bg, want) in [
+            (0.0, [11389, 19422, 28451, 31931]),
+            (0.5, [5211, 9909, 18229, 25700]),
+        ] {
             for (v, w) in [0.125f32, 0.25, 0.5, 0.749969].into_iter().zip(want) {
                 let got = probe([bg; 3], [v; 3], &p);
-                assert!(off(got, levels([w; 3])) < 2.0, "bg {bg} v {v}: {} vs {}", got[0] * 32768.0, w);
+                assert!(
+                    off(got, levels([w; 3])) < 2.0,
+                    "bg {bg} v {v}: {} vs {}",
+                    got[0] * 32768.0,
+                    w
+                );
             }
         }
     }
@@ -365,7 +410,12 @@ mod tests {
     /// Radius 10 px), in black, 0.15 and 0.3 grey surroundings: Photoshop's results.
     #[test]
     fn colour_matches_photoshop() {
-        let p = ShadowsHighlights { shadow_radius: 10.0, black_clip: 0.0, white_clip: 0.0, ..Default::default() };
+        let p = ShadowsHighlights {
+            shadow_radius: 10.0,
+            black_clip: 0.0,
+            white_clip: 0.0,
+            ..Default::default()
+        };
         for (bg, px, want) in [
             (0.0, [3277, 1638, 0], [8235, 5202, 2170]),
             (0.0, [8192, 6554, 4915], [19350, 16514, 13676]),
@@ -373,7 +423,11 @@ mod tests {
             (9830.0 / 32768.0, [11469, 9830, 8192], [16540, 14376, 12214]),
         ] {
             let got = probe([bg; 3], levels(px), &p);
-            assert!(off(got, levels(want)) < 2.0, "{px:?} on {bg}: {:?} vs {want:?}", got.map(|c| (c * 32768.0).round()));
+            assert!(
+                off(got, levels(want)) < 2.0,
+                "{px:?} on {bg}: {:?} vs {want:?}",
+                got.map(|c| (c * 32768.0).round())
+            );
         }
     }
 
@@ -383,7 +437,15 @@ mod tests {
     fn edge_matches_photoshop() {
         let (w, h) = (200, 24);
         let (a, b) = (3277.0 / 32768.0, 29491.0 / 32768.0);
-        let mut img: Vec<[f32; 4]> = (0..w * h).map(|i| if i % w < 100 { [a, a, a, 1.0] } else { [b, b, b, 1.0] }).collect();
+        let mut img: Vec<[f32; 4]> = (0..w * h)
+            .map(|i| {
+                if i % w < 100 {
+                    [a, a, a, 1.0]
+                } else {
+                    [b, b, b, 1.0]
+                }
+            })
+            .collect();
         let p = ShadowsHighlights {
             shadow_amount: 100.0,
             shadow_tone: 100.0,
@@ -395,9 +457,20 @@ mod tests {
         };
         shadows_highlights(&mut img, w, h, &p);
         let row = &img[12 * w..13 * w];
-        for (x, want) in [(92, 16370), (98, 14439), (99, 12146), (100, 30891), (101, 30403), (102, 30146), (108, 29979)] {
+        for (x, want) in [
+            (92, 16370),
+            (98, 14439),
+            (99, 12146),
+            (100, 30891),
+            (101, 30403),
+            (102, 30146),
+            (108, 29979),
+        ] {
             let got = row[x][0] * 32768.0;
-            assert!((got - want as f32).abs() / 32768.0 * 255.0 < 6.0, "x {x}: {got} vs {want}");
+            assert!(
+                (got - want as f32).abs() / 32768.0 * 255.0 < 6.0,
+                "x {x}: {got} vs {want}"
+            );
         }
     }
 
@@ -414,10 +487,19 @@ mod tests {
     #[test]
     fn tonal_mask_spans_photoshop_tones() {
         let m95 = tonal_mask(95.0);
-        assert!((m95[128] - (1.0 - 128.0 / 255.0)).abs() < 1e-3, "{}", m95[128]);
+        assert!(
+            (m95[128] - (1.0 - 128.0 / 255.0)).abs() < 1e-3,
+            "{}",
+            m95[128]
+        );
         assert_eq!(tonal_mask(100.0), m95);
         // Tone 0 still reaches about 7 % into the levels (Photoshop: half at level 18).
         let m0 = tonal_mask(0.0);
-        assert!(m0[0] > 0.999 && (m0[18] - 0.5).abs() < 0.03 && m0[60] < 0.02, "{} {}", m0[18], m0[60]);
+        assert!(
+            m0[0] > 0.999 && (m0[18] - 0.5).abs() < 0.03 && m0[60] < 0.02,
+            "{} {}",
+            m0[18],
+            m0[60]
+        );
     }
 }

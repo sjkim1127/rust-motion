@@ -18,7 +18,7 @@
 use rayon::prelude::*;
 
 use crate::color::{M3, V3};
-use crate::demosaic::{Pattern, demosaic};
+use crate::demosaic::{demosaic, Pattern};
 use crate::raw::RawImage;
 use crate::{Error, Result};
 
@@ -62,7 +62,13 @@ pub fn active_rect(p: &Params, w: usize, h: usize) -> Result<Rect> {
 pub fn crop_rect(p: &Params, aw: usize, ah: usize) -> Rect {
     let (ox, oy) = p.crop_origin.unwrap_or((0.0, 0.0));
     let (sw, sh) = p.crop_size.unwrap_or((aw as f64, ah as f64));
-    let to = |v: f64, max: usize| if v.is_finite() && v > 0.0 { (v.min(max as f64)) as usize } else { 0 };
+    let to = |v: f64, max: usize| {
+        if v.is_finite() && v > 0.0 {
+            (v.min(max as f64)) as usize
+        } else {
+            0
+        }
+    };
     let x = to(ox.floor(), aw.saturating_sub(1));
     let y = to(oy.floor(), ah.saturating_sub(1));
     let w = to(sw.round(), aw - x).max(1);
@@ -71,11 +77,19 @@ pub fn crop_rect(p: &Params, aw: usize, ah: usize) -> Rect {
 }
 
 /// Normalised, white-balanced samples of the active area (steps 1–4), one plane per sample.
-fn normalise(raw: &RawImage, p: &Params, (ax, ay, aw, ah): Rect, neutral: &V3, planes: usize) -> Result<Vec<f32>> {
+fn normalise(
+    raw: &RawImage,
+    p: &Params,
+    (ax, ay, aw, ah): Rect,
+    neutral: &V3,
+    planes: usize,
+) -> Result<Vec<f32>> {
     let spp = raw.samples_per_pixel;
     let (br, bc) = (p.black_repeat.0.max(1), p.black_repeat.1.max(1));
     if br > 64 || bc > 64 {
-        return Err(Error::Unsupported("a BlackLevelRepeatDim larger than 64".into()));
+        return Err(Error::Unsupported(
+            "a BlackLevelRepeatDim larger than 64".into(),
+        ));
     }
     let need = br * bc * spp;
     let black: Vec<f64> = match p.black.len() {
@@ -85,9 +99,19 @@ fn normalise(raw: &RawImage, p: &Params, (ax, ay, aw, ah): Rect, neutral: &V3, p
         _ => return Err(Error::Malformed("BlackLevel has too few values")),
     };
     let max_code = ((1u32 << raw.bits) - 1) as f64;
-    let white: Vec<f64> = (0..spp).map(|s| p.white.get(s).or(p.white.first()).copied().unwrap_or(max_code)).collect();
+    let white: Vec<f64> = (0..spp)
+        .map(|s| {
+            p.white
+                .get(s)
+                .or(p.white.first())
+                .copied()
+                .unwrap_or(max_code)
+        })
+        .collect();
     let lin = p.linearization.as_deref().filter(|t| !t.is_empty());
-    let inv_neutral: Vec<f32> = (0..planes).map(|c| (1.0 / neutral.get(c).copied().unwrap_or(1.0)) as f32).collect();
+    let inv_neutral: Vec<f32> = (0..planes)
+        .map(|c| (1.0 / neutral.get(c).copied().unwrap_or(1.0)) as f32)
+        .collect();
     let cfa = p.cfa.as_ref();
     let mut out = vec![0f32; aw * ah * spp];
     let row = |y: usize, o: &mut [f32]| {
@@ -96,14 +120,24 @@ fn normalise(raw: &RawImage, p: &Params, (ax, ay, aw, ah): Rect, neutral: &V3, p
         for x in 0..aw {
             let dh = p.black_delta_h.get(x).copied().unwrap_or(0.0);
             for s in 0..spp {
-                let code = raw.data.get(src_row + (ax + x) * spp + s).copied().unwrap_or(0);
+                let code = raw
+                    .data
+                    .get(src_row + (ax + x) * spp + s)
+                    .copied()
+                    .unwrap_or(0);
                 let v = match lin {
-                    Some(t) => f64::from(t.get(usize::from(code)).or(t.last()).copied().unwrap_or(0)),
+                    Some(t) => {
+                        f64::from(t.get(usize::from(code)).or(t.last()).copied().unwrap_or(0))
+                    }
                     None => f64::from(code),
                 };
                 let b = black[((y % br) * bc + x % bc) * spp + s] + dh + dv;
                 let range = white[s] - b;
-                let n = if range > 0.0 { ((v - b) / range).clamp(0.0, 1.0) } else { 0.0 };
+                let n = if range > 0.0 {
+                    ((v - b) / range).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
                 let plane = match cfa {
                     Some(c) => usize::from(c.color(x, y)),
                     None => s,
@@ -116,9 +150,13 @@ fn normalise(raw: &RawImage, p: &Params, (ax, ay, aw, ah): Rect, neutral: &V3, p
         }
     };
     #[cfg(feature = "threads")]
-    out.par_chunks_mut((aw * spp).max(1)).enumerate().for_each(|(y, o)| row(y, o));
+    out.par_chunks_mut((aw * spp).max(1))
+        .enumerate()
+        .for_each(|(y, o)| row(y, o));
     #[cfg(not(feature = "threads"))]
-    out.chunks_mut((aw * spp).max(1)).enumerate().for_each(|(y, o)| row(y, o));
+    out.chunks_mut((aw * spp).max(1))
+        .enumerate()
+        .for_each(|(y, o)| row(y, o));
     Ok(out)
 }
 
@@ -133,10 +171,14 @@ pub struct Developed {
 pub fn develop(raw: &RawImage, p: &Params, neutral: &V3, matrix: &M3) -> Result<Developed> {
     let spp = raw.samples_per_pixel;
     if p.cfa.is_some() && spp != 1 {
-        return Err(Error::Malformed("a CFA image with more than one sample per pixel"));
+        return Err(Error::Malformed(
+            "a CFA image with more than one sample per pixel",
+        ));
     }
     if p.cfa.is_none() && !matches!(spp, 1 | 3) {
-        return Err(Error::Unsupported(format!("LinearRaw with {spp} samples per pixel")));
+        return Err(Error::Unsupported(format!(
+            "LinearRaw with {spp} samples per pixel"
+        )));
     }
     let active = active_rect(p, raw.width, raw.height)?;
     let (_, _, aw, ah) = active;
@@ -155,7 +197,9 @@ pub fn develop(raw: &RawImage, p: &Params, neutral: &V3, matrix: &M3) -> Result<
     let row = |y: usize, o: &mut [f32]| {
         let src = (cy + y) * aw + cx;
         for x in 0..cw {
-            let Some(c) = rgb.get((src + x) * 3..(src + x) * 3 + 3) else { continue };
+            let Some(c) = rgb.get((src + x) * 3..(src + x) * 3 + 3) else {
+                continue;
+            };
             let px = if mono {
                 // grey: the matrix's luminance gain only
                 let g = c[0] * (m[1][0] + m[1][1] + m[1][2]);
@@ -169,10 +213,18 @@ pub fn develop(raw: &RawImage, p: &Params, neutral: &V3, matrix: &M3) -> Result<
         }
     };
     #[cfg(feature = "threads")]
-    rgba.par_chunks_mut(cw * 4).enumerate().for_each(|(y, o)| row(y, o));
+    rgba.par_chunks_mut(cw * 4)
+        .enumerate()
+        .for_each(|(y, o)| row(y, o));
     #[cfg(not(feature = "threads"))]
-    rgba.chunks_mut(cw * 4).enumerate().for_each(|(y, o)| row(y, o));
-    Ok(Developed { width: cw, height: ch, rgba })
+    rgba.chunks_mut(cw * 4)
+        .enumerate()
+        .for_each(|(y, o)| row(y, o));
+    Ok(Developed {
+        width: cw,
+        height: ch,
+        rgba,
+    })
 }
 
 #[cfg(test)]
@@ -181,14 +233,24 @@ mod tests {
     use crate::color::IDENTITY;
 
     fn raw(w: usize, h: usize, spp: usize, data: Vec<u16>) -> RawImage {
-        RawImage { width: w, height: h, samples_per_pixel: spp, bits: 12, data }
+        RawImage {
+            width: w,
+            height: h,
+            samples_per_pixel: spp,
+            bits: 12,
+            data,
+        }
     }
 
     #[test]
     fn black_white_linearisation_and_white_balance() {
         // LinearRaw 2 × 1: black 100, white 1100; neutral (0.5, 1, 0.25)
         let r = raw(2, 1, 3, vec![600, 600, 600, 100, 1100, 2000]);
-        let p = Params { black: vec![100.0], white: vec![1100.0], ..Default::default() };
+        let p = Params {
+            black: vec![100.0],
+            white: vec![1100.0],
+            ..Default::default()
+        };
         let d = develop(&r, &p, &[0.5, 1.0, 0.25], &IDENTITY).unwrap();
         assert_eq!((d.width, d.height), (2, 1));
         // 0.5 / 0.5 = 1, 0.5 / 1, 0.5 / 0.25 = 2 → clipped to 1
@@ -197,7 +259,12 @@ mod tests {
         assert_eq!(&d.rgba[4..], &[0.0, 1.0, 1.0, 1.0]);
         // a linearisation table doubling the codes
         let t: Vec<u16> = (0..4096u32).map(|v| (v * 2).min(65_535) as u16).collect();
-        let p = Params { linearization: Some(t), black: vec![200.0], white: vec![2200.0], ..p };
+        let p = Params {
+            linearization: Some(t),
+            black: vec![200.0],
+            white: vec![2200.0],
+            ..p
+        };
         let d = develop(&r, &p, &[1.0; 3], &IDENTITY).unwrap();
         assert_eq!(&d.rgba[..3], &[0.5, 0.5, 0.5]);
     }
@@ -205,7 +272,11 @@ mod tests {
     #[test]
     fn per_cfa_black_levels_and_deltas() {
         // 2 × 2 CFA, black repeat 2 × 2 with a different black per site, plus row/column deltas
-        let pat = Pattern { rows: 2, cols: 2, colors: vec![0, 1, 1, 2] };
+        let pat = Pattern {
+            rows: 2,
+            cols: 2,
+            colors: vec![0, 1, 1, 2],
+        };
         let p = Params {
             black_repeat: (2, 2),
             black: vec![10.0, 20.0, 30.0, 40.0],
@@ -229,19 +300,35 @@ mod tests {
         // 6 × 4 LinearRaw grey ramp; active area cuts a 1-pixel border, crop takes 2 × 1 at (1, 1)
         let data: Vec<u16> = (0..24u16).flat_map(|i| [i * 10; 3]).collect();
         let r = raw(6, 4, 3, data);
-        let p =
-            Params { active_area: Some([1, 1, 3, 5]), white: vec![4095.0], crop_origin: Some((1.0, 1.0)), crop_size: Some((2.0, 1.0)), ..Default::default() };
+        let p = Params {
+            active_area: Some([1, 1, 3, 5]),
+            white: vec![4095.0],
+            crop_origin: Some((1.0, 1.0)),
+            crop_size: Some((2.0, 1.0)),
+            ..Default::default()
+        };
         let d = develop(&r, &p, &[1.0; 3], &IDENTITY).unwrap();
         assert_eq!((d.width, d.height), (2, 1));
         // active (1,1)–(5,3); crop origin (1,1) inside it → raw (2, 2) and (3, 2): samples 14, 15
         assert!((d.rgba[0] - 140.0 / 4095.0).abs() < 1e-6);
         assert!((d.rgba[4] - 150.0 / 4095.0).abs() < 1e-6);
         // hostile active areas and crops
-        let bad = Params { active_area: Some([3, 0, 1, 6]), ..Default::default() };
+        let bad = Params {
+            active_area: Some([3, 0, 1, 6]),
+            ..Default::default()
+        };
         assert!(develop(&r, &bad, &[1.0; 3], &IDENTITY).is_err());
-        let bad = Params { active_area: Some([0, 0, 4, 7]), ..Default::default() };
+        let bad = Params {
+            active_area: Some([0, 0, 4, 7]),
+            ..Default::default()
+        };
         assert!(develop(&r, &bad, &[1.0; 3], &IDENTITY).is_err());
-        let huge = Params { crop_origin: Some((1e12, -5.0)), crop_size: Some((f64::NAN, 1e9)), white: vec![4095.0], ..Default::default() };
+        let huge = Params {
+            crop_origin: Some((1e12, -5.0)),
+            crop_size: Some((f64::NAN, 1e9)),
+            white: vec![4095.0],
+            ..Default::default()
+        };
         let d = develop(&r, &huge, &[1.0; 3], &IDENTITY).unwrap();
         assert!(d.width >= 1 && d.width <= 6 && d.height >= 1 && d.height <= 4);
     }
@@ -249,7 +336,10 @@ mod tests {
     #[test]
     fn matrix_and_clipping_of_negatives() {
         let r = raw(1, 1, 3, vec![4095, 0, 0]);
-        let p = Params { white: vec![4095.0], ..Default::default() };
+        let p = Params {
+            white: vec![4095.0],
+            ..Default::default()
+        };
         let m = [[1.0, 0.0, 0.0], [-0.5, 1.0, 0.0], [0.0, 0.0, 2.0]];
         let d = develop(&r, &p, &[1.0; 3], &m).unwrap();
         assert_eq!(&d.rgba, &[1.0, 0.0, 0.0, 1.0]);
@@ -258,7 +348,16 @@ mod tests {
     #[test]
     fn short_black_level_is_an_error() {
         let r = raw(2, 2, 1, vec![0; 4]);
-        let p = Params { black_repeat: (2, 2), black: vec![1.0, 2.0], cfa: Some(Pattern { rows: 2, cols: 2, colors: vec![0, 1, 1, 2] }), ..Default::default() };
+        let p = Params {
+            black_repeat: (2, 2),
+            black: vec![1.0, 2.0],
+            cfa: Some(Pattern {
+                rows: 2,
+                cols: 2,
+                colors: vec![0, 1, 1, 2],
+            }),
+            ..Default::default()
+        };
         assert!(develop(&r, &p, &[1.0; 3], &IDENTITY).is_err());
     }
 }

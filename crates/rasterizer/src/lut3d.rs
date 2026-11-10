@@ -46,7 +46,10 @@ impl Lut3d {
         let mut data = Vec::new();
 
         let parse_three = |rest: &str| -> Option<[f32; 3]> {
-            let v: Vec<f32> = rest.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+            let v: Vec<f32> = rest
+                .split_whitespace()
+                .filter_map(|x| x.parse().ok())
+                .collect();
             if v.len() == 3 {
                 Some([v[0], v[1], v[2]])
             } else {
@@ -62,7 +65,10 @@ impl Lut3d {
             if let Some(r) = l.strip_prefix("TITLE") {
                 title = Some(r.trim().trim_matches('"').to_string());
             } else if let Some(r) = l.strip_prefix("LUT_3D_SIZE") {
-                size = r.trim().parse().map_err(|_| format!("bad LUT_3D_SIZE `{}`", r.trim()))?;
+                size = r
+                    .trim()
+                    .parse()
+                    .map_err(|_| format!("bad LUT_3D_SIZE `{}`", r.trim()))?;
                 if !(2..=256).contains(&size) {
                     return Err(format!("LUT_3D_SIZE {size} out of range (2..=256)"));
                 }
@@ -98,7 +104,10 @@ impl Lut3d {
 
     /// Parse an Autodesk Flame / Lustre `.3dl` file.
     pub fn parse_3dl(text: &str) -> Result<Lut3d, String> {
-        let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#'));
+        let mut lines = text
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'));
         let mut size = 0usize;
         let mut data = Vec::new();
 
@@ -116,7 +125,10 @@ impl Lut3d {
                     }
                 }
             }
-            let nums: Vec<f32> = line.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+            let nums: Vec<f32> = line
+                .split_whitespace()
+                .filter_map(|x| x.parse().ok())
+                .collect();
             if nums.len() > 1 && size == 0 {
                 // Input mesh coordinate line (e.g. 0 64 128 192 ...)
                 size = nums.len();
@@ -132,7 +144,10 @@ impl Lut3d {
         let mut max_val: f32 = 1.0;
         let mut raw_triplets = Vec::new();
         for line in lines {
-            let nums: Vec<f32> = line.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+            let nums: Vec<f32> = line
+                .split_whitespace()
+                .filter_map(|x| x.parse().ok())
+                .collect();
             if nums.len() >= 3 {
                 max_val = max_val.max(nums[0]).max(nums[1]).max(nums[2]);
                 raw_triplets.push([nums[0], nums[1], nums[2]]);
@@ -140,7 +155,11 @@ impl Lut3d {
         }
 
         let scale = if max_val > 256.0 {
-            if max_val > 1024.0 { 4095.0 } else { 1023.0 }
+            if max_val > 1024.0 {
+                4095.0
+            } else {
+                1023.0
+            }
         } else if max_val > 1.0 {
             255.0
         } else {
@@ -153,7 +172,10 @@ impl Lut3d {
 
         let expected = size * size * size;
         if data.len() != expected {
-            return Err(format!("expected {expected} entries in .3dl, found {}", data.len()));
+            return Err(format!(
+                "expected {expected} entries in .3dl, found {}",
+                data.len()
+            ));
         }
 
         Ok(Lut3d {
@@ -181,11 +203,13 @@ impl Lut3d {
         }
 
         let at = |r: usize, g: usize, b: usize| self.data[r + n * (g + n * b)];
-        let lerp = |a: [f32; 3], b: [f32; 3], t: f32| [
-            a[0] + (b[0] - a[0]) * t,
-            a[1] + (b[1] - a[1]) * t,
-            a[2] + (b[2] - a[2]) * t,
-        ];
+        let lerp = |a: [f32; 3], b: [f32; 3], t: f32| {
+            [
+                a[0] + (b[0] - a[0]) * t,
+                a[1] + (b[1] - a[1]) * t,
+                a[2] + (b[2] - a[2]) * t,
+            ]
+        };
 
         let (r, g, b) = (idx[0], idx[1], idx[2]);
         let c00 = lerp(at(r, g, b), at(r + 1, g, b), frac[0]);
@@ -234,18 +258,36 @@ impl Lut3d {
         for k in 0..3 {
             let v = if fx >= fy {
                 if fy >= fz {
-                    p000[k] + fx * (p100[k] - p000[k]) + fy * (p110[k] - p100[k]) + fz * (p111[k] - p110[k])
+                    p000[k]
+                        + fx * (p100[k] - p000[k])
+                        + fy * (p110[k] - p100[k])
+                        + fz * (p111[k] - p110[k])
                 } else if fx >= fz {
-                    p000[k] + fx * (p100[k] - p000[k]) + fz * (p101[k] - p100[k]) + fy * (p111[k] - p101[k])
+                    p000[k]
+                        + fx * (p100[k] - p000[k])
+                        + fz * (p101[k] - p100[k])
+                        + fy * (p111[k] - p101[k])
                 } else {
-                    p000[k] + fz * (p001[k] - p000[k]) + fx * (p101[k] - p001[k]) + fy * (p111[k] - p101[k])
+                    p000[k]
+                        + fz * (p001[k] - p000[k])
+                        + fx * (p101[k] - p001[k])
+                        + fy * (p111[k] - p101[k])
                 }
             } else if fx >= fz {
-                p000[k] + fy * (p010[k] - p000[k]) + fx * (p110[k] - p010[k]) + fz * (p111[k] - p110[k])
+                p000[k]
+                    + fy * (p010[k] - p000[k])
+                    + fx * (p110[k] - p010[k])
+                    + fz * (p111[k] - p110[k])
             } else if fy >= fz {
-                p000[k] + fy * (p010[k] - p000[k]) + fz * (p011[k] - p010[k]) + fx * (p111[k] - p011[k])
+                p000[k]
+                    + fy * (p010[k] - p000[k])
+                    + fz * (p011[k] - p010[k])
+                    + fx * (p111[k] - p011[k])
             } else {
-                p000[k] + fz * (p001[k] - p000[k]) + fy * (p011[k] - p001[k]) + fx * (p111[k] - p011[k])
+                p000[k]
+                    + fz * (p001[k] - p000[k])
+                    + fy * (p011[k] - p001[k])
+                    + fx * (p111[k] - p011[k])
             };
             out[k] = v;
         }
@@ -389,24 +431,43 @@ fn registry() -> &'static RwLock<HashMap<String, Arc<Lut3d>>> {
     static R: OnceLock<RwLock<HashMap<String, Arc<Lut3d>>>> = OnceLock::new();
     R.get_or_init(|| {
         let mut map = HashMap::new();
-        map.insert("kodak_portra_400".into(), Arc::new(Lut3d::kodak_portra_400()));
-        map.insert("fujifilm_provia_100".into(), Arc::new(Lut3d::fujifilm_provia_100()));
-        map.insert("cinematic_teal_orange".into(), Arc::new(Lut3d::cinematic_teal_orange()));
+        map.insert(
+            "kodak_portra_400".into(),
+            Arc::new(Lut3d::kodak_portra_400()),
+        );
+        map.insert(
+            "fujifilm_provia_100".into(),
+            Arc::new(Lut3d::fujifilm_provia_100()),
+        );
+        map.insert(
+            "cinematic_teal_orange".into(),
+            Arc::new(Lut3d::cinematic_teal_orange()),
+        );
         RwLock::new(map)
     })
 }
 
 /// Register a named LUT in the global registry.
 pub fn register(id: &str, lut: Lut3d) {
-    registry().write().unwrap_or_else(|e| e.into_inner()).insert(id.to_string(), Arc::new(lut));
+    registry()
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(id.to_string(), Arc::new(lut));
 }
 
 /// Retrieve a registered LUT by name or identifier.
 pub fn get(id: &str) -> Option<Arc<Lut3d>> {
-    registry().read().unwrap_or_else(|e| e.into_inner()).get(id).cloned()
+    registry()
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(id)
+        .cloned()
 }
 
 /// Remove a registered LUT from the global registry.
 pub fn unregister(id: &str) {
-    registry().write().unwrap_or_else(|e| e.into_inner()).remove(id);
+    registry()
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(id);
 }

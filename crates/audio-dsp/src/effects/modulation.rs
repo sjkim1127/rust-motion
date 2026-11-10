@@ -2,8 +2,10 @@
 //! Delay. All modulated delays read with linear interpolation; feedback loops are bounded
 //! (|g| < 1, or saturating for the Analog Delay).
 
-use super::util::{AllPass1, DelayLine, Envelope, Lfo, OnePole, coef, uni_sine, uni_tri};
-use crate::{AudioEffect, ParamSpec, ParamValues, Smoothed, Unit, block_len, db_to_gain, param_plumbing};
+use super::util::{coef, uni_sine, uni_tri, AllPass1, DelayLine, Envelope, Lfo, OnePole};
+use crate::{
+    block_len, db_to_gain, param_plumbing, AudioEffect, ParamSpec, ParamValues, Smoothed, Unit,
+};
 
 const SM: f32 = 20.0;
 
@@ -85,7 +87,12 @@ impl AudioEffect for ChorusFlanger {
         let flanger = self.pv.idx("mode") == 1;
         let trans = self.pv.v("transience") / 100.0;
         let ms = self.sr * 0.001;
-        let (fa, fr, sa, sr_) = (coef(0.5, self.sr), coef(20.0, self.sr), coef(30.0, self.sr), coef(200.0, self.sr));
+        let (fa, fr, sa, sr_) = (
+            coef(0.5, self.sr),
+            coef(20.0, self.sr),
+            coef(30.0, self.sr),
+            coef(200.0, self.sr),
+        );
         for i in 0..n {
             let mix = self.mix.tick();
             let width = self.width.tick();
@@ -102,7 +109,9 @@ impl AudioEffect for ChorusFlanger {
                 } else {
                     let mut acc = 0.0;
                     for v in 0..3 {
-                        let d = (15.0 + 20.0 * width * uni_sine(self.lfo.phase(off + v as f64 / 3.0))) * ms;
+                        let d = (15.0
+                            + 20.0 * width * uni_sine(self.lfo.phase(off + v as f64 / 3.0)))
+                            * ms;
                         acc += line.read(d);
                     }
                     let y = acc / 3.0;
@@ -116,7 +125,11 @@ impl AudioEffect for ChorusFlanger {
                     let a = x.abs();
                     let f = self.fast[ch].tick(fa, fr, a);
                     let s = self.slow[ch].tick(sa, sr_, a);
-                    let boost = if s > 1e-9 { ((f - s) / s).clamp(0.0, 2.0) } else { 0.0 };
+                    let boost = if s > 1e-9 {
+                        ((f - s) / s).clamp(0.0, 2.0)
+                    } else {
+                        0.0
+                    };
                     w *= 1.0 + trans * boost;
                 }
                 channels[ch][i] = x + mix * (w - x);
@@ -144,9 +157,30 @@ pub struct Flanger {
 
 impl Flanger {
     pub const PARAMS: &'static [ParamSpec] = &[
-        ParamSpec::log("initial_delay", "Initial Delay", 0.1, 20.0, 1.0, Unit::Milliseconds),
-        ParamSpec::log("final_delay", "Final Delay", 0.1, 20.0, 5.0, Unit::Milliseconds),
-        ParamSpec::new("stereo_phasing", "Stereo Phasing", 0.0, 180.0, 90.0, Unit::None),
+        ParamSpec::log(
+            "initial_delay",
+            "Initial Delay",
+            0.1,
+            20.0,
+            1.0,
+            Unit::Milliseconds,
+        ),
+        ParamSpec::log(
+            "final_delay",
+            "Final Delay",
+            0.1,
+            20.0,
+            5.0,
+            Unit::Milliseconds,
+        ),
+        ParamSpec::new(
+            "stereo_phasing",
+            "Stereo Phasing",
+            0.0,
+            180.0,
+            90.0,
+            Unit::None,
+        ),
         ParamSpec::new("feedback", "Feedback", -100.0, 100.0, 50.0, Unit::Percent),
         ParamSpec::log("rate", "Modulation Rate", 0.01, 10.0, 0.5, Unit::Hertz),
         ParamSpec::toggle("inverted", "Inverted", false),
@@ -205,7 +239,12 @@ impl AudioEffect for Flanger {
         let rate = self.pv.v("rate");
         let shape = |p: f64| if sine { uni_sine(p) } else { uni_tri(p) };
         for i in 0..n {
-            let (d0, d1, fb, mix) = (self.d0.tick(), self.d1.tick(), self.fb.tick(), self.mix.tick());
+            let (d0, d1, fb, mix) = (
+                self.d0.tick(),
+                self.d1.tick(),
+                self.fb.tick(),
+                self.mix.tick(),
+            );
             for ch in 0..nch {
                 let x = channels[ch][i];
                 let p = self.lfo.phase(if ch == 1 { phasing } else { 0.0 });
@@ -250,8 +289,22 @@ impl Phaser {
         ParamSpec::new("intensity", "Intensity", 0.0, 100.0, 100.0, Unit::Percent),
         ParamSpec::new("depth", "Depth", 0.0, 100.0, 70.0, Unit::Percent),
         ParamSpec::log("rate", "Modulation Rate", 0.01, 10.0, 0.5, Unit::Hertz),
-        ParamSpec::new("phase_diff", "Phase Difference", 0.0, 180.0, 90.0, Unit::None),
-        ParamSpec::log("upper_freq", "Upper Frequency", 100.0, 20000.0, 2500.0, Unit::Hertz),
+        ParamSpec::new(
+            "phase_diff",
+            "Phase Difference",
+            0.0,
+            180.0,
+            90.0,
+            Unit::None,
+        ),
+        ParamSpec::log(
+            "upper_freq",
+            "Upper Frequency",
+            100.0,
+            20000.0,
+            2500.0,
+            Unit::Hertz,
+        ),
         ParamSpec::new("feedback", "Feedback", -100.0, 100.0, 0.0, Unit::Percent),
         ParamSpec::new("mix", "Mix", 0.0, 100.0, 50.0, Unit::Percent),
         ParamSpec::new("output", "Output Gain", -24.0, 24.0, 0.0, Unit::Decibels),
@@ -283,7 +336,12 @@ impl Phaser {
         self.fb.set(0.9 * self.pv.v("feedback") / 100.0);
         self.out.set(db_to_gain(self.pv.v("output")));
         if snap {
-            for s in [&mut self.intensity, &mut self.mix, &mut self.fb, &mut self.out] {
+            for s in [
+                &mut self.intensity,
+                &mut self.mix,
+                &mut self.fb,
+                &mut self.out,
+            ] {
                 s.snap();
             }
         }
@@ -293,11 +351,18 @@ impl Phaser {
 impl AudioEffect for Phaser {
     param_plumbing!("phaser");
     fn reset(&mut self) {
-        self.ap.iter_mut().for_each(|a| a.iter_mut().for_each(AllPass1::reset));
+        self.ap
+            .iter_mut()
+            .for_each(|a| a.iter_mut().for_each(AllPass1::reset));
         self.fbs.iter_mut().for_each(|v| *v = 0.0);
         self.lfo.reset();
         self.counter = 0;
-        for s in [&mut self.intensity, &mut self.mix, &mut self.fb, &mut self.out] {
+        for s in [
+            &mut self.intensity,
+            &mut self.mix,
+            &mut self.fb,
+            &mut self.out,
+        ] {
             s.snap();
         }
     }
@@ -319,7 +384,12 @@ impl AudioEffect for Phaser {
                 }
             }
             self.counter = (self.counter + 1) % 8;
-            let (inten, mix, fb, out) = (self.intensity.tick(), self.mix.tick(), self.fb.tick() as f64, self.out.tick());
+            let (inten, mix, fb, out) = (
+                self.intensity.tick(),
+                self.mix.tick(),
+                self.fb.tick() as f64,
+                self.out.tick(),
+            );
             for ch in 0..nch {
                 let x = channels[ch][i];
                 let a = self.coefs[ch];
@@ -395,7 +465,14 @@ impl AnalogDelay {
         self.drive.set(1.0 + 4.0 * self.pv.v("trash") / 100.0);
         self.spread.set(self.pv.v("spread") / 100.0);
         if snap {
-            for s in [&mut self.time, &mut self.dry, &mut self.wet, &mut self.fb, &mut self.drive, &mut self.spread] {
+            for s in [
+                &mut self.time,
+                &mut self.dry,
+                &mut self.wet,
+                &mut self.fb,
+                &mut self.drive,
+                &mut self.spread,
+            ] {
                 s.snap();
             }
         }
@@ -407,7 +484,14 @@ impl AudioEffect for AnalogDelay {
     fn reset(&mut self) {
         self.lines.iter_mut().for_each(DelayLine::reset);
         self.lp.iter_mut().for_each(OnePole::reset);
-        for s in [&mut self.time, &mut self.dry, &mut self.wet, &mut self.fb, &mut self.drive, &mut self.spread] {
+        for s in [
+            &mut self.time,
+            &mut self.dry,
+            &mut self.wet,
+            &mut self.fb,
+            &mut self.drive,
+            &mut self.spread,
+        ] {
             s.snap();
         }
     }
@@ -418,7 +502,14 @@ impl AudioEffect for AnalogDelay {
         let cutoff = [6500.0, 5000.0, 3200.0][mode.min(2)];
         let a = OnePole::alpha(cutoff, self.sr);
         for i in 0..n {
-            let (t, dry, wet, fb, drive, spread) = (self.time.tick(), self.dry.tick(), self.wet.tick(), self.fb.tick(), self.drive.tick(), self.spread.tick());
+            let (t, dry, wet, fb, drive, spread) = (
+                self.time.tick(),
+                self.dry.tick(),
+                self.wet.tick(),
+                self.fb.tick(),
+                self.drive.tick(),
+                self.spread.tick(),
+            );
             for ch in 0..nch {
                 let x = channels[ch][i];
                 let side = match (nch, ch) {
@@ -445,8 +536,12 @@ impl AudioEffect for AnalogDelay {
 // ------------------------------------------------------------------------------- multitap delay
 
 const TAPS: usize = 4;
-const TAP_IDS: [[&str; 3]; TAPS] =
-    [["delay1", "feedback1", "level1"], ["delay2", "feedback2", "level2"], ["delay3", "feedback3", "level3"], ["delay4", "feedback4", "level4"]];
+const TAP_IDS: [[&str; 3]; TAPS] = [
+    ["delay1", "feedback1", "level1"],
+    ["delay2", "feedback2", "level2"],
+    ["delay3", "feedback3", "level3"],
+    ["delay4", "feedback4", "level4"],
+];
 
 /// Four independent feedback delay taps mixed into one wet signal.
 pub struct MultitapDelay {

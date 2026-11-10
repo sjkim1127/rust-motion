@@ -22,7 +22,18 @@ pub enum Curve {
 
 /// The sRGB transfer function (IEC 61966-2.1) as ICC parametric type 3.
 pub fn srgb_trc() -> Curve {
-    Curve::Parametric { kind: 3, p: [2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045, 0.0, 0.0] }
+    Curve::Parametric {
+        kind: 3,
+        p: [
+            2.4,
+            1.0 / 1.055,
+            0.055 / 1.055,
+            1.0 / 12.92,
+            0.04045,
+            0.0,
+            0.0,
+        ],
+    }
 }
 
 impl Curve {
@@ -44,7 +55,10 @@ impl Curve {
             Curve::Parametric { kind: 0, p } => (p[0] - 1.0).abs() < 1e-9,
             Curve::Table(t) => {
                 let n = t.len();
-                n < 2 || t.iter().enumerate().all(|(i, v)| (*v as f64 - i as f64 / (n - 1) as f64).abs() < 1.0 / 65535.0)
+                n < 2
+                    || t.iter()
+                        .enumerate()
+                        .all(|(i, v)| (*v as f64 - i as f64 / (n - 1) as f64).abs() < 1.0 / 65535.0)
             }
             _ => false,
         }
@@ -80,7 +94,8 @@ impl Curve {
                     mirror(y, |v| v.powf(1.0 / g))
                 }
             }
-            Curve::Parametric { kind, p } => para_inverse(*kind, p, y).unwrap_or_else(|| numeric_inverse(|x| para(*kind, p, x), y)),
+            Curve::Parametric { kind, p } => para_inverse(*kind, p, y)
+                .unwrap_or_else(|| numeric_inverse(|x| para(*kind, p, x), y)),
             Curve::Table(t) => table_inverse(t, y as f32) as f64,
         }
     }
@@ -96,7 +111,9 @@ impl Curve {
 
     /// Samples `n` evenly spaced points over `[0, 1]`.
     pub fn sample(&self, n: usize) -> Vec<f32> {
-        (0..n).map(|i| self.eval64(i as f64 / (n - 1) as f64) as f32).collect()
+        (0..n)
+            .map(|i| self.eval64(i as f64 / (n - 1) as f64) as f32)
+            .collect()
     }
 
     /// `true` when the curve never decreases over `[0, 1]`.
@@ -108,11 +125,19 @@ impl Curve {
 
 #[inline]
 fn mirror(x: f64, f: impl Fn(f64) -> f64) -> f64 {
-    if x < 0.0 { -f(-x) } else { f(x) }
+    if x < 0.0 {
+        -f(-x)
+    } else {
+        f(x)
+    }
 }
 
 fn pw(base: f64, g: f64) -> f64 {
-    if base <= 0.0 { 0.0 } else { base.powf(g) }
+    if base <= 0.0 {
+        0.0
+    } else {
+        base.powf(g)
+    }
 }
 
 fn para(kind: u16, p: &[f64; 7], x: f64) -> f64 {
@@ -165,13 +190,21 @@ fn para_inverse(kind: u16, p: &[f64; 7], y: f64) -> Option<f64> {
             if a == 0.0 {
                 return None;
             }
-            if y <= 0.0 { -b / a } else { (root(y) - b) / a }
+            if y <= 0.0 {
+                -b / a
+            } else {
+                (root(y) - b) / a
+            }
         }
         2 => {
             if a == 0.0 {
                 return None;
             }
-            if y <= c { -b / a } else { (root(y - c) - b) / a }
+            if y <= c {
+                -b / a
+            } else {
+                (root(y - c) - b) / a
+            }
         }
         3 => {
             if a == 0.0 {
@@ -244,13 +277,25 @@ fn table_inverse(t: &[f32], y: f32) -> f32 {
         return y;
     }
     let increasing = t[n - 1] >= t[0];
-    let (lo_v, hi_v) = if increasing { (t[0], t[n - 1]) } else { (t[n - 1], t[0]) };
+    let (lo_v, hi_v) = if increasing {
+        (t[0], t[n - 1])
+    } else {
+        (t[n - 1], t[0])
+    };
     if y <= lo_v {
         // Flat start: choose the last index still at the lowest value.
-        return if increasing { edge_index(t, true) } else { edge_index(t, false) };
+        return if increasing {
+            edge_index(t, true)
+        } else {
+            edge_index(t, false)
+        };
     }
     if y >= hi_v {
-        return if increasing { edge_index(t, false) } else { edge_index(t, true) };
+        return if increasing {
+            edge_index(t, false)
+        } else {
+            edge_index(t, true)
+        };
     }
     let (mut lo, mut hi) = (0usize, n - 1);
     while hi - lo > 1 {
@@ -262,7 +307,11 @@ fn table_inverse(t: &[f32], y: f32) -> f32 {
         }
     }
     let (a, b) = (t[lo], t[hi]);
-    let f = if (b - a).abs() > 1e-12 { (y - a) / (b - a) } else { 0.5 };
+    let f = if (b - a).abs() > 1e-12 {
+        (y - a) / (b - a)
+    } else {
+        0.5
+    };
     (lo as f32 + f) / (n - 1) as f32
 }
 
@@ -272,11 +321,17 @@ fn edge_index(t: &[f32], start: bool) -> f32 {
     let n = t.len();
     if start {
         let v = t[0];
-        let i = t.iter().position(|x| (*x - v).abs() > 1e-7).map_or(n - 1, |i| i - 1);
+        let i = t
+            .iter()
+            .position(|x| (*x - v).abs() > 1e-7)
+            .map_or(n - 1, |i| i - 1);
         i as f32 / (n - 1) as f32
     } else {
         let v = t[n - 1];
-        let i = t.iter().rposition(|x| (*x - v).abs() > 1e-7).map_or(0, |i| i + 1);
+        let i = t
+            .iter()
+            .rposition(|x| (*x - v).abs() > 1e-7)
+            .map_or(0, |i| i + 1);
         i as f32 / (n - 1) as f32
     }
 }
@@ -290,7 +345,11 @@ mod tests {
         let c = srgb_trc();
         for i in 0..=255 {
             let v = i as f64 / 255.0;
-            let want = if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+            let want = if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            };
             assert!((c.eval64(v) - want).abs() < 1e-12);
             assert!((c.eval_inverse64(want) - v).abs() < 1e-9);
         }
@@ -299,11 +358,23 @@ mod tests {
     #[test]
     fn parametric_inverses() {
         let curves = [
-            Curve::Parametric { kind: 0, p: [2.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
-            Curve::Parametric { kind: 1, p: [2.0, 0.9, 0.1, 0.0, 0.0, 0.0, 0.0] },
-            Curve::Parametric { kind: 2, p: [2.0, 0.9, 0.1, 0.05, 0.0, 0.0, 0.0] },
+            Curve::Parametric {
+                kind: 0,
+                p: [2.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            },
+            Curve::Parametric {
+                kind: 1,
+                p: [2.0, 0.9, 0.1, 0.0, 0.0, 0.0, 0.0],
+            },
+            Curve::Parametric {
+                kind: 2,
+                p: [2.0, 0.9, 0.1, 0.05, 0.0, 0.0, 0.0],
+            },
             srgb_trc(),
-            Curve::Parametric { kind: 4, p: [2.4, 0.9, 0.05, 0.08, 0.04, 0.01, 0.002] },
+            Curve::Parametric {
+                kind: 4,
+                p: [2.4, 0.9, 0.05, 0.08, 0.04, 0.01, 0.002],
+            },
             Curve::Gamma(1.8),
         ];
         for c in &curves {

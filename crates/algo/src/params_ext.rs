@@ -230,7 +230,16 @@ pub struct IrisPin {
 
 impl Default for IrisPin {
     fn default() -> Self {
-        IrisPin { x: 0.5, y: 0.5, radius_x: 0.35, radius_y: 0.25, angle: 0.0, roundness: 0.0, feather: 0.5, blur: 15.0 }
+        IrisPin {
+            x: 0.5,
+            y: 0.5,
+            radius_x: 0.35,
+            radius_y: 0.25,
+            angle: 0.0,
+            roundness: 0.0,
+            feather: 0.5,
+            blur: 15.0,
+        }
     }
 }
 
@@ -245,7 +254,11 @@ pub struct FieldPin {
 
 impl Default for FieldPin {
     fn default() -> Self {
-        FieldPin { x: 0.5, y: 0.5, blur: 15.0 }
+        FieldPin {
+            x: 0.5,
+            y: 0.5,
+            blur: 15.0,
+        }
     }
 }
 
@@ -264,7 +277,14 @@ pub struct SpinPin {
 
 impl Default for SpinPin {
     fn default() -> Self {
-        SpinPin { x: 0.5, y: 0.5, radius_x: 0.3, radius_y: 0.3, angle: 0.0, blur_angle: 15.0 }
+        SpinPin {
+            x: 0.5,
+            y: 0.5,
+            radius_x: 0.3,
+            radius_y: 0.3,
+            angle: 0.0,
+            blur_angle: 15.0,
+        }
     }
 }
 
@@ -281,6 +301,10 @@ pub struct BlurPath {
 
 impl Default for BlurPath {
     fn default() -> Self {
-        BlurPath { points: vec![[0.2, 0.5], [0.8, 0.5]], speed: 50.0, taper: 0.0 }
+        BlurPath {
+            points: vec![[0.2, 0.5], [0.8, 0.5]],
+            speed: 50.0,
+            taper: 0.0,
+        }
     }
 }

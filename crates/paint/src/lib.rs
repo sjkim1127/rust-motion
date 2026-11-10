@@ -12,7 +12,14 @@
 //! stroke buffer → pixels), [`presets`] (built-ins), [`mixer`] (Mixer Brush), [`replace`] (Color
 //! Replacement), [`retouch`] (sequential/accumulating helpers for the retouch tools).
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 use photocraft_geom::{Point, Rect};
 use photocraft_raster::Surface;
@@ -34,12 +41,15 @@ pub mod symmetry;
 pub mod tile;
 
 pub use brush::{
-    BrushPreset, BrushSettings, ColorDynamics, Control, DualBrush, Dynamic, MAX_BRUSH_SIZE, MAX_SCATTER, MaskMode, Pattern, PatternStyle, Pose, PresetCaptures,
-    Scattering, SectionLocks, ShapeDynamics, Smoothing, Texture, TipShape, Transfer,
+    BrushPreset, BrushSettings, ColorDynamics, Control, DualBrush, Dynamic, MaskMode, Pattern,
+    PatternStyle, Pose, PresetCaptures, Scattering, SectionLocks, ShapeDynamics, Smoothing,
+    Texture, TipShape, Transfer, MAX_BRUSH_SIZE, MAX_SCATTER,
 };
 pub use curve::ResponseCurve;
 pub use mixer::MixerSettings;
-pub use render::{BrushContext, StrokeRenderer, UnionLive, grid_center, grid_square, render_stroke};
+pub use render::{
+    grid_center, grid_square, render_stroke, BrushContext, StrokeRenderer, UnionLive,
+};
 pub use tile::{GrayTile, StoredTile};
 
 /// One input sample. Missing stylus data defaults to "mouse": full pressure, no tilt/rotation.
@@ -63,13 +73,27 @@ pub struct StrokePoint {
 
 impl Default for StrokePoint {
     fn default() -> Self {
-        Self { x: 0.0, y: 0.0, pressure: 1.0, tilt_x: 0.0, tilt_y: 0.0, rotation: 0.0, wheel: 1.0, time: 0.0 }
+        Self {
+            x: 0.0,
+            y: 0.0,
+            pressure: 1.0,
+            tilt_x: 0.0,
+            tilt_y: 0.0,
+            rotation: 0.0,
+            wheel: 1.0,
+            time: 0.0,
+        }
     }
 }
 
 impl StrokePoint {
     pub fn new(x: f64, y: f64, pressure: f32) -> Self {
-        Self { x, y, pressure, ..Default::default() }
+        Self {
+            x,
+            y,
+            pressure,
+            ..Default::default()
+        }
     }
 }
 
@@ -144,8 +168,19 @@ pub fn dabs(stroke: &Stroke) -> Vec<Dab> {
 /// at 40 px and checked at 100, 9 and 3 px): a solid core of radius `r0 · R`, then a Gaussian
 /// shoulder `exp(-((d − r0) / s)²)` of width `s · R`, both by hardness (0, 0.1, … 1). A soft tip
 /// reaches well past its nominal radius (hardness 0 is a Gaussian of σ ≈ 0.47 R: 8 % at 1.05 R).
-const TIP_SHAPE: [(f32, f32); 11] =
-    [(0.00, 0.664), (0.14, 0.58), (0.28, 0.50), (0.40, 0.44), (0.52, 0.36), (0.63, 0.29), (0.70, 0.24), (0.78, 0.19), (0.84, 0.15), (0.89, 0.11), (1.00, 0.0)];
+const TIP_SHAPE: [(f32, f32); 11] = [
+    (0.00, 0.664),
+    (0.14, 0.58),
+    (0.28, 0.50),
+    (0.40, 0.44),
+    (0.52, 0.36),
+    (0.63, 0.29),
+    (0.70, 0.24),
+    (0.78, 0.19),
+    (0.84, 0.15),
+    (0.89, 0.11),
+    (1.00, 0.0),
+];
 
 /// Photoshop's anti-aliased edge: the shoulder never narrows below this many pixels, and the core
 /// stays this far inside the radius (a hardness-100 tip is a disc with a ~1 px soft edge at any size).
@@ -154,16 +189,27 @@ const TIP_EDGE_PX: f32 = 1.2;
 /// The core radius and shoulder width (both in pixels) of a round tip of `radius` and `hardness`.
 #[inline]
 pub fn tip_shape(radius: f32, hardness: f32) -> (f32, f32) {
-    let h = if hardness.is_nan() { 0.0 } else { hardness.clamp(0.0, 1.0) } * 10.0;
+    let h = if hardness.is_nan() {
+        0.0
+    } else {
+        hardness.clamp(0.0, 1.0)
+    } * 10.0;
     let i = (h.floor() as usize).min(9);
     let t = h - i as f32;
     let (a, b) = (TIP_SHAPE[i], TIP_SHAPE[i + 1]);
     let (r0, s) = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
-    let radius = if radius.is_finite() { radius.max(0.0) } else { 0.0 };
+    let radius = if radius.is_finite() {
+        radius.max(0.0)
+    } else {
+        0.0
+    };
     // A tip of a few pixels keeps a narrower edge, so a small hard dab stays solid in the middle.
     // Never sharper than a quarter pixel, the small-tip supersampling step.
     let edge = TIP_EDGE_PX.min(0.3 * radius).max(0.25);
-    ((r0 * radius).min(radius - edge).max(0.0), (s * radius).max(edge).max(1e-3))
+    (
+        (r0 * radius).min(radius - edge).max(0.0),
+        (s * radius).max(edge).max(1e-3),
+    )
 }
 
 /// `exp(-u)` as `(1 − u/64)⁶⁴` by six squarings: within 1/255 of `exp` where it matters, exact
@@ -216,8 +262,20 @@ pub fn dab_coverage(d: f32, radius: f32, hardness: f32) -> f32 {
 
 /// Rasterize a stroke onto `target`, optionally limited by a selection (grayscale coverage surface).
 /// Returns the damaged rectangle.
-pub fn apply_stroke(target: &mut Surface, stroke: &Stroke, selection: Option<&Surface>, lock_transparency: bool) -> Rect {
-    render_stroke(target, &stroke.brush, &stroke.points, selection, lock_transparency, 1.0)
+pub fn apply_stroke(
+    target: &mut Surface,
+    stroke: &Stroke,
+    selection: Option<&Surface>,
+    lock_transparency: bool,
+) -> Rect {
+    render_stroke(
+        target,
+        &stroke.brush,
+        &stroke.points,
+        selection,
+        lock_transparency,
+        1.0,
+    )
 }
 
 /// Exponential moving-average smoothing of input points (Photoshop's "Smoothing" %, simplified).
@@ -228,7 +286,11 @@ pub fn smooth(points: &[StrokePoint], amount: f32) -> Vec<StrokePoint> {
     for p in points {
         let n = match cur {
             None => *p,
-            Some(c) => StrokePoint { x: c.x + (p.x - c.x) * a, y: c.y + (p.y - c.y) * a, ..*p },
+            Some(c) => StrokePoint {
+                x: c.x + (p.x - c.x) * a,
+                y: c.y + (p.y - c.y) * a,
+                ..*p
+            },
         };
         out.push(n);
         cur = Some(n);
@@ -246,8 +308,15 @@ mod tests {
 
     fn stroke(points: &[(f64, f64)], size: f32) -> Stroke {
         Stroke {
-            brush: BrushSettings { size, pressure_size: false, ..Default::default() },
-            points: points.iter().map(|&(x, y)| StrokePoint::new(x, y, 1.0)).collect(),
+            brush: BrushSettings {
+                size,
+                pressure_size: false,
+                ..Default::default()
+            },
+            points: points
+                .iter()
+                .map(|&(x, y)| StrokePoint::new(x, y, 1.0))
+                .collect(),
         }
     }
 
@@ -257,7 +326,15 @@ mod tests {
         let d = dabs(&s);
         // spacing 0.1 * 10px = 1px → ~101 dabs
         assert!((95..=105).contains(&d.len()), "{}", d.len());
-        let s = Stroke { brush: BrushSettings { spacing: 1.0, pressure_size: false, size: 10.0, ..Default::default() }, ..s };
+        let s = Stroke {
+            brush: BrushSettings {
+                spacing: 1.0,
+                pressure_size: false,
+                size: 10.0,
+                ..Default::default()
+            },
+            ..s
+        };
         assert_eq!(dabs(&s).len(), 11);
     }
 
@@ -275,7 +352,12 @@ mod tests {
     #[test]
     fn hard_brush_paints_solid_line() {
         let mut s = Surface::new(PixelFormat::RGBA8);
-        let dmg = apply_stroke(&mut s, &stroke(&[(10.0, 10.0), (90.0, 10.0)], 8.0), None, false);
+        let dmg = apply_stroke(
+            &mut s,
+            &stroke(&[(10.0, 10.0), (90.0, 10.0)], 8.0),
+            None,
+            false,
+        );
         assert!(dmg.contains(50, 10));
         assert_eq!(s.pixel(50, 10), vec![0.0, 0.0, 0.0, 1.0]);
         assert_eq!(s.pixel(50, 30)[3], 0.0);
@@ -296,7 +378,12 @@ mod tests {
         let mut s = Surface::new(PixelFormat::RGBA8);
         let mut sel = Surface::new(PixelFormat::GRAY8);
         sel.fill_rect(Rect::new(0, 0, 50, 100), &[1.0]);
-        apply_stroke(&mut s, &stroke(&[(10.0, 10.0), (90.0, 10.0)], 8.0), Some(&sel), false);
+        apply_stroke(
+            &mut s,
+            &stroke(&[(10.0, 10.0), (90.0, 10.0)], 8.0),
+            Some(&sel),
+            false,
+        );
         assert_eq!(s.pixel(20, 10)[3], 1.0);
         assert_eq!(s.pixel(70, 10)[3], 0.0);
     }
@@ -316,7 +403,12 @@ mod tests {
     fn lock_transparency_preserves_alpha() {
         let mut s = Surface::new(PixelFormat::RGBA8);
         s.fill_rect(Rect::new(0, 0, 50, 20), &[1.0, 1.0, 1.0, 1.0]);
-        apply_stroke(&mut s, &stroke(&[(10.0, 10.0), (90.0, 10.0)], 8.0), None, true);
+        apply_stroke(
+            &mut s,
+            &stroke(&[(10.0, 10.0), (90.0, 10.0)], 8.0),
+            None,
+            true,
+        );
         assert_eq!(s.pixel(20, 10), vec![0.0, 0.0, 0.0, 1.0]);
         assert_eq!(s.pixel(70, 10)[3], 0.0);
     }
@@ -333,7 +425,9 @@ mod tests {
 
     #[test]
     fn smoothing_keeps_endpoints() {
-        let pts: Vec<StrokePoint> = (0..20).map(|i| StrokePoint::new(i as f64, if i % 2 == 0 { 0.0 } else { 10.0 }, 1.0)).collect();
+        let pts: Vec<StrokePoint> = (0..20)
+            .map(|i| StrokePoint::new(i as f64, if i % 2 == 0 { 0.0 } else { 10.0 }, 1.0))
+            .collect();
         let s = smooth(&pts, 0.8);
         assert_eq!(s.first(), pts.first());
         assert_eq!(s.last(), pts.last());
@@ -344,7 +438,13 @@ mod tests {
 
     #[test]
     fn works_at_all_depths() {
-        for f in [PixelFormat::RGBA8, PixelFormat::RGBA16, PixelFormat::RGBA32F, PixelFormat::GRAYA8, PixelFormat::CMYKA8] {
+        for f in [
+            PixelFormat::RGBA8,
+            PixelFormat::RGBA16,
+            PixelFormat::RGBA32F,
+            PixelFormat::GRAYA8,
+            PixelFormat::CMYKA8,
+        ] {
             let mut s = Surface::new(f);
             let mut st = stroke(&[(5.0, 5.0), (40.0, 5.0)], 6.0);
             st.brush.color = [1.0, 1.0, 1.0, 1.0];

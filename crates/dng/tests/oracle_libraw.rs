@@ -7,8 +7,8 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+use rust_motion_dng::writer::{write, Compression, Layout, Options};
 use rust_motion_dng::Dng;
-use rust_motion_dng::writer::{Compression, Layout, Options, write};
 
 fn tool() -> Option<String> {
     let t = std::env::var("FILMCRAFT_UNPROCESSED_RAW").unwrap_or_else(|_| "unprocessed_raw".into());
@@ -45,7 +45,15 @@ fn pgm(b: &[u8]) -> Option<(usize, usize, Vec<u16>)> {
     }
     let (w, h): (usize, usize) = (fields[1].parse().ok()?, fields[2].parse().ok()?);
     let data = b.get(i + 1..)?;
-    Some((w, h, data.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes(*c)).collect()))
+    Some((
+        w,
+        h,
+        data.as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_be_bytes(*c))
+            .collect(),
+    ))
 }
 
 #[test]
@@ -54,7 +62,8 @@ fn libraw_reads_our_raw_samples() {
         eprintln!("SKIPPED: unprocessed_raw (LibRaw samples) not installed");
         return;
     };
-    let dir: PathBuf = std::env::temp_dir().join(format!("filmcraft-dng-oracle-{}", std::process::id()));
+    let dir: PathBuf =
+        std::env::temp_dir().join(format!("filmcraft-dng-oracle-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let (w, h) = (40, 26);
     let mut cases: Vec<(String, Options, u32)> = Vec::new();
@@ -62,7 +71,14 @@ fn libraw_reads_our_raw_samples() {
         for be in [false, true] {
             cases.push((
                 format!("u{bits}{}", if be { "be" } else { "le" }),
-                Options { width: w, height: h, bits, big_endian: be, layout: Layout::Strips { rows: 7 }, ..Default::default() },
+                Options {
+                    width: w,
+                    height: h,
+                    bits,
+                    big_endian: be,
+                    layout: Layout::Strips { rows: 7 },
+                    ..Default::default()
+                },
                 bits,
             ));
         }
@@ -73,8 +89,16 @@ fn libraw_reads_our_raw_samples() {
                 width: w,
                 height: h,
                 bits: 14,
-                layout: Layout::Tiles { width: 16, height: 16 },
-                compression: Compression::LosslessJpeg { predictor, components, restart_lines: 0, pt: 0 },
+                layout: Layout::Tiles {
+                    width: 16,
+                    height: 16,
+                },
+                compression: Compression::LosslessJpeg {
+                    predictor,
+                    components,
+                    restart_lines: 0,
+                    pt: 0,
+                },
                 ..Default::default()
             };
             cases.push((format!("lj{predictor}c{components}"), o, 14));
@@ -83,12 +107,21 @@ fn libraw_reads_our_raw_samples() {
     for (i, (name, o, bits)) in cases.iter().enumerate() {
         let px = picture(w, h, *bits, i as u32);
         let f = write(&px, o);
-        assert_eq!(Dng::parse(&f).unwrap().raw().unwrap().data, px, "{name}: ours");
+        assert_eq!(
+            Dng::parse(&f).unwrap().raw().unwrap().data,
+            px,
+            "{name}: ours"
+        );
         let path = dir.join(format!("{name}.dng"));
         std::fs::write(&path, &f).unwrap();
         let out = Command::new(&tool).arg("-q").arg(&path).output().unwrap();
-        assert!(out.status.success(), "{name}: {}", String::from_utf8_lossy(&out.stderr));
-        let (pw, ph, theirs) = pgm(&std::fs::read(dir.join(format!("{name}.dng.pgm"))).unwrap()).unwrap();
+        assert!(
+            out.status.success(),
+            "{name}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let (pw, ph, theirs) =
+            pgm(&std::fs::read(dir.join(format!("{name}.dng.pgm"))).unwrap()).unwrap();
         assert_eq!((pw, ph), (w, h), "{name}");
         assert_eq!(theirs, px, "{name}: LibRaw");
         eprintln!("{name}: LibRaw agrees");

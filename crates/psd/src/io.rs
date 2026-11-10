@@ -31,12 +31,20 @@ pub(crate) struct Reader<'a> {
 
 impl<'a> Reader<'a> {
     pub(crate) fn new(data: &'a [u8]) -> Self {
-        Reader { data, pos: 0, little: false }
+        Reader {
+            data,
+            pos: 0,
+            little: false,
+        }
     }
 
     /// A reader of little-endian integers (Photoshop data inside an Intel-order TIFF).
     pub(crate) fn new_little(data: &'a [u8]) -> Self {
-        Reader { data, pos: 0, little: true }
+        Reader {
+            data,
+            pos: 0,
+            little: true,
+        }
     }
 
     pub(crate) fn pos(&self) -> usize {
@@ -58,7 +66,10 @@ impl<'a> Reader<'a> {
 
     pub(crate) fn bytes(&mut self, n: usize) -> Result<&'a [u8]> {
         if n > self.remaining() {
-            return Err(PsdError::UnexpectedEof { offset: self.pos, needed: n - self.remaining() });
+            return Err(PsdError::UnexpectedEof {
+                offset: self.pos,
+                needed: n - self.remaining(),
+            });
         }
         let s = &self.data[self.pos..self.pos + n];
         self.pos += n;
@@ -67,13 +78,18 @@ impl<'a> Reader<'a> {
 
     /// Reads `n` bytes where `n` comes from a (possibly 64-bit) length field.
     pub(crate) fn bytes_u64(&mut self, n: u64) -> Result<&'a [u8]> {
-        let n = usize::try_from(n).map_err(|_| PsdError::LimitExceeded("length exceeds address space"))?;
+        let n = usize::try_from(n)
+            .map_err(|_| PsdError::LimitExceeded("length exceeds address space"))?;
         self.bytes(n)
     }
 
     pub(crate) fn sub(&mut self, n: u64) -> Result<Reader<'a>> {
         let little = self.little;
-        Ok(Reader { data: self.bytes_u64(n)?, pos: 0, little })
+        Ok(Reader {
+            data: self.bytes_u64(n)?,
+            pos: 0,
+            little,
+        })
     }
 
     pub(crate) fn skip(&mut self, n: usize) -> Result<()> {
@@ -92,36 +108,68 @@ impl<'a> Reader<'a> {
     }
     pub(crate) fn u16(&mut self) -> Result<u16> {
         let b = self.array()?;
-        Ok(if self.little { u16::from_le_bytes(b) } else { u16::from_be_bytes(b) })
+        Ok(if self.little {
+            u16::from_le_bytes(b)
+        } else {
+            u16::from_be_bytes(b)
+        })
     }
     pub(crate) fn i16(&mut self) -> Result<i16> {
         let b = self.array()?;
-        Ok(if self.little { i16::from_le_bytes(b) } else { i16::from_be_bytes(b) })
+        Ok(if self.little {
+            i16::from_le_bytes(b)
+        } else {
+            i16::from_be_bytes(b)
+        })
     }
     pub(crate) fn u32(&mut self) -> Result<u32> {
         let b = self.array()?;
-        Ok(if self.little { u32::from_le_bytes(b) } else { u32::from_be_bytes(b) })
+        Ok(if self.little {
+            u32::from_le_bytes(b)
+        } else {
+            u32::from_be_bytes(b)
+        })
     }
     pub(crate) fn i32(&mut self) -> Result<i32> {
         let b = self.array()?;
-        Ok(if self.little { i32::from_le_bytes(b) } else { i32::from_be_bytes(b) })
+        Ok(if self.little {
+            i32::from_le_bytes(b)
+        } else {
+            i32::from_be_bytes(b)
+        })
     }
     pub(crate) fn u64(&mut self) -> Result<u64> {
         let b = self.array()?;
-        Ok(if self.little { u64::from_le_bytes(b) } else { u64::from_be_bytes(b) })
+        Ok(if self.little {
+            u64::from_le_bytes(b)
+        } else {
+            u64::from_be_bytes(b)
+        })
     }
     pub(crate) fn i64(&mut self) -> Result<i64> {
         let b = self.array()?;
-        Ok(if self.little { i64::from_le_bytes(b) } else { i64::from_be_bytes(b) })
+        Ok(if self.little {
+            i64::from_le_bytes(b)
+        } else {
+            i64::from_be_bytes(b)
+        })
     }
     pub(crate) fn f64(&mut self) -> Result<f64> {
         let b = self.array()?;
-        Ok(if self.little { f64::from_le_bytes(b) } else { f64::from_be_bytes(b) })
+        Ok(if self.little {
+            f64::from_le_bytes(b)
+        } else {
+            f64::from_be_bytes(b)
+        })
     }
 
     /// Reads a length field that is 4 bytes, or 8 bytes when `long`.
     pub(crate) fn len_field(&mut self, long: bool) -> Result<u64> {
-        if long { self.u64() } else { Ok(u64::from(self.u32()?)) }
+        if long {
+            self.u64()
+        } else {
+            Ok(u64::from(self.u32()?))
+        }
     }
 
     /// Returns `Err` unless `count * min_item_size` bytes remain. Used to
@@ -129,7 +177,10 @@ impl<'a> Reader<'a> {
     pub(crate) fn check_count(&self, count: u64, min_item_size: u64) -> Result<()> {
         let need = count.saturating_mul(min_item_size);
         if need > self.remaining() as u64 {
-            return Err(PsdError::UnexpectedEof { offset: self.pos, needed: usize::try_from(need - self.remaining() as u64).unwrap_or(usize::MAX) });
+            return Err(PsdError::UnexpectedEof {
+                offset: self.pos,
+                needed: usize::try_from(need - self.remaining() as u64).unwrap_or(usize::MAX),
+            });
         }
         Ok(())
     }
@@ -186,7 +237,9 @@ impl WriteExt for Vec<u8> {
         if long {
             self.put_u64(v);
         } else {
-            let v = u32::try_from(v).map_err(|_| PsdError::LimitExceeded("section too large for 32-bit length (use PSB)"))?;
+            let v = u32::try_from(v).map_err(|_| {
+                PsdError::LimitExceeded("section too large for 32-bit length (use PSB)")
+            })?;
             self.put_u32(v);
         }
         Ok(())
@@ -202,7 +255,9 @@ impl WriteExt for Vec<u8> {
         if long {
             self[at..at + 8].copy_from_slice(&n.to_be_bytes());
         } else {
-            let v = u32::try_from(n).map_err(|_| PsdError::LimitExceeded("section too large for 32-bit length (use PSB)"))?;
+            let v = u32::try_from(n).map_err(|_| {
+                PsdError::LimitExceeded("section too large for 32-bit length (use PSB)")
+            })?;
             self[at..at + 4].copy_from_slice(&v.to_be_bytes());
         }
         Ok(())
@@ -239,7 +294,16 @@ pub(crate) fn decode_legacy_name(b: &[u8]) -> String {
 
 /// Encodes a name for a legacy Pascal field: non-ASCII chars become `?`.
 pub(crate) fn encode_legacy_name(s: &str) -> Vec<u8> {
-    s.chars().map(|c| if c.is_ascii() && !c.is_ascii_control() { c as u8 } else { b'?' }).take(255).collect()
+    s.chars()
+        .map(|c| {
+            if c.is_ascii() && !c.is_ascii_control() {
+                c as u8
+            } else {
+                b'?'
+            }
+        })
+        .take(255)
+        .collect()
 }
 
 /// Reads a Photoshop Unicode string: u32 code-unit count + UTF-16BE units.
@@ -311,7 +375,14 @@ mod tests {
 
     #[test]
     fn pascal_padding() {
-        for (name, align, total) in [(&b""[..], 2, 2), (&b"a"[..], 2, 2), (&b"ab"[..], 2, 4), (&b""[..], 4, 4), (&b"abc"[..], 4, 4), (&b"abcd"[..], 4, 8)] {
+        for (name, align, total) in [
+            (&b""[..], 2, 2),
+            (&b"a"[..], 2, 2),
+            (&b"ab"[..], 2, 4),
+            (&b""[..], 4, 4),
+            (&b"abc"[..], 4, 4),
+            (&b"abcd"[..], 4, 8),
+        ] {
             let mut v = Vec::new();
             write_pascal(&mut v, name, align);
             assert_eq!(v.len(), total, "{name:?} align {align}");

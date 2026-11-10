@@ -17,7 +17,7 @@ use photocraft_geom::Rect;
 use photocraft_raster::Surface;
 use serde::{Deserialize, Serialize};
 
-use crate::transform::{Homography, Interp, warp_surface};
+use crate::transform::{warp_surface, Homography, Interp};
 
 type V3 = [f64; 3];
 
@@ -34,7 +34,11 @@ fn dot(a: V3, b: V3) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 fn cross(a: V3, b: V3) -> V3 {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 fn norm(a: V3) -> V3 {
     mul(a, 1.0 / dot(a, a).sqrt().max(1e-300))
@@ -87,7 +91,10 @@ impl VpPlane {
         if v1[2].abs() < 1e-9 || v2[2].abs() < 1e-9 {
             return None;
         }
-        let (a, b) = ([v1[0] / v1[2] - c[0], v1[1] / v1[2] - c[1]], [v2[0] / v2[2] - c[0], v2[1] / v2[2] - c[1]]);
+        let (a, b) = (
+            [v1[0] / v1[2] - c[0], v1[1] / v1[2] - c[1]],
+            [v2[0] / v2[2] - c[0], v2[1] / v2[2] - c[1]],
+        );
         let f2 = -(a[0] * b[0] + a[1] * b[1]);
         (f2 > 1.0).then(|| f2.sqrt())
     }
@@ -99,7 +106,11 @@ impl VpPlane {
         // Vanishing directions (or the edge directions when they're parallel in the image).
         let dir = |a: [f64; 2], b: [f64; 2], cc: [f64; 2], d: [f64; 2]| -> V3 {
             let v = meet(a, b, cc, d);
-            if v[2].abs() < 1e-9 * (v[0].abs() + v[1].abs()).max(1.0) { norm([v[0], v[1], 0.0]) } else { norm(ray([v[0] / v[2], v[1] / v[2]])) }
+            if v[2].abs() < 1e-9 * (v[0].abs() + v[1].abs()).max(1.0) {
+                norm([v[0], v[1], 0.0])
+            } else {
+                norm(ray([v[0] / v[2], v[1] / v[2]]))
+            }
         };
         let d1 = dir(q[0], q[1], q[3], q[2]);
         let d2 = dir(q[0], q[3], q[1], q[2]);
@@ -112,7 +123,11 @@ impl VpPlane {
             let lam = 1.0 / dot(n, r).abs().max(1e-9);
             mul(r, lam)
         });
-        Lifted { focal: f, center: c, pts }
+        Lifted {
+            focal: f,
+            center: c,
+            pts,
+        }
     }
 
     /// Turn of each corner (`sin` of the angle between consecutive edges, positive when the
@@ -142,7 +157,9 @@ impl VpPlane {
     /// come from a camera centred at `center` (or with a corner sharper than 10°), else
     /// [`PlaneCheck::Valid`].
     pub fn check(&self, center: [f64; 2]) -> PlaneCheck {
-        let Some(t) = self.turns() else { return PlaneCheck::Invalid };
+        let Some(t) = self.turns() else {
+            return PlaneCheck::Invalid;
+        };
         let same_sign = t.iter().all(|v| *v > 0.0) || t.iter().all(|v| *v < 0.0);
         let min = t.iter().fold(f64::MAX, |m, v| m.min(v.abs()));
         if !same_sign || min < 1f64.to_radians().sin() || self.homography().is_none() {
@@ -168,8 +185,17 @@ impl VpPlane {
         if self.turns().is_some_and(|t| t.iter().sum::<f64>() < 0.0) {
             q = [q[0], q[3], q[2], q[1]];
         }
-        let first = (0..4).min_by(|&a, &b| (q[a][0] + q[a][1]).total_cmp(&(q[b][0] + q[b][1]))).unwrap_or(0);
-        VpPlane { corners: [q[first], q[(first + 1) % 4], q[(first + 2) % 4], q[(first + 3) % 4]] }
+        let first = (0..4)
+            .min_by(|&a, &b| (q[a][0] + q[a][1]).total_cmp(&(q[b][0] + q[b][1])))
+            .unwrap_or(0);
+        VpPlane {
+            corners: [
+                q[first],
+                q[(first + 1) % 4],
+                q[(first + 2) % 4],
+                q[(first + 3) % 4],
+            ],
+        }
     }
 }
 
@@ -185,12 +211,20 @@ pub enum PlaneCheck {
 
 impl Lifted {
     pub fn project(&self, x: V3) -> Option<[f64; 2]> {
-        (x[2] > 1e-9).then(|| [self.center[0] + self.focal * x[0] / x[2], self.center[1] + self.focal * x[1] / x[2]])
+        (x[2] > 1e-9).then(|| {
+            [
+                self.center[0] + self.focal * x[0] / x[2],
+                self.center[1] + self.focal * x[1] / x[2],
+            ]
+        })
     }
     /// Metric side lengths (u along top edge, v along left edge).
     pub fn lengths(&self) -> (f64, f64) {
         let l = |a: V3, b: V3| dot(sub(a, b), sub(a, b)).sqrt();
-        ((l(self.pts[0], self.pts[1]) + l(self.pts[3], self.pts[2])) / 2.0, (l(self.pts[0], self.pts[3]) + l(self.pts[1], self.pts[2])) / 2.0)
+        (
+            (l(self.pts[0], self.pts[1]) + l(self.pts[3], self.pts[2])) / 2.0,
+            (l(self.pts[0], self.pts[3]) + l(self.pts[1], self.pts[2])) / 2.0,
+        )
     }
 }
 
@@ -205,8 +239,15 @@ pub struct Scene {
 impl Scene {
     /// Focal length from the first plane (or `fallback` px when it is fronto-parallel).
     pub fn new(first: VpPlane, center: [f64; 2], focal: Option<f64>, fallback: f64) -> Scene {
-        let f = focal.filter(|f| *f > 1.0).or_else(|| first.focal(center)).unwrap_or(fallback);
-        Scene { planes: vec![first], focal: f, center }
+        let f = focal
+            .filter(|f| *f > 1.0)
+            .or_else(|| first.focal(center))
+            .unwrap_or(fallback);
+        Scene {
+            planes: vec![first],
+            focal: f,
+            center,
+        }
     }
 
     pub fn lifted(&self, i: usize) -> Lifted {
@@ -237,9 +278,16 @@ impl Scene {
         let mut best: Option<(f64, [[f64; 2]; 4])> = None;
         for sgn in [1.0, -1.0] {
             let (s, c) = (sgn * th).sin_cos();
-            let rot = add(add(mul(out, c), mul(cross(axis, out), s)), mul(axis, dot(axis, out) * (1.0 - c)));
+            let rot = add(
+                add(mul(out, c), mul(cross(axis, out), s)),
+                mul(axis, dot(axis, out) * (1.0 - c)),
+            );
             let (a2, b2) = (add(a, mul(rot, len)), add(b, mul(rot, len)));
-            let (Some(pa), Some(pb), Some(pa2), Some(pb2)) = (lf.project(a), lf.project(b), lf.project(a2), lf.project(b2)) else { continue };
+            let (Some(pa), Some(pb), Some(pa2), Some(pb2)) =
+                (lf.project(a), lf.project(b), lf.project(a2), lf.project(b2))
+            else {
+                continue;
+            };
             let mut n2 = norm(cross(sub(b, a), sub(a2, a)));
             if dot(n2, a) > 0.0 {
                 n2 = mul(n2, -1.0);
@@ -271,23 +319,35 @@ impl Scene {
     /// The plane whose quad contains image point `p`.
     pub fn plane_at(&self, p: [f64; 2]) -> Option<usize> {
         (0..self.planes.len()).rev().find(|&i| {
-            self.planes[i].homography().and_then(|h| h.inverse()).is_some_and(|inv| {
-                let (u, v) = inv.apply(p[0], p[1]);
-                (0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v)
-            })
+            self.planes[i]
+                .homography()
+                .and_then(|h| h.inverse())
+                .is_some_and(|inv| {
+                    let (u, v) = inv.apply(p[0], p[1]);
+                    (0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v)
+                })
         })
     }
 }
 
 /// Coverage mask (0/1 surface values) of a plane quad over `area`.
 fn quad_mask(h: &Homography, area: Rect) -> Vec<f32> {
-    let Some(inv) = h.inverse() else { return vec![0.0; (area.width() * area.height()) as usize] };
+    let Some(inv) = h.inverse() else {
+        return vec![0.0; (area.width() * area.height()) as usize];
+    };
     let w = area.width() as usize;
     (0..(area.width() * area.height()) as usize)
         .map(|i| {
-            let (x, y) = (area.x0 as f64 + (i % w) as f64 + 0.5, area.y0 as f64 + (i / w) as f64 + 0.5);
+            let (x, y) = (
+                area.x0 as f64 + (i % w) as f64 + 0.5,
+                area.y0 as f64 + (i / w) as f64 + 0.5,
+            );
             let (u, v) = inv.apply(x, y);
-            if (0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v) { 1.0 } else { 0.0 }
+            if (0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v) {
+                1.0
+            } else {
+                0.0
+            }
         })
         .collect()
 }
@@ -295,8 +355,17 @@ fn quad_mask(h: &Homography, area: Rect) -> Vec<f32> {
 /// Pastes `src` (content in `src_rect`) onto plane `i` with its top-left at plane coordinates
 /// `at` (0..1) and its width `width` (fraction of the plane's width), aspect preserved in the
 /// plane's metric. Returns the warped image clipped to the plane (transparent elsewhere).
-pub fn paste(scene: &Scene, i: usize, src: &Surface, src_rect: Rect, at: [f64; 2], width: f64) -> Result<Option<Surface>, photocraft_raster::AllocationError> {
-    let Some((h, lu, lv)) = scene.frame(i) else { return Ok(None) };
+pub fn paste(
+    scene: &Scene,
+    i: usize,
+    src: &Surface,
+    src_rect: Rect,
+    at: [f64; 2],
+    width: f64,
+) -> Result<Option<Surface>, photocraft_raster::AllocationError> {
+    let Some((h, lu, lv)) = scene.frame(i) else {
+        return Ok(None);
+    };
     let (sw, sh) = (src_rect.width() as f64, src_rect.height() as f64);
     if sw <= 0.0 || sh <= 0.0 {
         return Ok(None);
@@ -304,7 +373,17 @@ pub fn paste(scene: &Scene, i: usize, src: &Surface, src_rect: Rect, at: [f64; 2
     // Source px → plane (u, v): u spans `width`, v keeps the metric aspect.
     let su = width / sw;
     let sv = width * lu / lv / sw;
-    let to_plane = Homography([su, 0.0, at[0] - src_rect.x0 as f64 * su, 0.0, sv, at[1] - src_rect.y0 as f64 * sv, 0.0, 0.0, 1.0]);
+    let to_plane = Homography([
+        su,
+        0.0,
+        at[0] - src_rect.x0 as f64 * su,
+        0.0,
+        sv,
+        at[1] - src_rect.y0 as f64 * sv,
+        0.0,
+        0.0,
+        1.0,
+    ]);
     let full = h.mul(&to_plane);
     let mut out = warp_surface(src, src_rect, &full, Interp::Bicubic)?;
     // Clip to the plane.
@@ -327,11 +406,27 @@ pub fn paste(scene: &Scene, i: usize, src: &Surface, src_rect: Rect, at: [f64; 2
 /// Perspective clone stamp: one stroke of dabs at image points `points` on the destination
 /// plane, copying from `source` (image px) with the offset fixed in plane-metric units at the
 /// first dab. `size` is the brush diameter in px at the first dab; `hardness` 0..=1.
-pub fn clone_stroke(scene: &Scene, surf: &mut Surface, source: [f64; 2], points: &[[f64; 2]], size: f64, hardness: f64, opacity: f32) -> usize {
-    let Some(first) = points.first() else { return 0 };
-    let (Some(ps), Some(pd)) = (scene.plane_at(source), scene.plane_at(*first)) else { return 0 };
-    let (Some((hs, lus, lvs)), Some((hd, lud, lvd))) = (scene.frame(ps), scene.frame(pd)) else { return 0 };
-    let (Some(hs_inv), Some(hd_inv)) = (hs.inverse(), hd.inverse()) else { return 0 };
+pub fn clone_stroke(
+    scene: &Scene,
+    surf: &mut Surface,
+    source: [f64; 2],
+    points: &[[f64; 2]],
+    size: f64,
+    hardness: f64,
+    opacity: f32,
+) -> usize {
+    let Some(first) = points.first() else {
+        return 0;
+    };
+    let (Some(ps), Some(pd)) = (scene.plane_at(source), scene.plane_at(*first)) else {
+        return 0;
+    };
+    let (Some((hs, lus, lvs)), Some((hd, lud, lvd))) = (scene.frame(ps), scene.frame(pd)) else {
+        return 0;
+    };
+    let (Some(hs_inv), Some(hd_inv)) = (hs.inverse(), hd.inverse()) else {
+        return 0;
+    };
     let metric = |inv: &Homography, lu: f64, lv: f64, p: [f64; 2]| {
         let (u, v) = inv.apply(p[0], p[1]);
         [u * lu, v * lv]
@@ -356,7 +451,12 @@ pub fn clone_stroke(scene: &Scene, surf: &mut Surface, source: [f64; 2], points:
             let (x, y) = hd.apply(u, v);
             bb = [bb[0].min(x), bb[1].min(y), bb[2].max(x), bb[3].max(y)];
         }
-        let area = Rect::new(bb[0].floor() as i32, bb[1].floor() as i32, (bb[2].ceil() as i32).saturating_add(1), (bb[3].ceil() as i32).saturating_add(1));
+        let area = Rect::new(
+            bb[0].floor() as i32,
+            bb[1].floor() as i32,
+            (bb[2].ceil() as i32).saturating_add(1),
+            (bb[3].ceil() as i32).saturating_add(1),
+        );
         if area.is_empty() || area.width() > 4096 || area.height() > 4096 {
             continue;
         }
@@ -364,14 +464,21 @@ pub fn clone_stroke(scene: &Scene, surf: &mut Surface, source: [f64; 2], points:
         let w = area.width() as usize;
         let mut changed = false;
         for (i, px) in data.chunks_exact_mut(n).enumerate() {
-            let (x, y) = (area.x0 as f64 + (i % w) as f64 + 0.5, area.y0 as f64 + (i / w) as f64 + 0.5);
+            let (x, y) = (
+                area.x0 as f64 + (i % w) as f64 + 0.5,
+                area.y0 as f64 + (i / w) as f64 + 0.5,
+            );
             let m = metric(&hd_inv, lud, lvd, [x, y]);
             let d = (m[0] - mc[0]).hypot(m[1] - mc[1]) / r_m;
             if d >= 1.0 {
                 continue;
             }
             let hard = hardness.clamp(0.0, 0.99);
-            let fall = if d <= hard { 1.0 } else { 1.0 - (d - hard) / (1.0 - hard) };
+            let fall = if d <= hard {
+                1.0
+            } else {
+                1.0 - (d - hard) / (1.0 - hard)
+            };
             let k = (fall * fall * (3.0 - 2.0 * fall)) as f32 * opacity;
             // Source pixel at the same metric offset.
             let sm = [m[0] + offset[0], m[1] + offset[1]];
@@ -394,7 +501,12 @@ fn sample(s: &Surface, x: f64, y: f64, n: usize) -> Vec<f32> {
     let (x0, y0) = (x.floor() as i32, y.floor() as i32);
     let (tx, ty) = ((x - x0 as f64) as f32, (y - y0 as f64) as f32);
     let r = s.read_region(Rect::new(x0, y0, x0 + 2, y0 + 2));
-    (0..n).map(|c| (r[c] * (1.0 - tx) + r[n + c] * tx) * (1.0 - ty) + (r[2 * n + c] * (1.0 - tx) + r[3 * n + c] * tx) * ty).collect()
+    (0..n)
+        .map(|c| {
+            (r[c] * (1.0 - tx) + r[n + c] * tx) * (1.0 - ty)
+                + (r[2 * n + c] * (1.0 - tx) + r[3 * n + c] * tx) * ty
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -416,7 +528,13 @@ mod tests {
             let (s2, c2) = ry.sin_cos();
             [c2 * q[0] + s2 * q[2], q[1], -s2 * q[0] + c2 * q[2]]
         };
-        let corners = [[-1.0, -0.5, 0.0], [1.0, -0.5, 0.0], [1.0, 0.5, 0.0], [-1.0, 0.5, 0.0]].map(|p: V3| project(f, c, add(rot(p), [0.0, 0.0, 4.0])));
+        let corners = [
+            [-1.0, -0.5, 0.0],
+            [1.0, -0.5, 0.0],
+            [1.0, 0.5, 0.0],
+            [-1.0, 0.5, 0.0],
+        ]
+        .map(|p: V3| project(f, c, add(rot(p), [0.0, 0.0, 4.0])));
         VpPlane { corners }
     }
 
@@ -434,18 +552,39 @@ mod tests {
     fn plane_check_and_corner_order() {
         let c = [400.0, 300.0];
         assert_eq!(floor_quad(500.0, c).check(c), PlaneCheck::Valid);
-        let square = VpPlane { corners: [[10.0, 10.0], [110.0, 10.0], [110.0, 110.0], [10.0, 110.0]] };
+        let square = VpPlane {
+            corners: [[10.0, 10.0], [110.0, 10.0], [110.0, 110.0], [10.0, 110.0]],
+        };
         assert_eq!(square.check(c), PlaneCheck::Valid, "fronto-parallel");
-        let bowtie = VpPlane { corners: [[10.0, 10.0], [110.0, 110.0], [110.0, 10.0], [10.0, 110.0]] };
+        let bowtie = VpPlane {
+            corners: [[10.0, 10.0], [110.0, 110.0], [110.0, 10.0], [10.0, 110.0]],
+        };
         assert_eq!(bowtie.check(c), PlaneCheck::Invalid);
-        let dent = VpPlane { corners: [[10.0, 10.0], [110.0, 10.0], [40.0, 40.0], [10.0, 110.0]] };
+        let dent = VpPlane {
+            corners: [[10.0, 10.0], [110.0, 10.0], [40.0, 40.0], [10.0, 110.0]],
+        };
         assert_eq!(dent.check(c), PlaneCheck::Invalid, "concave");
-        let sliver = VpPlane { corners: [[10.0, 10.0], [300.0, 10.0], [300.0, 40.0], [200.0, 40.0]] };
-        assert_eq!(sliver.check(c), PlaneCheck::Questionable, "a corner sharper than 10°");
-        let nan = VpPlane { corners: [[f64::NAN, 10.0], [110.0, 10.0], [110.0, 110.0], [10.0, 110.0]] };
+        let sliver = VpPlane {
+            corners: [[10.0, 10.0], [300.0, 10.0], [300.0, 40.0], [200.0, 40.0]],
+        };
+        assert_eq!(
+            sliver.check(c),
+            PlaneCheck::Questionable,
+            "a corner sharper than 10°"
+        );
+        let nan = VpPlane {
+            corners: [
+                [f64::NAN, 10.0],
+                [110.0, 10.0],
+                [110.0, 110.0],
+                [10.0, 110.0],
+            ],
+        };
         assert_eq!(nan.check(c), PlaneCheck::Invalid);
         // Clicked counter-clockwise from the bottom-right: clockwise from the top-left.
-        let ccw = VpPlane { corners: [[110.0, 110.0], [110.0, 10.0], [10.0, 10.0], [10.0, 110.0]] };
+        let ccw = VpPlane {
+            corners: [[110.0, 110.0], [110.0, 10.0], [10.0, 10.0], [10.0, 110.0]],
+        };
         assert_eq!(ccw.normalized(), square);
     }
 
@@ -456,7 +595,10 @@ mod tests {
         let k = sc.tear_off(0, Edge::Top, 90.0, 1.0).unwrap();
         let p = &sc.planes[k];
         // Shared edge.
-        assert!((p.corners[3][0] - sc.planes[0].corners[0][0]).abs() < 1e-6 && (p.corners[2][0] - sc.planes[0].corners[1][0]).abs() < 1e-6);
+        assert!(
+            (p.corners[3][0] - sc.planes[0].corners[0][0]).abs() < 1e-6
+                && (p.corners[2][0] - sc.planes[0].corners[1][0]).abs() < 1e-6
+        );
         // In 3-D the new plane is perpendicular.
         let (a, b) = (sc.lifted(0), sc.lifted(k));
         let n1 = norm(cross(sub(a.pts[1], a.pts[0]), sub(a.pts[3], a.pts[0])));
@@ -470,7 +612,9 @@ mod tests {
         let sc = Scene::new(floor_quad(500.0, c), c, None, 800.0);
         let mut img = Surface::new(PixelFormat::RGBA8);
         img.fill_rect(Rect::new(0, 0, 100, 50), &[1.0, 0.0, 0.0, 1.0]);
-        let out = paste(&sc, 0, &img, Rect::new(0, 0, 100, 50), [0.25, 0.25], 0.5).unwrap().unwrap();
+        let out = paste(&sc, 0, &img, Rect::new(0, 0, 100, 50), [0.25, 0.25], 0.5)
+            .unwrap()
+            .unwrap();
         // The pasted rectangle lands inside the plane, around plane (0.5, 0.5).
         let h = sc.planes[0].homography().unwrap();
         let (x, y) = h.apply(0.5, 0.5);
@@ -481,10 +625,17 @@ mod tests {
         let mut s = Surface::new(PixelFormat::RGBA8);
         s.fill_rect(Rect::new(0, 0, 800, 600), &[0.2, 0.2, 0.2, 1.0]);
         let (sx, sy) = h.apply(0.5, 0.8);
-        s.fill_rect(Rect::new(sx as i32 - 6, sy as i32 - 6, sx as i32 + 6, sy as i32 + 6), &[1.0, 0.0, 0.0, 1.0]);
+        s.fill_rect(
+            Rect::new(sx as i32 - 6, sy as i32 - 6, sx as i32 + 6, sy as i32 + 6),
+            &[1.0, 0.0, 0.0, 1.0],
+        );
         let (dx, dy) = h.apply(0.5, 0.3);
         let n = clone_stroke(&sc, &mut s, [sx, sy], &[[dx, dy]], 10.0, 0.8, 1.0);
         assert_eq!(n, 1);
-        assert!(s.rgba(dx as i32, dy as i32)[0] > 0.8, "{:?}", s.rgba(dx as i32, dy as i32));
+        assert!(
+            s.rgba(dx as i32, dy as i32)[0] > 0.8,
+            "{:?}",
+            s.rgba(dx as i32, dy as i32)
+        );
     }
 }

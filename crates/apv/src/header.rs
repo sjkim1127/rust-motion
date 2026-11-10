@@ -144,7 +144,8 @@ pub fn parse_au_pbus(data: &[u8]) -> Result<Vec<PbuSlice<'_>>> {
     let mut pbus = Vec::new();
     while pos < au.len() {
         let sz_bytes = au.get(pos..pos + 4).ok_or(Error::Truncated)?;
-        let pbu_size = u32::from_be_bytes([sz_bytes[0], sz_bytes[1], sz_bytes[2], sz_bytes[3]]) as usize;
+        let pbu_size =
+            u32::from_be_bytes([sz_bytes[0], sz_bytes[1], sz_bytes[2], sz_bytes[3]]) as usize;
         if pbu_size == 0 || pbu_size == 0xFFFF_FFFF {
             return Err(Error::Invalid("invalid pbu_size"));
         }
@@ -166,7 +167,11 @@ pub fn parse_au_pbus(data: &[u8]) -> Result<Vec<PbuSlice<'_>>> {
         if group_id == 0xFFFF || (group_id == 0 && pbu_type <= 64) {
             return Err(Error::Invalid("invalid PBU group_id"));
         }
-        pbus.push(PbuSlice { pbu_type, group_id, payload: &pbu[4..] });
+        pbus.push(PbuSlice {
+            pbu_type,
+            group_id,
+            payload: &pbu[4..],
+        });
     }
     Ok(pbus)
 }
@@ -208,7 +213,8 @@ pub fn parse_frame_header(payload: &[u8]) -> Result<Option<FrameHeader>> {
     if width == 0 || height == 0 || width > MAX_DIMENSION || height > MAX_DIMENSION {
         return Err(Error::Invalid("unsupported frame dimensions"));
     }
-    let chroma = ChromaFormat::from_idc(chroma_format_idc).ok_or(Error::Invalid("invalid chroma_format_idc"))?;
+    let chroma = ChromaFormat::from_idc(chroma_format_idc)
+        .ok_or(Error::Invalid("invalid chroma_format_idc"))?;
     if chroma == ChromaFormat::Yuv422 && !width.is_multiple_of(2) {
         return Err(Error::Invalid("4:2:2 frame_width must be even"));
     }
@@ -223,7 +229,12 @@ pub fn parse_frame_header(payload: &[u8]) -> Result<Option<FrameHeader>> {
         let transfer = r.read_bits(8).map_err(|_| Error::Truncated)? as u8;
         let matrix = r.read_bits(8).map_err(|_| Error::Truncated)? as u8;
         let full_range = r.read_bit().map_err(|_| Error::Truncated)?;
-        ColorInfo { primaries, transfer, matrix, full_range }
+        ColorInfo {
+            primaries,
+            transfer,
+            matrix,
+            full_range,
+        }
     } else {
         ColorInfo::default()
     };
@@ -372,28 +383,43 @@ pub fn write_frame_header(h: &FrameHeader) -> Vec<u8> {
 
 /// Parse a `metadata()` PBU payload (after `pbu_header()`), extracting MDCV (`payloadType == 5`)
 /// and CLL (`payloadType == 6`) if present (RFC 9924 §5.3.10 & §8).
-pub fn parse_metadata_pbu(payload: &[u8], mdcv: &mut Option<MasteringDisplay>, cll: &mut Option<ContentLightLevel>) -> Result<()> {
+pub fn parse_metadata_pbu(
+    payload: &[u8],
+    mdcv: &mut Option<MasteringDisplay>,
+    cll: &mut Option<ContentLightLevel>,
+) -> Result<()> {
     if payload.len() < 4 {
         return Err(Error::Truncated);
     }
-    let metadata_size = u32::from_be_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize;
-    let body = payload.get(4..4usize.checked_add(metadata_size).ok_or(Error::Truncated)?).ok_or(Error::Truncated)?;
+    let metadata_size =
+        u32::from_be_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize;
+    let body = payload
+        .get(4..4usize.checked_add(metadata_size).ok_or(Error::Truncated)?)
+        .ok_or(Error::Truncated)?;
     let mut pos = 0usize;
     while pos < body.len() {
         let mut payload_type = 0u32;
         while *body.get(pos).ok_or(Error::Truncated)? == 0xFF {
-            payload_type = payload_type.checked_add(255).ok_or(Error::Invalid("metadata payloadType overflow"))?;
+            payload_type = payload_type
+                .checked_add(255)
+                .ok_or(Error::Invalid("metadata payloadType overflow"))?;
             pos += 1;
         }
-        payload_type = payload_type.checked_add(*body.get(pos).ok_or(Error::Truncated)? as u32).ok_or(Error::Invalid("metadata payloadType overflow"))?;
+        payload_type = payload_type
+            .checked_add(*body.get(pos).ok_or(Error::Truncated)? as u32)
+            .ok_or(Error::Invalid("metadata payloadType overflow"))?;
         pos += 1;
 
         let mut payload_size = 0usize;
         while *body.get(pos).ok_or(Error::Truncated)? == 0xFF {
-            payload_size = payload_size.checked_add(255).ok_or(Error::Invalid("metadata payloadSize overflow"))?;
+            payload_size = payload_size
+                .checked_add(255)
+                .ok_or(Error::Invalid("metadata payloadSize overflow"))?;
             pos += 1;
         }
-        payload_size = payload_size.checked_add(*body.get(pos).ok_or(Error::Truncated)? as usize).ok_or(Error::Invalid("metadata payloadSize overflow"))?;
+        payload_size = payload_size
+            .checked_add(*body.get(pos).ok_or(Error::Truncated)? as usize)
+            .ok_or(Error::Invalid("metadata payloadSize overflow"))?;
         pos += 1;
 
         let end = pos.checked_add(payload_size).ok_or(Error::Truncated)?;
@@ -403,16 +429,24 @@ pub fn parse_metadata_pbu(payload: &[u8], mdcv: &mut Option<MasteringDisplay>, c
         match payload_type {
             5 if item.len() >= 24 => {
                 let u16_at = |i: usize| u16::from_be_bytes([item[i], item[i + 1]]);
-                let u32_at = |i: usize| u32::from_be_bytes([item[i], item[i + 1], item[i + 2], item[i + 3]]);
+                let u32_at =
+                    |i: usize| u32::from_be_bytes([item[i], item[i + 1], item[i + 2], item[i + 3]]);
                 *mdcv = Some(MasteringDisplay {
-                    primaries: [(u16_at(0), u16_at(2)), (u16_at(4), u16_at(6)), (u16_at(8), u16_at(10))],
+                    primaries: [
+                        (u16_at(0), u16_at(2)),
+                        (u16_at(4), u16_at(6)),
+                        (u16_at(8), u16_at(10)),
+                    ],
                     white_point: (u16_at(12), u16_at(14)),
                     max_luminance: u32_at(16),
                     min_luminance: u32_at(20),
                 });
             }
             6 if item.len() >= 4 => {
-                *cll = Some(ContentLightLevel { max_cll: u16::from_be_bytes([item[0], item[1]]), max_fall: u16::from_be_bytes([item[2], item[3]]) });
+                *cll = Some(ContentLightLevel {
+                    max_cll: u16::from_be_bytes([item[0], item[1]]),
+                    max_fall: u16::from_be_bytes([item[2], item[3]]),
+                });
             }
             // Filler metadata (§8.2.1): must be 0xFF bytes
             10 if item.iter().any(|&b| b != 0xFF) => {
@@ -427,7 +461,11 @@ pub fn parse_metadata_pbu(payload: &[u8], mdcv: &mut Option<MasteringDisplay>, c
 }
 
 /// Build a `metadata()` PBU (including its 4-byte `pbu_header`) carrying MDCV and/or CLL metadata.
-pub fn write_metadata_pbu(group_id: u16, mdcv: Option<&MasteringDisplay>, cll: Option<&ContentLightLevel>) -> Option<Vec<u8>> {
+pub fn write_metadata_pbu(
+    group_id: u16,
+    mdcv: Option<&MasteringDisplay>,
+    cll: Option<&ContentLightLevel>,
+) -> Option<Vec<u8>> {
     if mdcv.is_none() && cll.is_none() {
         return None;
     }

@@ -1,5 +1,8 @@
 use photocraft_color::{Color, PixelFormat, SampleType};
-use photocraft_doc::{Fill, FillRule, LineCap, LineJoin, Path, PathOp, ShapeLayer, ShapeStroke, StrokeAlign, Subpath, VectorMask};
+use photocraft_doc::{
+    Fill, FillRule, LineCap, LineJoin, Path, PathOp, ShapeLayer, ShapeStroke, StrokeAlign, Subpath,
+    VectorMask,
+};
 use photocraft_geom::Rect;
 
 use crate::*;
@@ -33,9 +36,14 @@ fn rect_area_exact_and_rotated() {
     let got = area(&cov(&p, Rect::new(0, 0, 200, 100)));
     assert!((got - 100.45 * 50.2).abs() < 1e-2, "{got}");
     // Rotated square: area preserved.
-    let rot = p.transform(&photocraft_geom::Affine::rotate(0.4).then(&photocraft_geom::Affine::translate(60.0, 30.0)));
+    let rot = p.transform(
+        &photocraft_geom::Affine::rotate(0.4).then(&photocraft_geom::Affine::translate(60.0, 30.0)),
+    );
     let got = area(&cov(&rot, Rect::new(-100, -100, 400, 400)));
-    assert!((got - 100.45 * 50.2).abs() / (100.45 * 50.2) < 1e-4, "{got}");
+    assert!(
+        (got - 100.45 * 50.2).abs() / (100.45 * 50.2) < 1e-4,
+        "{got}"
+    );
 }
 
 #[test]
@@ -83,11 +91,21 @@ fn even_odd_vs_non_zero() {
     // Non-zero area − even-odd area = the inner pentagon (circumradius R·cos72°/cos36°).
     let r_in = 40.0 * 72f64.to_radians().cos() / 36f64.to_radians().cos();
     let inner_pent = 2.5 * r_in * r_in * (72f64.to_radians()).sin();
-    assert!(((area(&nz) - area(&eo)) - inner_pent).abs() / inner_pent < 0.01, "{} vs {inner_pent}", area(&nz) - area(&eo));
+    assert!(
+        ((area(&nz) - area(&eo)) - inner_pent).abs() / inner_pent < 0.01,
+        "{} vs {inner_pent}",
+        area(&nz) - area(&eo)
+    );
 }
 
 fn two_squares(op: PathOp) -> Path {
-    Path::new(vec![shapes::rect(10.0, 10.0, 40.0, 40.0).subpaths.remove(0), shapes::rect(30.0, 30.0, 40.0, 40.0).subpaths.remove(0).with_op(op)])
+    Path::new(vec![
+        shapes::rect(10.0, 10.0, 40.0, 40.0).subpaths.remove(0),
+        shapes::rect(30.0, 30.0, 40.0, 40.0)
+            .subpaths
+            .remove(0)
+            .with_op(op),
+    ])
 }
 
 #[test]
@@ -108,7 +126,12 @@ fn boolean_ops_areas() {
     assert!((area(&cov(&inv, r)) - (10000.0 - 400.0)).abs() < 1e-2);
     // Donut: circle minus a smaller circle (exact booleans, even with overlapping AA edges).
     let mut d = shapes::ellipse(10.0, 10.0, 80.0, 80.0);
-    d.subpaths.push(shapes::ellipse(30.0, 30.0, 40.0, 40.0).subpaths.remove(0).with_op(PathOp::Subtract));
+    d.subpaths.push(
+        shapes::ellipse(30.0, 30.0, 40.0, 40.0)
+            .subpaths
+            .remove(0)
+            .with_op(PathOp::Subtract),
+    );
     let want = std::f64::consts::PI * (1600.0 - 400.0);
     assert!((area(&cov(&d, r)) - want).abs() / want < 0.002);
 }
@@ -121,18 +144,41 @@ fn stroke_area(path: &Path, st: &StrokeStyle) -> f64 {
 #[test]
 fn stroke_widths_caps_and_joins() {
     let line = Path::new(vec![Subpath::polyline(&[(20.0, 50.0), (120.0, 50.0)])]);
-    let st = |w: f64, cap| StrokeStyle { width: w, cap, ..Default::default() };
+    let st = |w: f64, cap| StrokeStyle {
+        width: w,
+        cap,
+        ..Default::default()
+    };
     // Butt: exactly length × width.
     for w in [1.0, 2.5, 10.0] {
-        assert!((stroke_area(&line, &st(w, LineCap::Butt)) - 100.0 * w).abs() < 1e-2, "w={w}");
+        assert!(
+            (stroke_area(&line, &st(w, LineCap::Butt)) - 100.0 * w).abs() < 1e-2,
+            "w={w}"
+        );
     }
     // Square adds w/2 at both ends; round adds a disc.
     assert!((stroke_area(&line, &st(10.0, LineCap::Square)) - 110.0 * 10.0).abs() < 1e-2);
     let round = stroke_area(&line, &st(10.0, LineCap::Round));
-    assert!((round - (1000.0 + std::f64::consts::PI * 25.0)).abs() < 0.5, "{round}");
+    assert!(
+        (round - (1000.0 + std::f64::consts::PI * 25.0)).abs() < 0.5,
+        "{round}"
+    );
     // Right-angle polyline: miter fills the full corner square, bevel half, round a quarter disc.
-    let l = Path::new(vec![Subpath::polyline(&[(20.0, 20.0), (120.0, 20.0), (120.0, 120.0)])]);
-    let j = |join| stroke_area(&l, &StrokeStyle { width: 10.0, join, ..Default::default() });
+    let l = Path::new(vec![Subpath::polyline(&[
+        (20.0, 20.0),
+        (120.0, 20.0),
+        (120.0, 120.0),
+    ])]);
+    let j = |join| {
+        stroke_area(
+            &l,
+            &StrokeStyle {
+                width: 10.0,
+                join,
+                ..Default::default()
+            },
+        )
+    };
     let base = 2.0 * 100.0 * 10.0;
     let miter = j(LineJoin::Miter);
     let bevel = j(LineJoin::Bevel);
@@ -140,42 +186,86 @@ fn stroke_widths_caps_and_joins() {
     // Two 100×10 bars share the inner 5×5 quarter; the outer 5×5 corner is the join.
     assert!((miter - (base - 25.0 + 25.0)).abs() < 1e-2, "{miter}");
     assert!((bevel - (base - 25.0 + 12.5)).abs() < 1e-2, "{bevel}");
-    assert!((roundj - (base - 25.0 + std::f64::consts::PI * 25.0 / 4.0)).abs() < 0.1, "{roundj}");
+    assert!(
+        (roundj - (base - 25.0 + std::f64::consts::PI * 25.0 / 4.0)).abs() < 0.1,
+        "{roundj}"
+    );
     // Miter limit: a very sharp angle falls back to bevel.
-    let sharp = Path::new(vec![Subpath::polyline(&[(0.0, 0.0), (100.0, 5.0), (0.0, 10.0)])]);
-    let lim = |m| stroke_area(&sharp, &StrokeStyle { width: 4.0, join: LineJoin::Miter, miter_limit: m, ..Default::default() });
+    let sharp = Path::new(vec![Subpath::polyline(&[
+        (0.0, 0.0),
+        (100.0, 5.0),
+        (0.0, 10.0),
+    ])]);
+    let lim = |m| {
+        stroke_area(
+            &sharp,
+            &StrokeStyle {
+                width: 4.0,
+                join: LineJoin::Miter,
+                miter_limit: m,
+                ..Default::default()
+            },
+        )
+    };
     assert!(lim(100.0) > lim(4.0) + 10.0);
 }
 
 #[test]
 fn closed_rect_stroke_and_alignment() {
     let sq = shapes::rect(20.0, 20.0, 100.0, 100.0);
-    let st = StrokeStyle { width: 10.0, ..Default::default() };
+    let st = StrokeStyle {
+        width: 10.0,
+        ..Default::default()
+    };
     // Centred miter stroke of a closed square: outer 110² minus inner 90².
     assert!((stroke_area(&sq, &st) - (110.0f64.powi(2) - 90.0f64.powi(2))).abs() < 1e-2);
     let shape = |align| ShapeLayer {
         path: sq.clone(),
         fill: None,
-        stroke: Some(ShapeStroke { width: 10.0, paint: Fill::Solid(Color::BLACK), align, ..Default::default() }),
+        stroke: Some(ShapeStroke {
+            width: 10.0,
+            paint: Fill::Solid(Color::BLACK),
+            align,
+            ..Default::default()
+        }),
         ..Default::default()
     };
     let alpha_area = |sh: &ShapeLayer| {
-        let rgba = CompiledShape::new(sh, DEFAULT_TOLERANCE, Rect::new(0, 0, 150, 150)).render_rgba(Rect::new(0, 0, 150, 150));
+        let rgba = CompiledShape::new(sh, DEFAULT_TOLERANCE, Rect::new(0, 0, 150, 150))
+            .render_rgba(Rect::new(0, 0, 150, 150));
         rgba.iter().map(|p| f64::from(p[3])).sum::<f64>()
     };
-    assert!((alpha_area(&shape(StrokeAlign::Inside)) - (100.0f64.powi(2) - 80.0f64.powi(2))).abs() < 0.05);
-    assert!((alpha_area(&shape(StrokeAlign::Outside)) - (120.0f64.powi(2) - 100.0f64.powi(2))).abs() < 0.05);
-    assert!((alpha_area(&shape(StrokeAlign::Center)) - (110.0f64.powi(2) - 90.0f64.powi(2))).abs() < 0.05);
+    assert!(
+        (alpha_area(&shape(StrokeAlign::Inside)) - (100.0f64.powi(2) - 80.0f64.powi(2))).abs()
+            < 0.05
+    );
+    assert!(
+        (alpha_area(&shape(StrokeAlign::Outside)) - (120.0f64.powi(2) - 100.0f64.powi(2))).abs()
+            < 0.05
+    );
+    assert!(
+        (alpha_area(&shape(StrokeAlign::Center)) - (110.0f64.powi(2) - 90.0f64.powi(2))).abs()
+            < 0.05
+    );
 }
 
 #[test]
 fn aligned_dashes_keep_width_units_and_open_paths_stay_centered() {
     let clip = Rect::new(0, 0, 100, 100);
     let square = shapes::rect(10.0, 10.0, 80.0, 80.0);
-    for (align, y, other_y) in [(StrokeAlign::Inside, 11, 7), (StrokeAlign::Center, 9, 6), (StrokeAlign::Outside, 7, 11)] {
+    for (align, y, other_y) in [
+        (StrokeAlign::Inside, 11, 7),
+        (StrokeAlign::Center, 9, 6),
+        (StrokeAlign::Outside, 7, 11),
+    ] {
         let sh = ShapeLayer {
             path: square.clone(),
-            stroke: Some(ShapeStroke { width: 4.0, align, dashes: vec![2.0, 2.0], ..Default::default() }),
+            stroke: Some(ShapeStroke {
+                width: 4.0,
+                align,
+                dashes: vec![2.0, 2.0],
+                ..Default::default()
+            }),
             ..Default::default()
         };
         let rgba = CompiledShape::new(&sh, DEFAULT_TOLERANCE, clip).render_rgba(clip);
@@ -185,8 +275,16 @@ fn aligned_dashes_keep_width_units_and_open_paths_stay_centered() {
     }
     let open = Path::new(vec![Subpath::polyline(&[(10.0, 50.0), (90.0, 50.0)])]);
     let render = |align| {
-        let sh =
-            ShapeLayer { path: open.clone(), stroke: Some(ShapeStroke { width: 4.0, align, cap: LineCap::Round, ..Default::default() }), ..Default::default() };
+        let sh = ShapeLayer {
+            path: open.clone(),
+            stroke: Some(ShapeStroke {
+                width: 4.0,
+                align,
+                cap: LineCap::Round,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
         CompiledShape::new(&sh, DEFAULT_TOLERANCE, clip).render_rgba(clip)
     };
     assert_eq!(render(StrokeAlign::Center), render(StrokeAlign::Inside));
@@ -196,14 +294,27 @@ fn aligned_dashes_keep_width_units_and_open_paths_stay_centered() {
 #[test]
 fn dashes_cover_expected_fraction() {
     let line = Path::new(vec![Subpath::polyline(&[(0.0, 50.0), (120.0, 50.0)])]);
-    let st = StrokeStyle { width: 4.0, dashes: vec![8.0, 4.0], ..Default::default() };
+    let st = StrokeStyle {
+        width: 4.0,
+        dashes: vec![8.0, 4.0],
+        ..Default::default()
+    };
     // 120 px = 10 periods of 12 px, 8 on each.
     assert!((stroke_area(&line, &st) - 80.0 * 4.0).abs() < 1e-2);
     // Photoshop-style dash units (multiples of width) via stroke_style.
-    let s = stroke_style(&ShapeStroke { width: 4.0, dashes: vec![2.0, 1.0], ..Default::default() });
+    let s = stroke_style(&ShapeStroke {
+        width: 4.0,
+        dashes: vec![2.0, 1.0],
+        ..Default::default()
+    });
     assert_eq!(s.dashes, vec![8.0, 4.0]);
     // Round caps on zero-length dashes draw dots.
-    let dots = StrokeStyle { width: 4.0, cap: LineCap::Round, dashes: vec![0.0, 12.0], ..Default::default() };
+    let dots = StrokeStyle {
+        width: 4.0,
+        cap: LineCap::Round,
+        dashes: vec![0.0, 12.0],
+        ..Default::default()
+    };
     let a = stroke_area(&line, &dots);
     let one = std::f64::consts::PI * 4.0;
     assert!(a > 9.0 * one && a < 11.5 * one, "{a}");
@@ -214,11 +325,19 @@ fn render_shape_formats_and_paint() {
     let sh = ShapeLayer {
         path: shapes::rect(2.0, 2.0, 10.0, 10.0),
         fill: Some(Fill::Solid(Color::rgb(1.0, 0.0, 0.0))),
-        stroke: Some(ShapeStroke { width: 2.0, paint: Fill::Solid(Color::rgb(0.0, 0.0, 1.0)), ..Default::default() }),
+        stroke: Some(ShapeStroke {
+            width: 2.0,
+            paint: Fill::Solid(Color::rgb(0.0, 0.0, 1.0)),
+            ..Default::default()
+        }),
         ..Default::default()
     };
     for sample in SampleType::ALL {
-        for mode in [photocraft_color::ColorMode::Rgb, photocraft_color::ColorMode::Grayscale, photocraft_color::ColorMode::Cmyk] {
+        for mode in [
+            photocraft_color::ColorMode::Rgb,
+            photocraft_color::ColorMode::Grayscale,
+            photocraft_color::ColorMode::Cmyk,
+        ] {
             let fmt = PixelFormat::new(mode, sample, true);
             let s = render_shape(&sh, fmt, Rect::new(0, 0, 20, 20));
             assert_eq!(s.format(), fmt);
@@ -241,10 +360,17 @@ fn render_shape_formats_and_paint() {
 fn gradient_fill_spans_bounds() {
     let sh = ShapeLayer {
         path: shapes::rect(0.0, 0.0, 100.0, 10.0),
-        fill: Some(Fill::gradient(vec![(0.0, Color::BLACK), (1.0, Color::WHITE)], 0.0, 1.0, photocraft_doc::GradientStyle::Linear, false)),
+        fill: Some(Fill::gradient(
+            vec![(0.0, Color::BLACK), (1.0, Color::WHITE)],
+            0.0,
+            1.0,
+            photocraft_doc::GradientStyle::Linear,
+            false,
+        )),
         ..Default::default()
     };
-    let rgba = CompiledShape::new(&sh, DEFAULT_TOLERANCE, Rect::new(0, 0, 100, 10)).render_rgba(Rect::new(0, 0, 100, 10));
+    let rgba = CompiledShape::new(&sh, DEFAULT_TOLERANCE, Rect::new(0, 0, 100, 10))
+        .render_rgba(Rect::new(0, 0, 100, 10));
     assert!(rgba[0][0] < 0.02 && rgba[99][0] > 0.98 && (rgba[50][0] - 0.505).abs() < 0.02);
 }
 
@@ -252,7 +378,11 @@ fn gradient_fill_spans_bounds() {
 /// below are hand-derived (the compositor's own rendering is checked against them by the
 /// parity tests in `photocraft-compose`).
 fn grad(fill: Fill, canvas: Rect) -> Vec<[f32; 4]> {
-    let sh = ShapeLayer { path: shapes::rect(0.0, 0.0, 100.0, 10.0), fill: Some(fill), ..Default::default() };
+    let sh = ShapeLayer {
+        path: shapes::rect(0.0, 0.0, 100.0, 10.0),
+        fill: Some(fill),
+        ..Default::default()
+    };
     let c = Rect::new(0, 0, canvas.x1.min(100), canvas.y1.min(10));
     CompiledShape::new(&sh, DEFAULT_TOLERANCE, canvas).render_rgba(c)
 }
@@ -261,7 +391,10 @@ fn grad(fill: Fill, canvas: Rect) -> Vec<[f32; 4]> {
 fn gradient_midpoints_opacity_stops_offset_and_sorted_stops() {
     // Linear 0° over the path's 100 × 10 bounds: t is the pixel's left corner / 100, so pixel
     // x sits at t = x / 100.
-    let g = |midpoints: Vec<f32>, opacity_stops: Vec<(f32, f32)>, offset: (f32, f32), stops: Vec<(f32, Color)>| Fill::Gradient {
+    let g = |midpoints: Vec<f32>,
+             opacity_stops: Vec<(f32, f32)>,
+             offset: (f32, f32),
+             stops: Vec<(f32, Color)>| Fill::Gradient {
         stops,
         angle: 0.0,
         scale: 1.0,
@@ -274,17 +407,59 @@ fn gradient_midpoints_opacity_stops_offset_and_sorted_stops() {
         align: true,
     };
     // Midpoint 0.25: the colour is half-way at t = 0.25 (pixel 25).
-    let px = grad(g(vec![0.25], vec![], (0.0, 0.0), vec![(0.0, Color::BLACK), (1.0, Color::WHITE)]), Rect::new(0, 0, 100, 10));
+    let px = grad(
+        g(
+            vec![0.25],
+            vec![],
+            (0.0, 0.0),
+            vec![(0.0, Color::BLACK), (1.0, Color::WHITE)],
+        ),
+        Rect::new(0, 0, 100, 10),
+    );
     assert!((px[25][0] - 0.5).abs() < 1e-3, "{}", px[25][0]);
     // Opacity stop ramp 1 → 0.5: alpha at t = 0.25 is 0.875.
-    let px = grad(g(vec![], vec![(0.0, 1.0), (1.0, 0.5)], (0.0, 0.0), vec![(0.0, Color::BLACK), (1.0, Color::WHITE)]), Rect::new(0, 0, 100, 10));
+    let px = grad(
+        g(
+            vec![],
+            vec![(0.0, 1.0), (1.0, 0.5)],
+            (0.0, 0.0),
+            vec![(0.0, Color::BLACK), (1.0, Color::WHITE)],
+        ),
+        Rect::new(0, 0, 100, 10),
+    );
     assert!((px[25][3] - 0.875).abs() < 1e-3, "{}", px[25][3]);
     // Centre offset half a frame right: t = 0 moves to x = 50, so pixel 75 sits at t = 0.25.
-    let px = grad(g(vec![], vec![], (0.5, 0.0), vec![(0.0, Color::BLACK), (1.0, Color::WHITE)]), Rect::new(0, 0, 100, 10));
-    assert!(px[25][0] < 0.01 && (px[75][0] - 0.25).abs() < 1e-3, "{} {}", px[25][0], px[75][0]);
+    let px = grad(
+        g(
+            vec![],
+            vec![],
+            (0.5, 0.0),
+            vec![(0.0, Color::BLACK), (1.0, Color::WHITE)],
+        ),
+        Rect::new(0, 0, 100, 10),
+    );
+    assert!(
+        px[25][0] < 0.01 && (px[75][0] - 0.25).abs() < 1e-3,
+        "{} {}",
+        px[25][0],
+        px[75][0]
+    );
     // Unsorted stops are sorted by location: black still left, white right.
-    let px = grad(g(vec![], vec![], (0.0, 0.0), vec![(1.0, Color::WHITE), (0.0, Color::BLACK)]), Rect::new(0, 0, 100, 10));
-    assert!(px[1][0] < 0.02 && px[98][0] > 0.97, "{} {}", px[1][0], px[98][0]);
+    let px = grad(
+        g(
+            vec![],
+            vec![],
+            (0.0, 0.0),
+            vec![(1.0, Color::WHITE), (0.0, Color::BLACK)],
+        ),
+        Rect::new(0, 0, 100, 10),
+    );
+    assert!(
+        px[1][0] < 0.02 && px[98][0] > 0.97,
+        "{} {}",
+        px[1][0],
+        px[98][0]
+    );
 }
 
 #[test]
@@ -334,7 +509,10 @@ fn gradient_dither_is_deterministic_and_one_level() {
         max = max.max((p[0] - q[0]).abs());
         changed += usize::from((p[0] - q[0]).abs() > 1e-6);
     }
-    assert!(changed > 0 && max <= 1.0 / 255.0 + 1e-6, "changed={changed} max={max}");
+    assert!(
+        changed > 0 && max <= 1.0 / 255.0 + 1e-6,
+        "changed={changed} max={max}"
+    );
 }
 
 #[test]
@@ -346,7 +524,11 @@ fn coverage_surface_and_vector_mask_values() {
     assert_eq!(s.tile_count(), 1);
     let mut inv = p.clone();
     inv.inverted = true;
-    let si = coverage_surface(&fill_rasterizer(&inv, DEFAULT_TOLERANCE), PixelFormat::GRAY8, Rect::new(0, 0, 40, 40));
+    let si = coverage_surface(
+        &fill_rasterizer(&inv, DEFAULT_TOLERANCE),
+        PixelFormat::GRAY8,
+        Rect::new(0, 0, 40, 40),
+    );
     assert_eq!(si.sample_channel(0, 0, 0), 1.0);
     assert_eq!(si.sample_channel(15, 15, 0), 0.0);
     let mut vm = VectorMask::new(p);
@@ -354,19 +536,30 @@ fn coverage_surface_and_vector_mask_values() {
     let v = vector_mask_values(&vm, Rect::new(0, 0, 40, 40));
     assert!((v[0] - 0.75).abs() < 1e-6 && (v[15 * 40 + 15] - 1.0).abs() < 1e-6);
     vm.enabled = false;
-    assert!(vector_mask_values(&vm, Rect::new(0, 0, 4, 4)).iter().all(|x| *x == 1.0));
+    assert!(vector_mask_values(&vm, Rect::new(0, 0, 4, 4))
+        .iter()
+        .all(|x| *x == 1.0));
     // Empty vector masks reveal all (hide all when inverted).
     let mut empty = VectorMask::new(Path::default());
-    assert!(vector_mask_values(&empty, Rect::new(0, 0, 4, 4)).iter().all(|x| *x == 1.0));
+    assert!(vector_mask_values(&empty, Rect::new(0, 0, 4, 4))
+        .iter()
+        .all(|x| *x == 1.0));
     empty.path.inverted = true;
-    assert!(vector_mask_values(&empty, Rect::new(0, 0, 4, 4)).iter().all(|x| *x == 0.0));
+    assert!(vector_mask_values(&empty, Rect::new(0, 0, 4, 4))
+        .iter()
+        .all(|x| *x == 0.0));
 }
 
 #[test]
 fn sequential_vector_masks_match_parallel_rendering() {
     let rect = Rect::new(-3, -7, 510, 250);
     let mut path = shapes::ellipse(10.25, 8.75, 470.0, 220.0);
-    path.subpaths.push(shapes::rect(200.5, 90.25, 45.0, 50.0).subpaths.remove(0).with_op(PathOp::Subtract));
+    path.subpaths.push(
+        shapes::rect(200.5, 90.25, 45.0, 50.0)
+            .subpaths
+            .remove(0)
+            .with_op(PathOp::Subtract),
+    );
     for inverted in [false, true] {
         for density in [0.0, 0.25, 1.0] {
             path.inverted = inverted;
@@ -390,7 +583,10 @@ fn sequential_vector_masks_match_parallel_rendering() {
     disabled.enabled = false;
     let compiled = CompiledVectorMask::new(&disabled);
     assert_eq!(compiled.render_sequential(rect), compiled.render(rect));
-    assert_eq!(compiled.render_sequential(Rect::EMPTY), compiled.render(Rect::EMPTY));
+    assert_eq!(
+        compiled.render_sequential(Rect::EMPTY),
+        compiled.render(Rect::EMPTY)
+    );
 }
 
 fn iou(a: &[f32], b: &[f32]) -> f64 {
@@ -407,8 +603,14 @@ fn trace_roundtrip_iou() {
     let rect = Rect::new(0, 0, 160, 120);
     // Antialiased donut + a hard rectangle, as a selection would hold.
     let mut src = shapes::ellipse(10.0, 10.0, 90.0, 90.0);
-    src.subpaths.push(shapes::ellipse(35.0, 35.0, 40.0, 40.0).subpaths.remove(0).with_op(PathOp::Subtract));
-    src.subpaths.push(shapes::rect(110.0, 20.0, 40.0, 80.0).subpaths.remove(0));
+    src.subpaths.push(
+        shapes::ellipse(35.0, 35.0, 40.0, 40.0)
+            .subpaths
+            .remove(0)
+            .with_op(PathOp::Subtract),
+    );
+    src.subpaths
+        .push(shapes::rect(110.0, 20.0, 40.0, 80.0).subpaths.remove(0));
     let mask = cov(&src, rect);
     for tol in [0.5, 1.0, 2.0] {
         let traced = trace::trace_mask(&mask, rect, 0.0, tol);
@@ -420,7 +622,10 @@ fn trace_roundtrip_iou() {
         assert!(knots < 60, "tol {tol}: {knots} knots");
     }
     // Hard-edged (binary) mask.
-    let hard: Vec<f32> = mask.iter().map(|v| if *v >= 0.5 { 1.0 } else { 0.0 }).collect();
+    let hard: Vec<f32> = mask
+        .iter()
+        .map(|v| if *v >= 0.5 { 1.0 } else { 0.0 })
+        .collect();
     let back = cov(&trace::trace_mask(&hard, rect, 0.0, 1.0), rect);
     assert!(iou(&hard, &back) > 0.98);
 }
@@ -444,12 +649,26 @@ fn perf_6016() {
             photocraft_geom::Point::new(x + d * t.sin(), y - d * t.cos()),
         ));
     }
-    let mut path = Path::new(vec![Subpath { closed: true, knots, op: PathOp::Combine }]);
-    path.subpaths.push(shapes::ellipse(2000.0, 2000.0, 2016.0, 2016.0).subpaths.remove(0).with_op(PathOp::Exclude));
+    let mut path = Path::new(vec![Subpath {
+        closed: true,
+        knots,
+        op: PathOp::Combine,
+    }]);
+    path.subpaths.push(
+        shapes::ellipse(2000.0, 2000.0, 2016.0, 2016.0)
+            .subpaths
+            .remove(0)
+            .with_op(PathOp::Exclude),
+    );
     let sh = ShapeLayer {
         path: path.clone(),
         fill: Some(Fill::Solid(Color::rgb(0.2, 0.5, 0.9))),
-        stroke: Some(ShapeStroke { width: 12.0, join: LineJoin::Round, dashes: vec![3.0, 2.0], ..Default::default() }),
+        stroke: Some(ShapeStroke {
+            width: 12.0,
+            join: LineJoin::Round,
+            dashes: vec![3.0, 2.0],
+            ..Default::default()
+        }),
         ..Default::default()
     };
     let t = std::time::Instant::now();
@@ -504,14 +723,20 @@ fn joined_subpaths_fill_as_one_component() {
     assert_eq!(joined.components(), vec![0..2]);
     assert_eq!(separate.components(), vec![0..1, 1..2]);
     // A component after a joined one starts afresh with its own operation.
-    let cut = Subpath::polygon(&[(0.0, 0.0), (20.0, 0.0), (20.0, 4.0), (0.0, 4.0)]).with_op(PathOp::Subtract);
+    let cut = Subpath::polygon(&[(0.0, 0.0), (20.0, 0.0), (20.0, 4.0), (0.0, 4.0)])
+        .with_op(PathOp::Subtract);
     let p = Path::new(vec![outer, inner.with_op(PathOp::Join), cut]);
     assert_eq!(p.components(), vec![0..2, 2..3]);
     let v = cov(&p, r);
     assert_eq!(v[3 * 20 + 10], 0.0);
     assert_eq!(v[5 * 20 + 10], 1.0);
     // A lone joined subpath acts as the first component.
-    let lone = Path::new(vec![Subpath::polygon(&[(2.0, 2.0), (8.0, 2.0), (8.0, 8.0)]).with_op(PathOp::Join)]);
+    let lone = Path::new(vec![Subpath::polygon(&[
+        (2.0, 2.0),
+        (8.0, 2.0),
+        (8.0, 8.0),
+    ])
+    .with_op(PathOp::Join)]);
     assert_eq!(cov(&lone, r)[3 * 20 + 6], 1.0);
 }
 
@@ -519,11 +744,23 @@ fn joined_subpaths_fill_as_one_component() {
 /// (every depth); they must all equal `want`.
 fn assert_rendered_bounds(path: &Path, want: Rect, what: &str) {
     let canvas = Rect::new(0, 0, 1920, 1080);
-    let sh = ShapeLayer { path: path.clone(), fill: Some(Fill::Solid(Color::rgb(0.0, 0.0, 1.0))), ..Default::default() };
+    let sh = ShapeLayer {
+        path: path.clone(),
+        fill: Some(Fill::Solid(Color::rgb(0.0, 0.0, 1.0))),
+        ..Default::default()
+    };
     for sample in SampleType::ALL {
         let fmt = PixelFormat::new(photocraft_color::ColorMode::Rgb, sample, true);
-        assert_eq!(render_shape(&sh, fmt, canvas).content_bounds(), want, "{what}: layer {sample:?}");
-        let sel = coverage_surface(&fill_rasterizer(path, DEFAULT_TOLERANCE), PixelFormat::new(photocraft_color::ColorMode::Grayscale, sample, false), canvas);
+        assert_eq!(
+            render_shape(&sh, fmt, canvas).content_bounds(),
+            want,
+            "{what}: layer {sample:?}"
+        );
+        let sel = coverage_surface(
+            &fill_rasterizer(path, DEFAULT_TOLERANCE),
+            PixelFormat::new(photocraft_color::ColorMode::Grayscale, sample, false),
+            canvas,
+        );
         assert_eq!(sel.content_bounds(), want, "{what}: selection {sample:?}");
     }
 }
@@ -545,14 +782,38 @@ fn curved_shape_bounds_are_exact() {
         op: Default::default(),
     }]);
     let cases = [
-        ("ellipse", shapes::ellipse(0.0, 0.0, 100.0, 100.0), Rect::new(0, 0, 100, 100)),
-        ("ellipse 600", shapes::ellipse(660.0, 240.0, 600.0, 600.0), Rect::new(660, 240, 1260, 840)),
-        ("ellipse at x.5", shapes::ellipse(10.5, 10.0, 100.0, 100.0), Rect::new(10, 10, 111, 110)),
-        ("rounded rect", shapes::rounded_rect(0.0, 0.0, 100.0, 100.0, [20.0; 4]), Rect::new(0, 0, 100, 100)),
+        (
+            "ellipse",
+            shapes::ellipse(0.0, 0.0, 100.0, 100.0),
+            Rect::new(0, 0, 100, 100),
+        ),
+        (
+            "ellipse 600",
+            shapes::ellipse(660.0, 240.0, 600.0, 600.0),
+            Rect::new(660, 240, 1260, 840),
+        ),
+        (
+            "ellipse at x.5",
+            shapes::ellipse(10.5, 10.0, 100.0, 100.0),
+            Rect::new(10, 10, 111, 110),
+        ),
+        (
+            "rounded rect",
+            shapes::rounded_rect(0.0, 0.0, 100.0, 100.0, [20.0; 4]),
+            Rect::new(0, 0, 100, 100),
+        ),
         // Outer vertices at x = 50 ± 50·cos 18° (2.45, 97.55), lowest at y = 50 + 50·sin 54° (90.45).
-        ("star", shapes::polygon(0.0, 0.0, 100.0, 100.0, 5, 0.5), Rect::new(2, 0, 98, 91)),
+        (
+            "star",
+            shapes::polygon(0.0, 0.0, 100.0, 100.0, 5, 0.5),
+            Rect::new(2, 0, 98, 91),
+        ),
         ("custom path", blob, Rect::new(0, 0, 100, 100)),
-        ("rect", shapes::rect(0.0, 0.0, 100.0, 100.0), Rect::new(0, 0, 100, 100)),
+        (
+            "rect",
+            shapes::rect(0.0, 0.0, 100.0, 100.0),
+            Rect::new(0, 0, 100, 100),
+        ),
     ];
     for (what, path, want) in &cases {
         assert_rendered_bounds(path, *want, what);
@@ -562,9 +823,21 @@ fn curved_shape_bounds_are_exact() {
 #[test]
 fn thin_antialiased_edges_still_count_toward_bounds() {
     // A quarter-pixel overhang and a 1-px bar straddling two columns are real coverage.
-    assert_rendered_bounds(&shapes::rect(0.0, 0.0, 100.25, 100.0), Rect::new(0, 0, 101, 100), "quarter overhang");
-    assert_rendered_bounds(&shapes::rect(10.5, 0.0, 1.0, 50.0), Rect::new(10, 0, 12, 50), "1-px bar");
-    assert_rendered_bounds(&shapes::rect(0.0, 0.0, 100.01, 10.0), Rect::new(0, 0, 101, 10), "1% sliver");
+    assert_rendered_bounds(
+        &shapes::rect(0.0, 0.0, 100.25, 100.0),
+        Rect::new(0, 0, 101, 100),
+        "quarter overhang",
+    );
+    assert_rendered_bounds(
+        &shapes::rect(10.5, 0.0, 1.0, 50.0),
+        Rect::new(10, 0, 12, 50),
+        "1-px bar",
+    );
+    assert_rendered_bounds(
+        &shapes::rect(0.0, 0.0, 100.01, 10.0),
+        Rect::new(0, 0, 101, 10),
+        "1% sliver",
+    );
     // At 32-bit even a 1e-4 sliver is kept: only round-off is dropped.
     let r = fill_rasterizer(&shapes::rect(0.0, 0.0, 100.0001, 10.0), DEFAULT_TOLERANCE);
     let c = r.render(Rect::new(0, 0, 102, 10));

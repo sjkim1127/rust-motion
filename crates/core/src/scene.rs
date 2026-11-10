@@ -27,7 +27,8 @@ use serde_json::Value;
 // ── Re-exports from rust-motion-composition ────────────────────────────────────
 pub use rust_motion_composition::{
     SceneEmitter, SceneEmitterComposition, SceneFrameContext, SceneFreeze, SceneGroup, SceneLayer,
-    SceneLinearGradient, SceneNullObject, SceneRect, SceneSequence, SceneStack, SceneText, SceneTextBlock,
+    SceneLinearGradient, SceneNullObject, SceneRect, SceneSequence, SceneStack, SceneText,
+    SceneTextBlock,
 };
 
 // ── SceneAbsoluteFill ─────────────────────────────────────────────────────────

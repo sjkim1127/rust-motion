@@ -659,7 +659,14 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
                 }
             }
         }
-        SceneNode::FractalNoise { x, y, w, h, opacity, .. } => {
+        SceneNode::FractalNoise {
+            x,
+            y,
+            w,
+            h,
+            opacity,
+            ..
+        } => {
             rsx! {
                 rect {
                     x: "{x}",

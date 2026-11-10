@@ -67,11 +67,19 @@ fn blur(w: usize, h: usize, v: &[f32], r: usize) -> Vec<f32> {
         for line in 0..n {
             let at = |k: i64| {
                 let k = k.clamp(0, m as i64 - 1) as usize;
-                if horizontal { src[line * w + k] } else { src[k * w + line] }
+                if horizontal {
+                    src[line * w + k]
+                } else {
+                    src[k * w + line]
+                }
             };
             let mut acc: f32 = (-(r as i64)..=r as i64).map(at).sum();
             for k in 0..m {
-                let i = if horizontal { line * w + k } else { k * w + line };
+                let i = if horizontal {
+                    line * w + k
+                } else {
+                    k * w + line
+                };
                 dst[i] = acc / (2 * r + 1) as f32;
                 acc += at(k as i64 + r as i64 + 1) - at(k as i64 - r as i64);
             }
@@ -83,14 +91,26 @@ fn blur(w: usize, h: usize, v: &[f32], r: usize) -> Vec<f32> {
 
 /// Harris corners: at most `max` corners at least `min_dist` pixels apart, strongest first,
 /// only where `valid` (if given) is true for the whole descriptor patch.
-pub fn harris(w: usize, h: usize, img: &[f32], max: usize, min_dist: f32, valid: Option<&[bool]>) -> Vec<Corner> {
+pub fn harris(
+    w: usize,
+    h: usize,
+    img: &[f32],
+    max: usize,
+    min_dist: f32,
+    valid: Option<&[bool]>,
+) -> Vec<Corner> {
     if w < 2 * PATCH_RADIUS + 3 || h < 2 * PATCH_RADIUS + 3 {
         return Vec::new();
     }
-    let (mut xx, mut yy, mut xy) = (vec![0.0f32; w * h], vec![0.0f32; w * h], vec![0.0f32; w * h]);
+    let (mut xx, mut yy, mut xy) = (
+        vec![0.0f32; w * h],
+        vec![0.0f32; w * h],
+        vec![0.0f32; w * h],
+    );
     for y in 1..h - 1 {
         for x in 1..w - 1 {
-            let p = |dx: i64, dy: i64| img[((y as i64 + dy) as usize) * w + (x as i64 + dx) as usize];
+            let p =
+                |dx: i64, dy: i64| img[((y as i64 + dy) as usize) * w + (x as i64 + dx) as usize];
             // Sobel.
             let gx = (p(1, -1) + 2.0 * p(1, 0) + p(1, 1)) - (p(-1, -1) + 2.0 * p(-1, 0) + p(-1, 1));
             let gy = (p(-1, 1) + 2.0 * p(0, 1) + p(1, 1)) - (p(-1, -1) + 2.0 * p(0, -1) + p(1, -1));
@@ -101,8 +121,14 @@ pub fn harris(w: usize, h: usize, img: &[f32], max: usize, min_dist: f32, valid:
         }
     }
     // Two box passes approximate the Gaussian window.
-    let (xx, yy, xy) = (blur(w, h, &blur(w, h, &xx, 1), 1), blur(w, h, &blur(w, h, &yy, 1), 1), blur(w, h, &blur(w, h, &xy, 1), 1));
-    let r: Vec<f32> = (0..w * h).map(|i| xx[i] * yy[i] - xy[i] * xy[i] - 0.04 * (xx[i] + yy[i]).powi(2)).collect();
+    let (xx, yy, xy) = (
+        blur(w, h, &blur(w, h, &xx, 1), 1),
+        blur(w, h, &blur(w, h, &yy, 1), 1),
+        blur(w, h, &blur(w, h, &xy, 1), 1),
+    );
+    let r: Vec<f32> = (0..w * h)
+        .map(|i| xx[i] * yy[i] - xy[i] * xy[i] - 0.04 * (xx[i] + yy[i]).powi(2))
+        .collect();
     let peak = r.iter().copied().fold(0.0f32, f32::max);
     if peak <= 0.0 {
         return Vec::new();
@@ -115,29 +141,55 @@ pub fn harris(w: usize, h: usize, img: &[f32], max: usize, min_dist: f32, valid:
             if v < peak * 0.01 {
                 continue;
             }
-            let is_max = (-1i64..=1).all(|dy| (-1i64..=1).all(|dx| (dx == 0 && dy == 0) || r[((y as i64 + dy) as usize) * w + (x as i64 + dx) as usize] <= v));
+            let is_max = (-1i64..=1).all(|dy| {
+                (-1i64..=1).all(|dx| {
+                    (dx == 0 && dy == 0)
+                        || r[((y as i64 + dy) as usize) * w + (x as i64 + dx) as usize] <= v
+                })
+            });
             if !is_max {
                 continue;
             }
             if let Some(ok) = valid {
-                let all = (y - PATCH_RADIUS..=y + PATCH_RADIUS).step_by(5).all(|yy| (x - PATCH_RADIUS..=x + PATCH_RADIUS).step_by(5).all(|xx| ok[yy * w + xx]));
+                let all = (y - PATCH_RADIUS..=y + PATCH_RADIUS).step_by(5).all(|yy| {
+                    (x - PATCH_RADIUS..=x + PATCH_RADIUS)
+                        .step_by(5)
+                        .all(|xx| ok[yy * w + xx])
+                });
                 if !all {
                     continue;
                 }
             }
-            cand.push(Corner { x: x as f32, y: y as f32, score: v });
+            cand.push(Corner {
+                x: x as f32,
+                y: y as f32,
+                score: v,
+            });
         }
     }
-    cand.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.y.total_cmp(&b.y)).then(a.x.total_cmp(&b.x)));
+    cand.sort_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then(a.y.total_cmp(&b.y))
+            .then(a.x.total_cmp(&b.x))
+    });
     // Minimum spacing via a coarse occupancy grid.
     let cell = min_dist.max(1.0);
-    let (gw, gh) = ((w as f32 / cell).ceil() as usize + 1, (h as f32 / cell).ceil() as usize + 1);
+    let (gw, gh) = (
+        (w as f32 / cell).ceil() as usize + 1,
+        (h as f32 / cell).ceil() as usize + 1,
+    );
     let mut grid: Vec<Vec<(f32, f32)>> = vec![Vec::new(); gw * gh];
     let mut out = Vec::new();
     for c in cand {
         let (gx, gy) = ((c.x / cell) as usize, (c.y / cell) as usize);
-        let near = (gy.saturating_sub(1)..=(gy + 1).min(gh - 1))
-            .any(|yy| (gx.saturating_sub(1)..=(gx + 1).min(gw - 1)).any(|xx| grid[yy * gw + xx].iter().any(|&(px, py)| (px - c.x).hypot(py - c.y) < min_dist)));
+        let near = (gy.saturating_sub(1)..=(gy + 1).min(gh - 1)).any(|yy| {
+            (gx.saturating_sub(1)..=(gx + 1).min(gw - 1)).any(|xx| {
+                grid[yy * gw + xx]
+                    .iter()
+                    .any(|&(px, py)| (px - c.x).hypot(py - c.y) < min_dist)
+            })
+        });
         if near {
             continue;
         }
@@ -158,7 +210,8 @@ fn pairs() -> &'static [[f32; 4]; 256] {
         let mut gauss = || {
             // Box–Muller.
             let (u, v) = (rng.unit().max(1e-12), rng.unit());
-            ((-2.0 * u.ln()).sqrt() * (std::f64::consts::TAU * v).cos() * 31.0 / 5.0).clamp(-13.0, 13.0) as f32
+            ((-2.0 * u.ln()).sqrt() * (std::f64::consts::TAU * v).cos() * 31.0 / 5.0)
+                .clamp(-13.0, 13.0) as f32
         };
         let mut p = [[0.0f32; 4]; 256];
         for q in &mut p {
@@ -170,10 +223,19 @@ fn pairs() -> &'static [[f32; 4]; 256] {
 
 /// Steered-BRIEF descriptors for `corners` (orientation from the intensity centroid unless
 /// `upright`). Returns one descriptor per corner, in order.
-pub fn describe(w: usize, h: usize, img: &[f32], corners: &[Corner], upright: bool) -> Vec<Descriptor> {
+pub fn describe(
+    w: usize,
+    h: usize,
+    img: &[f32],
+    corners: &[Corner],
+    upright: bool,
+) -> Vec<Descriptor> {
     let smooth = blur(w, h, img, 2);
     let at = |x: f32, y: f32| -> f32 {
-        let (xi, yi) = ((x.round() as i64).clamp(0, w as i64 - 1) as usize, (y.round() as i64).clamp(0, h as i64 - 1) as usize);
+        let (xi, yi) = (
+            (x.round() as i64).clamp(0, w as i64 - 1) as usize,
+            (y.round() as i64).clamp(0, h as i64 - 1) as usize,
+        );
         smooth[yi * w + xi]
     };
     corners
@@ -236,7 +298,9 @@ pub fn match_descriptors(a: &[Descriptor], b: &[Descriptor], ratio: f32) -> Vec<
         if d1 > 80 || (d2 != u32::MAX && d1 as f32 > ratio * d2 as f32) {
             return None;
         }
-        best(&b[j], a).is_some_and(|(k, _, _)| k == i).then_some((i, j))
+        best(&b[j], a)
+            .is_some_and(|(k, _, _)| k == i)
+            .then_some((i, j))
     });
     matched.into_iter().flatten().collect()
 }
@@ -290,9 +354,20 @@ fn least_squares(rows: &[(Vec<f64>, f64)], n: usize) -> Option<Vec<f64>> {
 /// Hartley normalisation: centroid to the origin, mean distance √2.
 fn normaliser(pts: &[[f64; 2]]) -> Homography {
     let n = pts.len().max(1) as f64;
-    let (cx, cy) = (pts.iter().map(|p| p[0]).sum::<f64>() / n, pts.iter().map(|p| p[1]).sum::<f64>() / n);
-    let d = pts.iter().map(|p| (p[0] - cx).hypot(p[1] - cy)).sum::<f64>() / n;
-    let s = if d > 1e-12 { std::f64::consts::SQRT_2 / d } else { 1.0 };
+    let (cx, cy) = (
+        pts.iter().map(|p| p[0]).sum::<f64>() / n,
+        pts.iter().map(|p| p[1]).sum::<f64>() / n,
+    );
+    let d = pts
+        .iter()
+        .map(|p| (p[0] - cx).hypot(p[1] - cy))
+        .sum::<f64>()
+        / n;
+    let s = if d > 1e-12 {
+        std::f64::consts::SQRT_2 / d
+    } else {
+        1.0
+    };
     Homography([s, 0.0, -s * cx, 0.0, s, -s * cy, 0.0, 0.0, 1.0])
 }
 
@@ -304,18 +379,40 @@ pub fn fit(model: Model, src: &[[f64; 2]], dst: &[[f64; 2]]) -> Option<Homograph
             if n == 0 {
                 return None;
             }
-            let (tx, ty) = src.iter().zip(dst).fold((0.0, 0.0), |(ax, ay), (s, d)| (ax + d[0] - s[0], ay + d[1] - s[1]));
-            Some(Homography([1.0, 0.0, tx / n as f64, 0.0, 1.0, ty / n as f64, 0.0, 0.0, 1.0]))
+            let (tx, ty) = src.iter().zip(dst).fold((0.0, 0.0), |(ax, ay), (s, d)| {
+                (ax + d[0] - s[0], ay + d[1] - s[1])
+            });
+            Some(Homography([
+                1.0,
+                0.0,
+                tx / n as f64,
+                0.0,
+                1.0,
+                ty / n as f64,
+                0.0,
+                0.0,
+                1.0,
+            ]))
         }
         Model::Similarity => {
             if n < 2 {
                 return None;
             }
             // x' = a·x − b·y + tx, y' = b·x + a·y + ty.
-            let rows: Vec<(Vec<f64>, f64)> =
-                src.iter().zip(dst).flat_map(|(s, d)| [(vec![s[0], -s[1], 1.0, 0.0], d[0]), (vec![s[1], s[0], 0.0, 1.0], d[1])]).collect();
+            let rows: Vec<(Vec<f64>, f64)> = src
+                .iter()
+                .zip(dst)
+                .flat_map(|(s, d)| {
+                    [
+                        (vec![s[0], -s[1], 1.0, 0.0], d[0]),
+                        (vec![s[1], s[0], 0.0, 1.0], d[1]),
+                    ]
+                })
+                .collect();
             let v = least_squares(&rows, 4)?;
-            Some(Homography([v[0], -v[1], v[2], v[1], v[0], v[3], 0.0, 0.0, 1.0]))
+            Some(Homography([
+                v[0], -v[1], v[2], v[1], v[0], v[3], 0.0, 0.0, 1.0,
+            ]))
         }
         Model::Homography => {
             if n < 4 {
@@ -328,7 +425,10 @@ pub fn fit(model: Model, src: &[[f64; 2]], dst: &[[f64; 2]]) -> Option<Homograph
                 .flat_map(|(s, d)| {
                     let (x, y) = ts.apply(s[0], s[1]);
                     let (u, v) = td.apply(d[0], d[1]);
-                    [(vec![x, y, 1.0, 0.0, 0.0, 0.0, -u * x, -u * y], u), (vec![0.0, 0.0, 0.0, x, y, 1.0, -v * x, -v * y], v)]
+                    [
+                        (vec![x, y, 1.0, 0.0, 0.0, 0.0, -u * x, -u * y], u),
+                        (vec![0.0, 0.0, 0.0, x, y, 1.0, -v * x, -v * y], v),
+                    ]
                 })
                 .collect();
             let h = least_squares(&rows, 8)?;
@@ -350,7 +450,14 @@ fn min_points(model: Model) -> usize {
 
 /// RANSAC: the model with the most correspondences within `threshold` pixels after `iters`
 /// random minimal samples, refit to its inliers. Returns the model and the inlier indices.
-pub fn ransac(model: Model, src: &[[f64; 2]], dst: &[[f64; 2]], iters: usize, threshold: f64, seed: u64) -> Option<(Homography, Vec<usize>)> {
+pub fn ransac(
+    model: Model,
+    src: &[[f64; 2]],
+    dst: &[[f64; 2]],
+    iters: usize,
+    threshold: f64,
+    seed: u64,
+) -> Option<(Homography, Vec<usize>)> {
     let k = min_points(model);
     let n = src.len();
     if n < k {
@@ -378,7 +485,9 @@ pub fn ransac(model: Model, src: &[[f64; 2]], dst: &[[f64; 2]], iters: usize, th
             }
         }
         let (s, d): (Vec<[f64; 2]>, Vec<[f64; 2]>) = idx.iter().map(|&i| (src[i], dst[i])).unzip();
-        let Some(h) = fit(model, &s, &d) else { continue };
+        let Some(h) = fit(model, &s, &d) else {
+            continue;
+        };
         let inl = inliers_of(&h);
         if best.as_ref().is_none_or(|(_, b)| inl.len() > b.len()) {
             best = Some((h, inl));
@@ -392,7 +501,11 @@ pub fn ransac(model: Model, src: &[[f64; 2]], dst: &[[f64; 2]], iters: usize, th
     let (s, d): (Vec<[f64; 2]>, Vec<[f64; 2]>) = inl.iter().map(|&i| (src[i], dst[i])).unzip();
     let h2 = fit(model, &s, &d).unwrap_or(h);
     let inl2 = inliers_of(&h2);
-    Some(if inl2.len() >= inl.len() { (h2, inl2) } else { (h, inl) })
+    Some(if inl2.len() >= inl.len() {
+        (h2, inl2)
+    } else {
+        (h, inl)
+    })
 }
 
 /// Register `moving` onto `reference` (both `w × h` luminance; optional validity masks for
@@ -414,10 +527,19 @@ pub fn register(
     if ca.len() < 4 || cb.len() < 4 {
         return None;
     }
-    let (da, db) = (describe(w, h, reference, &ca, upright), describe(w, h, moving, &cb, upright));
+    let (da, db) = (
+        describe(w, h, reference, &ca, upright),
+        describe(w, h, moving, &cb, upright),
+    );
     let matches = match_descriptors(&db, &da, 0.85);
-    let src: Vec<[f64; 2]> = matches.iter().map(|&(i, _)| [cb[i].x as f64, cb[i].y as f64]).collect();
-    let dst: Vec<[f64; 2]> = matches.iter().map(|&(_, j)| [ca[j].x as f64, ca[j].y as f64]).collect();
+    let src: Vec<[f64; 2]> = matches
+        .iter()
+        .map(|&(i, _)| [cb[i].x as f64, cb[i].y as f64])
+        .collect();
+    let dst: Vec<[f64; 2]> = matches
+        .iter()
+        .map(|&(_, j)| [ca[j].x as f64, ca[j].y as f64])
+        .collect();
     let threshold = (w.max(h) as f64 / 400.0).clamp(1.5, 4.0);
     let (hm, inl) = ransac(model, &src, &dst, 1000, threshold, 7)?;
     (inl.len() >= min_points(model).max(6)).then_some((hm, inl.len()))
@@ -439,7 +561,11 @@ mod tests {
             for y in 0..h {
                 for x in 0..w {
                     let (dx, dy) = (x as f64 - cx, y as f64 - cy);
-                    let inside = if sq { dx.abs() < r && dy.abs() < r * 0.6 } else { dx.hypot(dy) < r };
+                    let inside = if sq {
+                        dx.abs() < r && dy.abs() < r * 0.6
+                    } else {
+                        dx.hypot(dy) < r
+                    };
                     if inside {
                         img[y * w + x] = v;
                     }
@@ -481,13 +607,23 @@ mod tests {
         let c = harris(w, h, &img, 10, 5.0, None);
         assert!(c.len() >= 4, "{c:?}");
         for (x, y) in [(30.0, 30.0), (49.0, 49.0)] {
-            assert!(c.iter().any(|k| (k.x - x).abs() <= 2.0 && (k.y - y).abs() <= 2.0), "corner near ({x},{y}): {c:?}");
+            assert!(
+                c.iter()
+                    .any(|k| (k.x - x).abs() <= 2.0 && (k.y - y).abs() <= 2.0),
+                "corner near ({x},{y}): {c:?}"
+            );
         }
     }
 
     #[test]
     fn fits_are_exact_on_clean_data() {
-        let src = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [5.0, 3.0]];
+        let src = [
+            [0.0, 0.0],
+            [10.0, 0.0],
+            [10.0, 10.0],
+            [0.0, 10.0],
+            [5.0, 3.0],
+        ];
         let truth = Homography([1.1, 0.05, 3.0, -0.02, 0.95, -2.0, 0.001, 0.0005, 1.0]);
         let dst: Vec<[f64; 2]> = src
             .iter()
@@ -520,7 +656,11 @@ mod tests {
         for i in 0..40 {
             let p = [(i * 7 % 50) as f64, (i * 13 % 50) as f64];
             src.push(p);
-            dst.push(if i % 4 == 0 { [p[0] * 3.0 + 40.0, -p[1]] } else { [p[0] + 12.0, p[1] - 5.0] });
+            dst.push(if i % 4 == 0 {
+                [p[0] * 3.0 + 40.0, -p[1]]
+            } else {
+                [p[0] + 12.0, p[1] - 5.0]
+            });
         }
         let (h, inl) = ransac(Model::Translation, &src, &dst, 100, 1.0, 1).unwrap();
         assert_eq!(inl.len(), 30);
@@ -536,18 +676,37 @@ mod tests {
         let moving = warp(w, h, &reference, &shift.inverse().unwrap());
         let (m, n) = register(w, h, &reference, &moving, None, None, Model::Translation).unwrap();
         assert!(n >= 6);
-        assert!((m.0[2] + 9.0).abs() < 1.0 && (m.0[5] - 6.0).abs() < 1.0, "{m:?}");
+        assert!(
+            (m.0[2] + 9.0).abs() < 1.0 && (m.0[5] - 6.0).abs() < 1.0,
+            "{m:?}"
+        );
         // Rotated 4° and scaled 1.03 about the centre.
-        let (c, s) = (4f64.to_radians().cos() * 1.03, 4f64.to_radians().sin() * 1.03);
+        let (c, s) = (
+            4f64.to_radians().cos() * 1.03,
+            4f64.to_radians().sin() * 1.03,
+        );
         let (cx, cy) = (w as f64 / 2.0, h as f64 / 2.0);
-        let sim = Homography([c, -s, cx - c * cx + s * cy, s, c, cy - s * cx - c * cy, 0.0, 0.0, 1.0]);
+        let sim = Homography([
+            c,
+            -s,
+            cx - c * cx + s * cy,
+            s,
+            c,
+            cy - s * cx - c * cy,
+            0.0,
+            0.0,
+            1.0,
+        ]);
         let moving = warp(w, h, &reference, &sim.inverse().unwrap());
         let (m, _) = register(w, h, &reference, &moving, None, None, Model::Similarity).unwrap();
         // m should undo sim: m · sim ≈ identity at a few points.
         for p in [[40.0, 40.0], [150.0, 120.0], [96.0, 80.0]] {
             let (x, y) = sim.apply(p[0], p[1]);
             let (bx, by) = m.apply(x, y);
-            assert!((bx - p[0]).abs() < 1.5 && (by - p[1]).abs() < 1.5, "{p:?} → {bx},{by}");
+            assert!(
+                (bx - p[0]).abs() < 1.5 && (by - p[1]).abs() < 1.5,
+                "{p:?} → {bx},{by}"
+            );
         }
     }
 
@@ -556,7 +715,10 @@ mod tests {
         let (w, h) = (96, 96);
         let img = texture(w, h);
         let c = harris(w, h, &img, 50, 6.0, None);
-        assert_eq!(describe(w, h, &img, &c, false), describe(w, h, &img, &c, false));
+        assert_eq!(
+            describe(w, h, &img, &c, false),
+            describe(w, h, &img, &c, false)
+        );
         assert_eq!(hamming(&[0, 0, 0, 0], &[1, 3, 0, u64::MAX]), 67);
     }
 }

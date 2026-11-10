@@ -13,13 +13,13 @@ use std::cell::RefCell;
 use std::ptr::NonNull;
 
 use block2::RcBlock;
-use objc2::MainThreadMarker;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
+use objc2::MainThreadMarker;
 use objc2_app_kit::{NSEvent, NSEventMask};
 
 use crate::appkit::{RawEvent, State};
-use crate::{Error, Sample, Update, deliver};
+use crate::{deliver, Error, Sample, Update};
 
 /// Keeps the monitor installed; dropping it removes the monitor. Main-thread only (not `Send`).
 pub struct Monitor {
@@ -56,9 +56,15 @@ impl Monitor {
         // SAFETY: the handler returns the (non-null, valid) event it was given, as the API
         // requires ("block's return must be a valid pointer or null"). We keep the block alive
         // in `Monitor` as well, although AppKit copies it.
-        let token = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(mask, &handler) };
-        let token = token.ok_or_else(|| Error::Platform("addLocalMonitorForEventsMatchingMask returned nil".into()))?;
-        Ok(Self { token, _handler: handler })
+        let token =
+            unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(mask, &handler) };
+        let token = token.ok_or_else(|| {
+            Error::Platform("addLocalMonitorForEventsMatchingMask returned nil".into())
+        })?;
+        Ok(Self {
+            token,
+            _handler: handler,
+        })
     }
 }
 
@@ -75,20 +81,37 @@ impl Drop for Monitor {
 /// are only read for the event types that define them, see [`crate::appkit`]).
 fn read(e: &NSEvent) -> RawEvent {
     let kind = e.r#type().0;
-    let tabletish = matches!(kind, crate::appkit::event_type::TABLET_POINT | crate::appkit::event_type::TABLET_PROXIMITY);
+    let tabletish = matches!(
+        kind,
+        crate::appkit::event_type::TABLET_POINT | crate::appkit::event_type::TABLET_PROXIMITY
+    );
     let mouse = !tabletish && is_mouse(kind);
     // `subtype` raises an exception for event types without one; ask only mouse events.
     let subtype = if mouse { e.subtype().0 } else { 0 };
-    let proximity = kind == crate::appkit::event_type::TABLET_PROXIMITY || (mouse && subtype == crate::appkit::subtype::TABLET_PROXIMITY);
-    let point = kind == crate::appkit::event_type::TABLET_POINT || (mouse && subtype == crate::appkit::subtype::TABLET_POINT);
+    let proximity = kind == crate::appkit::event_type::TABLET_PROXIMITY
+        || (mouse && subtype == crate::appkit::subtype::TABLET_PROXIMITY);
+    let point = kind == crate::appkit::event_type::TABLET_POINT
+        || (mouse && subtype == crate::appkit::subtype::TABLET_POINT);
     let (pressure, tilt, rotation) = if point {
         let t = e.tilt();
         (e.pressure(), (t.x, t.y), e.rotation())
     } else {
         (0.0, (0.0, 0.0), 0.0)
     };
-    let (device, entering) = if proximity { (e.pointingDeviceType().0, e.isEnteringProximity()) } else { (0, false) };
-    RawEvent { kind, subtype, pressure, tilt, rotation, device, entering }
+    let (device, entering) = if proximity {
+        (e.pointingDeviceType().0, e.isEnteringProximity())
+    } else {
+        (0, false)
+    };
+    RawEvent {
+        kind,
+        subtype,
+        pressure,
+        tilt,
+        rotation,
+        device,
+        entering,
+    }
 }
 
 fn is_mouse(kind: usize) -> bool {
@@ -111,26 +134,31 @@ fn is_mouse(kind: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use objc2_core_graphics::{CGEvent, CGEventField, CGEventMouseSubtype, CGEventType, CGMouseButton};
+    use objc2_core_graphics::{
+        CGEvent, CGEventField, CGEventMouseSubtype, CGEventType, CGMouseButton,
+    };
     use objc2_foundation::NSPoint;
 
     #[test]
     fn install_off_the_main_thread_is_an_error() {
         // `cargo test` runs tests on worker threads, never on the main thread.
-        let r = std::thread::spawn(|| Monitor::install(|_| {}).err()).join().unwrap();
+        let r = std::thread::spawn(|| Monitor::install(|_| {}).err())
+            .join()
+            .unwrap();
         assert_eq!(r, Some(Error::NotMainThread));
     }
 
     /// A real `NSEvent` built from a Quartz event, as the tablet driver posts them.
     fn event(kind: CGEventType, set: impl Fn(&CGEvent)) -> objc2::rc::Retained<NSEvent> {
         // Quartz builds mouse events only; other types start blank and get their type set.
-        let cg = CGEvent::new_mouse_event(None, kind, NSPoint::new(10.0, 10.0), CGMouseButton::Left)
-            .or_else(|| {
-                let e = CGEvent::new(None)?;
-                CGEvent::set_type(Some(&e), kind);
-                Some(e)
-            })
-            .expect("CGEvent");
+        let cg =
+            CGEvent::new_mouse_event(None, kind, NSPoint::new(10.0, 10.0), CGMouseButton::Left)
+                .or_else(|| {
+                    let e = CGEvent::new(None)?;
+                    CGEvent::set_type(Some(&e), kind);
+                    Some(e)
+                })
+                .expect("CGEvent");
         set(&cg);
         NSEvent::eventWithCGEvent(&cg).expect("NSEvent")
     }
@@ -148,7 +176,11 @@ mod tests {
     fn tablet_events_read_through_the_monitor_path() {
         let mut st = State::default();
         let drag = event(CGEventType::LeftMouseDragged, |e| {
-            int(e, CGEventField::MouseEventSubtype, i64::from(CGEventMouseSubtype::TabletPoint.0));
+            int(
+                e,
+                CGEventField::MouseEventSubtype,
+                i64::from(CGEventMouseSubtype::TabletPoint.0),
+            );
             dbl(e, CGEventField::MouseEventPressure, 0.25);
             dbl(e, CGEventField::TabletEventPointPressure, 0.25);
             dbl(e, CGEventField::TabletEventTiltX, 0.5);
@@ -157,23 +189,37 @@ mod tests {
         });
         let raw = read(&drag);
         assert_eq!((raw.kind, raw.subtype), (6, 1));
-        let Update::Set(Some(s)) = st.handle(&raw) else { panic!("{raw:?}") };
+        let Update::Set(Some(s)) = st.handle(&raw) else {
+            panic!("{raw:?}")
+        };
         assert!((s.pressure - 0.25).abs() < 0.01, "{s:?}"); // Quartz keeps 8 bits of mouse pressure.
-        assert!((s.tilt_x - 30.0).abs() < 0.1 && (s.tilt_y - 30.0).abs() < 0.1, "{s:?}");
+        assert!(
+            (s.tilt_x - 30.0).abs() < 0.1 && (s.tilt_y - 30.0).abs() < 0.1,
+            "{s:?}"
+        );
         assert!((s.rotation - 45.0).abs() < 0.1, "{s:?}");
         assert!(!s.eraser);
 
         // Eraser end entering proximity, then a press with it.
         let prox = event(CGEventType::TabletProximity, |e| {
-            int(e, CGEventField::TabletProximityEventPointerType, crate::appkit::device::ERASER as i64);
+            int(
+                e,
+                CGEventField::TabletProximityEventPointerType,
+                crate::appkit::device::ERASER as i64,
+            );
             int(e, CGEventField::TabletProximityEventEnterProximity, 1);
         });
         let raw = read(&prox);
         assert_eq!((raw.kind, raw.device, raw.entering), (24, 3, true));
-        assert!(matches!(st.handle(&raw), Update::Set(Some(Sample { eraser: true, .. }))));
+        assert!(matches!(
+            st.handle(&raw),
+            Update::Set(Some(Sample { eraser: true, .. }))
+        ));
 
         // A plain mouse event (subtype 0) is a mouse, whatever its pressure.
-        let mouse = event(CGEventType::LeftMouseDown, |e| dbl(e, CGEventField::MouseEventPressure, 0.7));
+        let mouse = event(CGEventType::LeftMouseDown, |e| {
+            dbl(e, CGEventField::MouseEventPressure, 0.7)
+        });
         let raw = read(&mouse);
         assert_eq!((raw.kind, raw.subtype), (1, 0));
         assert_eq!(st.handle(&raw), Update::Set(None));

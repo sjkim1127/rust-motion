@@ -71,15 +71,15 @@ fn test_affinity_blend_mode_mapping() {
 #[test]
 fn test_affinity_path_conversion() {
     let path = AffPath {
-        subpaths: vec![
-            SubPath {
-                start: Point { x: 10.0, y: 10.0 },
-                segments: vec![
-                    [Point { x: 20.0, y: 10.0 }, Point { x: 30.0, y: 20.0 }, Point { x: 40.0, y: 20.0 }],
-                ],
-                closed: true,
-            },
-        ],
+        subpaths: vec![SubPath {
+            start: Point { x: 10.0, y: 10.0 },
+            segments: vec![[
+                Point { x: 20.0, y: 10.0 },
+                Point { x: 30.0, y: 20.0 },
+                Point { x: 40.0, y: 20.0 },
+            ]],
+            closed: true,
+        }],
     };
     let svg = affinity_path_to_svg_d(&path);
     assert!(svg.starts_with("M 10 10"));

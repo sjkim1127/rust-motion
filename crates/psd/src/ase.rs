@@ -163,11 +163,18 @@ fn read_color(body: &mut Reader<'_>) -> Result<AseSwatch> {
         _ => {
             // Unknown model: everything but the trailing colour type is its data.
             let n = body.remaining().saturating_sub(2);
-            AseColor::Other { model, data: body.bytes(n)?.to_vec() }
+            AseColor::Other {
+                model,
+                data: body.bytes(n)?.to_vec(),
+            }
         }
     };
     // Some writers omit the colour type; it defaults to process.
-    let kind = if body.remaining() >= 2 { AseKind::from_u16(body.u16()?) } else { AseKind::Process };
+    let kind = if body.remaining() >= 2 {
+        AseKind::from_u16(body.u16()?)
+    } else {
+        AseKind::Process
+    };
     Ok(AseSwatch { name, color, kind })
 }
 
@@ -179,7 +186,10 @@ pub fn parse(data: &[u8]) -> Result<AseFile> {
     let mut r = Reader::new(data);
     let sig: [u8; 4] = r.array()?;
     if &sig != SIGNATURE {
-        return Err(PsdError::InvalidSignature { expected: "ASEF", found: sig });
+        return Err(PsdError::InvalidSignature {
+            expected: "ASEF",
+            found: sig,
+        });
     }
     let major = r.u16()?;
     let _minor = r.u16()?;
@@ -239,7 +249,9 @@ fn put_name(out: &mut Vec<u8>, name: &str) {
 
 fn put_block(out: &mut Vec<u8>, kind: u16, body: &[u8]) -> Result<()> {
     out.put_u16(kind);
-    out.put_u32(u32::try_from(body.len()).map_err(|_| PsdError::LimitExceeded("swatch block too large"))?);
+    out.put_u32(
+        u32::try_from(body.len()).map_err(|_| PsdError::LimitExceeded("swatch block too large"))?,
+    );
     out.put(body);
     Ok(())
 }
@@ -282,7 +294,9 @@ fn put_color(out: &mut Vec<u8>, s: &AseSwatch) -> Result<()> {
 /// format's 32-bit fields or there are more than [`MAX_SWATCHES`] colours.
 pub fn write(file: &AseFile) -> Result<Vec<u8>> {
     if file.swatch_count() > MAX_SWATCHES {
-        return Err(PsdError::LimitExceeded("too many swatches for an .ase file"));
+        return Err(PsdError::LimitExceeded(
+            "too many swatches for an .ase file",
+        ));
     }
     let mut body = Vec::with_capacity(64 * file.swatch_count().max(1));
     let mut blocks = 0u64;
@@ -318,23 +332,45 @@ mod tests {
     use super::*;
 
     fn sw(name: &str, color: AseColor, kind: AseKind) -> AseSwatch {
-        AseSwatch { name: name.into(), color, kind }
+        AseSwatch {
+            name: name.into(),
+            color,
+            kind,
+        }
     }
 
     fn sample() -> AseFile {
         AseFile {
             entries: vec![
-                AseEntry::Swatch(sw("Loose red", AseColor::Rgb([1.0, 0.0, 0.0]), AseKind::Process)),
+                AseEntry::Swatch(sw(
+                    "Loose red",
+                    AseColor::Rgb([1.0, 0.0, 0.0]),
+                    AseKind::Process,
+                )),
                 AseEntry::Group {
                     name: "Brand ✓".into(),
                     swatches: vec![
                         sw("Ink", AseColor::Cmyk([0.1, 0.2, 0.3, 0.4]), AseKind::Spot),
-                        sw("Lab", AseColor::Lab([0.5321, -12.25, 40.5]), AseKind::Global),
+                        sw(
+                            "Lab",
+                            AseColor::Lab([0.5321, -12.25, 40.5]),
+                            AseKind::Global,
+                        ),
                         sw("Mid gray", AseColor::Gray(0.5), AseKind::Process),
-                        sw("Odd", AseColor::Other { model: *b"HSV ", data: vec![1, 2, 3, 4, 5, 6] }, AseKind::Process),
+                        sw(
+                            "Odd",
+                            AseColor::Other {
+                                model: *b"HSV ",
+                                data: vec![1, 2, 3, 4, 5, 6],
+                            },
+                            AseKind::Process,
+                        ),
                     ],
                 },
-                AseEntry::Group { name: String::new(), swatches: vec![] },
+                AseEntry::Group {
+                    name: String::new(),
+                    swatches: vec![],
+                },
             ],
         }
     }
@@ -345,7 +381,10 @@ mod tests {
         let bytes = write(&f).unwrap();
         assert_eq!(&bytes[..4], b"ASEF");
         // 1 loose + (start + 4 + end) + (start + end).
-        assert_eq!(u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]), 9);
+        assert_eq!(
+            u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]),
+            9
+        );
         let back = parse(&bytes).unwrap();
         assert_eq!(back, f);
         assert_eq!(write(&back).unwrap(), bytes, "byte-stable");
@@ -369,14 +408,33 @@ mod tests {
         let mut f = b"ASEF\0\x01\0\0\0\0\0\x04".to_vec();
         f.extend_from_slice(&body);
         let p = parse(&f).unwrap();
-        assert_eq!(p.entries, vec![AseEntry::Group { name: "G".into(), swatches: vec![sw("A", AseColor::Gray(0.25), AseKind::Process)] }]);
+        assert_eq!(
+            p.entries,
+            vec![AseEntry::Group {
+                name: "G".into(),
+                swatches: vec![sw("A", AseColor::Gray(0.25), AseKind::Process)]
+            }]
+        );
     }
 
     #[test]
     fn non_finite_components_become_zero() {
-        let f = AseFile { entries: vec![AseEntry::Swatch(sw("n", AseColor::Rgb([f32::NAN, f32::INFINITY, 0.5]), AseKind::Process))] };
+        let f = AseFile {
+            entries: vec![AseEntry::Swatch(sw(
+                "n",
+                AseColor::Rgb([f32::NAN, f32::INFINITY, 0.5]),
+                AseKind::Process,
+            ))],
+        };
         let p = parse(&write(&f).unwrap()).unwrap();
-        assert_eq!(p.entries, vec![AseEntry::Swatch(sw("n", AseColor::Rgb([0.0, 0.0, 0.5]), AseKind::Process))]);
+        assert_eq!(
+            p.entries,
+            vec![AseEntry::Swatch(sw(
+                "n",
+                AseColor::Rgb([0.0, 0.0, 0.5]),
+                AseKind::Process
+            ))]
+        );
     }
 
     #[test]
@@ -387,7 +445,10 @@ mod tests {
         }
         assert!(parse(b"ASEX\0\x01\0\0\0\0\0\0").is_err(), "signature");
         assert!(parse(b"ASEF\0\x02\0\0\0\0\0\0").is_err(), "version");
-        assert!(parse(b"ASEF\0\x01\0\0\xff\xff\xff\xff").is_err(), "huge block count");
+        assert!(
+            parse(b"ASEF\0\x01\0\0\xff\xff\xff\xff").is_err(),
+            "huge block count"
+        );
         // A block length beyond the data.
         assert!(parse(b"ASEF\0\x01\0\0\0\0\0\x01\0\x01\xff\xff\xff\xff").is_err());
         // A name length beyond the block.
@@ -412,7 +473,12 @@ mod tests {
     #[test]
     fn too_many_swatches() {
         let s = sw("", AseColor::Gray(0.0), AseKind::Process);
-        let f = AseFile { entries: vec![AseEntry::Group { name: "g".into(), swatches: vec![s; MAX_SWATCHES + 1] }] };
+        let f = AseFile {
+            entries: vec![AseEntry::Group {
+                name: "g".into(),
+                swatches: vec![s; MAX_SWATCHES + 1],
+            }],
+        };
         assert!(write(&f).is_err());
     }
 }

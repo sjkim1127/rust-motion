@@ -24,7 +24,14 @@
 //! A sample is reported through a callback: `Some(sample)` while a pen is in use (hovering or
 //! touching), `None` when the pointer is a mouse again.
 
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 pub mod appkit;
 pub mod recorder;
@@ -52,7 +59,13 @@ pub struct Sample {
 
 impl Default for Sample {
     fn default() -> Self {
-        Self { pressure: 1.0, tilt_x: 0.0, tilt_y: 0.0, rotation: 0.0, eraser: false }
+        Self {
+            pressure: 1.0,
+            tilt_x: 0.0,
+            tilt_y: 0.0,
+            rotation: 0.0,
+            eraser: false,
+        }
     }
 }
 
@@ -61,7 +74,11 @@ impl Sample {
     /// full pressure, like a mouse; NaN tilt and rotation as 0).
     pub fn sanitized(self) -> Self {
         let f = |v: f32, lo: f32, hi: f32, d: f32| if v.is_finite() { v.clamp(lo, hi) } else { d };
-        let rotation = if self.rotation.is_finite() { self.rotation.rem_euclid(360.0) } else { 0.0 };
+        let rotation = if self.rotation.is_finite() {
+            self.rotation.rem_euclid(360.0)
+        } else {
+            0.0
+        };
         Self {
             pressure: f(self.pressure, 0.0, 1.0, 1.0),
             tilt_x: f(self.tilt_x, -90.0, 90.0, 0.0),
@@ -108,7 +125,9 @@ impl std::error::Error for Error {}
 /// Sanitize a sample and run a user callback with it, without letting a panic unwind into the platform's event loop (an unwind
 /// through an Objective-C block or a detached thread would abort or silently stop input).
 pub fn deliver(callback: &dyn Fn(Option<Sample>), sample: Option<Sample>) {
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(sample.map(Sample::sanitized))));
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        callback(sample.map(Sample::sanitized))
+    }));
 }
 
 #[cfg(test)]
@@ -117,20 +136,66 @@ mod tests {
 
     #[test]
     fn sanitized_clamps_and_replaces_non_finite() {
-        let s = Sample { pressure: 1.7, tilt_x: -120.0, tilt_y: f32::NAN, rotation: -90.0, eraser: true }.sanitized();
-        assert_eq!(s, Sample { pressure: 1.0, tilt_x: -90.0, tilt_y: 0.0, rotation: 270.0, eraser: true });
-        let s = Sample { pressure: f32::NAN, tilt_x: f32::INFINITY, tilt_y: f32::NEG_INFINITY, rotation: f32::INFINITY, eraser: false }.sanitized();
+        let s = Sample {
+            pressure: 1.7,
+            tilt_x: -120.0,
+            tilt_y: f32::NAN,
+            rotation: -90.0,
+            eraser: true,
+        }
+        .sanitized();
+        assert_eq!(
+            s,
+            Sample {
+                pressure: 1.0,
+                tilt_x: -90.0,
+                tilt_y: 0.0,
+                rotation: 270.0,
+                eraser: true
+            }
+        );
+        let s = Sample {
+            pressure: f32::NAN,
+            tilt_x: f32::INFINITY,
+            tilt_y: f32::NEG_INFINITY,
+            rotation: f32::INFINITY,
+            eraser: false,
+        }
+        .sanitized();
         assert_eq!(s, Sample::default());
-        let s = Sample { pressure: -0.5, rotation: -1e-9, ..Default::default() }.sanitized();
+        let s = Sample {
+            pressure: -0.5,
+            rotation: -1e-9,
+            ..Default::default()
+        }
+        .sanitized();
         assert_eq!((s.pressure, s.rotation), (0.0, 0.0));
-        assert!(Sample { rotation: 725.0, ..Default::default() }.sanitized().rotation == 5.0);
+        assert!(
+            Sample {
+                rotation: 725.0,
+                ..Default::default()
+            }
+            .sanitized()
+            .rotation
+                == 5.0
+        );
     }
 
     #[test]
     fn deliver_contains_a_panicking_callback() {
         let seen = std::cell::Cell::new(None);
-        deliver(&|s| seen.set(s), Some(Sample { pressure: 3.0, ..Default::default() }));
-        assert_eq!(seen.get().map(|s| s.pressure), Some(1.0), "sanitized on the way out");
+        deliver(
+            &|s| seen.set(s),
+            Some(Sample {
+                pressure: 3.0,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(
+            seen.get().map(|s| s.pressure),
+            Some(1.0),
+            "sanitized on the way out"
+        );
         deliver(&|_| panic!("boom"), None);
     }
 }

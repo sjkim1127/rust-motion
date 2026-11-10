@@ -7,9 +7,16 @@ use proptest::prelude::*;
 fn truncation_sweep(bytes: &[u8], name: &str) {
     for cut in 0..bytes.len() {
         let r = PsdFile::from_bytes(&bytes[..cut]);
-        assert!(r.is_err(), "{name}: truncation at {cut}/{} parsed successfully", bytes.len());
+        assert!(
+            r.is_err(),
+            "{name}: truncation at {cut}/{} parsed successfully",
+            bytes.len()
+        );
     }
-    assert!(PsdFile::from_bytes(bytes).is_ok(), "{name}: full file must parse");
+    assert!(
+        PsdFile::from_bytes(bytes).is_ok(),
+        "{name}: full file must parse"
+    );
 }
 
 macro_rules! trunc {
@@ -25,17 +32,27 @@ macro_rules! trunc {
 trunc!(truncate_small_psd_raw, Version::Psd, Compression::Raw);
 trunc!(truncate_small_psd_rle, Version::Psd, Compression::Rle);
 trunc!(truncate_small_psd_zip, Version::Psd, Compression::Zip);
-trunc!(truncate_small_psd_zipp, Version::Psd, Compression::ZipPrediction);
+trunc!(
+    truncate_small_psd_zipp,
+    Version::Psd,
+    Compression::ZipPrediction
+);
 trunc!(truncate_small_psb_raw, Version::Psb, Compression::Raw);
 trunc!(truncate_small_psb_rle, Version::Psb, Compression::Rle);
 trunc!(truncate_small_psb_zip, Version::Psb, Compression::Zip);
-trunc!(truncate_small_psb_zipp, Version::Psb, Compression::ZipPrediction);
+trunc!(
+    truncate_small_psb_zipp,
+    Version::Psb,
+    Compression::ZipPrediction
+);
 
 #[test]
 fn truncate_merged_only_all_modes() {
     for mode in testgen::MODES {
         for &depth in testgen::mode_depths(mode) {
-            let b = testgen::merged_only(Version::Psd, mode, depth, Compression::Rle, 5, 3).to_bytes().unwrap();
+            let b = testgen::merged_only(Version::Psd, mode, depth, Compression::Rle, 5, 3)
+                .to_bytes()
+                .unwrap();
             truncation_sweep(&b, &format!("{mode:?} {depth}"));
         }
     }
@@ -44,35 +61,57 @@ fn truncate_merged_only_all_modes() {
 #[test]
 fn truncate_builder_16bit_lr16() {
     let mut b = PsdBuilder::new(3, 2).depth(16);
-    b.push_layer(LayerSpec::new("x", 0, 0, 3, 2, PixelData::Rgba16(vec![1000; 24])));
+    b.push_layer(LayerSpec::new(
+        "x",
+        0,
+        0,
+        3,
+        2,
+        PixelData::Rgba16(vec![1000; 24]),
+    ));
     let bytes = b.to_bytes().unwrap();
     truncation_sweep(&bytes, "builder 16");
 }
 
 #[test]
 fn empty_input() {
-    assert!(matches!(PsdFile::from_bytes(&[]), Err(PsdError::UnexpectedEof { .. })));
+    assert!(matches!(
+        PsdFile::from_bytes(&[]),
+        Err(PsdError::UnexpectedEof { .. })
+    ));
 }
 
 #[test]
 fn bad_file_signature() {
-    let mut b = testgen::small(Version::Psd, Compression::Raw).to_bytes().unwrap();
+    let mut b = testgen::small(Version::Psd, Compression::Raw)
+        .to_bytes()
+        .unwrap();
     b[..4].copy_from_slice(b"8BPX");
-    assert!(matches!(PsdFile::from_bytes(&b), Err(PsdError::InvalidSignature { .. })));
+    assert!(matches!(
+        PsdFile::from_bytes(&b),
+        Err(PsdError::InvalidSignature { .. })
+    ));
 }
 
 #[test]
 fn bad_version() {
-    let mut b = testgen::small(Version::Psd, Compression::Raw).to_bytes().unwrap();
+    let mut b = testgen::small(Version::Psd, Compression::Raw)
+        .to_bytes()
+        .unwrap();
     for v in [0u16, 3, 0xffff] {
         b[4..6].copy_from_slice(&v.to_be_bytes());
-        assert_eq!(PsdFile::from_bytes(&b), Err(PsdError::UnsupportedVersion(v)));
+        assert_eq!(
+            PsdFile::from_bytes(&b),
+            Err(PsdError::UnsupportedVersion(v))
+        );
     }
 }
 
 #[test]
 fn bad_depth_and_channels() {
-    let good = testgen::small(Version::Psd, Compression::Raw).to_bytes().unwrap();
+    let good = testgen::small(Version::Psd, Compression::Raw)
+        .to_bytes()
+        .unwrap();
     let mut b = good.clone();
     b[22..24].copy_from_slice(&7u16.to_be_bytes());
     assert!(PsdFile::from_bytes(&b).is_err());
@@ -86,15 +125,22 @@ fn bad_depth_and_channels() {
 
 #[test]
 fn oversized_dimensions_rejected() {
-    let mut b = testgen::small(Version::Psb, Compression::Raw).to_bytes().unwrap();
+    let mut b = testgen::small(Version::Psb, Compression::Raw)
+        .to_bytes()
+        .unwrap();
     b[14..18].copy_from_slice(&300_001u32.to_be_bytes());
-    assert!(matches!(PsdFile::from_bytes(&b), Err(PsdError::LimitExceeded(_))));
+    assert!(matches!(
+        PsdFile::from_bytes(&b),
+        Err(PsdError::LimitExceeded(_))
+    ));
 }
 
 #[test]
 fn zero_dimensions_rejected() {
     // Height is bytes 14..18 and width 18..22; the spec range starts at 1.
-    let good = testgen::small(Version::Psd, Compression::Raw).to_bytes().unwrap();
+    let good = testgen::small(Version::Psd, Compression::Raw)
+        .to_bytes()
+        .unwrap();
     for range in [14..18, 18..22, 14..22] {
         let mut b = good.clone();
         b[range.clone()].fill(0);
@@ -103,13 +149,23 @@ fn zero_dimensions_rejected() {
     }
     let mut f = testgen::small(Version::Psd, Compression::Raw);
     f.header.width = 0;
-    assert!(f.validate().is_err(), "a zero-sized header must not pass the writer's validation");
+    assert!(
+        f.validate().is_err(),
+        "a zero-sized header must not pass the writer's validation"
+    );
 }
 
 #[test]
 fn huge_declared_dimensions_small_data() {
     // 300000² RLE image with 16 bytes of data must fail fast, not allocate.
-    let mut f = testgen::merged_only(Version::Psb, ColorMode::Grayscale, 8, Compression::Rle, 1, 1);
+    let mut f = testgen::merged_only(
+        Version::Psb,
+        ColorMode::Grayscale,
+        8,
+        Compression::Rle,
+        1,
+        1,
+    );
     f.header.width = 300_000;
     f.header.height = 300_000;
     let b = f.to_bytes().unwrap();
@@ -118,7 +174,10 @@ fn huge_declared_dimensions_small_data() {
     f.image_data.compression = Compression::Zip;
     f.image_data.data = compression::zip_compress(&[0; 100]);
     let b = f.to_bytes().unwrap();
-    assert!(matches!(PsdFile::from_bytes(&b).and_then(|f| f.decode_merged()), Err(PsdError::LimitExceeded(_))));
+    assert!(matches!(
+        PsdFile::from_bytes(&b).and_then(|f| f.decode_merged()),
+        Err(PsdError::LimitExceeded(_))
+    ));
 }
 
 #[test]
@@ -127,14 +186,20 @@ fn bad_resource_signature() {
     let mut b = f.to_bytes().unwrap();
     // header 26 + color mode len 4 + resources len 4 → first resource sig.
     b[34..38].copy_from_slice(b"XXXX");
-    assert!(matches!(PsdFile::from_bytes(&b), Err(PsdError::InvalidSignature { .. })));
+    assert!(matches!(
+        PsdFile::from_bytes(&b),
+        Err(PsdError::InvalidSignature { .. })
+    ));
 }
 
 #[test]
 fn bad_layer_blend_signature() {
     let f = testgen::small(Version::Psd, Compression::Raw);
     let b = f.to_bytes().unwrap();
-    let pos = b.windows(8).position(|w| w == b"8BIMnorm").expect("blend sig");
+    let pos = b
+        .windows(8)
+        .position(|w| w == b"8BIMnorm")
+        .expect("blend sig");
     let mut b2 = b.clone();
     b2[pos..pos + 4].copy_from_slice(b"XBIM");
     assert!(PsdFile::from_bytes(&b2).is_err());
@@ -181,7 +246,12 @@ fn corrupt_layer_channel_is_lazy_error() {
 #[test]
 fn negative_layer_rect_decode_errors() {
     let mut f = testgen::small(Version::Psd, Compression::Raw);
-    f.layers_mut()[0].rect = Rect { top: 10, left: 0, bottom: 0, right: 4 };
+    f.layers_mut()[0].rect = Rect {
+        top: 10,
+        left: 0,
+        bottom: 0,
+        right: 4,
+    };
     let b = f.to_bytes().unwrap();
     let p = PsdFile::from_bytes(&b).unwrap();
     assert!(p.layers()[0].decode_channel(0, 8, Version::Psd).is_err());
@@ -192,7 +262,10 @@ fn negative_layer_rect_decode_errors() {
 fn too_many_layer_channels() {
     let f = testgen::small(Version::Psd, Compression::Raw);
     let b = f.to_bytes().unwrap();
-    let li = b.windows(4).position(|w| w == [0, 0xff, 0xff, 0xff]).is_some();
+    let li = b
+        .windows(4)
+        .position(|w| w == [0, 0xff, 0xff, 0xff])
+        .is_some();
     let _ = li;
     // Construct directly: layer count 1, rect, channel count 0xffff.
     let mut f2 = testgen::merged_only(Version::Psd, ColorMode::Rgb, 8, Compression::Raw, 1, 1);
@@ -214,7 +287,10 @@ fn too_many_layer_channels() {
     let old_lm_len = u32::from_be_bytes(b2[lm..lm + 4].try_into().unwrap()) as usize;
     out.extend_from_slice(&b2[lm + 4 + old_lm_len..]);
     b2 = out;
-    assert!(matches!(PsdFile::from_bytes(&b2), Err(PsdError::LimitExceeded(_)) | Err(PsdError::UnexpectedEof { .. })));
+    assert!(matches!(
+        PsdFile::from_bytes(&b2),
+        Err(PsdError::LimitExceeded(_)) | Err(PsdError::UnexpectedEof { .. })
+    ));
 }
 
 proptest! {

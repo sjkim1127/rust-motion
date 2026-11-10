@@ -147,13 +147,36 @@ fn wait<T>(cell: &OnceLock<T>) -> Option<&T> {
 }
 
 impl Frame {
-    pub fn new(id: u32, poc: i32, width: usize, height: usize, log2_ctb: u32, bit_depth: u32, bit_depth_c: u32) -> Self {
+    pub fn new(
+        id: u32,
+        poc: i32,
+        width: usize,
+        height: usize,
+        log2_ctb: u32,
+        bit_depth: u32,
+        bit_depth_c: u32,
+    ) -> Self {
         let n = height.div_ceil(1 << log2_ctb);
         fn cells<S: Sample>(n: usize) -> Rows {
             S::wrap_rows((0..n).map(|_| OnceLock::new()).collect())
         }
-        let rows = if stores_u8(bit_depth, bit_depth_c) { cells::<u8>(n) } else { cells::<u16>(n) };
-        Frame { id, poc, width, height, cwidth: width / 2, cheight: height / 2, log2_ctb, bit_depth, bit_depth_c, rows }
+        let rows = if stores_u8(bit_depth, bit_depth_c) {
+            cells::<u8>(n)
+        } else {
+            cells::<u16>(n)
+        };
+        Frame {
+            id,
+            poc,
+            width,
+            height,
+            cwidth: width / 2,
+            cheight: height / 2,
+            log2_ctb,
+            bit_depth,
+            bit_depth_c,
+            rows,
+        }
     }
 
     pub fn num_rows(&self) -> usize {
@@ -219,33 +242,65 @@ impl Frame {
     pub fn col_mv(&self, x: usize, y: usize) -> ColMv {
         let r = y >> self.log2_ctb;
         let y16 = (y & ((1 << self.log2_ctb) - 1)) >> 4;
-        self.col_row(r).and_then(|col| col.get(y16 * self.width16() + (x >> 4))).copied().unwrap_or_default()
+        self.col_row(r)
+            .and_then(|col| col.get(y16 * self.width16() + (x >> 4)))
+            .copied()
+            .unwrap_or_default()
     }
 
     /// Copy a w x h luma window at (x0, y0) with edge replication into `out` (stride `os`).
-    pub fn luma_window<S: Sample>(&self, x0: i32, y0: i32, w: usize, h: usize, out: &mut [i16], os: usize) {
+    pub fn luma_window<S: Sample>(
+        &self,
+        x0: i32,
+        y0: i32,
+        w: usize,
+        h: usize,
+        out: &mut [i16],
+        os: usize,
+    ) {
         let (width, height) = (self.width as i32, self.height as i32);
         let sh = self.log2_ctb;
         let mask = (1i32 << sh) - 1;
         for r in 0..h {
             let yy = (y0 + r as i32).clamp(0, height - 1);
-            let Some(row) = self.row::<S>((yy >> sh) as usize) else { return };
+            let Some(row) = self.row::<S>((yy >> sh) as usize) else {
+                return;
+            };
             let off = ((yy & mask) * width) as usize;
-            copy_line(&row.y[off..off + width as usize], x0, &mut out[r * os..r * os + w]);
+            copy_line(
+                &row.y[off..off + width as usize],
+                x0,
+                &mut out[r * os..r * os + w],
+            );
         }
     }
 
     /// Copy a w x h window of chroma component `c` (0 = Cb, 1 = Cr) with edge replication.
-    pub fn chroma_window<S: Sample>(&self, c: usize, x0: i32, y0: i32, w: usize, h: usize, out: &mut [i16], os: usize) {
+    pub fn chroma_window<S: Sample>(
+        &self,
+        c: usize,
+        x0: i32,
+        y0: i32,
+        w: usize,
+        h: usize,
+        out: &mut [i16],
+        os: usize,
+    ) {
         let (cw, ch) = (self.cwidth as i32, self.cheight as i32);
         let sh = self.log2_ctb - 1;
         let mask = (1i32 << sh) - 1;
         for r in 0..h {
             let yy = (y0 + r as i32).clamp(0, ch - 1);
-            let Some(row) = self.row::<S>((yy >> sh) as usize) else { return };
+            let Some(row) = self.row::<S>((yy >> sh) as usize) else {
+                return;
+            };
             let plane = if c == 0 { &row.cb } else { &row.cr };
             let off = ((yy & mask) * cw) as usize;
-            copy_line(&plane[off..off + cw as usize], x0, &mut out[r * os..r * os + w]);
+            copy_line(
+                &plane[off..off + cw as usize],
+                x0,
+                &mut out[r * os..r * os + w],
+            );
         }
     }
 
@@ -253,9 +308,25 @@ impl Frame {
     /// `rows` (h = `rows.len()`), lines outside the picture replicated from its top / bottom edge
     /// (8-228, 8-229): the reference window of a prediction block without copying it. False (and
     /// `rows` partly filled) when the runs are not inside the picture horizontally.
-    pub fn window_rows<'f, S: Sample>(&'f self, c: usize, x0: i32, y0: i32, w: usize, rows: &mut [&'f [S]]) -> bool {
-        let (pw, ph, sh) = if c == 0 { (self.width, self.height, self.log2_ctb) } else { (self.cwidth, self.cheight, self.log2_ctb - 1) };
-        let Some(x) = usize::try_from(x0).ok().filter(|&x| x.saturating_add(w) <= pw) else { return false };
+    pub fn window_rows<'f, S: Sample>(
+        &'f self,
+        c: usize,
+        x0: i32,
+        y0: i32,
+        w: usize,
+        rows: &mut [&'f [S]],
+    ) -> bool {
+        let (pw, ph, sh) = if c == 0 {
+            (self.width, self.height, self.log2_ctb)
+        } else {
+            (self.cwidth, self.cheight, self.log2_ctb - 1)
+        };
+        let Some(x) = usize::try_from(x0)
+            .ok()
+            .filter(|&x| x.saturating_add(w) <= pw)
+        else {
+            return false;
+        };
         let mask = (1usize << sh) - 1;
         let max_y = ph as i32 - 1;
         let mut cur: Option<(usize, &'f [S])> = None;
@@ -264,7 +335,9 @@ impl Frame {
             let plane = match cur {
                 Some((i, p)) if i == yy >> sh => p,
                 _ => {
-                    let Some(row) = self.row::<S>(yy >> sh) else { return false };
+                    let Some(row) = self.row::<S>(yy >> sh) else {
+                        return false;
+                    };
                     let p: &'f [S] = match c {
                         0 => &row.y,
                         1 => &row.cb,
@@ -275,7 +348,9 @@ impl Frame {
                 }
             };
             let off = (yy & mask) * pw + x;
-            let Some(run) = plane.get(off..off + w) else { return false };
+            let Some(run) = plane.get(off..off + w) else {
+                return false;
+            };
             *slot = run;
         }
         true
@@ -284,26 +359,48 @@ impl Frame {
     /// Copy the w x h block at (x0, y0) of plane `c` (0 = luma, 1 = Cb, 2 = Cr) into `dst`
     /// (stride `ds`), samples outside the picture replicated from its edges (8-228, 8-229).
     #[allow(clippy::too_many_arguments)]
-    pub fn copy_block<S: Sample>(&self, c: usize, x0: i32, y0: i32, w: usize, h: usize, dst: &mut [S], ds: usize) {
-        let (pw, ph, sh) = if c == 0 { (self.width, self.height, self.log2_ctb) } else { (self.cwidth, self.cheight, self.log2_ctb - 1) };
-        let inside = usize::try_from(x0).ok().filter(|&x| x.saturating_add(w) <= pw);
+    pub fn copy_block<S: Sample>(
+        &self,
+        c: usize,
+        x0: i32,
+        y0: i32,
+        w: usize,
+        h: usize,
+        dst: &mut [S],
+        ds: usize,
+    ) {
+        let (pw, ph, sh) = if c == 0 {
+            (self.width, self.height, self.log2_ctb)
+        } else {
+            (self.cwidth, self.cheight, self.log2_ctb - 1)
+        };
+        let inside = usize::try_from(x0)
+            .ok()
+            .filter(|&x| x.saturating_add(w) <= pw);
         for (r, d) in dst.chunks_mut(ds).take(h).enumerate() {
             let yy = y0.saturating_add(r as i32).min(ph as i32 - 1).max(0) as usize;
-            let Some(row) = self.row::<S>(yy >> sh) else { return };
+            let Some(row) = self.row::<S>(yy >> sh) else {
+                return;
+            };
             let plane = match c {
                 0 => &row.y,
                 1 => &row.cb,
                 _ => &row.cr,
             };
             let off = (yy & ((1 << sh) - 1)) * pw;
-            let Some(line) = plane.get(off..off + pw) else { return };
+            let Some(line) = plane.get(off..off + pw) else {
+                return;
+            };
             let Some(d) = d.get_mut(..w) else { return };
             match inside.and_then(|x| line.get(x..x + w)) {
                 Some(s) => copy_run(s, d),
                 None => {
                     let max = (pw as i32 - 1).max(0);
                     for (i, d) in d.iter_mut().enumerate() {
-                        *d = line.get(x0.saturating_add(i as i32).clamp(0, max) as usize).copied().unwrap_or_default();
+                        *d = line
+                            .get(x0.saturating_add(i as i32).clamp(0, max) as usize)
+                            .copied()
+                            .unwrap_or_default();
                     }
                 }
             }
@@ -312,8 +409,17 @@ impl Frame {
 
     /// Crop the frame into planar buffers (waits for completion): 8-bit planes when `eight_bit`,
     /// else 16-bit ones. Rows stored in the output type are copied as they are.
-    pub fn cropped_planes(&self, crop: (usize, usize, usize, usize), eight_bit: bool) -> (Plane, Plane, Plane) {
-        fn planes<S: Sample, T>(f: &Frame, crop: (usize, usize, usize, usize), conv: impl Fn(S) -> T, wrap: impl Fn(Vec<T>) -> Plane) -> (Plane, Plane, Plane) {
+    pub fn cropped_planes(
+        &self,
+        crop: (usize, usize, usize, usize),
+        eight_bit: bool,
+    ) -> (Plane, Plane, Plane) {
+        fn planes<S: Sample, T>(
+            f: &Frame,
+            crop: (usize, usize, usize, usize),
+            conv: impl Fn(S) -> T,
+            wrap: impl Fn(Vec<T>) -> Plane,
+        ) -> (Plane, Plane, Plane) {
             let (y, u, v) = f.copy_cropped::<S, T>(crop, conv);
             (wrap(y), wrap(u), wrap(v))
         }
@@ -328,7 +434,11 @@ impl Frame {
 
     /// The cropped planes of the frame converted sample by sample with `conv` (a plain copy for
     /// the identity).
-    fn copy_cropped<S: Sample, T>(&self, crop: (usize, usize, usize, usize), conv: impl Fn(S) -> T) -> (Vec<T>, Vec<T>, Vec<T>) {
+    fn copy_cropped<S: Sample, T>(
+        &self,
+        crop: (usize, usize, usize, usize),
+        conv: impl Fn(S) -> T,
+    ) -> (Vec<T>, Vec<T>, Vec<T>) {
         let (cx, cy, cw, ch) = crop;
         let ctb = 1usize << self.log2_ctb;
         let (mut y, mut u, mut v) = (Vec::new(), Vec::new(), Vec::new());
@@ -339,7 +449,9 @@ impl Frame {
         };
         y.reserve_exact(cw.saturating_mul(ch));
         for r in cy..cy.saturating_add(ch) {
-            let Some(row) = self.row::<S>(r / ctb) else { break };
+            let Some(row) = self.row::<S>(r / ctb) else {
+                break;
+            };
             put(&mut y, &row.y, (r % ctb) * self.width + cx, cw);
         }
         let (ccx, ccy, ccw, cch) = (cx / 2, cy / 2, cw.div_ceil(2), ch.div_ceil(2));
@@ -347,7 +459,9 @@ impl Frame {
         u.reserve_exact(ccw.saturating_mul(cch));
         v.reserve_exact(ccw.saturating_mul(cch));
         for r in ccy..ccy.saturating_add(cch) {
-            let Some(row) = self.row::<S>(r / cctb) else { break };
+            let Some(row) = self.row::<S>(r / cctb) else {
+                break;
+            };
             let o = (r % cctb) * self.cwidth + ccx;
             put(&mut u, &row.cb, o, ccw);
             put(&mut v, &row.cr, o, ccw);
@@ -359,7 +473,10 @@ impl Frame {
     /// or a picture whose decoding failed: readers never block on it).
     pub fn publish_gray(&self) {
         fn fill<S: Sample>(f: &Frame) {
-            let (gy, gc) = (S::from_u16(1 << (f.bit_depth.clamp(1, 16) - 1)), S::from_u16(1 << (f.bit_depth_c.clamp(1, 16) - 1)));
+            let (gy, gc) = (
+                S::from_u16(1 << (f.bit_depth.clamp(1, 16) - 1)),
+                S::from_u16(1 << (f.bit_depth_c.clamp(1, 16) - 1)),
+            );
             let w16 = f.width16();
             for r in 0..f.num_rows() {
                 if f.is_published(r) {
@@ -386,14 +503,29 @@ impl Frame {
 
     /// A mid-grey frame with the geometry of `like`.
     pub fn gray(id: u32, poc: i32, like: &Frame) -> Frame {
-        let f = Frame::new(id, poc, like.width, like.height, like.log2_ctb, like.bit_depth, like.bit_depth_c);
+        let f = Frame::new(
+            id,
+            poc,
+            like.width,
+            like.height,
+            like.log2_ctb,
+            like.bit_depth,
+            like.bit_depth_c,
+        );
         f.publish_gray();
         f
     }
 
     /// A frame with every row published from full-picture planes and no motion.
     #[cfg(test)]
-    pub fn from_planes(id: u32, poc: i32, like: &Frame, y: &[u16], cb: &[u16], cr: &[u16]) -> Frame {
+    pub fn from_planes(
+        id: u32,
+        poc: i32,
+        like: &Frame,
+        y: &[u16],
+        cb: &[u16],
+        cr: &[u16],
+    ) -> Frame {
         fn fill<S: Sample>(f: &Frame, y: &[u16], cb: &[u16], cr: &[u16]) {
             let ctb = 1usize << f.log2_ctb;
             let w16 = f.width16();
@@ -414,7 +546,15 @@ impl Frame {
                 );
             }
         }
-        let f = Frame::new(id, poc, like.width, like.height, like.log2_ctb, like.bit_depth, like.bit_depth_c);
+        let f = Frame::new(
+            id,
+            poc,
+            like.width,
+            like.height,
+            like.log2_ctb,
+            like.bit_depth,
+            like.bit_depth_c,
+        );
         match &f.rows {
             Rows::U8(_) => fill::<u8>(&f, y, cb, cr),
             Rows::U16(_) => fill::<u16>(&f, y, cb, cr),
@@ -490,7 +630,9 @@ fn copy_line<S: Sample>(line: &[S], x0: i32, out: &mut [i16]) {
     } else {
         // the window crosses the left and / or right picture edge: the edge samples repeated
         // outside, the samples inside copied as a run
-        let (Some(&first), Some(&last)) = (line.first(), line.last()) else { return };
+        let (Some(&first), Some(&last)) = (line.first(), line.last()) else {
+            return;
+        };
         let n = line.len() as i64;
         let (x0, w) = (x0 as i64, w as i64);
         // out[i] is inside the line for i in lo..hi
@@ -546,9 +688,15 @@ mod tests {
             assert!(f.is_complete());
             let (py, pu, pv) = f.cropped_planes(crop, bd == 8);
             let (cx, cy, cw, ch) = crop;
-            let want_y: Vec<u16> = (cy..cy + ch).flat_map(|r| y[r * w + cx..r * w + cx + cw].to_vec()).collect();
+            let want_y: Vec<u16> = (cy..cy + ch)
+                .flat_map(|r| y[r * w + cx..r * w + cx + cw].to_vec())
+                .collect();
             let (ccw, cch) = (cw.div_ceil(2), ch.div_ceil(2));
-            let want_c = |p: &[u16]| -> Vec<u16> { (cy / 2..cy / 2 + cch).flat_map(|r| p[r * w / 2 + cx / 2..r * w / 2 + cx / 2 + ccw].to_vec()).collect() };
+            let want_c = |p: &[u16]| -> Vec<u16> {
+                (cy / 2..cy / 2 + cch)
+                    .flat_map(|r| p[r * w / 2 + cx / 2..r * w / 2 + cx / 2 + ccw].to_vec())
+                    .collect()
+            };
             let got = |p: &Plane| -> Vec<u16> { (0..p.len()).map(|i| p.get(i)).collect() };
             assert_eq!(got(&py), want_y, "luma bd {bd}");
             assert_eq!(got(&pu), want_c(&cb), "cb bd {bd}");
@@ -568,7 +716,9 @@ mod tests {
                 for x0 in -80i32..80 {
                     let mut out = vec![-1i16; w];
                     copy_line(line, x0, &mut out);
-                    let want: Vec<i16> = (0..w as i32).map(|i| line[(x0 + i).clamp(0, n as i32 - 1) as usize] as i16).collect();
+                    let want: Vec<i16> = (0..w as i32)
+                        .map(|i| line[(x0 + i).clamp(0, n as i32 - 1) as usize] as i16)
+                        .collect();
                     assert_eq!(out, want, "n {n} w {w} x0 {x0}");
                 }
             }
@@ -580,7 +730,15 @@ mod tests {
     #[test]
     fn wrong_sample_type_is_harmless() {
         let f = Frame::new(0, 0, 32, 32, 4, 8, 8);
-        f.publish(0, FrameRow::<u16> { y: vec![1; 16 * 32].into(), cb: vec![1; 8 * 16].into(), cr: vec![1; 8 * 16].into(), col: Box::new([]) });
+        f.publish(
+            0,
+            FrameRow::<u16> {
+                y: vec![1; 16 * 32].into(),
+                cb: vec![1; 8 * 16].into(),
+                cr: vec![1; 8 * 16].into(),
+                col: Box::new([]),
+            },
+        );
         assert!(!f.is_published(0));
         f.publish_gray();
         assert!(f.is_complete());

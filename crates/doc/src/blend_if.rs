@@ -23,7 +23,10 @@ impl Default for BlendRange {
 
 impl BlendRange {
     /// Every value blends (the sliders at the ends).
-    pub const FULL: BlendRange = BlendRange { black: [0, 0], white: [255, 255] };
+    pub const FULL: BlendRange = BlendRange {
+        black: [0, 0],
+        white: [255, 255],
+    };
 
     /// Whether this range hides nothing.
     pub fn is_full(&self) -> bool {
@@ -32,7 +35,10 @@ impl BlendRange {
 
     /// From PSD's byte order: black low, black high, white low, white high.
     pub fn from_bytes(b: [u8; 4]) -> Self {
-        BlendRange { black: [b[0], b[1]], white: [b[2], b[3]] }
+        BlendRange {
+            black: [b[0], b[1]],
+            white: [b[2], b[3]],
+        }
     }
 
     /// PSD's byte order (see [`BlendRange::from_bytes`]).
@@ -48,7 +54,15 @@ impl BlendRange {
         let ramp = |lo: u8, hi: u8, x: f32| -> f32 {
             // 0 at or below `lo`, 1 at or above `hi`.
             let (lo, hi) = (f32::from(lo), f32::from(hi));
-            if hi <= lo { if x >= lo { 1.0 } else { 0.0 } } else { ((x - lo) / (hi - lo)).clamp(0.0, 1.0) }
+            if hi <= lo {
+                if x >= lo {
+                    1.0
+                } else {
+                    0.0
+                }
+            } else {
+                ((x - lo) / (hi - lo)).clamp(0.0, 1.0)
+            }
         };
         let lo = ramp(self.black[0], self.black[1], v);
         // Mirror for the white point: 1 at or below its low half, 0 above its high half.
@@ -83,7 +97,11 @@ impl BlendIf {
             self.ranges.resize(i + 1, [BlendRange::FULL; 2]);
         }
         self.ranges[i] = pair;
-        while self.ranges.last().is_some_and(|p| p.iter().all(BlendRange::is_full)) {
+        while self
+            .ranges
+            .last()
+            .is_some_and(|p| p.iter().all(BlendRange::is_full))
+        {
             self.ranges.pop();
         }
     }
@@ -104,7 +122,10 @@ mod tests {
 
     #[test]
     fn unsplit_points_are_hard_thresholds() {
-        let r = BlendRange { black: [50, 50], white: [200, 200] };
+        let r = BlendRange {
+            black: [50, 50],
+            white: [200, 200],
+        };
         assert_eq!(r.weight(49.0), 0.0);
         assert_eq!(r.weight(49.9), 0.0);
         assert_eq!(r.weight(50.0), 1.0);
@@ -115,7 +136,10 @@ mod tests {
 
     #[test]
     fn split_points_ramp_linearly() {
-        let r = BlendRange { black: [0, 100], white: [155, 255] };
+        let r = BlendRange {
+            black: [0, 100],
+            white: [155, 255],
+        };
         // A split black point fades from its low half (hidden) to its high half (shown).
         assert_eq!(r.weight(0.0), 0.0);
         assert!((r.weight(50.0) - 0.5).abs() < 1e-6);
@@ -128,7 +152,10 @@ mod tests {
 
     #[test]
     fn bytes_round_trip_in_psd_order() {
-        let r = BlendRange { black: [10, 20], white: [230, 240] };
+        let r = BlendRange {
+            black: [10, 20],
+            white: [230, 240],
+        };
         assert_eq!(r.to_bytes(), [10, 20, 230, 240]);
         assert_eq!(BlendRange::from_bytes(r.to_bytes()), r);
     }
@@ -137,7 +164,10 @@ mod tests {
     fn set_trims_trailing_full_entries() {
         let mut b = BlendIf::default();
         assert!(b.is_default());
-        let r = BlendRange { black: [30, 30], white: [255, 255] };
+        let r = BlendRange {
+            black: [30, 30],
+            white: [255, 255],
+        };
         b.set(2, [BlendRange::FULL, r]);
         assert_eq!(b.ranges.len(), 3);
         assert_eq!(b.get(2), [BlendRange::FULL, r]);

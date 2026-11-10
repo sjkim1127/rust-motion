@@ -10,7 +10,10 @@ impl Mv {
     pub const ZERO: Mv = Mv { x: 0, y: 0 };
     #[inline]
     pub const fn new(x: i32, y: i32) -> Mv {
-        Mv { x: x as i16, y: y as i16 }
+        Mv {
+            x: x as i16,
+            y: y as i16,
+        }
     }
 }
 

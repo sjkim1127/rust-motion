@@ -8,7 +8,11 @@ use crate::tables::{BLK4_XY, LAST8X8, SIG8X8_FRAME};
 
 pub fn write_skip_flag<S: BinSink>(s: &mut S, nb: &NbCtx, skip: bool) {
     let cond = |m: Option<&MbInfo>| m.is_some_and(|m| !m.kind.is_skip()) as usize;
-    let base = if nb.slice_type == SliceType::B { 24 } else { 11 };
+    let base = if nb.slice_type == SliceType::B {
+        24
+    } else {
+        11
+    };
     s.decision(base + cond(nb.left) + cond(nb.top), skip as u32);
 }
 
@@ -82,7 +86,9 @@ fn write_b_bins<S: BinSink>(s: &mut S, nb: &NbCtx, bins: &[u32]) {
     for (i, &b) in bins.iter().enumerate() {
         let ctx = match i {
             0 => {
-                let cond = |m: Option<&MbInfo>| m.is_some_and(|m| !matches!(m.kind, MbKind::BSkip | MbKind::BDirect)) as usize;
+                let cond = |m: Option<&MbInfo>| {
+                    m.is_some_and(|m| !matches!(m.kind, MbKind::BSkip | MbKind::BDirect)) as usize
+                };
                 27 + cond(nb.left) + cond(nb.top)
             }
             1 => 27 + 3,
@@ -151,8 +157,16 @@ fn write_mvd<S: BinSink>(s: &mut S, comp: usize, v: i32, sum: u32) {
 /// Sum of |mvd| of neighbours A and B for the 4x4 block at raster `r` (current MB info already holds earlier partitions).
 fn mvd_sum(nb: &NbCtx, r: usize, list: usize, comp: usize) -> u32 {
     let (x, y) = (r & 3, r >> 2);
-    let a = if x > 0 { nb.cur.mvd[list][r - 1][comp] } else { nb.left.map_or(0, |m| m.mvd[list][y * 4 + 3][comp]) };
-    let b = if y > 0 { nb.cur.mvd[list][r - 4][comp] } else { nb.top.map_or(0, |m| m.mvd[list][12 + x][comp]) };
+    let a = if x > 0 {
+        nb.cur.mvd[list][r - 1][comp]
+    } else {
+        nb.left.map_or(0, |m| m.mvd[list][y * 4 + 3][comp])
+    };
+    let b = if y > 0 {
+        nb.cur.mvd[list][r - 4][comp]
+    } else {
+        nb.top.map_or(0, |m| m.mvd[list][12 + x][comp])
+    };
     a as u32 + b as u32
 }
 
@@ -185,9 +199,15 @@ fn write_cbp<S: BinSink>(s: &mut S, nb: &NbCtx, cbp: u8) {
             !m.kind.is_skip() && if two { c == 2 } else { c != 0 }
         }) as usize
     };
-    s.decision(77 + cc(nb.left, false) + 2 * cc(nb.top, false), (chroma != 0) as u32);
+    s.decision(
+        77 + cc(nb.left, false) + 2 * cc(nb.top, false),
+        (chroma != 0) as u32,
+    );
     if chroma != 0 {
-        s.decision(77 + 4 + cc(nb.left, true) + 2 * cc(nb.top, true), (chroma == 2) as u32);
+        s.decision(
+            77 + 4 + cc(nb.left, true) + 2 * cc(nb.top, true),
+            (chroma == 2) as u32,
+        );
     }
 }
 
@@ -213,7 +233,11 @@ pub fn write_residual<S: BinSink>(s: &mut S, cat: Cat, coeffs: &[i16], cbf_inc: 
         s.decision(85 + CBF_OFF[ci] + cbf_inc as usize, last.is_some() as u32);
     }
     let Some(last) = last else { return };
-    let (sig_base, last_base, abs_base) = if cat == Cat::Luma8x8 { (402, 417, 426) } else { (105 + SIG_OFF[ci], 166 + SIG_OFF[ci], 227 + ABS_OFF[ci]) };
+    let (sig_base, last_base, abs_base) = if cat == Cat::Luma8x8 {
+        (402, 417, 426)
+    } else {
+        (105 + SIG_OFF[ci], 166 + SIG_OFF[ci], 227 + ABS_OFF[ci])
+    };
     for i in 0..n - 1 {
         let (si, li) = match cat {
             Cat::ChromaDc => (i.min(2), i.min(2)),
@@ -325,7 +349,9 @@ pub fn write_mb<S: BinSink>(s: &mut S, nb: &NbCtx, c: &MbCode) {
         }
     }
     if c.kind.is_intra() {
-        let cond = |m: Option<&MbInfo>| m.is_some_and(|m| m.kind.is_intra() && m.chroma_mode != 0) as usize;
+        let cond = |m: Option<&MbInfo>| {
+            m.is_some_and(|m| m.kind.is_intra() && m.chroma_mode != 0) as usize
+        };
         let m = c.chroma_mode as u32;
         s.decision(64 + cond(nb.left) + cond(nb.top), (m > 0) as u32);
         if m > 0 {
@@ -362,7 +388,11 @@ pub fn write_mb<S: BinSink>(s: &mut S, nb: &NbCtx, c: &MbCode) {
     }
     {
         let v = c.qp_delta;
-        let m = if v > 0 { 2 * v as u32 - 1 } else { (-2 * v) as u32 };
+        let m = if v > 0 {
+            2 * v as u32 - 1
+        } else {
+            (-2 * v) as u32
+        };
         s.decision(60 + nb.prev_dqp_nz as usize, (m > 0) as u32);
         if m > 0 {
             for k in 1..=m {
@@ -376,7 +406,12 @@ pub fn write_mb<S: BinSink>(s: &mut S, nb: &NbCtx, c: &MbCode) {
         if c.cbp & 15 != 0 {
             for blk in 0..16 {
                 let (x, y) = BLK4_XY[blk];
-                write_residual(s, Cat::LumaAc, &c.luma4[blk][1..16], cbf_luma(nb, y * 4 + x));
+                write_residual(
+                    s,
+                    Cat::LumaAc,
+                    &c.luma4[blk][1..16],
+                    cbf_luma(nb, y * 4 + x),
+                );
             }
         }
     } else {
@@ -404,7 +439,12 @@ pub fn write_mb<S: BinSink>(s: &mut S, nb: &NbCtx, c: &MbCode) {
     if chroma == 2 {
         for comp in 0..2 {
             for b in 0..4 {
-                write_residual(s, Cat::ChromaAc, &c.cac[comp * 4 + b][1..16], cbf_chroma_ac(nb, comp, b));
+                write_residual(
+                    s,
+                    Cat::ChromaAc,
+                    &c.cac[comp * 4 + b][1..16],
+                    cbf_chroma_ac(nb, comp, b),
+                );
             }
         }
     }

@@ -205,11 +205,15 @@ pub fn container(entries: &[(&str, &[u8], Method)], thumbnail_png: Option<&[u8]>
             Method::Stored => data.to_vec(),
             Method::Zlib => {
                 use std::io::Write;
-                let mut e = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
+                let mut e =
+                    flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
                 e.write_all(data).unwrap();
                 e.finish().unwrap()
             }
-            Method::Zstd => ruzstd::encoding::compress_to_vec(*data, ruzstd::encoding::CompressionLevel::Fastest),
+            Method::Zstd => ruzstd::encoding::compress_to_vec(
+                *data,
+                ruzstd::encoding::CompressionLevel::Fastest,
+            ),
         };
         let offset = out.len() as u64;
         out.extend(b"#Fil");

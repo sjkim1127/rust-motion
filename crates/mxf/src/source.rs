@@ -60,7 +60,11 @@ impl<T: ByteSource + ?Sized> ByteSource for Arc<T> {
 }
 
 /// Up to `len` bytes at `offset` (fewer at the end of the source).
-pub(crate) fn read_upto(src: &(impl ByteSource + ?Sized), offset: u64, len: usize) -> io::Result<Vec<u8>> {
+pub(crate) fn read_upto(
+    src: &(impl ByteSource + ?Sized),
+    offset: u64,
+    len: usize,
+) -> io::Result<Vec<u8>> {
     let n = src.len().saturating_sub(offset).min(len as u64) as usize;
     let mut v = vec![0u8; n];
     src.read_at(offset, &mut v)?;

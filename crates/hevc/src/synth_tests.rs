@@ -5,10 +5,10 @@
 //! is known exactly where the in-loop filters leave the samples alone, and every stream is also checked
 //! against ffmpeg (when present).
 
-use crate::Decoder;
-use crate::cabac::{Contexts, NEXT_STATE, RANGE_TAB_LPS, init_contexts};
+use crate::cabac::{init_contexts, Contexts, NEXT_STATE, RANGE_TAB_LPS};
 use crate::spec_tables::*;
-use filmcraft_bitstream::{BitWriter, escape_rbsp};
+use crate::Decoder;
+use filmcraft_bitstream::{escape_rbsp, BitWriter};
 
 const W: usize = 96;
 const H: usize = 64;
@@ -30,7 +30,14 @@ impl Enc {
     fn new(w: BitWriter, qp: i32, init_type: usize) -> Self {
         let mut ctx: Contexts = [0u8; NUM_CTX.next_power_of_two()];
         init_contexts(&mut ctx, qp, init_type);
-        Enc { w, low: 0, range: 510, outstanding: 0, first: true, ctx }
+        Enc {
+            w,
+            low: 0,
+            range: 510,
+            outstanding: 0,
+            first: true,
+            ctx,
+        }
     }
     fn reset_engine(&mut self) {
         self.low = 0;
@@ -96,7 +103,8 @@ impl Enc {
 
 /// Deterministic test content.
 fn pattern(pic: u32, c: usize, x: usize, y: usize) -> u8 {
-    let v = (x * (3 + c) + y * (5 + pic as usize) + ((x ^ y) & 7) * 9 + pic as usize * 37 + c * 50) % 200;
+    let v = (x * (3 + c) + y * (5 + pic as usize) + ((x ^ y) & 7) * 9 + pic as usize * 37 + c * 50)
+        % 200;
     (v + 20) as u8
 }
 
@@ -107,7 +115,11 @@ struct Planes {
 }
 
 fn content(pic: u32) -> Planes {
-    let mut p = Planes { y: vec![0; W * H], u: vec![0; W * H / 4], v: vec![0; W * H / 4] };
+    let mut p = Planes {
+        y: vec![0; W * H],
+        u: vec![0; W * H / 4],
+        v: vec![0; W * H / 4],
+    };
     for y in 0..H {
         for x in 0..W {
             p.y[y * W + x] = pattern(pic, 0, x, y);
@@ -312,7 +324,13 @@ struct PicDesc {
 }
 
 /// Write the slice segment NAL units of a picture.
-fn encode_picture(d: &PicDesc, tiles: &Tiles, pcm_content: &Planes, out: &mut Vec<u8>, saved: &mut Option<Contexts>) {
+fn encode_picture(
+    d: &PicDesc,
+    tiles: &Tiles,
+    pcm_content: &Planes,
+    out: &mut Vec<u8>,
+    saved: &mut Option<Contexts>,
+) {
     let (order, tile_of) = tile_scan(tiles);
     let qp = 26;
     let init_type = if d.intra { 0 } else { 1 };
@@ -341,13 +359,19 @@ fn encode_picture(d: &PicDesc, tiles: &Tiles, pcm_content: &Planes, out: &mut Ve
                     e.w.align_zero();
                     for y in 0..CTB {
                         for x in 0..CTB {
-                            e.w.write_bits(pcm_content.y[(ry * CTB + y) * W + rx * CTB + x] as u32, 8);
+                            e.w.write_bits(
+                                pcm_content.y[(ry * CTB + y) * W + rx * CTB + x] as u32,
+                                8,
+                            );
                         }
                     }
                     for plane in [&pcm_content.u, &pcm_content.v] {
                         for y in 0..CTB / 2 {
                             for x in 0..CTB / 2 {
-                                e.w.write_bits(plane[(ry * CTB / 2 + y) * W / 2 + rx * CTB / 2 + x] as u32, 8);
+                                e.w.write_bits(
+                                    plane[(ry * CTB / 2 + y) * W / 2 + rx * CTB / 2 + x] as u32,
+                                    8,
+                                );
                             }
                         }
                     }
@@ -409,7 +433,8 @@ fn encode_picture(d: &PicDesc, tiles: &Tiles, pcm_content: &Planes, out: &mut Ve
                 if !d.intra {
                     w.write_bit(true); // num_ref_idx_active_override_flag
                     w.write_ue(d.num_ref - 1);
-                    let total = d.st.iter().filter(|s| s.1).count() + d.lt.iter().filter(|l| l.1).count();
+                    let total =
+                        d.st.iter().filter(|s| s.1).count() + d.lt.iter().filter(|l| l.1).count();
                     // PPS 1 has lists_modification_present_flag set
                     if d.list_entry.is_none() && d.pps_id == 1 && total > 1 {
                         w.write_bit(false);
@@ -454,12 +479,20 @@ fn encode_picture(d: &PicDesc, tiles: &Tiles, pcm_content: &Planes, out: &mut Ve
 }
 
 fn whole(n: usize) -> Vec<Segment> {
-    vec![Segment { start: 0, len: n, dependent: false }]
+    vec![Segment {
+        start: 0,
+        len: n,
+        dependent: false,
+    }]
 }
 
 /// Encode the test sequence; returns the stream and the exact expected pictures (when the PCM samples
 /// are not filtered).
-fn sequence(tiles: &Tiles, pcm_lf_disabled: bool, segments: Vec<Segment>) -> (Vec<u8>, Vec<Planes>) {
+fn sequence(
+    tiles: &Tiles,
+    pcm_lf_disabled: bool,
+    segments: Vec<Segment>,
+) -> (Vec<u8>, Vec<Planes>) {
     let mut s = Vec::new();
     s.extend(vps());
     s.extend(sps(pcm_lf_disabled));
@@ -470,7 +503,18 @@ fn sequence(tiles: &Tiles, pcm_lf_disabled: bool, segments: Vec<Segment>) -> (Ve
     let c0 = content(0);
     let c1 = content(1);
     // 0: IDR, PCM, tiles / slices / dependent segments
-    let p0 = PicDesc { nal_type: 19, poc: 0, intra: true, cu: Cu::Pcm, pps_id: 0, st: vec![], lt: vec![], num_ref: 0, list_entry: None, segments };
+    let p0 = PicDesc {
+        nal_type: 19,
+        poc: 0,
+        intra: true,
+        cu: Cu::Pcm,
+        pps_id: 0,
+        st: vec![],
+        lt: vec![],
+        num_ref: 0,
+        list_entry: None,
+        segments,
+    };
     encode_picture(&p0, tiles, &c0, &mut s, &mut saved);
     // 1: intra TRAIL_R keeping picture 0 as a long-term reference (not used by this picture)
     let p1 = PicDesc {
@@ -559,7 +603,14 @@ fn check_ffmpeg(name: &str, stream: &[u8], pics: &[crate::Picture]) {
     let st = std::process::Command::new(ff)
         .args(["-hide_banner", "-loglevel", "error", "-y", "-i"])
         .arg(&src)
-        .args(["-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", "yuv420p"])
+        .args([
+            "-fps_mode",
+            "passthrough",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "yuv420p",
+        ])
         .arg(&yuv)
         .status();
     if let Ok(st) = st {
@@ -574,7 +625,10 @@ fn check_ffmpeg(name: &str, stream: &[u8], pics: &[crate::Picture]) {
                         ours.extend_from_slice(as_u8(&p.v));
                         if ours != f {
                             let k = ours.iter().zip(f).position(|(a, b)| a != b).unwrap_or(0);
-                            panic!("{name}: picture {i} differs from ffmpeg at byte {k}: {} vs {}", ours[k], f[k]);
+                            panic!(
+                                "{name}: picture {i} differs from ffmpeg at byte {k}: {} vs {}",
+                                ours[k], f[k]
+                            );
                         }
                     }
                 }
@@ -606,7 +660,10 @@ fn run(name: &str, tiles: Tiles, pcm_lf_disabled: bool, segments: Vec<Segment>) 
             assert_eq!(p.poc, i as i32);
             if pcm_lf_disabled {
                 assert!(as_u8(&p.y) == &e.y[..], "{name}: picture {i} luma");
-                assert!(as_u8(&p.u) == &e.u[..] && as_u8(&p.v) == &e.v[..], "{name}: picture {i} chroma");
+                assert!(
+                    as_u8(&p.u) == &e.u[..] && as_u8(&p.v) == &e.v[..],
+                    "{name}: picture {i} chroma"
+                );
             }
         }
         if threads == 1 {
@@ -627,17 +684,32 @@ fn pcm_deblocked_single_tile() {
 
 #[test]
 fn tiles_uniform_exact() {
-    run("tiles_uniform", Some((vec![2, 2, 2], vec![2, 2], true, true)), true, whole(WC * HC));
+    run(
+        "tiles_uniform",
+        Some((vec![2, 2, 2], vec![2, 2], true, true)),
+        true,
+        whole(WC * HC),
+    );
 }
 
 #[test]
 fn tiles_explicit_filter_across() {
-    run("tiles_across", Some((vec![1, 3, 2], vec![1, 3], false, true)), false, whole(WC * HC));
+    run(
+        "tiles_across",
+        Some((vec![1, 3, 2], vec![1, 3], false, true)),
+        false,
+        whole(WC * HC),
+    );
 }
 
 #[test]
 fn tiles_explicit_no_filter_across() {
-    run("tiles_no_across", Some((vec![2, 3, 1], vec![3, 1], false, false)), false, whole(WC * HC));
+    run(
+        "tiles_no_across",
+        Some((vec![2, 3, 1], vec![3, 1], false, false)),
+        false,
+        whole(WC * HC),
+    );
 }
 
 #[test]
@@ -645,17 +717,53 @@ fn tiles_slices_and_dependent_segments() {
     // tiles 2x2 (3x2 CTBs each): slice 0 = tiles 0-1, slice 1 = tiles 2-3 split into three segments,
     // the dependent ones starting inside a tile (context restore) and at a tile start
     let segs = vec![
-        Segment { start: 0, len: 12, dependent: false },
-        Segment { start: 12, len: 2, dependent: false },
-        Segment { start: 14, len: 4, dependent: true },
-        Segment { start: 18, len: 6, dependent: true },
+        Segment {
+            start: 0,
+            len: 12,
+            dependent: false,
+        },
+        Segment {
+            start: 12,
+            len: 2,
+            dependent: false,
+        },
+        Segment {
+            start: 14,
+            len: 4,
+            dependent: true,
+        },
+        Segment {
+            start: 18,
+            len: 6,
+            dependent: true,
+        },
     ];
-    run("tiles_slices", Some((vec![3, 3], vec![2, 2], true, false)), false, segs);
+    run(
+        "tiles_slices",
+        Some((vec![3, 3], vec![2, 2], true, false)),
+        false,
+        segs,
+    );
 }
 
 #[test]
 fn slices_without_tiles() {
-    let segs =
-        vec![Segment { start: 0, len: 7, dependent: false }, Segment { start: 7, len: 9, dependent: true }, Segment { start: 16, len: 8, dependent: false }];
+    let segs = vec![
+        Segment {
+            start: 0,
+            len: 7,
+            dependent: false,
+        },
+        Segment {
+            start: 7,
+            len: 9,
+            dependent: true,
+        },
+        Segment {
+            start: 16,
+            len: 8,
+            dependent: false,
+        },
+    ];
     run("slices", None, false, segs);
 }

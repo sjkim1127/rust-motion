@@ -75,7 +75,12 @@ pub static CTX_IDX_MAP: [u8; 16] = [0, 1, 4, 5, 2, 3, 4, 5, 6, 6, 8, 8, 7, 7, 8,
 pub static LEVEL_SCALE: [i32; 6] = [40, 45, 51, 57, 64, 72];
 
 /// DST-VII 4x4 matrix (8.6.4.2, trType 1).
-pub static DST_MATRIX: [[i8; 4]; 4] = [[29, 55, 74, 84], [74, 74, 0, -74], [84, -29, -74, 55], [55, -84, 74, -29]];
+pub static DST_MATRIX: [[i8; 4]; 4] = [
+    [29, 55, 74, 84],
+    [74, 74, 0, -74],
+    [84, -29, -74, 55],
+    [55, -84, 74, -29],
+];
 
 #[cfg(test)]
 mod tests {
@@ -96,7 +101,9 @@ mod tests {
         // rows are nearly orthogonal with norm ~ 64^2 * 32
         for a in 0..32 {
             for b in 0..32 {
-                let d: i64 = (0..32).map(|k| TRANS_MATRIX[a][k] as i64 * TRANS_MATRIX[b][k] as i64).sum();
+                let d: i64 = (0..32)
+                    .map(|k| TRANS_MATRIX[a][k] as i64 * TRANS_MATRIX[b][k] as i64)
+                    .sum();
                 if a == b {
                     assert!((d - 131072).abs() < 1000, "row {a} norm {d}");
                 } else {

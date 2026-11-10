@@ -23,7 +23,11 @@ pub fn envelope_db(channels: &[&[f32]], sample_rate: f32, hop_s: f32, window_s: 
     pre.push(0.0f64);
     let mut acc = 0.0f64;
     for i in 0..len {
-        let p: f64 = channels.iter().map(|c| (c[i] as f64) * (c[i] as f64)).sum::<f64>() / nch;
+        let p: f64 = channels
+            .iter()
+            .map(|c| (c[i] as f64) * (c[i] as f64))
+            .sum::<f64>()
+            / nch;
         acc += p;
         pre.push(acc);
     }
@@ -32,7 +36,11 @@ pub fn envelope_db(channels: &[&[f32]], sample_rate: f32, hop_s: f32, window_s: 
             let c = k * hop;
             let (a, b) = (c.saturating_sub(half), (c + half).min(len));
             let ms = (pre[b] - pre[a]).max(0.0) / (b - a).max(1) as f64;
-            if ms <= 1e-12 { FLOOR_DB } else { ((10.0 * ms.log10()) as f32).max(FLOOR_DB) }
+            if ms <= 1e-12 {
+                FLOOR_DB
+            } else {
+                ((10.0 * ms.log10()) as f32).max(FLOOR_DB)
+            }
         })
         .collect()
 }
@@ -40,7 +48,13 @@ pub fn envelope_db(channels: &[&[f32]], sample_rate: f32, hop_s: f32, window_s: 
 /// Regions `(start_s, end_s)` where the envelope exceeds `threshold_db`. Gaps shorter than
 /// `bridge_s` are merged first, then regions shorter than `min_on_s` are dropped. A frame `k`
 /// covers `[k·hop, (k+1)·hop)`.
-pub fn activity(env_db: &[f32], hop_s: f32, threshold_db: f32, min_on_s: f32, bridge_s: f32) -> Vec<(f64, f64)> {
+pub fn activity(
+    env_db: &[f32],
+    hop_s: f32,
+    threshold_db: f32,
+    min_on_s: f32,
+    bridge_s: f32,
+) -> Vec<(f64, f64)> {
     // the f32 hop rounded to whole microseconds, so 0.01 means exactly 0.01 s
     let hop = (hop_s as f64 * 1e6).round() / 1e6;
     let mut raw: Vec<(f64, f64)> = Vec::new();
@@ -82,10 +96,21 @@ pub fn sensitivity_threshold_db(sensitivity: f32) -> f32 {
 /// clip edge gets a keyframe at the edge with the ramp's value there (fully ducked when the region
 /// itself reaches the edge). Times are strictly increasing; no regions → no keyframes. `fade_s` is
 /// at least 1 ms so a ramp never collapses into two keyframes at the same time.
-pub fn duck_keyframes(regions: &[(f64, f64)], clip_start_s: f64, clip_end_s: f64, base_db: f64, reduce_db: f64, fade_s: f64) -> Vec<(f64, f64)> {
+pub fn duck_keyframes(
+    regions: &[(f64, f64)],
+    clip_start_s: f64,
+    clip_end_s: f64,
+    base_db: f64,
+    reduce_db: f64,
+    fade_s: f64,
+) -> Vec<(f64, f64)> {
     let fade = fade_s.max(1e-3);
     let ducked = base_db - reduce_db.abs();
-    let mut sorted: Vec<(f64, f64)> = regions.iter().copied().filter(|(a, b)| b > a && *b > clip_start_s && *a < clip_end_s).collect();
+    let mut sorted: Vec<(f64, f64)> = regions
+        .iter()
+        .copied()
+        .filter(|(a, b)| b > a && *b > clip_start_s && *a < clip_end_s)
+        .collect();
     sorted.sort_by(|x, y| x.0.total_cmp(&y.0));
     // merge regions whose ramps touch or overlap
     let mut groups: Vec<(f64, f64)> = Vec::new();
@@ -108,7 +133,8 @@ pub fn duck_keyframes(regions: &[(f64, f64)], clip_start_s: f64, clip_end_s: f64
         }
     };
     // value of the down-ramp ending at `a` / up-ramp starting at `b`, at time t
-    let down = |a: f64, t: f64| base_db + (ducked - base_db) * ((t - (a - fade)) / fade).clamp(0.0, 1.0);
+    let down =
+        |a: f64, t: f64| base_db + (ducked - base_db) * ((t - (a - fade)) / fade).clamp(0.0, 1.0);
     let up = |b: f64, t: f64| ducked + (base_db - ducked) * ((t - b) / fade).clamp(0.0, 1.0);
     for (a, b) in groups {
         let ramp_start = a - fade;
@@ -170,7 +196,10 @@ mod tests {
         }
         let r = activity(&env, hop, -40.0, 0.1, 0.2);
         assert_eq!(r.len(), 1);
-        assert!((r[0].0 - 0.5).abs() < 1e-6 && (r[0].1 - 1.5).abs() < 1e-6, "{r:?}");
+        assert!(
+            (r[0].0 - 0.5).abs() < 1e-6 && (r[0].1 - 1.5).abs() < 1e-6,
+            "{r:?}"
+        );
         // without bridging both remain, the blip still goes
         let r = activity(&env, hop, -40.0, 0.1, 0.0);
         assert_eq!(r.len(), 2);
@@ -198,7 +227,10 @@ mod tests {
         assert_eq!(k, vec![(1.5, 0.0), (2.0, -15.0), (4.0, -15.0), (4.5, 0.0)]);
         // ramps overlap (4.5 > 4.8 − 0.5 = 4.3) → stay ducked
         let k = duck_keyframes(&[(2.0, 4.0), (4.8, 6.0)], 0.0, 10.0, -3.0, 12.0, 0.5);
-        assert_eq!(k, vec![(1.5, -3.0), (2.0, -15.0), (6.0, -15.0), (6.5, -3.0)]);
+        assert_eq!(
+            k,
+            vec![(1.5, -3.0), (2.0, -15.0), (6.0, -15.0), (6.5, -3.0)]
+        );
         // separate regions
         let k = duck_keyframes(&[(5.0, 6.0), (1.0, 2.0)], 0.0, 10.0, 0.0, 10.0, 0.25);
         assert_eq!(k.len(), 8);

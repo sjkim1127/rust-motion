@@ -346,12 +346,18 @@ pub fn slip_clip(clip: &mut NleClip, delta_frames: i32) -> Result<(), NleError> 
 
 /// Slide edit: moves the clip along the timeline, trimming the outgoing edge of the previous clip
 /// and the incoming edge of the next clip to preserve total duration.
-pub fn slide_clip(track: &mut NleTrack, clip_idx: usize, delta_frames: i32) -> Result<(), NleError> {
+pub fn slide_clip(
+    track: &mut NleTrack,
+    clip_idx: usize,
+    delta_frames: i32,
+) -> Result<(), NleError> {
     if track.locked {
         return Err(NleError::TrackLocked);
     }
     if clip_idx == 0 || clip_idx + 1 >= track.clips.len() {
-        return Err(NleError::ClipNotFound("Slide requires preceding and succeeding clips".into()));
+        return Err(NleError::ClipNotFound(
+            "Slide requires preceding and succeeding clips".into(),
+        ));
     }
 
     let prev_in = track.clips[clip_idx - 1].track_in;
@@ -371,7 +377,8 @@ pub fn slide_clip(track: &mut NleTrack, clip_idx: usize, delta_frames: i32) -> R
     }
 
     track.clips[clip_idx - 1].track_out = new_curr_in;
-    track.clips[clip_idx - 1].source_out = (prev_src_out as i64 + delta_frames as i64).max(0) as u32;
+    track.clips[clip_idx - 1].source_out =
+        (prev_src_out as i64 + delta_frames as i64).max(0) as u32;
 
     track.clips[clip_idx].track_in = new_curr_in;
     track.clips[clip_idx].track_out = new_curr_out;
@@ -393,7 +400,9 @@ pub fn roll_edit(
         return Err(NleError::TrackLocked);
     }
     if left_clip_idx + 1 >= track.clips.len() {
-        return Err(NleError::ClipNotFound("Roll edit requires adjacent clips".into()));
+        return Err(NleError::ClipNotFound(
+            "Roll edit requires adjacent clips".into(),
+        ));
     }
 
     let left_in = track.clips[left_clip_idx].track_in;
@@ -409,10 +418,12 @@ pub fn roll_edit(
     }
 
     track.clips[left_clip_idx].track_out = new_cut;
-    track.clips[left_clip_idx].source_out = (left_src_out as i64 + delta_frames as i64).max(0) as u32;
+    track.clips[left_clip_idx].source_out =
+        (left_src_out as i64 + delta_frames as i64).max(0) as u32;
 
     track.clips[left_clip_idx + 1].track_in = new_cut;
-    track.clips[left_clip_idx + 1].source_in = (right_src_in as i64 + delta_frames as i64).max(0) as u32;
+    track.clips[left_clip_idx + 1].source_in =
+        (right_src_in as i64 + delta_frames as i64).max(0) as u32;
 
     track.validate_no_overlap()?;
     Ok(())
@@ -462,7 +473,11 @@ pub fn insert_clip(track: &mut NleTrack, at_frame: u32, new_clip: NleClip) -> Re
     let mut inserted = new_clip;
     inserted.track_in = at_frame;
     inserted.track_out = at_frame + dur;
-    let insert_pos = track.clips.iter().position(|c| c.track_in > at_frame).unwrap_or(track.clips.len());
+    let insert_pos = track
+        .clips
+        .iter()
+        .position(|c| c.track_in > at_frame)
+        .unwrap_or(track.clips.len());
     track.clips.insert(insert_pos, inserted);
 
     track.validate_no_overlap()?;
@@ -470,7 +485,11 @@ pub fn insert_clip(track: &mut NleTrack, at_frame: u32, new_clip: NleClip) -> Re
 }
 
 /// Overwrite edit: replaces whatever material is covered by `new_clip` on the track.
-pub fn overwrite_clip(track: &mut NleTrack, at_frame: u32, mut new_clip: NleClip) -> Result<(), NleError> {
+pub fn overwrite_clip(
+    track: &mut NleTrack,
+    at_frame: u32,
+    mut new_clip: NleClip,
+) -> Result<(), NleError> {
     if track.locked {
         return Err(NleError::TrackLocked);
     }

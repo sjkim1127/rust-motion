@@ -3,7 +3,7 @@
 use photocraft_geom::Rect;
 use photocraft_raster::{Interrupt, Surface};
 
-use super::motion_fft::{COORDINATE_LIMIT, Plan, ordinary_coordinates, worthwhile};
+use super::motion_fft::{ordinary_coordinates, worthwhile, Plan, COORDINATE_LIMIT};
 use crate::{FilterParams, Image};
 
 const MAX_RESIDENT_BYTES: usize = 512 << 20;
@@ -11,18 +11,34 @@ const MIN_TILE: i32 = 64;
 const MAX_TILE: i32 = 512;
 
 fn valid_rect(rect: Rect) -> bool {
-    !rect.is_empty() && rect.width() <= COORDINATE_LIMIT as u32 && rect.height() <= COORDINATE_LIMIT as u32 && ordinary_coordinates(rect)
+    !rect.is_empty()
+        && rect.width() <= COORDINATE_LIMIT as u32
+        && rect.height() <= COORDINATE_LIMIT as u32
+        && ordinary_coordinates(rect)
 }
 
 fn bytes(rect: Rect, channels: usize) -> Option<usize> {
-    usize::try_from(rect.width()).ok()?.checked_mul(usize::try_from(rect.height()).ok()?)?.checked_mul(channels)?.checked_mul(std::mem::size_of::<f32>())
+    usize::try_from(rect.width())
+        .ok()?
+        .checked_mul(usize::try_from(rect.height()).ok()?)?
+        .checked_mul(channels)?
+        .checked_mul(std::mem::size_of::<f32>())
 }
 
-fn group_size(resident: usize, metadata: usize, worker: usize, output: usize, tiles: usize, workers: usize) -> Option<usize> {
+fn group_size(
+    resident: usize,
+    metadata: usize,
+    worker: usize,
+    output: usize,
+    tiles: usize,
+    workers: usize,
+) -> Option<usize> {
     if tiles == 0 || workers == 0 {
         return None;
     }
-    let available = MAX_RESIDENT_BYTES.checked_sub(resident)?.checked_sub(metadata)?;
+    let available = MAX_RESIDENT_BYTES
+        .checked_sub(resident)?
+        .checked_sub(metadata)?;
     let per_tile = worker.checked_add(output)?;
     let memory_workers = available.checked_div(per_tile.max(1))?;
     (memory_workers > 0).then_some(memory_workers.min(workers).min(tiles))
@@ -41,7 +57,9 @@ pub(crate) fn apply(
     tile: i32,
     ctl: &Interrupt,
 ) -> Option<Option<Surface>> {
-    apply_inner(surface, params, area, bounds, selection, extent, tile, ctl, false)
+    apply_inner(
+        surface, params, area, bounds, selection, extent, tile, ctl, false,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -56,7 +74,9 @@ pub(super) fn apply_for_bench(
     tile: i32,
     ctl: &Interrupt,
 ) -> Option<Option<Surface>> {
-    apply_inner(surface, params, area, bounds, selection, extent, tile, ctl, true)
+    apply_inner(
+        surface, params, area, bounds, selection, extent, tile, ctl, true,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -71,7 +91,9 @@ fn apply_inner(
     ctl: &Interrupt,
     force: bool,
 ) -> Option<Option<Surface>> {
-    let FilterParams::MotionBlur { angle, distance } = *params else { return None };
+    let FilterParams::MotionBlur { angle, distance } = *params else {
+        return None;
+    };
     if ctl.cancelled() {
         return Some(None);
     }
@@ -106,7 +128,11 @@ fn apply_inner(
         tile = (tile / 2).max(MIN_TILE);
     }
     let tile_usize = usize::try_from(tile).ok()?;
-    if !force && !worthwhile(angle, distance, tile_usize, area, row_tile, channels, workers)? {
+    if !force
+        && !worthwhile(
+            angle, distance, tile_usize, area, row_tile, channels, workers,
+        )?
+    {
         return None;
     }
     let plan = match Plan::new_with(angle, distance, tile_usize, ctl) {
@@ -145,10 +171,20 @@ fn apply_inner(
     // estimate includes its input and scratch, but that decoding peak needs a separate check.
     let decode_bytes = largest_source_bytes.checked_mul(if extent.is_some() { 2 } else { 1 })?;
     let worker_bytes = plan.worker_bytes(channels, tile_usize)?.max(decode_bytes);
-    let output_bytes = tile_usize.checked_mul(tile_usize)?.checked_mul(channels)?.checked_mul(std::mem::size_of::<f32>())?;
+    let output_bytes = tile_usize
+        .checked_mul(tile_usize)?
+        .checked_mul(channels)?
+        .checked_mul(std::mem::size_of::<f32>())?;
     // A group's results remain live until its last worker finishes. Bounding the complete
     // group by each tile's scratch plus output is conservative and avoids forcing one per core.
-    let group = group_size(plan.resident_bytes(), metadata_bytes, worker_bytes, output_bytes, tiles.len(), workers)?;
+    let group = group_size(
+        plan.resident_bytes(),
+        metadata_bytes,
+        worker_bytes,
+        output_bytes,
+        tiles.len(),
+        workers,
+    )?;
     let finished = std::sync::atomic::AtomicUsize::new(0);
     let run = |&(output, source): &(Rect, Rect)| -> Option<(Rect, Vec<f32>)> {
         if ctl.cancelled() {
@@ -165,7 +201,9 @@ fn apply_inner(
         // retries its unchanged row pipeline, discarding this clone and any partial writes.
         // Do not allocate a row kernel's square window inside the FFT working-set budget.
         let mut data = plan.filter(&src, output, fmt.alpha, ctl)?;
-        if ctl.cancelled() || data.len().checked_mul(std::mem::size_of::<f32>())? != bytes(output, channels)? {
+        if ctl.cancelled()
+            || data.len().checked_mul(std::mem::size_of::<f32>())? != bytes(output, channels)?
+        {
             return None;
         }
         if let Some(selection) = selection {
@@ -190,7 +228,9 @@ fn apply_inner(
         };
         #[cfg(target_arch = "wasm32")]
         let results: Option<Vec<_>> = chunk.iter().map(run).collect();
-        let Some(results) = results else { return if ctl.cancelled() { Some(None) } else { None } };
+        let Some(results) = results else {
+            return if ctl.cancelled() { Some(None) } else { None };
+        };
         for (output, data) in results {
             if ctl.cancelled() {
                 return Some(None);
@@ -221,7 +261,10 @@ mod tests {
     fn scheduler_bounds_complete_groups_including_sources_and_outputs() {
         let mib = 1 << 20;
         let group = group_size(100 * mib, mib, 150 * mib, 5 * mib, 100, 12).unwrap();
-        assert_eq!(group, 2, "memory limits must take precedence over one tile per worker");
+        assert_eq!(
+            group, 2,
+            "memory limits must take precedence over one tile per worker"
+        );
         assert!(100 * mib + mib + group * (150 * mib + 5 * mib) <= MAX_RESIDENT_BYTES);
         assert_eq!(group_size(100 * mib, 0, 450 * mib, 5 * mib, 100, 12), None);
         assert_eq!(group_size(MAX_RESIDENT_BYTES, 1, 1, 1, 1, 1), None);
@@ -233,17 +276,95 @@ mod tests {
     fn scheduler_preflight_declines_unsupported_geometry_and_small_distances() {
         let surface = Surface::new(PixelFormat::GRAY8);
         let bounds = Rect::new(0, 0, 128, 128);
-        let small = FilterParams::MotionBlur { angle: 30.0, distance: 10.0 };
-        assert!(apply(&surface, &small, bounds, bounds, None, Some(bounds), 64, &Interrupt::NONE).is_none());
-        let wide = FilterParams::MotionBlur { angle: 30.0, distance: 64.0 };
+        let small = FilterParams::MotionBlur {
+            angle: 30.0,
+            distance: 10.0,
+        };
+        assert!(apply(
+            &surface,
+            &small,
+            bounds,
+            bounds,
+            None,
+            Some(bounds),
+            64,
+            &Interrupt::NONE
+        )
+        .is_none());
+        let wide = FilterParams::MotionBlur {
+            angle: 30.0,
+            distance: 64.0,
+        };
         let oversized = Rect::new(0, 0, i32::MAX, 128);
-        assert!(apply(&surface, &wide, oversized, bounds, None, Some(bounds), 64, &Interrupt::NONE).is_none());
-        assert!(apply(&surface, &wide, bounds, bounds, None, Some(Rect::EMPTY), 64, &Interrupt::NONE).is_none());
-        assert!(apply(&surface, &wide, Rect::new(0, 0, 1, 1), bounds, None, Some(bounds), 512, &Interrupt::NONE).is_none());
-        let huge = FilterParams::MotionBlur { angle: 30.0, distance: 2000.0 };
-        assert!(apply(&surface, &huge, bounds, bounds, None, Some(bounds), 512, &Interrupt::NONE).is_none());
-        assert!(!valid_rect(Rect::new(-COORDINATE_LIMIT, 0, COORDINATE_LIMIT, 1)));
-        assert!(apply(&surface, &wide, Rect::EMPTY, bounds, None, Some(bounds), 64, &Interrupt::NONE).unwrap().unwrap().tiles().next().is_none());
+        assert!(apply(
+            &surface,
+            &wide,
+            oversized,
+            bounds,
+            None,
+            Some(bounds),
+            64,
+            &Interrupt::NONE
+        )
+        .is_none());
+        assert!(apply(
+            &surface,
+            &wide,
+            bounds,
+            bounds,
+            None,
+            Some(Rect::EMPTY),
+            64,
+            &Interrupt::NONE
+        )
+        .is_none());
+        assert!(apply(
+            &surface,
+            &wide,
+            Rect::new(0, 0, 1, 1),
+            bounds,
+            None,
+            Some(bounds),
+            512,
+            &Interrupt::NONE
+        )
+        .is_none());
+        let huge = FilterParams::MotionBlur {
+            angle: 30.0,
+            distance: 2000.0,
+        };
+        assert!(apply(
+            &surface,
+            &huge,
+            bounds,
+            bounds,
+            None,
+            Some(bounds),
+            512,
+            &Interrupt::NONE
+        )
+        .is_none());
+        assert!(!valid_rect(Rect::new(
+            -COORDINATE_LIMIT,
+            0,
+            COORDINATE_LIMIT,
+            1
+        )));
+        assert!(apply(
+            &surface,
+            &wide,
+            Rect::EMPTY,
+            bounds,
+            None,
+            Some(bounds),
+            64,
+            &Interrupt::NONE
+        )
+        .unwrap()
+        .unwrap()
+        .tiles()
+        .next()
+        .is_none());
     }
 
     #[test]
@@ -254,19 +375,37 @@ mod tests {
             for channels in 1..=5 {
                 for angle in [0.0, 30.0, 45.0, 90.0] {
                     for distance in [10.0, 64.0, 128.0, 256.0] {
-                        assert_eq!(worthwhile(angle, distance, 512, proxy, 576, channels, workers), Some(false));
+                        assert_eq!(
+                            worthwhile(angle, distance, 512, proxy, 576, channels, workers),
+                            Some(false)
+                        );
                     }
                 }
             }
         }
         for workers in [4, 12] {
-            assert_eq!(worthwhile(30.0, 1000.0, 512, proxy, 1024, 4, workers), Some(true));
-            assert_eq!(worthwhile(45.0, 2000.0, 512, proxy, 2048, 4, workers), Some(true));
-            assert_eq!(worthwhile(30.0, 2000.0, 512, full, 2048, 4, workers), Some(false));
+            assert_eq!(
+                worthwhile(30.0, 1000.0, 512, proxy, 1024, 4, workers),
+                Some(true)
+            );
+            assert_eq!(
+                worthwhile(45.0, 2000.0, 512, proxy, 2048, 4, workers),
+                Some(true)
+            );
+            assert_eq!(
+                worthwhile(30.0, 2000.0, 512, full, 2048, 4, workers),
+                Some(false)
+            );
         }
         assert_eq!(worthwhile(30.0, 1000.0, 512, full, 1024, 4, 12), Some(true));
-        assert_eq!(worthwhile(30.0, 1000.0, 512, proxy, 1024, 4, 1), Some(false));
-        assert_eq!(worthwhile(30.0, 1000.0, 64, Rect::new(0, 0, 64, 64), 1024, 4, 12), Some(false));
+        assert_eq!(
+            worthwhile(30.0, 1000.0, 512, proxy, 1024, 4, 1),
+            Some(false)
+        );
+        assert_eq!(
+            worthwhile(30.0, 1000.0, 64, Rect::new(0, 0, 64, 64), 1024, 4, 12),
+            Some(false)
+        );
     }
 
     #[test]
@@ -275,10 +414,25 @@ mod tests {
         let mut surface = Surface::new(PixelFormat::GRAY8);
         surface.fill_rect(bounds, &[0.4]);
         let before = surface.to_interleaved(bounds);
-        let params = FilterParams::MotionBlur { angle: 0.0, distance: 64.0 };
+        let params = FilterParams::MotionBlur {
+            angle: 0.0,
+            distance: 64.0,
+        };
         let cancelled = AtomicBool::new(true);
         let cancel = || cancelled.load(Ordering::Relaxed);
-        assert!(matches!(apply(&surface, &params, bounds, bounds, None, Some(bounds), 64, &Interrupt::cancel_only(&cancel)), Some(None)));
+        assert!(matches!(
+            apply(
+                &surface,
+                &params,
+                bounds,
+                bounds,
+                None,
+                Some(bounds),
+                64,
+                &Interrupt::cancel_only(&cancel)
+            ),
+            Some(None)
+        ));
         cancelled.store(false, Ordering::Relaxed);
         let progress = |fraction: f32| {
             if fraction > 0.0 {
@@ -286,7 +440,19 @@ mod tests {
             }
         };
         let ctl = Interrupt::new(&cancel, &progress);
-        assert!(matches!(apply_for_bench(&surface, &params, bounds, bounds, None, Some(bounds), 64, &ctl), Some(None)));
+        assert!(matches!(
+            apply_for_bench(
+                &surface,
+                &params,
+                bounds,
+                bounds,
+                None,
+                Some(bounds),
+                64,
+                &ctl
+            ),
+            Some(None)
+        ));
         assert_eq!(surface.to_interleaved(bounds), before);
     }
 }

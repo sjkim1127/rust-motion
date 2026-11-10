@@ -54,11 +54,19 @@ impl PathRecord {
         u16::from_be_bytes([self.data[at], self.data[at + 1]])
     }
     fn i32_at(&self, at: usize) -> i32 {
-        i32::from_be_bytes([self.data[at], self.data[at + 1], self.data[at + 2], self.data[at + 3]])
+        i32::from_be_bytes([
+            self.data[at],
+            self.data[at + 1],
+            self.data[at + 2],
+            self.data[at + 3],
+        ])
     }
     /// Whether this is a (closed or open) subpath length record.
     pub fn is_length(&self) -> bool {
-        matches!(self.selector, selector::CLOSED_LENGTH | selector::OPEN_LENGTH)
+        matches!(
+            self.selector,
+            selector::CLOSED_LENGTH | selector::OPEN_LENGTH
+        )
     }
     /// Whether this is a Bézier knot record.
     pub fn is_knot(&self) -> bool {
@@ -98,7 +106,9 @@ pub fn fixed_to_f64(v: i32) -> f64 {
 
 /// Fraction → fixed 8.24 (rounded, saturating).
 pub fn f64_to_fixed(v: f64) -> i32 {
-    (v * 16_777_216.0).round().clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
+    (v * 16_777_216.0)
+        .round()
+        .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
 }
 
 /// A parsed path record list.
@@ -121,7 +131,10 @@ impl PathData {
             .map(|c| {
                 let mut d = [0u8; 24];
                 d.copy_from_slice(&c[2..]);
-                PathRecord { selector: u16::from_be_bytes([c[0], c[1]]), data: d }
+                PathRecord {
+                    selector: u16::from_be_bytes([c[0], c[1]]),
+                    data: d,
+                }
             })
             .collect();
         Ok(PathData { records })
@@ -140,7 +153,10 @@ impl PathData {
     /// Initial fill rule: `true` when the path starts with all pixels filled
     /// (inverted path).
     pub fn initial_fill(&self) -> bool {
-        self.records.iter().find(|r| r.selector == selector::INITIAL_FILL).is_some_and(|r| r.u16_at(0) != 0)
+        self.records
+            .iter()
+            .find(|r| r.selector == selector::INITIAL_FILL)
+            .is_some_and(|r| r.u16_at(0) != 0)
     }
 
     /// Subpaths with their knots. Knot records not preceded by a length
@@ -161,12 +177,26 @@ impl PathData {
             } else if r.is_knot() {
                 let closed = r.selector <= 2;
                 if remaining == 0 && out.last().is_none_or(|s| s.closed != closed) {
-                    out.push(PsdSubpath { closed, operation: -1, knots: Vec::new() });
+                    out.push(PsdSubpath {
+                        closed,
+                        operation: -1,
+                        knots: Vec::new(),
+                    });
                 }
                 remaining = remaining.saturating_sub(1);
-                let pt = |i: usize| (fixed_to_f64(r.i32_at(i * 8 + 4)), fixed_to_f64(r.i32_at(i * 8)));
+                let pt = |i: usize| {
+                    (
+                        fixed_to_f64(r.i32_at(i * 8 + 4)),
+                        fixed_to_f64(r.i32_at(i * 8)),
+                    )
+                };
                 if let Some(s) = out.last_mut() {
-                    s.knots.push(PsdKnot { linked: matches!(r.selector, 1 | 4), pre: pt(0), anchor: pt(1), post: pt(2) });
+                    s.knots.push(PsdKnot {
+                        linked: matches!(r.selector, 1 | 4),
+                        pre: pt(0),
+                        anchor: pt(1),
+                        post: pt(2),
+                    });
                 }
             }
         }
@@ -176,7 +206,16 @@ impl PathData {
     /// Builds a record list: a fill rule record, an initial fill record,
     /// then each subpath's length record and knots.
     pub fn from_subpaths(subpaths: &[PsdSubpath], initial_fill: bool) -> Self {
-        let mut records = vec![PathRecord { selector: selector::FILL_RULE, data: [0; 24] }, PathRecord { selector: selector::INITIAL_FILL, data: [0; 24] }];
+        let mut records = vec![
+            PathRecord {
+                selector: selector::FILL_RULE,
+                data: [0; 24],
+            },
+            PathRecord {
+                selector: selector::INITIAL_FILL,
+                data: [0; 24],
+            },
+        ];
         records[1].data[..2].copy_from_slice(&u16::from(initial_fill).to_be_bytes());
         for s in subpaths {
             let mut data = [0u8; 24];
@@ -184,7 +223,14 @@ impl PathData {
             data[2..4].copy_from_slice(&s.operation.to_be_bytes());
             // Photoshop writes 1 here (psd-tools default); meaning unknown.
             data[4..6].copy_from_slice(&1u16.to_be_bytes());
-            records.push(PathRecord { selector: if s.closed { selector::CLOSED_LENGTH } else { selector::OPEN_LENGTH }, data });
+            records.push(PathRecord {
+                selector: if s.closed {
+                    selector::CLOSED_LENGTH
+                } else {
+                    selector::OPEN_LENGTH
+                },
+                data,
+            });
             for k in s.knots.iter().take(u16::MAX as usize) {
                 let sel = match (s.closed, k.linked) {
                     (true, true) => selector::CLOSED_KNOT_LINKED,
@@ -197,7 +243,10 @@ impl PathData {
                     d[i * 8..i * 8 + 4].copy_from_slice(&f64_to_fixed(p.1).to_be_bytes());
                     d[i * 8 + 4..i * 8 + 8].copy_from_slice(&f64_to_fixed(p.0).to_be_bytes());
                 }
-                records.push(PathRecord { selector: sel, data: d });
+                records.push(PathRecord {
+                    selector: sel,
+                    data: d,
+                });
             }
         }
         PathData { records }
@@ -226,11 +275,18 @@ impl VectorMaskBlock {
     /// Parses the block data.
     pub fn from_bytes(data: &[u8]) -> Result<Self> {
         if data.len() < 8 {
-            return Err(PsdError::UnexpectedEof { offset: 0, needed: 8 - data.len() });
+            return Err(PsdError::UnexpectedEof {
+                offset: 0,
+                needed: 8 - data.len(),
+            });
         }
         let version = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
         let flags = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
-        Ok(VectorMaskBlock { version, flags, path: PathData::from_bytes(&data[8..])? })
+        Ok(VectorMaskBlock {
+            version,
+            flags,
+            path: PathData::from_bytes(&data[8..])?,
+        })
     }
 
     /// Serializes the block data.
@@ -253,12 +309,36 @@ mod tests {
                 closed: true,
                 operation: 1,
                 knots: vec![
-                    PsdKnot { linked: false, pre: (0.25, 0.25), anchor: (0.25, 0.25), post: (0.25, 0.25) },
-                    PsdKnot { linked: true, pre: (0.625, 0.125), anchor: (0.75, 0.25), post: (0.875, 0.375) },
-                    PsdKnot { linked: false, pre: (0.5, 0.75), anchor: (0.5, 0.75), post: (0.5, 0.75) },
+                    PsdKnot {
+                        linked: false,
+                        pre: (0.25, 0.25),
+                        anchor: (0.25, 0.25),
+                        post: (0.25, 0.25),
+                    },
+                    PsdKnot {
+                        linked: true,
+                        pre: (0.625, 0.125),
+                        anchor: (0.75, 0.25),
+                        post: (0.875, 0.375),
+                    },
+                    PsdKnot {
+                        linked: false,
+                        pre: (0.5, 0.75),
+                        anchor: (0.5, 0.75),
+                        post: (0.5, 0.75),
+                    },
                 ],
             },
-            PsdSubpath { closed: false, operation: 2, knots: vec![PsdKnot { linked: false, pre: (-0.5, 1.5), anchor: (0.0, 1.0), post: (0.0625, 0.9375) }] },
+            PsdSubpath {
+                closed: false,
+                operation: 2,
+                knots: vec![PsdKnot {
+                    linked: false,
+                    pre: (-0.5, 1.5),
+                    anchor: (0.0, 1.0),
+                    post: (0.0625, 0.9375),
+                }],
+            },
         ]
     }
 
@@ -288,7 +368,11 @@ mod tests {
 
     #[test]
     fn vector_mask_block_roundtrip() {
-        let b = VectorMaskBlock { version: 3, flags: VectorMaskBlock::FLAG_INVERT, path: PathData::from_subpaths(&sample(), false) };
+        let b = VectorMaskBlock {
+            version: 3,
+            flags: VectorMaskBlock::FLAG_INVERT,
+            path: PathData::from_subpaths(&sample(), false),
+        };
         let bytes = b.to_bytes();
         assert_eq!(VectorMaskBlock::from_bytes(&bytes).unwrap(), b);
         assert!(VectorMaskBlock::from_bytes(&[0; 4]).is_err());

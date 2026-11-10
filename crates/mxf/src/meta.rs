@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use crate::klv::{Cur, Ul, batch_of, int_of, rational_of, ul_of, utf16_of};
+use crate::klv::{batch_of, int_of, rational_of, ul_of, utf16_of, Cur, Ul};
 
 /// Local tag → property UL (ST 377-1 §9.2).
 #[derive(Clone, Debug, Default)]
@@ -17,7 +17,10 @@ impl Primer {
         let mut map = HashMap::new();
         for item in batch_of(v) {
             if item.len() >= 18 {
-                map.insert(u16::from_be_bytes([item[0], item[1]]), Ul(item[2..18].try_into().unwrap_or([0; 16])));
+                map.insert(
+                    u16::from_be_bytes([item[0], item[1]]),
+                    Ul(item[2..18].try_into().unwrap_or([0; 16])),
+                );
             }
         }
         Primer(map)
@@ -66,11 +69,18 @@ pub struct Set {
 
 impl Set {
     pub fn parse(key: Ul, v: &[u8], primer: &Primer) -> Set {
-        let mut s = Set { key, ..Default::default() };
+        let mut s = Set {
+            key,
+            ..Default::default()
+        };
         let mut c = Cur::new(v);
         while c.remaining() >= 4 {
-            let (Some(tag), Some(len)) = (c.u16(), c.u16()) else { break };
-            let Some(val) = c.bytes(len as usize) else { break };
+            let (Some(tag), Some(len)) = (c.u16(), c.u16()) else {
+                break;
+            };
+            let Some(val) = c.bytes(len as usize) else {
+                break;
+            };
             if tag == 0x3C0A && val.len() >= 16 {
                 s.instance_uid.copy_from_slice(&val[..16]);
             }
@@ -87,7 +97,9 @@ impl Set {
 
     /// The set type byte when this is a structural metadata set.
     pub fn kind(&self) -> Option<u8> {
-        self.key.item_starts_with(&[0x0D, 0x01, 0x01, 0x01, 0x01, 0x01]).then_some(self.key.0[14])
+        self.key
+            .item_starts_with(&[0x0D, 0x01, 0x01, 0x01, 0x01, 0x01])
+            .then_some(self.key.0[14])
     }
     pub fn get(&self, tag: u16) -> Option<&[u8]> {
         self.props.get(&tag).map(Vec::as_slice)
@@ -109,15 +121,27 @@ impl Set {
     }
     /// A strong / weak reference (16-byte UUID).
     pub fn reference(&self, tag: u16) -> Option<[u8; 16]> {
-        self.get(tag).and_then(|v| v.get(..16)).map(|b| b.try_into().unwrap_or([0; 16]))
+        self.get(tag)
+            .and_then(|v| v.get(..16))
+            .map(|b| b.try_into().unwrap_or([0; 16]))
     }
     /// A batch of references.
     pub fn references(&self, tag: u16) -> Vec<[u8; 16]> {
-        self.get(tag).map(|v| batch_of(v).into_iter().filter_map(|b| b.get(..16).map(|x| x.try_into().unwrap_or([0; 16]))).collect()).unwrap_or_default()
+        self.get(tag)
+            .map(|v| {
+                batch_of(v)
+                    .into_iter()
+                    .filter_map(|b| b.get(..16).map(|x| x.try_into().unwrap_or([0; 16])))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
     /// A dynamic property whose UL's item designator (bytes 8..) equals `item`.
     pub fn dynamic_item(&self, item: &[u8]) -> Option<&[u8]> {
-        self.dynamic.iter().find(|(k, _)| k.item_starts_with(item)).map(|(_, v)| v.as_slice())
+        self.dynamic
+            .iter()
+            .find(|(k, _)| k.item_starts_with(item))
+            .map(|(_, v)| v.as_slice())
     }
 }
 

@@ -84,12 +84,21 @@ impl LiquifyTool {
 
     /// Whole-field operations (no brush, no points).
     pub fn is_global(self) -> bool {
-        matches!(self, LiquifyTool::ReconstructAll | LiquifyTool::FreezeAll | LiquifyTool::ThawAll | LiquifyTool::InvertFreeze)
+        matches!(
+            self,
+            LiquifyTool::ReconstructAll
+                | LiquifyTool::FreezeAll
+                | LiquifyTool::ThawAll
+                | LiquifyTool::InvertFreeze
+        )
     }
 
     /// Tools that act while the brush is held still (each recorded point is a dab).
     pub fn is_stationary(self) -> bool {
-        !matches!(self, LiquifyTool::ForwardWarp | LiquifyTool::PushLeft | LiquifyTool::LassoMask)
+        !matches!(
+            self,
+            LiquifyTool::ForwardWarp | LiquifyTool::PushLeft | LiquifyTool::LassoMask
+        )
     }
 }
 
@@ -136,7 +145,15 @@ pub struct LiquifyStroke {
 
 impl LiquifyStroke {
     pub fn new(tool: LiquifyTool, size: f64) -> Self {
-        LiquifyStroke { tool, size, density: d_density(), pressure: d_pressure(), rate: d_rate(), points: Vec::new(), amount: None }
+        LiquifyStroke {
+            tool,
+            size,
+            density: d_density(),
+            pressure: d_pressure(),
+            rate: d_rate(),
+            points: Vec::new(),
+            amount: None,
+        }
     }
 
     /// Validates the stroke (finite numbers, 2 or 3 per point).
@@ -173,7 +190,12 @@ pub struct LiquifyField {
 /// transient brush state, not part of the result.
 impl PartialEq for LiquifyField {
     fn eq(&self, o: &Self) -> bool {
-        self.bounds == o.bounds && self.cell == o.cell && self.w == o.w && self.h == o.h && self.d == o.d && self.freeze == o.freeze
+        self.bounds == o.bounds
+            && self.cell == o.cell
+            && self.w == o.w
+            && self.h == o.h
+            && self.d == o.d
+            && self.freeze == o.freeze
     }
 }
 
@@ -201,7 +223,11 @@ fn moving_weight(r: f64) -> f64 {
 
 /// The default field resolution for `bounds`: 2 px per node up to 4 MP, 4 px beyond.
 pub fn auto_cell(bounds: Rect) -> f64 {
-    if bounds.size().area() <= 4_200_000 { 2.0 } else { 4.0 }
+    if bounds.size().area() <= 4_200_000 {
+        2.0
+    } else {
+        4.0
+    }
 }
 
 impl LiquifyField {
@@ -209,19 +235,33 @@ impl LiquifyField {
         let cell = cell.clamp(1.0, 64.0);
         let w = (f64::from(bounds.width()) / cell).ceil() as usize + 2;
         let h = (f64::from(bounds.height()) / cell).ceil() as usize + 2;
-        LiquifyField { bounds, cell, w, h, d: vec![[0.0; 2]; w * h], freeze: vec![0.0; w * h], cursor: None }
+        LiquifyField {
+            bounds,
+            cell,
+            w,
+            h,
+            d: vec![[0.0; 2]; w * h],
+            freeze: vec![0.0; w * h],
+            cursor: None,
+        }
     }
 
     /// Document position of node (i, j) (node 0 sits on the first pixel centre).
     #[inline]
     pub fn node_pos(&self, i: usize, j: usize) -> [f64; 2] {
-        [f64::from(self.bounds.x0) + 0.5 + i as f64 * self.cell, f64::from(self.bounds.y0) + 0.5 + j as f64 * self.cell]
+        [
+            f64::from(self.bounds.x0) + 0.5 + i as f64 * self.cell,
+            f64::from(self.bounds.y0) + 0.5 + j as f64 * self.cell,
+        ]
     }
 
     /// Field coordinates of a document point.
     #[inline]
     fn to_grid(&self, x: f64, y: f64) -> (f64, f64) {
-        ((x - f64::from(self.bounds.x0) - 0.5) / self.cell, (y - f64::from(self.bounds.y0) - 0.5) / self.cell)
+        (
+            (x - f64::from(self.bounds.x0) - 0.5) / self.cell,
+            (y - f64::from(self.bounds.y0) - 0.5) / self.cell,
+        )
     }
 
     pub fn is_identity(&self) -> bool {
@@ -247,7 +287,8 @@ impl LiquifyField {
         let (i, j) = ((gx as usize).min(self.w - 2), (gy as usize).min(self.h - 2));
         let (fx, fy) = ((gx - i as f64) as f32, (gy - j as f64) as f32);
         let at = |i: usize, j: usize| self.freeze[j * self.w + i];
-        (at(i, j) * (1.0 - fx) + at(i + 1, j) * fx) * (1.0 - fy) + (at(i, j + 1) * (1.0 - fx) + at(i + 1, j + 1) * fx) * fy
+        (at(i, j) * (1.0 - fx) + at(i + 1, j) * fx) * (1.0 - fy)
+            + (at(i, j + 1) * (1.0 - fx) + at(i + 1, j + 1) * fx) * fy
     }
 
     /// Applies one stroke. Returns the document rectangle whose output changed.
@@ -272,8 +313,15 @@ impl LiquifyField {
         if s.tool.is_global() {
             return self.bounds;
         }
-        let pts: Vec<[f64; 3]> = s.points.iter().filter(|p| p.len() >= 2).map(|p| [p[0], p[1], p.get(2).copied().unwrap_or(1.0)]).collect();
-        let Some(&first) = pts.first() else { return Rect::EMPTY };
+        let pts: Vec<[f64; 3]> = s
+            .points
+            .iter()
+            .filter(|p| p.len() >= 2)
+            .map(|p| [p[0], p[1], p.get(2).copied().unwrap_or(1.0)])
+            .collect();
+        let Some(&first) = pts.first() else {
+            return Rect::EMPTY;
+        };
         let mut dirty = self.stroke_begin(s, first);
         for w in pts.windows(2) {
             dirty = dirty.union(&self.stroke_segment(s, w[0], w[1]));
@@ -286,11 +334,21 @@ impl LiquifyField {
     /// A scanline fill: each node row costs one pass over the edges, then only the nodes inside
     /// are written. Returns the document rectangle the mask changed in.
     fn apply_lasso(&mut self, s: &LiquifyStroke) -> Rect {
-        let poly: Vec<[f64; 2]> = s.points.iter().filter_map(|p| Some([*p.first()?, *p.get(1)?])).filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
+        let poly: Vec<[f64; 2]> = s
+            .points
+            .iter()
+            .filter_map(|p| Some([*p.first()?, *p.get(1)?]))
+            .filter(|p| p[0].is_finite() && p[1].is_finite())
+            .collect();
         if poly.len() < 3 || self.w == 0 || self.h == 0 {
             return Rect::EMPTY;
         }
-        let (mut px0, mut py0, mut px1, mut py1) = (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+        let (mut px0, mut py0, mut px1, mut py1) = (
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        );
         for p in &poly {
             px0 = px0.min(p[0]);
             py0 = py0.min(p[1]);
@@ -305,12 +363,18 @@ impl LiquifyField {
         if j1 < j0 {
             return Rect::EMPTY;
         }
-        let v = if s.amount.unwrap_or(1.0) > 0.5 { 1.0f32 } else { 0.0 };
+        let v = if s.amount.unwrap_or(1.0) > 0.5 {
+            1.0f32
+        } else {
+            0.0
+        };
         let mut xs: Vec<f64> = Vec::new();
         for j in (j0 as usize)..=(j1 as usize) {
             let y = self.node_pos(0, j)[1];
             xs.clear();
-            let Some(mut prev) = poly.last().copied() else { return Rect::EMPTY };
+            let Some(mut prev) = poly.last().copied() else {
+                return Rect::EMPTY;
+            };
             for &a in &poly {
                 if (a[1] > y) != (prev[1] > y) {
                     xs.push(a[0] + (y - a[1]) * (prev[0] - a[0]) / (prev[1] - a[1]));
@@ -332,15 +396,29 @@ impl LiquifyField {
                 }
             }
         }
-        Rect::new(px0.floor() as i32, py0.floor() as i32, px1.ceil() as i32, py1.ceil() as i32).intersect(&self.bounds)
+        Rect::new(
+            px0.floor() as i32,
+            py0.floor() as i32,
+            px1.ceil() as i32,
+            py1.ceil() as i32,
+        )
+        .intersect(&self.bounds)
     }
 
     /// Starts a stroke at `p` (`[x, y, pressure]`): stationary tools dab once there. Interactive
     /// callers use this plus [`Self::stroke_segment`] per new point, which is exactly what
     /// [`Self::apply_stroke`] does with the whole point list.
     pub fn stroke_begin(&mut self, s: &LiquifyStroke, p: [f64; 3]) -> Rect {
-        self.cursor = Some(StrokeCursor { end: [p[0], p[1]], last_dab: [p[0], p[1]], carry: 0.0 });
-        if s.tool.is_stationary() && !s.tool.is_global() { self.dab(s, [p[0], p[1]], [0.0, 0.0], p[2].clamp(0.0, 1.0), 1.0) } else { Rect::EMPTY }
+        self.cursor = Some(StrokeCursor {
+            end: [p[0], p[1]],
+            last_dab: [p[0], p[1]],
+            carry: 0.0,
+        });
+        if s.tool.is_stationary() && !s.tool.is_global() {
+            self.dab(s, [p[0], p[1]], [0.0, 0.0], p[2].clamp(0.0, 1.0), 1.0)
+        } else {
+            Rect::EMPTY
+        }
     }
 
     /// Continues a stroke from `a` to `b`. Dabs fall every [`dab_spacing`] of distance travelled
@@ -360,13 +438,21 @@ impl LiquifyField {
         let stationary = s.tool.is_stationary();
         let cur = match self.cursor {
             Some(c) if c.end == [a[0], a[1]] => c,
-            _ => StrokeCursor { end: [a[0], a[1]], last_dab: [a[0], a[1]], carry: 0.0 },
+            _ => StrokeCursor {
+                end: [a[0], a[1]],
+                last_dab: [a[0], a[1]],
+                carry: 0.0,
+            },
         };
         let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
         let len = dx.hypot(dy);
         if len == 0.0 {
             self.cursor = Some(cur);
-            return if stationary { self.dab(s, [b[0], b[1]], [0.0, 0.0], pb, 1.0) } else { dirty };
+            return if stationary {
+                self.dab(s, [b[0], b[1]], [0.0, 0.0], pb, 1.0)
+            } else {
+                dirty
+            };
         }
         // NaN or a length that overflowed: nothing sensible to walk; the next segment restarts.
         if !len.is_finite() {
@@ -382,7 +468,11 @@ impl LiquifyField {
         // segment's end still falls on it, so cutting one segment in two never adds or drops a dab.
         let slack = spacing * 1e-6;
         if first > len + slack {
-            self.cursor = Some(StrokeCursor { end: [b[0], b[1]], last_dab: cur.last_dab, carry: cur.carry + len });
+            self.cursor = Some(StrokeCursor {
+                end: [b[0], b[1]],
+                last_dab: cur.last_dab,
+                carry: cur.carry + len,
+            });
             return dirty;
         }
         let last_k = ((len - first + slack) / spacing).floor().max(0.0);
@@ -399,19 +489,28 @@ impl LiquifyField {
             }
         }
         if k0 <= k1 {
-            let mut prev = if k0 > 0.0 { at(first + (k0 - 1.0) * spacing) } else { cur.last_dab };
+            let mut prev = if k0 > 0.0 {
+                at(first + (k0 - 1.0) * spacing)
+            } else {
+                cur.last_dab
+            };
             for k in (k0 as u64)..=(k1 as u64) {
                 let dist = (first + k as f64 * spacing).min(len);
                 let c = at(dist);
                 let delta = [c[0] - prev[0], c[1] - prev[1]];
                 // Forward Warp centres the dab where the brush was (it drags what is under it).
                 let centre = if stationary { c } else { prev };
-                dirty = dirty.union(&self.dab(s, centre, delta, pa + (pb - pa) * dist / len, weight));
+                dirty =
+                    dirty.union(&self.dab(s, centre, delta, pa + (pb - pa) * dist / len, weight));
                 prev = c;
             }
         }
         let last = (first + last_k * spacing).min(len);
-        self.cursor = Some(StrokeCursor { end: [b[0], b[1]], last_dab: at(last), carry: (len - last).clamp(0.0, spacing) });
+        self.cursor = Some(StrokeCursor {
+            end: [b[0], b[1]],
+            last_dab: at(last),
+            carry: (len - last).clamp(0.0, spacing),
+        });
         dirty
     }
 
@@ -424,8 +523,14 @@ impl LiquifyField {
             return None;
         }
         let pad = r + 2.0 * self.cell;
-        let lo = [f64::from(self.bounds.x0) + 0.5 - pad, f64::from(self.bounds.y0) + 0.5 - pad];
-        let hi = [lo[0] + (self.w - 1) as f64 * self.cell + 2.0 * pad, lo[1] + (self.h - 1) as f64 * self.cell + 2.0 * pad];
+        let lo = [
+            f64::from(self.bounds.x0) + 0.5 - pad,
+            f64::from(self.bounds.y0) + 0.5 - pad,
+        ];
+        let hi = [
+            lo[0] + (self.w - 1) as f64 * self.cell + 2.0 * pad,
+            lo[1] + (self.h - 1) as f64 * self.cell + 2.0 * pad,
+        ];
         let (mut u0, mut u1) = (0.0f64, 1.0f64);
         for ax in 0..2 {
             let d = dir[ax];
@@ -447,7 +552,14 @@ impl LiquifyField {
 
     /// One dab at `c` with brush motion `delta`, its strength scaled by `weight`. Returns the
     /// document rect it affected.
-    fn dab(&mut self, s: &LiquifyStroke, c: [f64; 2], delta: [f64; 2], point_pressure: f64, weight: f64) -> Rect {
+    fn dab(
+        &mut self,
+        s: &LiquifyStroke,
+        c: [f64; 2],
+        delta: [f64; 2],
+        point_pressure: f64,
+        weight: f64,
+    ) -> Rect {
         if s.tool == LiquifyTool::LassoMask {
             return Rect::EMPTY; // the lasso is polygon-only; never a brush dab
         }
@@ -487,7 +599,8 @@ impl LiquifyField {
                 bilinear(&self.d, self.w, self.h, gx, gy)
             }
         };
-        let mut writes: Vec<(usize, [f32; 2], f32)> = Vec::with_capacity((i1 - i0 + 1) * (j1 - j0 + 1));
+        let mut writes: Vec<(usize, [f32; 2], f32)> =
+            Vec::with_capacity((i1 - i0 + 1) * (j1 - j0 + 1));
         let inv_cell = 1.0 / self.cell;
         for j in j0..=j1 {
             for i in i0..=i1 {
@@ -502,7 +615,11 @@ impl LiquifyField {
                 let k_raw = strength * fall;
                 if s.tool == LiquifyTool::Freeze || s.tool == LiquifyTool::Thaw {
                     let f = self.freeze[idx];
-                    let v = if s.tool == LiquifyTool::Freeze { (f as f64 + k_raw).min(1.0) } else { (f as f64 - k_raw).max(0.0) };
+                    let v = if s.tool == LiquifyTool::Freeze {
+                        (f as f64 + k_raw).min(1.0)
+                    } else {
+                        (f as f64 - k_raw).max(0.0)
+                    };
                     writes.push((idx, self.d[idx], v as f32));
                     continue;
                 }
@@ -518,15 +635,30 @@ impl LiquifyField {
                     }
                     LiquifyTool::Smooth => {
                         let (gx, gy) = ((i - si0) as isize, (j - sj0) as isize);
-                        let at = |x: isize, y: isize| snap[(y.clamp(0, sh as isize - 1) as usize) * sw + x.clamp(0, sw as isize - 1) as usize];
+                        let at = |x: isize, y: isize| {
+                            snap[(y.clamp(0, sh as isize - 1) as usize) * sw
+                                + x.clamp(0, sw as isize - 1) as usize]
+                        };
                         let mut mean = [0.0f32; 2];
-                        for (ox, oy) in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)] {
+                        for (ox, oy) in [
+                            (-1, 0),
+                            (1, 0),
+                            (0, -1),
+                            (0, 1),
+                            (-1, -1),
+                            (1, -1),
+                            (-1, 1),
+                            (1, 1),
+                        ] {
                             let v = at(gx + ox, gy + oy);
                             mean[0] += v[0] / 8.0;
                             mean[1] += v[1] / 8.0;
                         }
                         let a = (k * (0.1 + 0.4 * rate)) as f32;
-                        [cur[0] + (mean[0] - cur[0]) * a, cur[1] + (mean[1] - cur[1]) * a]
+                        [
+                            cur[0] + (mean[0] - cur[0]) * a,
+                            cur[1] + (mean[1] - cur[1]) * a,
+                        ]
                     }
                     _ => {
                         let q = match s.tool {
@@ -534,7 +666,14 @@ impl LiquifyField {
                             // Left of the stroke direction (y down): (dx, dy) → (dy, -dx).
                             LiquifyTool::PushLeft => [p[0] - k * delta[1], p[1] + k * delta[0]],
                             LiquifyTool::TwirlCw | LiquifyTool::TwirlCcw => {
-                                let th = k * rate * 0.12 * if s.tool == LiquifyTool::TwirlCw { 1.0 } else { -1.0 };
+                                let th = k
+                                    * rate
+                                    * 0.12
+                                    * if s.tool == LiquifyTool::TwirlCw {
+                                        1.0
+                                    } else {
+                                        -1.0
+                                    };
                                 // Content turns by +th, so sample at the point turned by -th.
                                 let (sn, cs) = (-th).sin_cos();
                                 [c[0] + dx * cs - dy * sn, c[1] + dx * sn + dy * cs]
@@ -548,7 +687,10 @@ impl LiquifyField {
                                 [c[0] + dx * a, c[1] + dy * a]
                             }
                         };
-                        let (qx, qy) = ((q[0] - p[0]) * inv_cell + i as f64, (q[1] - p[1]) * inv_cell + j as f64);
+                        let (qx, qy) = (
+                            (q[0] - p[0]) * inv_cell + i as f64,
+                            (q[1] - p[1]) * inv_cell + j as f64,
+                        );
                         let dq = old(qx, qy);
                         [(q[0] + dq[0] - p[0]) as f32, (q[1] + dq[1] - p[1]) as f32]
                     }
@@ -561,7 +703,13 @@ impl LiquifyField {
             self.freeze[idx] = f;
         }
         let pad = r.ceil() as i32 + 2;
-        Rect::new(c[0].floor() as i32 - pad, c[1].floor() as i32 - pad, c[0].ceil() as i32 + pad, c[1].ceil() as i32 + pad).intersect(&self.bounds)
+        Rect::new(
+            c[0].floor() as i32 - pad,
+            c[1].floor() as i32 - pad,
+            c[0].ceil() as i32 + pad,
+            c[1].ceil() as i32 + pad,
+        )
+        .intersect(&self.bounds)
     }
 
     /// Replays strokes on a fresh field.
@@ -598,7 +746,11 @@ impl LiquifyField {
         let j0 = (gy0.floor() as isize - 2).clamp(0, self.h as isize - 1) as usize;
         let i1 = (gx1.ceil() as isize + 2).clamp(0, self.w as isize - 1) as usize;
         let j1 = (gy1.ceil() as isize + 2).clamp(0, self.h as isize - 1) as usize;
-        (j0..=j1).any(|j| self.d[j * self.w + i0..=j * self.w + i1].iter().any(|v| v[0] != 0.0 || v[1] != 0.0))
+        (j0..=j1).any(|j| {
+            self.d[j * self.w + i0..=j * self.w + i1]
+                .iter()
+                .any(|v| v[0] != 0.0 || v[1] != 0.0)
+        })
     }
 }
 
@@ -610,7 +762,11 @@ impl LiquifyField {
 /// outside, tearing the image along every dab's circle (#2606).
 pub fn falloff(t2: f64, density: f64) -> f64 {
     let t2 = t2.clamp(0.0, 1.0);
-    let density = if density.is_nan() { 0.5 } else { density.clamp(0.0, 1.0) };
+    let density = if density.is_nan() {
+        0.5
+    } else {
+        density.clamp(0.0, 1.0)
+    };
     // Feathered: (1 - t²)³. Dense: (1 - t⁴)², flat in the middle. Both are 0 with zero slope at
     // t = 1, and their slopes stay small enough that a dab every fifth of the radius never folds
     // the image over itself.
@@ -625,20 +781,31 @@ fn bilinear(d: &[[f32; 2]], w: usize, h: usize, gx: f64, gy: f64) -> [f64; 2] {
     }
     let gx = gx.clamp(0.0, (w - 1) as f64);
     let gy = gy.clamp(0.0, (h - 1) as f64);
-    let (i, j) = ((gx as usize).min(w.saturating_sub(2)), (gy as usize).min(h.saturating_sub(2)));
+    let (i, j) = (
+        (gx as usize).min(w.saturating_sub(2)),
+        (gy as usize).min(h.saturating_sub(2)),
+    );
     let (fx, fy) = (gx - i as f64, gy - j as f64);
     let i1 = (i + 1).min(w - 1);
     let j1 = (j + 1).min(h - 1);
     let at = |x: usize, y: usize| d[y * w + x];
     let (a, b, c, e) = (at(i, j), at(i1, j), at(i, j1), at(i1, j1));
-    let l = |k: usize| (f64::from(a[k]) * (1.0 - fx) + f64::from(b[k]) * fx) * (1.0 - fy) + (f64::from(c[k]) * (1.0 - fx) + f64::from(e[k]) * fx) * fy;
+    let l = |k: usize| {
+        (f64::from(a[k]) * (1.0 - fx) + f64::from(b[k]) * fx) * (1.0 - fy)
+            + (f64::from(c[k]) * (1.0 - fx) + f64::from(e[k]) * fx) * fy
+    };
     [l(0), l(1)]
 }
 
 fn catmull_rom(t: f64) -> [f64; 4] {
     let t2 = t * t;
     let t3 = t2 * t;
-    [-0.5 * t3 + t2 - 0.5 * t, 1.5 * t3 - 2.5 * t2 + 1.0, -1.5 * t3 + 2.0 * t2 + 0.5 * t, 0.5 * t3 - 0.5 * t2]
+    [
+        -0.5 * t3 + t2 - 0.5 * t,
+        1.5 * t3 - 2.5 * t2 + 1.0,
+        -1.5 * t3 + 2.0 * t2 + 0.5 * t,
+        0.5 * t3 - 0.5 * t2,
+    ]
 }
 
 /// Resamples `src` through the field: inside `field.bounds` each pixel shows the source at
@@ -654,7 +821,11 @@ pub fn apply_liquify(src: &Surface, field: &LiquifyField) -> Surface {
         return out;
     }
     let maxd = f64::from(field.max_displacement()).ceil() as i32 + 3;
-    let tiles: Vec<Rect> = b.tiles().map(|t| t.rect().intersect(&b)).filter(|r| !r.is_empty() && field.touches(*r)).collect();
+    let tiles: Vec<Rect> = b
+        .tiles()
+        .map(|t| t.rect().intersect(&b))
+        .filter(|r| !r.is_empty() && field.touches(*r))
+        .collect();
     let work = |t: &Rect| -> Option<(Rect, Vec<f32>)> {
         let w = t.width() as usize;
         let h = t.height() as usize;
@@ -685,8 +856,14 @@ pub fn apply_liquify(src: &Surface, field: &LiquifyField) -> Surface {
         if !moved {
             return None;
         }
-        let foot =
-            Rect::new(fx0.floor() as i32 - 3, fy0.floor() as i32 - 3, fx1.ceil() as i32 + 3, fy1.ceil() as i32 + 3).intersect(&t.inflate(maxd)).intersect(&b);
+        let foot = Rect::new(
+            fx0.floor() as i32 - 3,
+            fy0.floor() as i32 - 3,
+            fx1.ceil() as i32 + 3,
+            fy1.ceil() as i32 + 3,
+        )
+        .intersect(&t.inflate(maxd))
+        .intersect(&b);
         if foot.is_empty() {
             return None;
         }
@@ -705,7 +882,13 @@ pub fn apply_liquify(src: &Surface, field: &LiquifyField) -> Surface {
             let y = y.clamp(foot.y0, foot.y1 - 1);
             ((y - foot.y0) as usize * fw + (x - foot.x0) as usize) * n
         };
-        let snap = |t: f64| if (t - t.round()).abs() < 1e-7 { t.round() } else { t };
+        let snap = |t: f64| {
+            if (t - t.round()).abs() < 1e-7 {
+                t.round()
+            } else {
+                t
+            }
+        };
         let mut outp = vec![0.0f32; w * h * n];
         let mut acc = [0.0f64; 8];
         for y in 0..h {
@@ -714,7 +897,10 @@ pub fn apply_liquify(src: &Surface, field: &LiquifyField) -> Surface {
                 let u = snap(f64::from(t.x0) + x as f64 + d[0]);
                 let v = snap(f64::from(t.y0) + y as f64 + d[1]);
                 let (ix, iy) = (u.floor() as i32, v.floor() as i32);
-                let (wx, wy) = (catmull_rom(u - f64::from(ix)), catmull_rom(v - f64::from(iy)));
+                let (wx, wy) = (
+                    catmull_rom(u - f64::from(ix)),
+                    catmull_rom(v - f64::from(iy)),
+                );
                 acc[..n].fill(0.0);
                 for (j, wyj) in wy.iter().enumerate() {
                     for (i, wxi) in wx.iter().enumerate() {
@@ -733,7 +919,11 @@ pub fn apply_liquify(src: &Surface, field: &LiquifyField) -> Surface {
                     let al = acc[n - 1].clamp(0.0, 1.0);
                     outp[o + n - 1] = al as f32;
                     for c in 0..n - 1 {
-                        outp[o + c] = if al > 0.0 { (acc[c] / al).clamp(0.0, 1.0) as f32 } else { 0.0 };
+                        outp[o + c] = if al > 0.0 {
+                            (acc[c] / al).clamp(0.0, 1.0) as f32
+                        } else {
+                            0.0
+                        };
                     }
                 } else {
                     for c in 0..n {
@@ -786,7 +976,12 @@ impl ProxyImage {
         let mut px = vec![[0.0f32; 4]; w * h];
         let fmt = src.format();
         let fill_rows = |y: usize, row: &mut [[f32; 4]]| {
-            let r = Rect::new(bounds.x0, bounds.y0 + y as i32 * k, bounds.x0 + w as i32 * k, (bounds.y0 + (y as i32 + 1) * k).min(bounds.y1));
+            let r = Rect::new(
+                bounds.x0,
+                bounds.y0 + y as i32 * k,
+                bounds.x0 + w as i32 * k,
+                (bounds.y0 + (y as i32 + 1) * k).min(bounds.y1),
+            );
             let mut buf = vec![[0.0f32; 4]; r.width() as usize * r.height() as usize];
             src.read_rgba_into(r, &mut buf);
             let rw = r.width() as usize;
@@ -812,17 +1007,32 @@ impl ProxyImage {
         #[cfg(not(target_arch = "wasm32"))]
         {
             use rayon::prelude::*;
-            px.par_chunks_mut(w).enumerate().for_each(|(y, row)| fill_rows(y, row));
+            px.par_chunks_mut(w)
+                .enumerate()
+                .for_each(|(y, row)| fill_rows(y, row));
         }
         #[cfg(target_arch = "wasm32")]
-        px.chunks_mut(w).enumerate().for_each(|(y, row)| fill_rows(y, row));
-        ProxyImage { bounds, scale, w, h, px }
+        px.chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, row)| fill_rows(y, row));
+        ProxyImage {
+            bounds,
+            scale,
+            w,
+            h,
+            px,
+        }
     }
 
     /// Renders proxy pixels `r` (proxy coordinates) through the field into `out` (premultiplied
     /// RGBA8, `w × h`): bilinear field, bilinear source.
     pub fn render(&self, field: &LiquifyField, r: [usize; 4], out: &mut [[u8; 4]]) {
-        let [x0, y0, x1, y1] = [r[0].min(self.w), r[1].min(self.h), r[2].min(self.w), r[3].min(self.h)];
+        let [x0, y0, x1, y1] = [
+            r[0].min(self.w),
+            r[1].min(self.h),
+            r[2].min(self.w),
+            r[3].min(self.h),
+        ];
         if x0 >= x1 || y0 >= y1 {
             return;
         }
@@ -836,10 +1046,19 @@ impl ProxyImage {
                 let (u, v) = ((px + d[0] - bx) / s - 0.5, (py + d[1] - by) / s - 0.5);
                 let (iu, iv) = (u.floor(), v.floor());
                 let (fu, fv) = ((u - iu) as f32, (v - iv) as f32);
-                let at = |x: f64, y: f64| self.px[(y.clamp(0.0, (self.h - 1) as f64) as usize) * self.w + x.clamp(0.0, (self.w - 1) as f64) as usize];
-                let (a, b, c, e) = (at(iu, iv), at(iu + 1.0, iv), at(iu, iv + 1.0), at(iu + 1.0, iv + 1.0));
+                let at = |x: f64, y: f64| {
+                    self.px[(y.clamp(0.0, (self.h - 1) as f64) as usize) * self.w
+                        + x.clamp(0.0, (self.w - 1) as f64) as usize]
+                };
+                let (a, b, c, e) = (
+                    at(iu, iv),
+                    at(iu + 1.0, iv),
+                    at(iu, iv + 1.0),
+                    at(iu + 1.0, iv + 1.0),
+                );
                 *slot = std::array::from_fn(|k| {
-                    let v = (a[k] * (1.0 - fu) + b[k] * fu) * (1.0 - fv) + (c[k] * (1.0 - fu) + e[k] * fu) * fv;
+                    let v = (a[k] * (1.0 - fu) + b[k] * fu) * (1.0 - fv)
+                        + (c[k] * (1.0 - fu) + e[k] * fu) * fv;
                     (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
                 });
             }
@@ -849,10 +1068,14 @@ impl ProxyImage {
         #[cfg(not(target_arch = "wasm32"))]
         if (x1 - x0) * (y1 - y0) > 150_000 {
             use rayon::prelude::*;
-            rows.par_chunks_mut(self.w).enumerate().for_each(|(i, line)| row(y0 + i, line));
+            rows.par_chunks_mut(self.w)
+                .enumerate()
+                .for_each(|(i, line)| row(y0 + i, line));
             return;
         }
-        rows.chunks_mut(self.w).enumerate().for_each(|(i, line)| row(y0 + i, line));
+        rows.chunks_mut(self.w)
+            .enumerate()
+            .for_each(|(i, line)| row(y0 + i, line));
     }
 
     /// Renders a document-pixel-resolution preview for `region` into the corresponding part of
@@ -870,28 +1093,42 @@ impl ProxyImage {
         let bounds = bounds.intersect(&field.bounds);
         let region = region.intersect(&bounds);
         let (width, height) = (bounds.width() as usize, bounds.height() as usize);
-        let Some(out_len) = width.checked_mul(height) else { return false };
+        let Some(out_len) = width.checked_mul(height) else {
+            return false;
+        };
         if region.is_empty() || out.len() != out_len || width == 0 || height == 0 {
             return false;
         }
 
         // Bilinear field interpolation is a convex combination of its surrounding nodes. The
         // extrema of those nodes therefore bound every source sample in this output rectangle.
-        let (mut min_dx, mut min_dy, mut max_dx, mut max_dy) = (f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
+        let (mut min_dx, mut min_dy, mut max_dx, mut max_dy) = (
+            f32::INFINITY,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NEG_INFINITY,
+        );
         let (gx0, gy0) = field.to_grid(f64::from(region.x0) + 0.5, f64::from(region.y0) + 0.5);
         let (gx1, gy1) = field.to_grid(f64::from(region.x1) - 0.5, f64::from(region.y1) - 0.5);
         let (i0, j0) = (gx0.floor().max(0.0) as usize, gy0.floor().max(0.0) as usize);
         let (i1, j1) = (gx1.ceil().max(0.0) as usize, gy1.ceil().max(0.0) as usize);
         for j in j0..=j1.min(field.h.saturating_sub(1)) {
             for i in i0..=i1.min(field.w.saturating_sub(1)) {
-                let Some(v) = j.checked_mul(field.w).and_then(|row| row.checked_add(i)).and_then(|idx| field.d.get(idx)) else { continue };
+                let Some(v) = j
+                    .checked_mul(field.w)
+                    .and_then(|row| row.checked_add(i))
+                    .and_then(|idx| field.d.get(idx))
+                else {
+                    continue;
+                };
                 min_dx = min_dx.min(v[0]);
                 min_dy = min_dy.min(v[1]);
                 max_dx = max_dx.max(v[0]);
                 max_dy = max_dy.max(v[1]);
             }
         }
-        if !min_dx.is_finite() || !min_dy.is_finite() || !max_dx.is_finite() || !max_dy.is_finite() {
+        if !min_dx.is_finite() || !min_dy.is_finite() || !max_dx.is_finite() || !max_dy.is_finite()
+        {
             return false;
         }
 
@@ -912,11 +1149,16 @@ impl ProxyImage {
             return false;
         }
         let (sw, sh) = (src_rect.width() as usize, src_rect.height() as usize);
-        let Some(source_len) = sw.checked_mul(sh) else { return false };
+        let Some(source_len) = sw.checked_mul(sh) else {
+            return false;
+        };
         if source_len > MAX_FULL_RES_SOURCE_PIXELS {
             return false;
         }
-        if source_scratch.try_reserve(source_len.saturating_sub(source_scratch.len())).is_err() {
+        if source_scratch
+            .try_reserve(source_len.saturating_sub(source_scratch.len()))
+            .is_err()
+        {
             return false;
         }
         source_scratch.resize(source_len, [0.0; 4]);
@@ -950,15 +1192,23 @@ impl ProxyImage {
             let at = |sx: i32, sy: i32| -> [f32; 4] {
                 let ox = (sx - src_rect.x0) as usize;
                 let oy = (sy - src_rect.y0) as usize;
-                source_scratch.get(oy * sw + ox).copied().unwrap_or([0.0; 4])
+                source_scratch
+                    .get(oy * sw + ox)
+                    .copied()
+                    .unwrap_or([0.0; 4])
             };
             let (a, b, c, d) = (at(sx0, sy0), at(sx1, sy0), at(sx0, sy1), at(sx1, sy1));
-            std::array::from_fn(|channel| (a[channel] * (1.0 - tx) + b[channel] * tx) * (1.0 - ty) + (c[channel] * (1.0 - tx) + d[channel] * tx) * ty)
+            std::array::from_fn(|channel| {
+                (a[channel] * (1.0 - tx) + b[channel] * tx) * (1.0 - ty)
+                    + (c[channel] * (1.0 - tx) + d[channel] * tx) * ty
+            })
         };
         let render_rows = |first_y: usize, rows: &mut [[u8; 4]]| {
             for (offset, row) in rows.chunks_mut(width).enumerate() {
                 let y = bounds.y0 + (first_y + offset) as i32;
-                let Some(dest) = row.get_mut(x0..x1) else { continue };
+                let Some(dest) = row.get_mut(x0..x1) else {
+                    continue;
+                };
                 for (offset_x, pixel) in dest.iter_mut().enumerate() {
                     let x = bounds.x0 + (x0 + offset_x) as i32;
                     let p = [f64::from(x) + 0.5, f64::from(y) + 0.5];
@@ -968,14 +1218,20 @@ impl ProxyImage {
                 }
             }
         };
-        let Some(rows) = out.get_mut(y0 * width..y1 * width) else { return false };
+        let Some(rows) = out.get_mut(y0 * width..y1 * width) else {
+            return false;
+        };
         #[cfg(not(target_arch = "wasm32"))]
         if (x1 - x0).saturating_mul(y1 - y0) > 150_000 {
             use rayon::prelude::*;
-            rows.par_chunks_mut(width).enumerate().for_each(|(offset, line)| render_rows(y0 + offset, line));
+            rows.par_chunks_mut(width)
+                .enumerate()
+                .for_each(|(offset, line)| render_rows(y0 + offset, line));
             return true;
         }
-        rows.chunks_mut(width).enumerate().for_each(|(offset, line)| render_rows(y0 + offset, line));
+        rows.chunks_mut(width)
+            .enumerate()
+            .for_each(|(offset, line)| render_rows(y0 + offset, line));
         true
     }
 
@@ -1014,25 +1270,50 @@ mod tests {
             ([-900.0, 30.0, 1.0], [40.0, 31.0, 1.0]),      // in from far left
             ([40.0, 30.0, 1.0], [40.0, 4000.0, 0.2]),      // out downwards
             ([-500.0, -500.0, 1.0], [600.0, 600.0, 1.0]),  // diagonal through
-            ([-300.0, -9.0, 1.0], [300.0, -9.0, 1.0]),     // parallel, just above (the brush reaches)
+            ([-300.0, -9.0, 1.0], [300.0, -9.0, 1.0]), // parallel, just above (the brush reaches)
             ([-300.0, -400.0, 1.0], [300.0, -400.0, 1.0]), // parallel, far above (reaches nothing)
-            ([88.5, -50.0, 1.0], [88.5, 120.0, 1.0]),      // vertical, along the right edge
-            ([200.0, 200.0, 1.0], [201.0, 900.0, 1.0]),    // entirely outside
-            ([0.0, 0.0, 1.0], [0.25, 0.1, 1.0]),           // shorter than one step
-            ([60.0, 40.0, 1.0], [-2000.0, 45.0, 1.0]),     // continues the stroke before it, out left
+            ([88.5, -50.0, 1.0], [88.5, 120.0, 1.0]),  // vertical, along the right edge
+            ([200.0, 200.0, 1.0], [201.0, 900.0, 1.0]), // entirely outside
+            ([0.0, 0.0, 1.0], [0.25, 0.1, 1.0]),       // shorter than one step
+            ([60.0, 40.0, 1.0], [-2000.0, 45.0, 1.0]), // continues the stroke before it, out left
         ];
-        for tool in [ForwardWarp, PushLeft, Reconstruct, Smooth, TwirlCw, TwirlCcw, Pucker, Bloat, Freeze, Thaw] {
+        for tool in [
+            ForwardWarp,
+            PushLeft,
+            Reconstruct,
+            Smooth,
+            TwirlCw,
+            TwirlCcw,
+            Pucker,
+            Bloat,
+            Freeze,
+            Thaw,
+        ] {
             for size in [6.0, 40.0] {
                 for (a, b) in segments {
                     let s = LiquifyStroke::new(tool, size);
-                    let (mut fast, mut full) = (LiquifyField::new(bounds, 2.0), LiquifyField::new(bounds, 2.0));
+                    let (mut fast, mut full) = (
+                        LiquifyField::new(bounds, 2.0),
+                        LiquifyField::new(bounds, 2.0),
+                    );
                     // Some displacement first, so Reconstruct and Smooth have something to undo.
                     for f in [&mut fast, &mut full] {
-                        f.stroke_segment(&LiquifyStroke::new(ForwardWarp, 30.0), [20.0, 20.0, 1.0], [60.0, 40.0, 1.0]);
+                        f.stroke_segment(
+                            &LiquifyStroke::new(ForwardWarp, 30.0),
+                            [20.0, 20.0, 1.0],
+                            [60.0, 40.0, 1.0],
+                        );
                     }
                     let dirty = fast.stroke_segment(&s, a, b);
-                    assert_eq!(dirty, full_walk(&mut full, &s, a, b), "{tool:?} {size} {a:?} {b:?}");
-                    assert!(fast.d == full.d && fast.freeze == full.freeze, "{tool:?} {size} {a:?} {b:?}");
+                    assert_eq!(
+                        dirty,
+                        full_walk(&mut full, &s, a, b),
+                        "{tool:?} {size} {a:?} {b:?}"
+                    );
+                    assert!(
+                        fast.d == full.d && fast.freeze == full.freeze,
+                        "{tool:?} {size} {a:?} {b:?}"
+                    );
                 }
             }
         }
@@ -1058,8 +1339,22 @@ mod tests {
     #[test]
     fn the_result_does_not_depend_on_how_finely_the_path_was_sampled() {
         use LiquifyTool::*;
-        let path = [[20.0, 20.0, 1.0], [62.0, 26.0, 0.6], [70.0, 50.0, 0.9], [28.0, 55.0, 1.0], [30.0, 30.0, 1.0]];
-        for tool in [ForwardWarp, PushLeft, TwirlCw, Bloat, Reconstruct, Smooth, Freeze] {
+        let path = [
+            [20.0, 20.0, 1.0],
+            [62.0, 26.0, 0.6],
+            [70.0, 50.0, 0.9],
+            [28.0, 55.0, 1.0],
+            [30.0, 30.0, 1.0],
+        ];
+        for tool in [
+            ForwardWarp,
+            PushLeft,
+            TwirlCw,
+            Bloat,
+            Reconstruct,
+            Smooth,
+            Freeze,
+        ] {
             for size in [12.0, 40.0] {
                 let field = |parts: usize| {
                     let mut warp = LiquifyStroke::new(ForwardWarp, 30.0);
@@ -1072,8 +1367,18 @@ mod tests {
                 let coarse = field(1);
                 for parts in [3, 17, 60] {
                     let fine = field(parts);
-                    let dd = coarse.d.iter().zip(&fine.d).map(|(p, q)| (p[0] - q[0]).abs().max((p[1] - q[1]).abs())).fold(0.0f32, f32::max);
-                    let df = coarse.freeze.iter().zip(&fine.freeze).map(|(p, q)| (p - q).abs()).fold(0.0f32, f32::max);
+                    let dd = coarse
+                        .d
+                        .iter()
+                        .zip(&fine.d)
+                        .map(|(p, q)| (p[0] - q[0]).abs().max((p[1] - q[1]).abs()))
+                        .fold(0.0f32, f32::max);
+                    let df = coarse
+                        .freeze
+                        .iter()
+                        .zip(&fine.freeze)
+                        .map(|(p, q)| (p - q).abs())
+                        .fold(0.0f32, f32::max);
                     assert!(dd < 1e-3 && df < 1e-4, "{tool:?} {size}px, {parts} events per leg: field differs by {dd} px, mask by {df}");
                 }
             }
@@ -1087,12 +1392,22 @@ mod tests {
     fn a_long_diagonal_drag_gives_one_field_at_any_event_spacing() {
         let field = |step: f64| {
             let mut s = LiquifyStroke::new(LiquifyTool::ForwardWarp, 40.0);
-            s.points = (0..=(300.0 / step) as usize).map(|k| vec![40.0 + k as f64 * step * 0.6, 20.0 + k as f64 * step * 0.8]).collect();
+            s.points = (0..=(300.0 / step) as usize)
+                .map(|k| vec![40.0 + k as f64 * step * 0.6, 20.0 + k as f64 * step * 0.8])
+                .collect();
             LiquifyField::from_strokes(Rect::new(0, 0, 320, 300), 2.0, &[s])
         };
         let (slow, fast) = (field(2.0), field(60.0));
-        let dd = slow.d.iter().zip(&fast.d).map(|(p, q)| (p[0] - q[0]).abs().max((p[1] - q[1]).abs())).fold(0.0f32, f32::max);
-        assert!(slow.max_displacement() > 50.0, "the drag builds up a deep displacement");
+        let dd = slow
+            .d
+            .iter()
+            .zip(&fast.d)
+            .map(|(p, q)| (p[0] - q[0]).abs().max((p[1] - q[1]).abs()))
+            .fold(0.0f32, f32::max);
+        assert!(
+            slow.max_displacement() > 50.0,
+            "the drag builds up a deep displacement"
+        );
         assert!(dd < 1e-3, "slow and fast pointer fields differ by {dd} px");
     }
 
@@ -1122,7 +1437,11 @@ mod tests {
         let dirty = f.stroke_segment(&s, [0.0, 0.0, 1.0], [1e15, 0.0, 1.0]);
         assert!(!dirty.is_empty() && dirty.x1 <= 64, "{dirty:?}");
         f.stroke_segment(&s, [-1e308, 5.0, 1.0], [1e308, 5.0, 1.0]);
-        f.stroke_segment(&LiquifyStroke::new(LiquifyTool::Bloat, 30.0), [5.0, -1e15, 1.0], [5.0, 1e15, 1.0]);
+        f.stroke_segment(
+            &LiquifyStroke::new(LiquifyTool::Bloat, 30.0),
+            [5.0, -1e15, 1.0],
+            [5.0, 1e15, 1.0],
+        );
     }
 
     fn sample(st: SampleType) -> Surface {
@@ -1141,7 +1460,11 @@ mod tests {
     }
 
     fn worst(a: &Surface, b: &Surface, r: Rect) -> f32 {
-        a.read_region(r).iter().zip(b.read_region(r)).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max)
+        a.read_region(r)
+            .iter()
+            .zip(b.read_region(r))
+            .map(|(x, y)| (x - y).abs())
+            .fold(0.0, f32::max)
     }
 
     fn lasso(points: &[[f64; 2]], amount: Option<f64>) -> LiquifyStroke {
@@ -1157,7 +1480,9 @@ mod tests {
         let mut j = poly.len() - 1;
         for (i, a) in poly.iter().enumerate() {
             let b = poly[j];
-            if (a[1] > p[1]) != (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0] {
+            if (a[1] > p[1]) != (b[1] > p[1])
+                && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]
+            {
                 inside = !inside;
             }
             j = i;
@@ -1168,20 +1493,41 @@ mod tests {
     #[test]
     fn lasso_freezes_exactly_the_nodes_inside_a_concave_polygon() {
         // A concave "C" with a notch, at a non-integer cell size.
-        let poly = [[10.0, 8.0], [70.0, 8.0], [70.0, 20.0], [30.0, 22.5], [33.0, 40.0], [80.0, 41.0], [60.0, 58.0], [9.0, 55.0]];
+        let poly = [
+            [10.0, 8.0],
+            [70.0, 8.0],
+            [70.0, 20.0],
+            [30.0, 22.5],
+            [33.0, 40.0],
+            [80.0, 41.0],
+            [60.0, 58.0],
+            [9.0, 55.0],
+        ];
         for cell in [1.0, 2.0, 3.5] {
             let mut f = LiquifyField::new(bounds(), cell);
             let dirty = f.apply_stroke(&lasso(&poly, None));
             assert_eq!(dirty, Rect::new(9, 8, 80, 58));
             for j in 0..f.h {
                 for i in 0..f.w {
-                    let want = if inside(f.node_pos(i, j), &poly) { 1.0 } else { 0.0 };
-                    assert_eq!(f.freeze[j * f.w + i], want, "cell {cell}: node ({i}, {j}) at {:?}", f.node_pos(i, j));
+                    let want = if inside(f.node_pos(i, j), &poly) {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                    assert_eq!(
+                        f.freeze[j * f.w + i],
+                        want,
+                        "cell {cell}: node ({i}, {j}) at {:?}",
+                        f.node_pos(i, j)
+                    );
                 }
             }
             assert!(f.freeze.contains(&1.0));
             // Strokes replay to the same field (undo rebuilds from the list).
-            assert_eq!(LiquifyField::from_strokes(bounds(), cell, &[lasso(&poly, None)]), f);
+            assert_eq!(
+                LiquifyField::from_strokes(bounds(), cell, &[lasso(&poly, None)]),
+                f
+            );
         }
     }
 
@@ -1215,21 +1561,41 @@ mod tests {
         }
         // Huge coordinates around the canvas clamp to it instead of overflowing.
         let mut f = empty.clone();
-        f.apply_stroke(&lasso(&[[-1e15, -1e15], [1e15, -1e15], [1e15, 1e15], [-1e15, 1e15]], None));
+        f.apply_stroke(&lasso(
+            &[[-1e15, -1e15], [1e15, -1e15], [1e15, 1e15], [-1e15, 1e15]],
+            None,
+        ));
         assert!(f.freeze.iter().all(|&v| v == 1.0));
         // A NaN point among good ones is skipped.
         let mut f = empty.clone();
-        f.apply_stroke(&lasso(&[[10.0, 10.0], [f64::NAN, 0.0], [50.0, 10.0], [50.0, 50.0], [10.0, 50.0]], None));
+        f.apply_stroke(&lasso(
+            &[
+                [10.0, 10.0],
+                [f64::NAN, 0.0],
+                [50.0, 10.0],
+                [50.0, 50.0],
+                [10.0, 50.0],
+            ],
+            None,
+        ));
         assert_eq!(f.freeze_at(30.0, 30.0), 1.0);
     }
 
     #[test]
     fn the_brush_fades_to_nothing_at_its_rim_at_every_density() {
         for density in [0.0, 0.25, 0.5, 0.75, 1.0, f64::NAN, -3.0, 7.0] {
-            assert_eq!(falloff(0.0, density), 1.0, "full strength at the centre ({density})");
+            assert_eq!(
+                falloff(0.0, density),
+                1.0,
+                "full strength at the centre ({density})"
+            );
             assert_eq!(falloff(1.0, density), 0.0, "nothing at the rim ({density})");
             // Flat at the rim: the last 2 % of the radius moves at most a couple of percent.
-            assert!(falloff(0.98f64.powi(2), density) < 0.02, "{density}: {}", falloff(0.98f64.powi(2), density));
+            assert!(
+                falloff(0.98f64.powi(2), density) < 0.02,
+                "{density}: {}",
+                falloff(0.98f64.powi(2), density)
+            );
             let mut prev = 1.0;
             for k in 1..=100 {
                 let v = falloff(k as f64 / 100.0, density);
@@ -1240,7 +1606,10 @@ mod tests {
         // Density widens the strong core: more strength at every radius, as in Photoshop.
         for k in 1..100 {
             let t2 = k as f64 / 100.0;
-            assert!(falloff(t2, 1.0) >= falloff(t2, 0.5) && falloff(t2, 0.5) >= falloff(t2, 0.0), "t² = {t2}");
+            assert!(
+                falloff(t2, 1.0) >= falloff(t2, 0.5) && falloff(t2, 0.5) >= falloff(t2, 0.0),
+                "t² = {t2}"
+            );
         }
         assert!(falloff(0.5, 1.0) > 0.5 && falloff(0.5, 0.0) < 0.2);
     }
@@ -1264,13 +1633,19 @@ mod tests {
                     let t = (p[0] - 48.0).hypot(p[1] - 32.0) / r;
                     if (0.97..1.0).contains(&t) {
                         let d = f.d[j * f.w + i];
-                        assert!(f64::from(d[0].hypot(d[1])) < 0.03 * drag, "density {density}: a node at {t:.3} r moved {d:?}");
+                        assert!(
+                            f64::from(d[0].hypot(d[1])) < 0.03 * drag,
+                            "density {density}: a node at {t:.3} r moved {d:?}"
+                        );
                         rim += 1;
                     }
                 }
             }
             assert!(rim > 20, "{rim} rim nodes");
-            assert!(f.sample(48.0, 32.0)[0] < -0.9 * drag, "density {density}: the centre follows the brush");
+            assert!(
+                f.sample(48.0, 32.0)[0] < -0.9 * drag,
+                "density {density}: the centre follows the brush"
+            );
         }
     }
 
@@ -1305,14 +1680,28 @@ mod tests {
 
             let mut got = vec![[0; 4]; proxy.w * proxy.h];
             let mut scratch = Vec::new();
-            assert!(ProxyImage::render_full_resolution(&source, &field, canvas, canvas, &mut got, &mut scratch));
+            assert!(ProxyImage::render_full_resolution(
+                &source,
+                &field,
+                canvas,
+                canvas,
+                &mut got,
+                &mut scratch
+            ));
             assert_eq!(got, want, "full-resolution render at {sample_type:?}");
 
             let mut more = LiquifyStroke::new(LiquifyTool::Bloat, 16.0);
             more.points = vec![vec![43.0, 32.0, 1.0]];
             let dirty = field.apply_stroke(&more);
             proxy.render(&field, proxy.proxy_rect(dirty), &mut want);
-            assert!(ProxyImage::render_full_resolution(&source, &field, canvas, dirty, &mut got, &mut scratch));
+            assert!(ProxyImage::render_full_resolution(
+                &source,
+                &field,
+                canvas,
+                dirty,
+                &mut got,
+                &mut scratch
+            ));
             assert_eq!(got, want, "partial update at {sample_type:?}");
         }
     }
@@ -1326,11 +1715,17 @@ mod tests {
         let d = f.sample(52.0, 32.0);
         assert!(d[0] < -4.0 && d[1].abs() < 0.5, "{d:?}");
         // A pixel-level check: a marker column follows the stroke.
-        let mut img = Surface::new(PixelFormat::new(ColorMode::Grayscale, SampleType::F32, true));
+        let mut img = Surface::new(PixelFormat::new(
+            ColorMode::Grayscale,
+            SampleType::F32,
+            true,
+        ));
         img.fill_rect(bounds(), &[0.0, 1.0]);
         img.fill_rect(Rect::new(40, 28, 42, 36), &[1.0, 1.0]);
         let out = apply_liquify(&img, &f);
-        let brightest = (30..70).max_by(|a, b| out.pixel(*a, 32)[0].total_cmp(&out.pixel(*b, 32)[0])).unwrap();
+        let brightest = (30..70)
+            .max_by(|a, b| out.pixel(*a, 32)[0].total_cmp(&out.pixel(*b, 32)[0]))
+            .unwrap();
         assert!(brightest > 44, "marker moved right: {brightest}");
         // Reconstruct All restores the original exactly.
         let mut rec = LiquifyStroke::new(LiquifyTool::ReconstructAll, 10.0);
@@ -1349,7 +1744,11 @@ mod tests {
         let mut r = LiquifyStroke::new(LiquifyTool::Reconstruct, 80.0);
         r.points = vec![vec![40.0, 32.0]; 30];
         f.apply_stroke(&r);
-        assert!(f.max_displacement() < before * 0.2, "{} vs {before}", f.max_displacement());
+        assert!(
+            f.max_displacement() < before * 0.2,
+            "{} vs {before}",
+            f.max_displacement()
+        );
         // Frozen area doesn't move.
         let mut fr = LiquifyStroke::new(LiquifyTool::Freeze, 60.0);
         fr.density = 100.0;
@@ -1395,7 +1794,10 @@ mod tests {
         let f = at(LiquifyTool::TwirlCcw, c);
         assert!(f.sample(58.0, 32.0)[1] > 0.1);
         // Push Left while dragging up moves content left (samples from the right).
-        let f = at(LiquifyTool::PushLeft, vec![vec![48.0, 44.0], vec![48.0, 20.0]]);
+        let f = at(
+            LiquifyTool::PushLeft,
+            vec![vec![48.0, 44.0], vec![48.0, 20.0]],
+        );
         assert!(f.sample(48.0, 32.0)[0] > 0.5, "{:?}", f.sample(48.0, 32.0));
         // Smooth reduces sharp field differences.
         let mut s = LiquifyStroke::new(LiquifyTool::ForwardWarp, 12.0);
@@ -1411,7 +1813,11 @@ mod tests {
     #[test]
     fn replay_is_deterministic_and_depths_agree() {
         let mut s = LiquifyStroke::new(LiquifyTool::TwirlCw, 50.0);
-        s.points = vec![vec![48.0, 32.0, 0.5], vec![50.0, 33.0, 1.0], vec![52.0, 34.0]];
+        s.points = vec![
+            vec![48.0, 32.0, 0.5],
+            vec![50.0, 33.0, 1.0],
+            vec![52.0, 34.0],
+        ];
         let a = LiquifyField::from_strokes(bounds(), 2.0, std::slice::from_ref(&s));
         let b = LiquifyField::from_strokes(bounds(), 2.0, std::slice::from_ref(&s));
         assert_eq!(a, b);

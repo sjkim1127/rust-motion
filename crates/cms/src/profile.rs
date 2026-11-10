@@ -104,7 +104,12 @@ impl ColorSpace {
             Self::Hls => *b"HLS ",
             Self::Cmyk => *b"CMYK",
             Self::Cmy => *b"CMY ",
-            Self::Color(n) => [if n < 10 { b'0' + n } else { b'A' + n - 10 }, b'C', b'L', b'R'],
+            Self::Color(n) => [
+                if n < 10 { b'0' + n } else { b'A' + n - 10 },
+                b'C',
+                b'L',
+                b'R',
+            ],
             Self::Unknown(s) => return s,
         })
     }
@@ -236,14 +241,22 @@ impl Profile {
             return false;
         }
         let lab = crate::builtin::Builtin::LabD50.profile();
-        let to_lab = |p: &Profile| crate::transform::Transform::new(p, lab, Intent::RelativeColorimetric, false);
+        let to_lab = |p: &Profile| {
+            crate::transform::Transform::new(p, lab, Intent::RelativeColorimetric, false)
+        };
         let (Ok(a), Ok(b)) = (to_lab(self), to_lab(other)) else {
             return false;
         };
         // 17 steps per channel catch a TRC that differs only in its toe; 9 keep CMYK at 6561 samples.
         let steps: usize = if n <= 3 { 17 } else { 9 };
         // Lab D50 is the PCS, normalised as in ICC v4.
-        let decode = |o: [f32; 3]| [f64::from(o[0]) * 100.0, f64::from(o[1]) * 255.0 - 128.0, f64::from(o[2]) * 255.0 - 128.0];
+        let decode = |o: [f32; 3]| {
+            [
+                f64::from(o[0]) * 100.0,
+                f64::from(o[1]) * 255.0 - 128.0,
+                f64::from(o[2]) * 255.0 - 128.0,
+            ]
+        };
         let mut input = [0f32; 4];
         (0..steps.pow(n as u32)).all(|i| {
             let mut k = i;
@@ -293,14 +306,21 @@ impl Profile {
 
     /// `true` for matrix/TRC RGB or gray TRC profiles without LUTs.
     pub fn is_matrix_shaper(&self) -> bool {
-        self.a2b.iter().all(Option::is_none) && (self.matrix.is_some() && self.trc.is_some() || self.gray_trc.is_some())
+        self.a2b.iter().all(Option::is_none)
+            && (self.matrix.is_some() && self.trc.is_some() || self.gray_trc.is_some())
     }
 
     /// Whether colours can be converted into this profile for every intent. Input profiles with
     /// only AToB tables (Apple's Wide Color Sharing Profile on iPhone photos) can't: they
     /// describe a source but have no PCS → device path.
     pub fn can_be_destination(&self) -> bool {
-        [Intent::Perceptual, Intent::RelativeColorimetric, Intent::Saturation].into_iter().all(|i| self.pcs_to_device(i).is_ok())
+        [
+            Intent::Perceptual,
+            Intent::RelativeColorimetric,
+            Intent::Saturation,
+        ]
+        .into_iter()
+        .all(|i| self.pcs_to_device(i).is_ok())
     }
 
     fn lut_for(luts: &[Option<Lut>; 3], intent: Intent) -> Option<&Lut> {
@@ -334,25 +354,45 @@ impl Profile {
         match self.color_space {
             ColorSpace::Rgb => {
                 let (Some(m), Some(trc)) = (&self.matrix, &self.trc) else {
-                    return Err(CmsError::Unsupported("RGB profile without matrix/TRC or AToB tags".into()));
+                    return Err(CmsError::Unsupported(
+                        "RGB profile without matrix/TRC or AToB tags".into(),
+                    ));
                 };
-                Ok((vec![Stage::Curves(trc.to_vec()), Stage::matrix3(m)], Pcs::Xyz))
+                Ok((
+                    vec![Stage::Curves(trc.to_vec()), Stage::matrix3(m)],
+                    Pcs::Xyz,
+                ))
             }
             ColorSpace::Gray => {
-                let c = self.gray_trc.clone().ok_or_else(|| CmsError::Unsupported("gray profile without kTRC".into()))?;
+                let c = self
+                    .gray_trc
+                    .clone()
+                    .ok_or_else(|| CmsError::Unsupported("gray profile without kTRC".into()))?;
                 if self.pcs == Pcs::Lab {
                     // The curve yields L*/100.
-                    let m = Stage::Matrix { rows: 3, cols: 1, m: vec![100.0, 0.0, 0.0], offset: vec![0.0; 3] };
+                    let m = Stage::Matrix {
+                        rows: 3,
+                        cols: 1,
+                        m: vec![100.0, 0.0, 0.0],
+                        offset: vec![0.0; 3],
+                    };
                     Ok((vec![Stage::Curves(vec![c]), m], Pcs::Lab))
                 } else {
                     let w = math::D50;
-                    let m = Stage::Matrix { rows: 3, cols: 1, m: w.to_vec(), offset: vec![0.0; 3] };
+                    let m = Stage::Matrix {
+                        rows: 3,
+                        cols: 1,
+                        m: w.to_vec(),
+                        offset: vec![0.0; 3],
+                    };
                     Ok((vec![Stage::Curves(vec![c]), m], Pcs::Xyz))
                 }
             }
             ColorSpace::Lab => Ok((vec![Stage::DecodeLabV4], Pcs::Lab)),
             ColorSpace::Xyz => Ok((vec![Stage::DecodeXyz], Pcs::Xyz)),
-            cs => Err(CmsError::Unsupported(format!("{cs:?} profile without AToB tags"))),
+            cs => Err(CmsError::Unsupported(format!(
+                "{cs:?} profile without AToB tags"
+            ))),
         }
     }
 
@@ -366,24 +406,45 @@ impl Profile {
         match self.color_space {
             ColorSpace::Rgb => {
                 let (Some(m), Some(trc)) = (&self.matrix, &self.trc) else {
-                    return Err(CmsError::Unsupported("RGB profile without matrix/TRC or BToA tags".into()));
+                    return Err(CmsError::Unsupported(
+                        "RGB profile without matrix/TRC or BToA tags".into(),
+                    ));
                 };
-                let inv = math::invert(m).ok_or_else(|| CmsError::Invalid("singular colorant matrix".into()))?;
-                Ok((vec![Stage::matrix3(&inv), Stage::InvCurves(trc.to_vec())], Pcs::Xyz))
+                let inv = math::invert(m)
+                    .ok_or_else(|| CmsError::Invalid("singular colorant matrix".into()))?;
+                Ok((
+                    vec![Stage::matrix3(&inv), Stage::InvCurves(trc.to_vec())],
+                    Pcs::Xyz,
+                ))
             }
             ColorSpace::Gray => {
-                let c = self.gray_trc.clone().ok_or_else(|| CmsError::Unsupported("gray profile without kTRC".into()))?;
+                let c = self
+                    .gray_trc
+                    .clone()
+                    .ok_or_else(|| CmsError::Unsupported("gray profile without kTRC".into()))?;
                 if self.pcs == Pcs::Lab {
-                    let m = Stage::Matrix { rows: 1, cols: 3, m: vec![0.01, 0.0, 0.0], offset: vec![0.0] };
+                    let m = Stage::Matrix {
+                        rows: 1,
+                        cols: 3,
+                        m: vec![0.01, 0.0, 0.0],
+                        offset: vec![0.0],
+                    };
                     Ok((vec![m, Stage::InvCurves(vec![c])], Pcs::Lab))
                 } else {
-                    let m = Stage::Matrix { rows: 1, cols: 3, m: vec![0.0, 1.0, 0.0], offset: vec![0.0] };
+                    let m = Stage::Matrix {
+                        rows: 1,
+                        cols: 3,
+                        m: vec![0.0, 1.0, 0.0],
+                        offset: vec![0.0],
+                    };
                     Ok((vec![m, Stage::InvCurves(vec![c])], Pcs::Xyz))
                 }
             }
             ColorSpace::Lab => Ok((vec![Stage::EncodeLabV4], Pcs::Lab)),
             ColorSpace::Xyz => Ok((vec![Stage::EncodeXyz], Pcs::Xyz)),
-            cs => Err(CmsError::Unsupported(format!("{cs:?} profile without BToA tags"))),
+            cs => Err(CmsError::Unsupported(format!(
+                "{cs:?} profile without BToA tags"
+            ))),
         }
     }
 }
@@ -412,7 +473,9 @@ struct Reader<'a> {
 
 impl<'a> Reader<'a> {
     fn slice(&self, off: usize, len: usize) -> Result<&'a [u8], CmsError> {
-        off.checked_add(len).and_then(|end| self.b.get(off..end)).ok_or(CmsError::Truncated)
+        off.checked_add(len)
+            .and_then(|end| self.b.get(off..end))
+            .ok_or(CmsError::Truncated)
     }
     fn u8(&self, off: usize) -> Result<u8, CmsError> {
         self.b.get(off).copied().ok_or(CmsError::Truncated)
@@ -429,7 +492,9 @@ impl<'a> Reader<'a> {
         Ok(self.u32(off)? as i32 as f64 / 65536.0)
     }
     fn xyz(&self, off: usize) -> Result<[f64; 3], CmsError> {
-        let r = Reader { b: self.slice(off, 12)? };
+        let r = Reader {
+            b: self.slice(off, 12)?,
+        };
         Ok([r.s15f16(0)?, r.s15f16(4)?, r.s15f16(8)?])
     }
 }
@@ -438,7 +503,9 @@ impl<'a> Reader<'a> {
 /// fit a `usize`. Such fields reach `u32::MAX`, which overflows on 32-bit targets (wasm32):
 /// a panic with overflow checks on, a wrapped offset that reads the wrong bytes without (#4976).
 fn extent(base: usize, n: usize, size: usize) -> Result<usize, CmsError> {
-    n.checked_mul(size).and_then(|len| base.checked_add(len)).ok_or(CmsError::Truncated)
+    n.checked_mul(size)
+        .and_then(|len| base.checked_add(len))
+        .ok_or(CmsError::Truncated)
 }
 
 fn sig(s: &[u8; 4]) -> u32 {
@@ -458,7 +525,11 @@ fn parse_profile(bytes: &[u8]) -> Result<Profile, CmsError> {
     }
     let declared = r.u32(0)? as usize;
     // Some writers pad or truncate; trust the smaller of the two.
-    let end = if declared >= 132 && declared <= bytes.len() { declared } else { bytes.len() };
+    let end = if declared >= 132 && declared <= bytes.len() {
+        declared
+    } else {
+        bytes.len()
+    };
     let r = Reader { b: &bytes[..end] };
     let version = (r.u8(8)?, r.u8(9)?);
     let class = ProfileClass::from_sig(r.u32(12)?);
@@ -490,7 +561,10 @@ fn parse_profile(bytes: &[u8]) -> Result<Profile, CmsError> {
     let xyz_tag = |s: &[u8; 4]| -> Result<Option<[f64; 3]>, CmsError> {
         match tag_data(s)? {
             Some(d) if d.len() >= 20 && &d[..4] == b"XYZ " => Ok(Some(Reader { b: d }.xyz(8)?)),
-            Some(_) => Err(CmsError::Invalid(format!("tag {} is not XYZType", String::from_utf8_lossy(s)))),
+            Some(_) => Err(CmsError::Invalid(format!(
+                "tag {} is not XYZType",
+                String::from_utf8_lossy(s)
+            ))),
             None => Ok(None),
         }
     };
@@ -517,10 +591,18 @@ fn parse_profile(bytes: &[u8]) -> Result<Profile, CmsError> {
         _ => None,
     };
     let matrix = match (xyz_tag(b"rXYZ")?, xyz_tag(b"gXYZ")?, xyz_tag(b"bXYZ")?) {
-        (Some(rr), Some(g), Some(b)) => Some([[rr[0], g[0], b[0]], [rr[1], g[1], b[1]], [rr[2], g[2], b[2]]]),
+        (Some(rr), Some(g), Some(b)) => Some([
+            [rr[0], g[0], b[0]],
+            [rr[1], g[1], b[1]],
+            [rr[2], g[2], b[2]],
+        ]),
         _ => None,
     };
-    let trc = match (curve_tag(b"rTRC")?, curve_tag(b"gTRC")?, curve_tag(b"bTRC")?) {
+    let trc = match (
+        curve_tag(b"rTRC")?,
+        curve_tag(b"gTRC")?,
+        curve_tag(b"bTRC")?,
+    ) {
         (Some(a), Some(b), Some(c)) => Some([a, b, c]),
         _ => None,
     };
@@ -531,8 +613,16 @@ fn parse_profile(bytes: &[u8]) -> Result<Profile, CmsError> {
             None => Ok(None),
         }
     };
-    let a2b = [lut(b"A2B0", true)?, lut(b"A2B1", true)?, lut(b"A2B2", true)?];
-    let b2a = [lut(b"B2A0", false)?, lut(b"B2A1", false)?, lut(b"B2A2", false)?];
+    let a2b = [
+        lut(b"A2B0", true)?,
+        lut(b"A2B1", true)?,
+        lut(b"A2B2", true)?,
+    ];
+    let b2a = [
+        lut(b"B2A0", false)?,
+        lut(b"B2A1", false)?,
+        lut(b"B2A2", false)?,
+    ];
     let description = tag_data(b"desc")?.map(parse_text).unwrap_or_default();
     let copyright = tag_data(b"cprt")?.map(parse_text).unwrap_or_default();
 
@@ -559,15 +649,25 @@ fn parse_profile(bytes: &[u8]) -> Result<Profile, CmsError> {
     // spaces: its header PCS field holds the output colour space (ICC.1:2010 §7.2.7), so a
     // CMYK→CMYK link has a 4→4 AToB0.
     let dev = p.color_space.channels();
-    let conn = if p.class == ProfileClass::DeviceLink { ColorSpace::from_sig(pcs_sig).channels() } else { 3 };
+    let conn = if p.class == ProfileClass::DeviceLink {
+        ColorSpace::from_sig(pcs_sig).channels()
+    } else {
+        3
+    };
     for l in p.a2b.iter().flatten() {
         if dev != 0 && l.inputs != dev || conn != 0 && l.outputs != conn {
-            return Err(CmsError::Invalid(format!("AToB tag has {}→{} channels for a {:?} profile", l.inputs, l.outputs, p.color_space)));
+            return Err(CmsError::Invalid(format!(
+                "AToB tag has {}→{} channels for a {:?} profile",
+                l.inputs, l.outputs, p.color_space
+            )));
         }
     }
     for l in p.b2a.iter().flatten() {
         if conn != 0 && l.inputs != conn || dev != 0 && l.outputs != dev {
-            return Err(CmsError::Invalid(format!("BToA tag has {}→{} channels for a {:?} profile", l.inputs, l.outputs, p.color_space)));
+            return Err(CmsError::Invalid(format!(
+                "BToA tag has {}→{} channels for a {:?} profile",
+                l.inputs, l.outputs, p.color_space
+            )));
         }
     }
     Ok(p)
@@ -590,7 +690,12 @@ fn parse_curve(d: &[u8]) -> Result<(Curve, usize), CmsError> {
                 1 => Ok((Curve::Gamma(r.u16(12)? as f64 / 256.0), len)),
                 _ => {
                     let s = r.slice(12, n * 2)?;
-                    let t = s.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes([c[0], c[1]]) as f32 / 65535.0).collect();
+                    let t = s
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|c| u16::from_be_bytes([c[0], c[1]]) as f32 / 65535.0)
+                        .collect();
                     Ok((Curve::Table(t), len))
                 }
             }
@@ -598,7 +703,9 @@ fn parse_curve(d: &[u8]) -> Result<(Curve, usize), CmsError> {
         b"para" => {
             let kind = r.u16(8)?;
             if kind > 4 {
-                return Err(CmsError::Unsupported(format!("parametric curve type {kind}")));
+                return Err(CmsError::Unsupported(format!(
+                    "parametric curve type {kind}"
+                )));
             }
             let n = Curve::param_count(kind);
             let mut p = [0.0f64; 7];
@@ -606,10 +713,17 @@ fn parse_curve(d: &[u8]) -> Result<(Curve, usize), CmsError> {
                 *v = r.s15f16(12 + i * 4)?;
             }
             let len = 12 + n * 4;
-            let c = if kind == 0 { Curve::Gamma(p[0]) } else { Curve::Parametric { kind, p } };
+            let c = if kind == 0 {
+                Curve::Gamma(p[0])
+            } else {
+                Curve::Parametric { kind, p }
+            };
             Ok((c, len))
         }
-        other => Err(CmsError::Unsupported(format!("curve type {:?}", String::from_utf8_lossy(other)))),
+        other => Err(CmsError::Unsupported(format!(
+            "curve type {:?}",
+            String::from_utf8_lossy(other)
+        ))),
     }
 }
 
@@ -641,25 +755,34 @@ fn parse_lut(d: &[u8], a2b: bool) -> Result<Lut, CmsError> {
                     *v = r.s15f16(12 + (a * 3 + b) * 4)?;
                 }
             }
-            let (n_in, n_out, mut off) = if wide { (r.u16(48)? as usize, r.u16(50)? as usize, 52) } else { (256, 256, 48) };
+            let (n_in, n_out, mut off) = if wide {
+                (r.u16(48)? as usize, r.u16(50)? as usize, 52)
+            } else {
+                (256, 256, 48)
+            };
             if wide && (!(2..=4096).contains(&n_in) || !(2..=4096).contains(&n_out)) {
                 return Err(CmsError::Invalid("bad lut16 table size".into()));
             }
             let bps = if wide { 2 } else { 1 };
-            let read_tables = |off: &mut usize, count: usize, len: usize| -> Result<Vec<Curve>, CmsError> {
-                let mut v = Vec::with_capacity(count);
-                for _ in 0..count {
-                    let s = r.slice(*off, len * bps)?;
-                    let t: Vec<f32> = if wide {
-                        s.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes([c[0], c[1]]) as f32 / 65535.0).collect()
-                    } else {
-                        s.iter().map(|b| *b as f32 / 255.0).collect()
-                    };
-                    *off += len * bps;
-                    v.push(Curve::Table(t));
-                }
-                Ok(v)
-            };
+            let read_tables =
+                |off: &mut usize, count: usize, len: usize| -> Result<Vec<Curve>, CmsError> {
+                    let mut v = Vec::with_capacity(count);
+                    for _ in 0..count {
+                        let s = r.slice(*off, len * bps)?;
+                        let t: Vec<f32> = if wide {
+                            s.as_chunks::<2>()
+                                .0
+                                .iter()
+                                .map(|c| u16::from_be_bytes([c[0], c[1]]) as f32 / 65535.0)
+                                .collect()
+                        } else {
+                            s.iter().map(|b| *b as f32 / 255.0).collect()
+                        };
+                        *off += len * bps;
+                        v.push(Curve::Table(t));
+                    }
+                    Ok(v)
+                };
             let in_curves = read_tables(&mut off, i, n_in)?;
             let nodes = (g as u64).checked_pow(i as u32).unwrap_or(u64::MAX);
             if nodes as u128 * o as u128 > MAX_CLUT_VALUES as u128 {
@@ -668,7 +791,11 @@ fn parse_lut(d: &[u8], a2b: bool) -> Result<Lut, CmsError> {
             let total = nodes as usize * o;
             let s = r.slice(off, total * bps)?;
             let data: Vec<f32> = if wide {
-                s.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes([c[0], c[1]]) as f32 / 65535.0).collect()
+                s.as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|c| u16::from_be_bytes([c[0], c[1]]) as f32 / 65535.0)
+                    .collect()
             } else {
                 s.iter().map(|b| *b as f32 / 255.0).collect()
             };
@@ -676,7 +803,11 @@ fn parse_lut(d: &[u8], a2b: bool) -> Result<Lut, CmsError> {
             let out_curves = read_tables(&mut off, o, n_out)?;
             let mut stages = Vec::new();
             // The matrix only applies when the input is XYZ (BToA with an XYZ PCS).
-            let ident = m.iter().enumerate().all(|(a, row)| row.iter().enumerate().all(|(b, v)| (v - if a == b { 1.0 } else { 0.0 }).abs() < 1e-6));
+            let ident = m.iter().enumerate().all(|(a, row)| {
+                row.iter()
+                    .enumerate()
+                    .all(|(b, v)| (v - if a == b { 1.0 } else { 0.0 }).abs() < 1e-6)
+            });
             if !a2b && i == 3 && !ident {
                 // Only meaningful for an XYZ PCS; the caller decides (we cannot know the PCS here),
                 // so keep it: for Lab PCS writers are required to store the identity.
@@ -685,14 +816,25 @@ fn parse_lut(d: &[u8], a2b: bool) -> Result<Lut, CmsError> {
             stages.push(Stage::Curves(in_curves));
             stages.push(Stage::Clut(Clut::new(vec![g; i], o, data)));
             stages.push(Stage::Curves(out_curves));
-            Ok(Lut { kind: if wide { LutKind::Lut16 } else { LutKind::Lut8 }, inputs: i, outputs: o, stages })
+            Ok(Lut {
+                kind: if wide { LutKind::Lut16 } else { LutKind::Lut8 },
+                inputs: i,
+                outputs: o,
+                stages,
+            })
         }
         b"mAB " | b"mBA " => {
             let (i, o) = (r.u8(8)? as usize, r.u8(9)? as usize);
             if !(1..=15).contains(&i) || !(1..=15).contains(&o) {
                 return Err(CmsError::Invalid("bad lutAB dimensions".into()));
             }
-            let (ob, om, omc, oc, oa) = (r.u32(12)? as usize, r.u32(16)? as usize, r.u32(20)? as usize, r.u32(24)? as usize, r.u32(28)? as usize);
+            let (ob, om, omc, oc, oa) = (
+                r.u32(12)? as usize,
+                r.u32(16)? as usize,
+                r.u32(20)? as usize,
+                r.u32(24)? as usize,
+                r.u32(28)? as usize,
+            );
             let matrix = |off: usize| lut_ab_matrix(&r, off);
             let clut = |off: usize, cin: usize, cout: usize| lut_ab_clut(&r, off, cin, cout);
             let mut stages = Vec::new();
@@ -700,12 +842,16 @@ fn parse_lut(d: &[u8], a2b: bool) -> Result<Lut, CmsError> {
                 // A curves → CLUT → M curves → matrix → B curves.
                 if oc != 0 {
                     if oa == 0 {
-                        return Err(CmsError::Invalid("lutAtoB with CLUT but no A curves".into()));
+                        return Err(CmsError::Invalid(
+                            "lutAtoB with CLUT but no A curves".into(),
+                        ));
                     }
                     stages.push(Stage::Curves(parse_curves_at(d, oa, i)?));
                     stages.push(clut(oc, i, o)?);
                 } else if i != o {
-                    return Err(CmsError::Invalid("lutAtoB without CLUT changes channel count".into()));
+                    return Err(CmsError::Invalid(
+                        "lutAtoB without CLUT changes channel count".into(),
+                    ));
                 }
                 if om != 0 {
                     stages.push(Stage::Curves(parse_curves_at(d, omc, o)?));
@@ -727,36 +873,57 @@ fn parse_lut(d: &[u8], a2b: bool) -> Result<Lut, CmsError> {
                 }
                 if oc != 0 {
                     if oa == 0 {
-                        return Err(CmsError::Invalid("lutBtoA with CLUT but no A curves".into()));
+                        return Err(CmsError::Invalid(
+                            "lutBtoA with CLUT but no A curves".into(),
+                        ));
                     }
                     stages.push(clut(oc, i, o)?);
                     stages.push(Stage::Curves(parse_curves_at(d, oa, o)?));
                 } else if i != o {
-                    return Err(CmsError::Invalid("lutBtoA without CLUT changes channel count".into()));
+                    return Err(CmsError::Invalid(
+                        "lutBtoA without CLUT changes channel count".into(),
+                    ));
                 }
             }
-            Ok(Lut { kind: LutKind::Ab, inputs: i, outputs: o, stages })
+            Ok(Lut {
+                kind: LutKind::Ab,
+                inputs: i,
+                outputs: o,
+                stages,
+            })
         }
-        other => Err(CmsError::Unsupported(format!("LUT type {:?}", String::from_utf8_lossy(other)))),
+        other => Err(CmsError::Unsupported(format!(
+            "LUT type {:?}",
+            String::from_utf8_lossy(other)
+        ))),
     }
 }
 
 /// The 3×3 matrix and offset of a `mAB `/`mBA ` element at `off`, an offset stored in the file.
 fn lut_ab_matrix(r: &Reader, off: usize) -> Result<Stage, CmsError> {
     // One bounds-checked slice, then offsets inside it: `off + 44` need not fit a `usize`.
-    let e = Reader { b: r.slice(off, 48)? };
+    let e = Reader {
+        b: r.slice(off, 48)?,
+    };
     let mut m = vec![0.0; 9];
     for (k, v) in m.iter_mut().enumerate() {
         *v = e.s15f16(k * 4)?;
     }
     let offset = vec![e.s15f16(36)?, e.s15f16(40)?, e.s15f16(44)?];
-    Ok(Stage::Matrix { rows: 3, cols: 3, m, offset })
+    Ok(Stage::Matrix {
+        rows: 3,
+        cols: 3,
+        m,
+        offset,
+    })
 }
 
 /// The CLUT of a `mAB `/`mBA ` element at `off`, an offset stored in the file.
 fn lut_ab_clut(r: &Reader, off: usize, cin: usize, cout: usize) -> Result<Stage, CmsError> {
     // Grid points (16 bytes), precision and padding; the samples follow.
-    let head = Reader { b: r.slice(off, 20)? };
+    let head = Reader {
+        b: r.slice(off, 20)?,
+    };
     let mut grid = Vec::with_capacity(cin);
     for k in 0..cin {
         let g = head.u8(k)? as usize;
@@ -773,8 +940,18 @@ fn lut_ab_clut(r: &Reader, off: usize, cin: usize, cout: usize) -> Result<Stage,
     let total = nodes as usize * cout;
     let samples = extent(off, 20, 1)?;
     let data: Vec<f32> = match prec {
-        1 => r.slice(samples, total)?.iter().map(|b| *b as f32 / 255.0).collect(),
-        2 => r.slice(samples, total * 2)?.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes([c[0], c[1]]) as f32 / 65535.0).collect(),
+        1 => r
+            .slice(samples, total)?
+            .iter()
+            .map(|b| *b as f32 / 255.0)
+            .collect(),
+        2 => r
+            .slice(samples, total * 2)?
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_be_bytes([c[0], c[1]]) as f32 / 65535.0)
+            .collect(),
         _ => return Err(CmsError::Invalid(format!("CLUT precision {prec}"))),
     };
     Ok(Stage::Clut(Clut::new(grid, cout, data)))
@@ -783,8 +960,14 @@ fn lut_ab_clut(r: &Reader, off: usize, cin: usize, cout: usize) -> Result<Stage,
 /// Text from `desc` (textDescriptionType), `mluc` (English or first record) or `text`.
 fn parse_text(d: &[u8]) -> String {
     let r = Reader { b: d };
-    let Ok(ty) = r.slice(0, 4) else { return String::new() };
-    let ascii = |s: &[u8]| String::from_utf8_lossy(s.split(|b| *b == 0).next().unwrap_or(&[])).trim().to_string();
+    let Ok(ty) = r.slice(0, 4) else {
+        return String::new();
+    };
+    let ascii = |s: &[u8]| {
+        String::from_utf8_lossy(s.split(|b| *b == 0).next().unwrap_or(&[]))
+            .trim()
+            .to_string()
+    };
     match ty {
         b"desc" => {
             let n = r.u32(8).unwrap_or(0) as usize;
@@ -792,13 +975,19 @@ fn parse_text(d: &[u8]) -> String {
         }
         b"text" => ascii(d.get(8..).unwrap_or(&[])),
         b"mluc" => {
-            let (Ok(n), Ok(size)) = (r.u32(8), r.u32(12)) else { return String::new() };
+            let (Ok(n), Ok(size)) = (r.u32(8), r.u32(12)) else {
+                return String::new();
+            };
             let mut best: Option<(usize, usize)> = None;
             for k in 0..(n as usize).min(256) {
                 // The record size comes from the file: `k * size` can overflow a 32-bit `usize`.
-                let Ok(rec) = extent(16, k, size as usize).and_then(|o| r.slice(o, 12)) else { break };
+                let Ok(rec) = extent(16, k, size as usize).and_then(|o| r.slice(o, 12)) else {
+                    break;
+                };
                 let rec = Reader { b: rec };
-                let (Ok(lang), Ok(len), Ok(off)) = (rec.u16(0), rec.u32(4), rec.u32(8)) else { break };
+                let (Ok(lang), Ok(len), Ok(off)) = (rec.u16(0), rec.u32(4), rec.u32(8)) else {
+                    break;
+                };
                 if best.is_none() || lang == u16::from_be_bytes(*b"en") {
                     best = Some((off as usize, len as usize));
                     if lang == u16::from_be_bytes(*b"en") {
@@ -806,10 +995,22 @@ fn parse_text(d: &[u8]) -> String {
                     }
                 }
             }
-            let Some((off, len)) = best else { return String::new() };
-            let Ok(s) = r.slice(off, len) else { return String::new() };
-            let units: Vec<u16> = s.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes([c[0], c[1]])).collect();
-            String::from_utf16_lossy(&units).trim_end_matches('\0').trim().to_string()
+            let Some((off, len)) = best else {
+                return String::new();
+            };
+            let Ok(s) = r.slice(off, len) else {
+                return String::new();
+            };
+            let units: Vec<u16> = s
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                .collect();
+            String::from_utf16_lossy(&units)
+                .trim_end_matches('\0')
+                .trim()
+                .to_string()
         }
         _ => String::new(),
     }
@@ -829,10 +1030,22 @@ mod tests {
     fn offsets_at_the_top_of_the_address_space_are_truncated_not_overflowed() {
         let bytes = [0u8; 64];
         let r = Reader { b: &bytes };
-        for off in [usize::MAX, usize::MAX - 3, usize::MAX - 11, usize::MAX - 19, usize::MAX - 47] {
+        for off in [
+            usize::MAX,
+            usize::MAX - 3,
+            usize::MAX - 11,
+            usize::MAX - 19,
+            usize::MAX - 47,
+        ] {
             assert_eq!(r.xyz(off), Err(CmsError::Truncated), "xyz at {off}");
-            assert!(matches!(lut_ab_matrix(&r, off), Err(CmsError::Truncated)), "matrix at {off}");
-            assert!(matches!(lut_ab_clut(&r, off, 3, 3), Err(CmsError::Truncated)), "clut at {off}");
+            assert!(
+                matches!(lut_ab_matrix(&r, off), Err(CmsError::Truncated)),
+                "matrix at {off}"
+            );
+            assert!(
+                matches!(lut_ab_clut(&r, off, 3, 3), Err(CmsError::Truncated)),
+                "clut at {off}"
+            );
         }
         assert_eq!(extent(16, usize::MAX, 12), Err(CmsError::Truncated));
         assert_eq!(extent(usize::MAX, 1, 1), Err(CmsError::Truncated));
@@ -843,7 +1056,10 @@ mod tests {
     fn a_curve_count_is_checked_before_its_length_is_computed() {
         let mut d = b"curv\0\0\0\0".to_vec();
         d.extend(be(u32::MAX));
-        assert_eq!(parse_curve(&d).map(|c| c.1), Err(CmsError::Invalid("curve too long".into())));
+        assert_eq!(
+            parse_curve(&d).map(|c| c.1),
+            Err(CmsError::Invalid("curve too long".into()))
+        );
         // Controls: the identity and a two-point table still parse with their lengths.
         let mut d = b"curv\0\0\0\0".to_vec();
         d.extend(be(0));
@@ -870,11 +1086,23 @@ mod tests {
             }
             d
         };
-        assert!(parse_lut(&lut(32, 0, 0, 0, 0), true).is_ok(), "the control parses");
+        assert!(
+            parse_lut(&lut(32, 0, 0, 0, 0), true).is_ok(),
+            "the control parses"
+        );
         let top = u32::MAX - 8;
-        assert!(parse_lut(&lut(top, 0, 0, 0, 0), true).is_err(), "B curves offset");
-        assert!(parse_lut(&lut(32, top, 32, 0, 0), true).is_err(), "matrix offset");
-        assert!(parse_lut(&lut(32, 0, 0, top, 32), true).is_err(), "CLUT offset");
+        assert!(
+            parse_lut(&lut(top, 0, 0, 0, 0), true).is_err(),
+            "B curves offset"
+        );
+        assert!(
+            parse_lut(&lut(32, top, 32, 0, 0), true).is_err(),
+            "matrix offset"
+        );
+        assert!(
+            parse_lut(&lut(32, 0, 0, top, 32), true).is_err(),
+            "CLUT offset"
+        );
     }
 
     #[test]

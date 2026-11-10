@@ -21,7 +21,11 @@ impl Contexts {
         for (i, &(m, n)) in table.iter().enumerate() {
             let pre = (((m as i32) * qp) >> 4) + n as i32;
             let pre = pre.clamp(1, 126);
-            s[i] = if pre <= 63 { ((63 - pre) as u8) << 1 } else { (((pre - 64) as u8) << 1) | 1 };
+            s[i] = if pre <= 63 {
+                ((63 - pre) as u8) << 1
+            } else {
+                (((pre - 64) as u8) << 1) | 1
+            };
         }
         Contexts(s)
     }
@@ -44,7 +48,17 @@ pub struct CabacEncoder {
 impl CabacEncoder {
     /// Start encoding after a slice header; `header` must be byte aligned (cabac_alignment_one_bits written).
     pub fn new(ctx: Contexts, header: Vec<u8>) -> Self {
-        CabacEncoder { ctx, low: 0, range: 510, outstanding: 0, first_bit: true, buf: header, acc: 0, nbits: 0, bins: 0 }
+        CabacEncoder {
+            ctx,
+            low: 0,
+            range: 510,
+            outstanding: 0,
+            first_bit: true,
+            buf: header,
+            acc: 0,
+            nbits: 0,
+            bins: 0,
+        }
     }
 
     #[inline]
@@ -194,7 +208,11 @@ pub struct CabacEstimator<'a> {
 
 impl<'a> CabacEstimator<'a> {
     pub fn new(ctx: Contexts, table: &'a CostTable) -> Self {
-        CabacEstimator { ctx, cost: 0, table }
+        CabacEstimator {
+            ctx,
+            cost: 0,
+            table,
+        }
     }
 }
 
@@ -238,12 +256,22 @@ mod tests {
     }
     impl<'a> Dec<'a> {
         fn bit(&mut self) -> u32 {
-            let b = if self.pos / 8 < self.data.len() { (self.data[self.pos / 8] >> (7 - self.pos % 8)) & 1 } else { 0 };
+            let b = if self.pos / 8 < self.data.len() {
+                (self.data[self.pos / 8] >> (7 - self.pos % 8)) & 1
+            } else {
+                0
+            };
             self.pos += 1;
             b as u32
         }
         fn new(data: &'a [u8], ctx: Contexts) -> Self {
-            let mut d = Dec { data, pos: 0, range: 510, offset: 0, ctx };
+            let mut d = Dec {
+                data,
+                pos: 0,
+                range: 510,
+                offset: 0,
+                ctx,
+            };
             for _ in 0..9 {
                 d.offset = (d.offset << 1) | d.bit();
             }
@@ -312,7 +340,11 @@ mod tests {
             let kind = rnd() % 10;
             let c = (rnd() % 400) as usize;
             // skewed bins so contexts adapt
-            let bin = if rnd() % 100 < 80 { (c % 2) as u32 } else { 1 - (c % 2) as u32 };
+            let bin = if rnd() % 100 < 80 {
+                (c % 2) as u32
+            } else {
+                1 - (c % 2) as u32
+            };
             if kind < 7 {
                 enc.decision(c, bin);
                 ops.push((0, c, bin));

@@ -8,7 +8,7 @@ use std::f32::consts::{PI, TAU};
 
 use photocraft_geom::Rect;
 
-use crate::fxutil::{MAXC, luma, native, ncol, premul_window, smoothstep, unpremul_px, xy};
+use crate::fxutil::{luma, native, ncol, premul_window, smoothstep, unpremul_px, xy, MAXC};
 use crate::image::Image;
 use crate::noise::hash01;
 use crate::{BlurQuality, BlurShape, Ctx, DepthSource, Distribution, SmartBlurMode};
@@ -28,7 +28,10 @@ impl Spans {
         let mut rows = Vec::new();
         let mut count = 0.0;
         if r < 0.5 {
-            return Spans { rows: vec![(0, 0, 0)], count: 1.0 };
+            return Spans {
+                rows: vec![(0, 0, 0)],
+                count: 1.0,
+            };
         }
         for dy in -ri..=ri {
             let mut run: Option<i32> = None;
@@ -89,7 +92,10 @@ impl Prefix {
             let x0 = (x + a).clamp(0, self.w as i32) as usize;
             let x1 = (x + b + 1).clamp(0, self.w as i32) as usize;
             let row = yy as usize * (self.w + 1) * n;
-            let (hi, lo) = (&self.data[row + x1 * n..row + x1 * n + n], &self.data[row + x0 * n..row + x0 * n + n]);
+            let (hi, lo) = (
+                &self.data[row + x1 * n..row + x1 * n + n],
+                &self.data[row + x0 * n..row + x0 * n + n],
+            );
             for ((a, h), l) in acc.iter_mut().zip(hi).zip(lo) {
                 *a += h - l;
             }
@@ -132,7 +138,9 @@ pub(crate) fn shape_inside(shape: BlurShape) -> Box<dyn Fn(f32, f32) -> bool + S
         BlurShape::Square => Box::new(|_, _| true),
         BlurShape::Diamond => Box::new(|u, v| u.abs() + v.abs() <= 1.0),
         BlurShape::Triangle => Box::new(|u, v| v <= 0.75 && u.abs() <= (v + 1.0) / 1.75),
-        BlurShape::Hexagon => Box::new(|u, v| (u * u + v * v).sqrt() <= polygon_radius(v.atan2(u), 6, 0.0)),
+        BlurShape::Hexagon => {
+            Box::new(|u, v| (u * u + v * v).sqrt() <= polygon_radius(v.atan2(u), 6, 0.0))
+        }
         BlurShape::Star => {
             let pts: Vec<(f32, f32)> = (0..10)
                 .map(|i| {
@@ -153,7 +161,13 @@ pub(crate) fn shape_inside(shape: BlurShape) -> Box<dyn Fn(f32, f32) -> bool + S
 }
 
 /// Shape Blur: mean over a built-in shape of the given radius.
-pub(crate) fn shape_blur(src: &Image, out: Rect, ctx: &Ctx, radius: f32, shape: BlurShape) -> Vec<f32> {
+pub(crate) fn shape_blur(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    radius: f32,
+    shape: BlurShape,
+) -> Vec<f32> {
     crate::shape_blur::Prepared::new(radius, shape).run(src, out, ctx)
 }
 
@@ -189,7 +203,15 @@ mod shape_tests;
 /// Smart Blur: averages only neighbours within `threshold` levels of the
 /// centre pixel (so edges stay crisp); Edge Only / Overlay Edge draw the
 /// edges (where neighbours differ by more than the threshold) in white.
-pub(crate) fn smart_blur(src: &Image, out: Rect, ctx: &Ctx, radius: f32, threshold: f32, quality: BlurQuality, mode: SmartBlurMode) -> Vec<f32> {
+pub(crate) fn smart_blur(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    radius: f32,
+    threshold: f32,
+    quality: BlurQuality,
+    mode: SmartBlurMode,
+) -> Vec<f32> {
     let n = src.ch;
     let cc = ncol(ctx, n);
     let r = radius.clamp(0.1, 100.0);
@@ -248,7 +270,11 @@ pub(crate) fn smart_blur(src: &Image, out: Rect, ctx: &Ctx, radius: f32, thresho
             }
             let a = if ctx.alpha { q[n - 1] } else { 1.0 };
             for c in 0..n {
-                acc[c] += if ctx.alpha && c < n - 1 { q[c] * a } else { q[c] };
+                acc[c] += if ctx.alpha && c < n - 1 {
+                    q[c] * a
+                } else {
+                    q[c]
+                };
             }
             wsum += 1.0;
         }
@@ -302,7 +328,9 @@ pub(crate) fn lens_blur(src: &Image, out: Rect, ctx: &Ctx, spec: &LensSpec) -> V
         let pr = polygon_radius(v.atan2(u), blades, rot - PI / 2.0);
         rho <= pr + (1.0 - pr) * curv
     };
-    let levels: Vec<Spans> = (0..=LENS_LEVELS).map(|k| Spans::new(rmax * k as f32 / LENS_LEVELS as f32, iris)).collect();
+    let levels: Vec<Spans> = (0..=LENS_LEVELS)
+        .map(|k| Spans::new(rmax * k as f32 / LENS_LEVELS as f32, iris))
+        .collect();
     // Specular highlight boost before blurring.
     let mut p = premul_window(src, win, ctx.alpha);
     let boost = spec.brightness.clamp(0.0, 100.0) / 100.0 * 4.0;
@@ -316,7 +344,11 @@ pub(crate) fn lens_blur(src: &Image, out: Rect, ctx: &Ctx, spec: &LensSpec) -> V
             }
             let mut st = [0.0f32; MAXC];
             for c in 0..n {
-                st[c] = if ctx.alpha && c < n - 1 { px[c] / a } else { px[c] };
+                st[c] = if ctx.alpha && c < n - 1 {
+                    px[c] / a
+                } else {
+                    px[c]
+                };
             }
             let l = luma(ctx, &st[..n]);
             let k = 1.0 + boost * smoothstep(th, th + 0.02, l);
@@ -369,7 +401,9 @@ pub(crate) fn lens_blur(src: &Image, out: Rect, ctx: &Ctx, spec: &LensSpec) -> V
                 for (c, v) in px.iter_mut().enumerate().take(cc) {
                     let ch = if spec.mono { 0 } else { c as u32 };
                     *v += match spec.distribution {
-                        Distribution::Uniform => (hash01(x, y, ch + 200, spec.seed) - 0.5) * 2.0 * amount,
+                        Distribution::Uniform => {
+                            (hash01(x, y, ch + 200, spec.seed) - 0.5) * 2.0 * amount
+                        }
                         Distribution::Gaussian => {
                             let u1 = hash01(x, y, ch * 2 + 301, spec.seed).max(1e-7);
                             let u2 = hash01(x, y, ch * 2 + 302, spec.seed);

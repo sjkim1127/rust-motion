@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use photocraft_geom::Rect;
 use photocraft_raster::Interrupt;
-use rustfft::{Fft, FftPlanner, num_complex::Complex};
+use rustfft::{num_complex::Complex, Fft, FftPlanner};
 
 use crate::Image;
 
@@ -32,11 +32,16 @@ fn buffer<T: Clone>(len: usize, value: T) -> Option<Vec<T>> {
 }
 
 fn dimensions(rect: Rect) -> Option<(usize, usize)> {
-    Some((usize::try_from(i64::from(rect.x1) - i64::from(rect.x0)).ok()?, usize::try_from(i64::from(rect.y1) - i64::from(rect.y0)).ok()?))
+    Some((
+        usize::try_from(i64::from(rect.x1) - i64::from(rect.x0)).ok()?,
+        usize::try_from(i64::from(rect.y1) - i64::from(rect.y0)).ok()?,
+    ))
 }
 
 pub(super) fn ordinary_coordinates(rect: Rect) -> bool {
-    [rect.x0, rect.y0, rect.x1, rect.y1].iter().all(|v| (-COORDINATE_LIMIT..=COORDINATE_LIMIT).contains(v))
+    [rect.x0, rect.y0, rect.x1, rect.y1]
+        .iter()
+        .all(|v| (-COORDINATE_LIMIT..=COORDINATE_LIMIT).contains(v))
 }
 
 // Smooth lengths avoid the almost fourfold padding of a 512px tile plus a
@@ -91,7 +96,12 @@ fn taps(angle: f32, distance: f32, clip: Option<(Rect, Rect)>) -> Option<Vec<Tap
         let (x, y) = (cos * distance * t, -sin * distance * t);
         let (ix, iy) = (x.floor() as i32, y.floor() as i32);
         let (fx, fy) = (x - ix as f32, y - iy as f32);
-        for (x, y, weight) in [(ix, iy, (1.0 - fx) * (1.0 - fy)), (ix + 1, iy, fx * (1.0 - fy)), (ix, iy + 1, (1.0 - fx) * fy), (ix + 1, iy + 1, fx * fy)] {
+        for (x, y, weight) in [
+            (ix, iy, (1.0 - fx) * (1.0 - fy)),
+            (ix + 1, iy, fx * (1.0 - fy)),
+            (ix, iy + 1, (1.0 - fx) * fy),
+            (ix + 1, iy + 1, fx * fy),
+        ] {
             if weight <= 0.0 {
                 continue;
             }
@@ -115,16 +125,30 @@ fn taps(angle: f32, distance: f32, clip: Option<(Rect, Rect)>) -> Option<Vec<Tap
                 continue;
             }
         }
-        result.push(Tap { x, y, weight: f64::from(weight) });
+        result.push(Tap {
+            x,
+            y,
+            weight: f64::from(weight),
+        });
     }
     Some(result)
 }
 
 /// One pixel of the upstream row kernel, without allocating its premultiplied
 /// square window. Coefficients and accumulation retain their original f32 order.
-fn sample_row_point(src: &Image, x: i32, y: i32, alpha: bool, taps: &[Tap], ctl: &Interrupt) -> Option<[f32; 5]> {
+fn sample_row_point(
+    src: &Image,
+    x: i32,
+    y: i32,
+    alpha: bool,
+    taps: &[Tap],
+    ctl: &Interrupt,
+) -> Option<[f32; 5]> {
     let (width, height) = dimensions(src.rect)?;
-    if !(1..=5).contains(&src.ch) || width.checked_mul(height)?.checked_mul(src.ch)? != src.data.len() || !ordinary_coordinates(src.rect) {
+    if !(1..=5).contains(&src.ch)
+        || width.checked_mul(height)?.checked_mul(src.ch)? != src.data.len()
+        || !ordinary_coordinates(src.rect)
+    {
         return None;
     }
     let mut result = [0.0f32; 5];
@@ -133,13 +157,21 @@ fn sample_row_point(src: &Image, x: i32, y: i32, alpha: bool, taps: &[Tap], ctl:
             return None;
         }
         let (sx, sy) = (x.checked_add(tap.x)?, y.checked_add(tap.y)?);
-        let a = if alpha { src.get(sx, sy, src.ch - 1) } else { 1.0 };
+        let a = if alpha {
+            src.get(sx, sy, src.ch - 1)
+        } else {
+            1.0
+        };
         // Each stored coefficient came directly from f32 and converts back
         // exactly. Match the row kernel's weight * premultiplied sample order.
         let weight = tap.weight as f32;
         for (c, value) in result.iter_mut().take(src.ch).enumerate() {
             let sample = src.get(sx, sy, c);
-            let premultiplied = if alpha && c + 1 < src.ch { sample * a } else { sample };
+            let premultiplied = if alpha && c + 1 < src.ch {
+                sample * a
+            } else {
+                sample
+            };
             *value += weight * premultiplied;
         }
     }
@@ -156,7 +188,15 @@ fn sample_row_point(src: &Image, x: i32, y: i32, alpha: bool, taps: &[Tap], ctl:
 /// be faster than transforms unless FFT tiles retain enough parallelism. The
 /// release matrix in motion_bench covers both winners and declined cases.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn worthwhile(angle: f32, distance: f32, tile: usize, area: Rect, row_tile: usize, channels: usize, workers: usize) -> Option<bool> {
+pub(super) fn worthwhile(
+    angle: f32,
+    distance: f32,
+    tile: usize,
+    area: Rect,
+    row_tile: usize,
+    channels: usize,
+    workers: usize,
+) -> Option<bool> {
     if workers < 4 || !(1..=5).contains(&channels) || row_tile == 0 {
         return Some(false);
     }
@@ -189,23 +229,37 @@ pub(super) fn worthwhile(angle: f32, distance: f32, tile: usize, area: Rect, row
     // Before creating any FFT plans, conservatively estimate the same complete
     // working-set budget as the scheduler. Mixed-radix scratch is bounded here
     // by four times the longest side; the real plan supplies its exact size.
-    let source = tile.checked_add(sx)?.checked_mul(tile.checked_add(sy)?)?.checked_mul(channels)?.checked_mul(4)?;
+    let source = tile
+        .checked_add(sx)?
+        .checked_mul(tile.checked_add(sy)?)?
+        .checked_mul(channels)?
+        .checked_mul(4)?;
     let result = tile.checked_mul(tile)?.checked_mul(channels)?;
     let scratch = width.max(height).checked_mul(4)?;
-    let worker =
-        points.checked_mul(2)?.checked_add(scratch)?.checked_mul(16)?.checked_add(source)?.checked_add(result.checked_mul(8)?)?.max(source.checked_mul(2)?);
+    let worker = points
+        .checked_mul(2)?
+        .checked_add(scratch)?
+        .checked_mul(16)?
+        .checked_add(source)?
+        .checked_add(result.checked_mul(8)?)?
+        .max(source.checked_mul(2)?);
     let resident = points
         .checked_mul(16)?
         .checked_add(width.checked_add(height)?.checked_mul(256)?)?
         .checked_add(taps.capacity().checked_mul(std::mem::size_of::<Tap>())?)?;
     let metadata = tiles.checked_mul(std::mem::size_of::<(Rect, Rect)>())?;
-    let available = (512usize << 20).checked_sub(resident)?.checked_sub(metadata)?;
+    let available = (512usize << 20)
+        .checked_sub(resident)?
+        .checked_sub(metadata)?;
     let memory_workers = available.checked_div(worker.checked_add(result.checked_mul(4)?)?)?;
     let fft_workers = workers.min(memory_workers).min(tiles);
     // A few large diagonal transforms can lose to well-parallelized rows.
     // Admit them only when their task count gives a clear parallelism advantage.
-    let parallel = fft_workers >= row_workers.checked_mul(2)? || (fft_workers >= 4 && fft_workers.checked_mul(2)? >= row_workers);
-    let transform_work = points.checked_mul((width.ilog2() + height.ilog2()) as usize)?.checked_mul(tiles)?;
+    let parallel = fft_workers >= row_workers.checked_mul(2)?
+        || (fft_workers >= 4 && fft_workers.checked_mul(2)? >= row_workers);
+    let transform_work = points
+        .checked_mul((width.ilog2() + height.ilog2()) as usize)?
+        .checked_mul(tiles)?;
     let row_work = ow.checked_mul(oh)?.checked_mul(taps.len())?;
     Some(parallel && transform_work < row_work)
 }
@@ -231,11 +285,23 @@ pub(super) struct Plan {
 }
 
 impl Plan {
-    pub(super) fn new_with(angle: f32, distance: f32, tile: usize, ctl: &Interrupt) -> Option<Self> {
+    pub(super) fn new_with(
+        angle: f32,
+        distance: f32,
+        tile: usize,
+        ctl: &Interrupt,
+    ) -> Option<Self> {
         Self::build(angle, distance, tile, tile, None, ctl)
     }
 
-    fn build(angle: f32, distance: f32, tile_width: usize, tile_height: usize, clip: Option<(Rect, Rect)>, ctl: &Interrupt) -> Option<Self> {
+    fn build(
+        angle: f32,
+        distance: f32,
+        tile_width: usize,
+        tile_height: usize,
+        clip: Option<(Rect, Rect)>,
+        ctl: &Interrupt,
+    ) -> Option<Self> {
         if ctl.cancelled() {
             return None;
         }
@@ -304,7 +370,9 @@ impl Plan {
 
     pub(super) fn resident_bytes(&self) -> usize {
         // Include a conservative allowance for the FFT plans' twiddle tables.
-        self.kernel.len() * std::mem::size_of::<Number>() + self.taps.capacity() * std::mem::size_of::<Tap>() + (self.width + self.height) * 256
+        self.kernel.len() * std::mem::size_of::<Number>()
+            + self.taps.capacity() * std::mem::size_of::<Tap>()
+            + (self.width + self.height) * 256
     }
 
     pub(super) fn worker_bytes(&self, channels: usize, tile: usize) -> Option<usize> {
@@ -319,15 +387,35 @@ impl Plan {
             .checked_add(self.scratch_len)?
             .checked_mul(std::mem::size_of::<Number>())?
             .checked_add(source)?
-            .checked_add(tile.checked_mul(tile)?.checked_mul(channels)?.checked_mul(8)?)
+            .checked_add(
+                tile.checked_mul(tile)?
+                    .checked_mul(channels)?
+                    .checked_mul(8)?,
+            )
     }
 
     pub(super) fn read_rect(&self, out: Rect) -> Option<Rect> {
-        Some(Rect::new(out.x0.checked_add(self.min_x)?, out.y0.checked_add(self.min_y)?, out.x1.checked_add(self.max_x)?, out.y1.checked_add(self.max_y)?))
+        Some(Rect::new(
+            out.x0.checked_add(self.min_x)?,
+            out.y0.checked_add(self.min_y)?,
+            out.x1.checked_add(self.max_x)?,
+            out.y1.checked_add(self.max_y)?,
+        ))
     }
 
-    fn transform(&self, data: &mut [Number], transposed: &mut [Number], scratch: &mut [Number], inverse: bool, ctl: &Interrupt) -> Option<()> {
-        let (rows, cols) = if inverse { (&self.row_inverse, &self.col_inverse) } else { (&self.row_forward, &self.col_forward) };
+    fn transform(
+        &self,
+        data: &mut [Number],
+        transposed: &mut [Number],
+        scratch: &mut [Number],
+        inverse: bool,
+        ctl: &Interrupt,
+    ) -> Option<()> {
+        let (rows, cols) = if inverse {
+            (&self.row_inverse, &self.col_inverse)
+        } else {
+            (&self.row_forward, &self.col_forward)
+        };
         // Every row has the planned length, and scratch_len covers all four
         // plans. Those invariants satisfy RustFFT's checked process API.
         for (i, row) in data.chunks_exact_mut(self.width).enumerate() {
@@ -346,7 +434,13 @@ impl Plan {
         transpose(transposed, data, self.height, self.width, ctl)
     }
 
-    pub(super) fn filter(&self, src: &Image, out: Rect, alpha: bool, ctl: &Interrupt) -> Option<Vec<f32>> {
+    pub(super) fn filter(
+        &self,
+        src: &Image,
+        out: Rect,
+        alpha: bool,
+        ctl: &Interrupt,
+    ) -> Option<Vec<f32>> {
         let (ow, oh) = dimensions(out)?;
         if out.is_empty() {
             return Some(Vec::new());
@@ -366,14 +460,23 @@ impl Plan {
             if i % 4096 == 0 && ctl.cancelled() {
                 return None;
             }
-            if pixel.iter().any(|value| !value.is_finite() || value.abs() > MAX_SAMPLE)
-                || (alpha && !pixel.last().is_some_and(|value| (0.0..=1.0).contains(value)))
+            if pixel
+                .iter()
+                .any(|value| !value.is_finite() || value.abs() > MAX_SAMPLE)
+                || (alpha
+                    && !pixel
+                        .last()
+                        .is_some_and(|value| (0.0..=1.0).contains(value)))
             {
                 return None;
             }
             let a = if alpha { *pixel.last()? } else { 1.0 };
             for (c, &value) in pixel.iter().enumerate() {
-                let value = if alpha && c + 1 < src.ch { value * a } else { value };
+                let value = if alpha && c + 1 < src.ch {
+                    value * a
+                } else {
+                    value
+                };
                 let scale = scales.get_mut(c)?;
                 *scale = scale.max(f64::from(value.abs()));
             }
@@ -398,11 +501,21 @@ impl Plan {
                 if (y - used.y0) % 8 == 0 && ctl.cancelled() {
                     return None;
                 }
-                let source_start =
-                    usize::try_from(y - src.rect.y0).ok()?.checked_mul(sw)?.checked_add(usize::try_from(used.x0 - src.rect.x0).ok()?)?.checked_mul(src.ch)?;
-                let source_len = usize::try_from(used.x1 - used.x0).ok()?.checked_mul(src.ch)?;
-                let row = src.data.get(source_start..source_start.checked_add(source_len)?)?;
-                let start = usize::try_from(y - read.y0).ok()?.checked_mul(self.width)?.checked_add(usize::try_from(used.x0 - read.x0).ok()?)?;
+                let source_start = usize::try_from(y - src.rect.y0)
+                    .ok()?
+                    .checked_mul(sw)?
+                    .checked_add(usize::try_from(used.x0 - src.rect.x0).ok()?)?
+                    .checked_mul(src.ch)?;
+                let source_len = usize::try_from(used.x1 - used.x0)
+                    .ok()?
+                    .checked_mul(src.ch)?;
+                let row = src
+                    .data
+                    .get(source_start..source_start.checked_add(source_len)?)?;
+                let start = usize::try_from(y - read.y0)
+                    .ok()?
+                    .checked_mul(self.width)?
+                    .checked_add(usize::try_from(used.x0 - read.x0).ok()?)?;
                 let dst = data.get_mut(start..start.checked_add(source_len / src.ch)?)?;
                 for (pixel, dst) in row.chunks_exact(src.ch).zip(dst) {
                     let a = if alpha { *pixel.last()? } else { 1.0 };
@@ -411,7 +524,13 @@ impl Plan {
                     // a small alpha channel sharing the imaginary component.
                     let sample = |c: usize| -> f64 {
                         match (pixel.get(c), scales.get(c)) {
-                            (Some(&value), Some(&scale)) if scale > 0.0 => f64::from(if alpha && c + 1 < src.ch { value * a } else { value }) / scale,
+                            (Some(&value), Some(&scale)) if scale > 0.0 => {
+                                f64::from(if alpha && c + 1 < src.ch {
+                                    value * a
+                                } else {
+                                    value
+                                }) / scale
+                            }
                             _ => 0.0,
                         }
                     };
@@ -426,7 +545,10 @@ impl Plan {
             let x0 = usize::try_from(-self.min_x).ok()?;
             let y0 = usize::try_from(-self.min_y).ok()?;
             for (y, dst) in result.chunks_exact_mut(ow * src.ch).enumerate() {
-                let start = y.checked_add(y0)?.checked_mul(self.width)?.checked_add(x0)?;
+                let start = y
+                    .checked_add(y0)?
+                    .checked_mul(self.width)?
+                    .checked_add(x0)?;
                 let values = data.get(start..start.checked_add(ow)?)?;
                 for (pixel, value) in dst.chunks_exact_mut(src.ch).zip(values) {
                     *pixel.get_mut(channel)? = value.re * norm * scales.get(channel)?;
@@ -439,7 +561,9 @@ impl Plan {
         if alpha {
             // The row kernel accumulates in f32. Recompute very small alpha
             // near its cutoff so a different summation order cannot expose colour.
-            let uncertainty = f64::from(self.distance.abs().ceil()) * f64::from(f32::EPSILON) * scales.get(src.ch - 1)?;
+            let uncertainty = f64::from(self.distance.abs().ceil())
+                * f64::from(f32::EPSILON)
+                * scales.get(src.ch - 1)?;
             for (i, pixel) in result.chunks_exact_mut(src.ch).enumerate() {
                 if i % 16 == 0 && ctl.cancelled() {
                     return None;
@@ -455,7 +579,9 @@ impl Plan {
                 // The row kernel's f32 sum can straddle the cutoff at long distances.
                 // Keep its branch and straight colour exactly for that narrow
                 // range, rather than amplifying a tiny alpha difference.
-                if a > 0.0 && (a <= 1.01e-7 + uncertainty || (0.99e-7..=1.01e-7).contains(&(a as f32))) {
+                if a > 0.0
+                    && (a <= 1.01e-7 + uncertainty || (0.99e-7..=1.01e-7).contains(&(a as f32)))
+                {
                     let x = out.x0.checked_add(i32::try_from(i % ow).ok()?)?;
                     let y = out.y0.checked_add(i32::try_from(i / ow).ok()?)?;
                     let original = sample_row_point(src, x, y, alpha, &self.taps, ctl)?;
@@ -478,13 +604,26 @@ impl Plan {
 }
 
 #[cfg(test)]
-pub(super) fn row_point_for_test(src: &Image, x: i32, y: i32, alpha: bool, angle: f32, distance: f32) -> Option<Vec<f32>> {
+pub(super) fn row_point_for_test(
+    src: &Image,
+    x: i32,
+    y: i32,
+    alpha: bool,
+    angle: f32,
+    distance: f32,
+) -> Option<Vec<f32>> {
     let taps = taps(angle, distance, None)?;
     let result = sample_row_point(src, x, y, alpha, &taps, &Interrupt::NONE)?;
     Some(result.into_iter().take(src.ch).collect())
 }
 
-fn transpose(src: &[Number], dst: &mut [Number], width: usize, height: usize, ctl: &Interrupt) -> Option<()> {
+fn transpose(
+    src: &[Number],
+    dst: &mut [Number],
+    width: usize,
+    height: usize,
+    ctl: &Interrupt,
+) -> Option<()> {
     // Blocking keeps both row-major matrices in cache while transposing.
     for by in (0..height).step_by(32) {
         if ctl.cancelled() {
@@ -506,10 +645,24 @@ fn transpose(src: &[Number], dst: &mut [Number], width: usize, height: usize, ct
 /// Small-window oracle tests omit taps whose reads must be transparent. The
 /// production plan covers the whole kernel and is reused across output tiles.
 #[cfg(test)]
-pub(super) fn filter(src: &Image, out: Rect, alpha: bool, angle: f32, distance: f32) -> Option<Vec<f32>> {
+pub(super) fn filter(
+    src: &Image,
+    out: Rect,
+    alpha: bool,
+    angle: f32,
+    distance: f32,
+) -> Option<Vec<f32>> {
     if out.is_empty() {
         return Some(Vec::new());
     }
     let (width, height) = dimensions(out)?;
-    Plan::build(angle, distance, width, height, Some((src.rect, out)), &Interrupt::NONE)?.filter(src, out, alpha, &Interrupt::NONE)
+    Plan::build(
+        angle,
+        distance,
+        width,
+        height,
+        Some((src.rect, out)),
+        &Interrupt::NONE,
+    )?
+    .filter(src, out, alpha, &Interrupt::NONE)
 }

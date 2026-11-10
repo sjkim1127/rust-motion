@@ -10,12 +10,24 @@ use super::RgbImage;
 
 /// sRGB (`0..=1`) to CIELAB (D65), L in `0..=100`.
 pub fn rgb_to_lab(c: [f32; 3]) -> [f32; 3] {
-    let lin = |v: f32| if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+    let lin = |v: f32| {
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
     let (r, g, b) = (lin(c[0]), lin(c[1]), lin(c[2]));
     let x = (0.412_456_4 * r + 0.357_576_1 * g + 0.180_437_5 * b) / 0.950_47;
     let y = 0.212_672_9 * r + 0.715_152_2 * g + 0.072_175 * b;
     let z = (0.019_333_9 * r + 0.119_192 * g + 0.950_304_1 * b) / 1.088_83;
-    let f = |t: f32| if t > 0.008_856 { t.cbrt() } else { 7.787 * t + 16.0 / 116.0 };
+    let f = |t: f32| {
+        if t > 0.008_856 {
+            t.cbrt()
+        } else {
+            7.787 * t + 16.0 / 116.0
+        }
+    };
     let (fx, fy, fz) = (f(x), f(y), f(z));
     [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
 }
@@ -41,10 +53,23 @@ pub fn slic(img: &RgbImage, target: usize, compactness: f32, iters: usize) -> Su
 }
 
 /// [`slic`] on a CIELAB image.
-pub fn slic_lab(lab: &[[f32; 3]], w: usize, h: usize, target: usize, compactness: f32, iters: usize) -> Superpixels {
+pub fn slic_lab(
+    lab: &[[f32; 3]],
+    w: usize,
+    h: usize,
+    target: usize,
+    compactness: f32,
+    iters: usize,
+) -> Superpixels {
     let n = w * h;
     if n == 0 {
-        return Superpixels { w, h, labels: Vec::new(), count: 0, step: 1.0 };
+        return Superpixels {
+            w,
+            h,
+            labels: Vec::new(),
+            count: 0,
+            step: 1.0,
+        };
     }
     let s = ((n as f32 / target.max(1) as f32).sqrt()).max(1.0);
     let grad = |x: usize, y: usize| -> f32 {
@@ -124,7 +149,13 @@ pub fn slic_lab(lab: &[[f32; 3]], w: usize, h: usize, target: usize, compactness
         }
     }
     let (labels, count) = enforce_connectivity(&labels, w, h, ((s * s) / 4.0) as usize);
-    Superpixels { w, h, labels, count, step: s }
+    Superpixels {
+        w,
+        h,
+        labels,
+        count,
+        step: s,
+    }
 }
 
 /// Relabels 4-connected components; components smaller than `min_size` merge into the adjacent
@@ -141,7 +172,10 @@ fn enforce_connectivity(labels: &[u32], w: usize, h: usize, min_size: usize) -> 
         // Adjacent already-labelled component (to merge into if this one is small).
         let (sx, sy) = (s % w, s / w);
         let mut adj = None;
-        for j in [(sx > 0).then(|| s - 1), (sy > 0).then(|| s - w)].into_iter().flatten() {
+        for j in [(sx > 0).then(|| s - 1), (sy > 0).then(|| s - w)]
+            .into_iter()
+            .flatten()
+        {
             if out[j] != u32::MAX {
                 adj = Some(out[j]);
             }
@@ -154,7 +188,15 @@ fn enforce_connectivity(labels: &[u32], w: usize, h: usize, min_size: usize) -> 
             let i = comp[k];
             k += 1;
             let (x, y) = (i % w, i / w);
-            for j in [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)].into_iter().flatten() {
+            for j in [
+                (x > 0).then(|| i - 1),
+                (x + 1 < w).then(|| i + 1),
+                (y > 0).then(|| i - w),
+                (y + 1 < h).then(|| i + w),
+            ]
+            .into_iter()
+            .flatten()
+            {
                 if out[j] == u32::MAX && labels[j] == labels[s] {
                     out[j] = next;
                     comp.push(j);

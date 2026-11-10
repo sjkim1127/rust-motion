@@ -101,7 +101,13 @@ type LutParts<'a> = (Option<Vec<f64>>, &'a [Curve], &'a Clut, &'a [Curve]);
 fn lut_parts(stages: &[Stage]) -> Option<LutParts<'_>> {
     let mut i = 0;
     let mut mat = None;
-    if let Some(Stage::Matrix { rows: 3, cols: 3, m, .. }) = stages.first() {
+    if let Some(Stage::Matrix {
+        rows: 3,
+        cols: 3,
+        m,
+        ..
+    }) = stages.first()
+    {
         mat = Some(m.clone());
         i = 1;
     }
@@ -118,13 +124,21 @@ fn encode_mft(stages: &[Stage], wide: bool) -> Option<Vec<u8>> {
     if !clut.grid.iter().all(|x| *x == g) {
         return None;
     }
-    let mut o = if wide { b"mft2\0\0\0\0".to_vec() } else { b"mft1\0\0\0\0".to_vec() };
+    let mut o = if wide {
+        b"mft2\0\0\0\0".to_vec()
+    } else {
+        b"mft1\0\0\0\0".to_vec()
+    };
     o.extend_from_slice(&[clut.inputs as u8, clut.outputs as u8, g as u8, 0]);
     let m = mat.unwrap_or_else(|| vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
     for v in &m {
         o.extend_from_slice(&s15(*v));
     }
-    let (n_in, n_out) = if wide { (table_len(a), table_len(b)) } else { (256, 256) };
+    let (n_in, n_out) = if wide {
+        (table_len(a), table_len(b))
+    } else {
+        (256, 256)
+    };
     if wide {
         o.extend_from_slice(&(n_in as u16).to_be_bytes());
         o.extend_from_slice(&(n_out as u16).to_be_bytes());
@@ -187,7 +201,9 @@ fn encode_ab(stages: &[Stage], a2b: bool, inputs: usize, outputs: usize) -> Opti
             b_curves = Some(b.as_slice());
             k = 1;
         }
-        if let (Some(Stage::Matrix { m: mm, offset, .. }), Some(Stage::Curves(m))) = (v.get(k), v.get(k + 1)) {
+        if let (Some(Stage::Matrix { m: mm, offset, .. }), Some(Stage::Curves(m))) =
+            (v.get(k), v.get(k + 1))
+        {
             matrix = Some((mm, offset));
             m_curves = Some(m.as_slice());
             k += 2;
@@ -201,7 +217,11 @@ fn encode_ab(stages: &[Stage], a2b: bool, inputs: usize, outputs: usize) -> Opti
             return None;
         }
     }
-    let mut o = if a2b { b"mAB \0\0\0\0".to_vec() } else { b"mBA \0\0\0\0".to_vec() };
+    let mut o = if a2b {
+        b"mAB \0\0\0\0".to_vec()
+    } else {
+        b"mBA \0\0\0\0".to_vec()
+    };
     o.extend_from_slice(&[inputs as u8, outputs as u8, 0, 0]);
     o.extend_from_slice(&[0u8; 20]); // offsets, patched below
     let mut offs = [0u32; 5]; // B, matrix, M, CLUT, A
@@ -277,7 +297,10 @@ pub fn encode(p: &Profile) -> Vec<u8> {
     if let Some(k) = &p.gray_trc {
         tags.push((*b"kTRC", curve_elem(k)));
     }
-    for (luts, names, a2b) in [(&p.a2b, [b"A2B0", b"A2B1", b"A2B2"], true), (&p.b2a, [b"B2A0", b"B2A1", b"B2A2"], false)] {
+    for (luts, names, a2b) in [
+        (&p.a2b, [b"A2B0", b"A2B1", b"A2B2"], true),
+        (&p.b2a, [b"B2A0", b"B2A1", b"B2A2"], false),
+    ] {
         for (l, name) in luts.iter().zip(names) {
             if let Some(l) = l {
                 let data = match l.kind {

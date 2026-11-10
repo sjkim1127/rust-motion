@@ -7,13 +7,16 @@
 //! Without the variable the test only checks that the generator's model still matches the
 //! shipped AToB table (cheap), so model edits are not forgotten.
 
-use rust_motion_cms as photocraft_cms;
 use photocraft_cms::synth::{CmykModel, CmykParams};
 use photocraft_cms::{Builtin, Intent, Profile, Transform};
+use rust_motion_cms as photocraft_cms;
 
 #[test]
 fn regen_or_check_coated_cmyk() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/profiles/photocraft-coated-cmyk.icc");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/profiles/photocraft-coated-cmyk.icc"
+    );
     if std::env::var_os("PHOTOCRAFT_REGEN_PROFILES").is_some() {
         let t = std::time::Instant::now();
         let p = photocraft_cms::synth::coated_cmyk();
@@ -34,12 +37,19 @@ fn regen_or_check_coated_cmyk() {
                 for k in [0.0, 0.5, 1.0] {
                     let mut o = [0.0f32; 3];
                     t.eval(&[c as f32, m as f32, y as f32, k as f32], &mut o);
-                    let got = [o[0] as f64 * 100.0, o[1] as f64 * 255.0 - 128.0, o[2] as f64 * 255.0 - 128.0];
+                    let got = [
+                        o[0] as f64 * 100.0,
+                        o[1] as f64 * 255.0 - 128.0,
+                        o[2] as f64 * 255.0 - 128.0,
+                    ];
                     let want = model.lab([c, m, y, k]);
                     worst = worst.max(photocraft_cms::math::delta_e76(got, want));
                 }
             }
         }
     }
-    assert!(worst < 1.0, "shipped CMYK profile is stale (max ΔE {worst}); regenerate it");
+    assert!(
+        worst < 1.0,
+        "shipped CMYK profile is stale (max ΔE {worst}); regenerate it"
+    );
 }

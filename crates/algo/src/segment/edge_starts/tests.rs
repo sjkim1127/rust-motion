@@ -1,5 +1,5 @@
 use super::*;
-use crate::segment::{FREE, HARD_BG, HARD_FG, RgbImage, grid_cut_weighted};
+use crate::segment::{grid_cut_weighted, RgbImage, FREE, HARD_BG, HARD_FG};
 
 #[test]
 fn merged_starts_equal_all_live_edge_sources() {
@@ -13,14 +13,21 @@ fn merged_starts_equal_all_live_edge_sources() {
                     let live = free.contains(&i)
                         || crate::segment::NB.iter().any(|&(dx, dy, _)| {
                             let (xx, yy) = (x as i32 + dx, y as i32 + dy);
-                            xx >= 0 && xx < w as i32 && yy < h as i32 && free.contains(&(yy as usize * w + xx as usize))
+                            xx >= 0
+                                && xx < w as i32
+                                && yy < h as i32
+                                && free.contains(&(yy as usize * w + xx as usize))
                         });
                     if live {
                         expected.push(i)
                     }
                 }
             }
-            assert_eq!(Starts::new(&free, w).collect::<Vec<_>>(), expected, "{w}x{h} bits={bits}");
+            assert_eq!(
+                Starts::new(&free, w).collect::<Vec<_>>(),
+                expected,
+                "{w}x{h} bits={bits}"
+            );
         }
     }
 }
@@ -28,7 +35,13 @@ fn merged_starts_equal_all_live_edge_sources() {
 #[test]
 fn every_small_constraint_mask_matches_the_previous_graph() {
     for (w, h) in [(1, 1), (1, 6), (6, 1), (2, 3)] {
-        let img = RgbImage::from_fn(w, h, |x, y| [(x % 3) as f32 / 2.0, (y % 4) as f32 / 3.0, ((x + y) % 5) as f32 / 4.0]);
+        let img = RgbImage::from_fn(w, h, |x, y| {
+            [
+                (x % 3) as f32 / 2.0,
+                (y % 4) as f32 / 3.0,
+                ((x + y) % 5) as f32 / 4.0,
+            ]
+        });
         for code in 0..3usize.pow((w * h) as u32) {
             let mut state = code;
             let fixed: Vec<_> = (0..w * h)
@@ -65,7 +78,11 @@ fn sparse_graph_keeps_exact_masks_and_avoids_irrelevant_weights() {
     for kind in 0..4 {
         let fixed: Vec<_> = (0..w * h)
             .map(|i| {
-                if (kind == 0 && i % 503 == 0) || (kind == 1 && i % w >= 48 && i % w <= 52) || (kind == 2 && i / w == 0) || (kind == 3 && i % w == w - 1) {
+                if (kind == 0 && i % 503 == 0)
+                    || (kind == 1 && i % w >= 48 && i % w <= 52)
+                    || (kind == 2 && i / w == 0)
+                    || (kind == 3 && i % w == w - 1)
+                {
                     FREE
                 } else if i % w < 50 {
                     HARD_FG
@@ -85,23 +102,44 @@ fn sparse_graph_keeps_exact_masks_and_avoids_irrelevant_weights() {
             0.3 * (-2.0 * d).exp()
         });
         assert_eq!(new, old, "kind={kind}");
-        assert!(after.get() * 5 < before.get(), "kind={kind} counts {} -> {}", before.get(), after.get());
+        assert!(
+            after.get() * 5 < before.get(),
+            "kind={kind} counts {} -> {}",
+            before.get(),
+            after.get()
+        );
     }
 }
 
 #[test]
 fn malformed_grid_dimensions_and_short_inputs_return_empty() {
     for img in [
-        RgbImage { w: usize::MAX, h: 2, px: Vec::new() },
-        RgbImage { w: i32::MAX as usize + 1, h: 0, px: Vec::new() },
-        RgbImage { w: 2, h: 2, px: vec![[0.0; 3]; 3] },
+        RgbImage {
+            w: usize::MAX,
+            h: 2,
+            px: Vec::new(),
+        },
+        RgbImage {
+            w: i32::MAX as usize + 1,
+            h: 0,
+            px: Vec::new(),
+        },
+        RgbImage {
+            w: 2,
+            h: 2,
+            px: vec![[0.0; 3]; 3],
+        },
     ] {
         assert!(crate::segment::grid_cut(&img, &[], &[], &[], 1.0, 1.0).is_empty());
     }
     let img = RgbImage::new(2, 2);
     let cost = [0.0; 4];
     let fixed = [FREE; 4];
-    for (fg, bg, constraints) in [(&cost[..3], &cost[..], &fixed[..]), (&cost[..], &cost[..3], &fixed[..]), (&cost[..], &cost[..], &fixed[..3])] {
+    for (fg, bg, constraints) in [
+        (&cost[..3], &cost[..], &fixed[..]),
+        (&cost[..], &cost[..3], &fixed[..]),
+        (&cost[..], &cost[..], &fixed[..3]),
+    ] {
         assert!(crate::segment::grid_cut_with(&img, fg, bg, constraints, |_| 1.0).is_empty());
     }
 }

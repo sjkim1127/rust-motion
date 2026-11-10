@@ -4,7 +4,10 @@ use photocraft_color::{ColorMode, PixelFormat, SampleType};
 #[test]
 fn all_rotation_tables_keep_the_direct_bits() {
     for angle in [0.0, 0.1, 15.0, 73.7, 180.0, 360.0, f32::NAN, f32::INFINITY] {
-        let p = SpinPin { blur_angle: angle, ..Default::default() };
+        let p = SpinPin {
+            blur_angle: angle,
+            ..Default::default()
+        };
         let plans = spin_plan::prepare(&[p]).unwrap();
         let theta = angle.clamp(0.0, 360.0).to_radians();
         for count in 2..=64 {
@@ -33,7 +36,11 @@ fn prepared_spin_matches_the_original_kernel() {
     ] {
         for alpha in [false, true] {
             let n = PixelFormat::new(mode, SampleType::F32, alpha).channels();
-            let ctx = Ctx { bounds, mode, alpha };
+            let ctx = Ctx {
+                bounds,
+                mode,
+                alpha,
+            };
             let mut src = Image::new(bounds, n);
             for (i, v) in src.data.iter_mut().enumerate() {
                 *v = ((i * 71 + i / n * 107) % 65536) as f32 / 65535.0;
@@ -45,13 +52,30 @@ fn prepared_spin_matches_the_original_kernel() {
             }
             for angle in [0.0, 0.1, 15.0, 91.0, 360.0, f32::NAN] {
                 let pins = [
-                    SpinPin { x: 0.2, y: 0.3, radius_x: 0.25, radius_y: 0.5, angle: 31.0, blur_angle: angle },
-                    SpinPin { x: 0.7, y: 0.6, radius_x: 0.8, radius_y: 0.6, angle: -15.0, blur_angle: angle },
+                    SpinPin {
+                        x: 0.2,
+                        y: 0.3,
+                        radius_x: 0.25,
+                        radius_y: 0.5,
+                        angle: 31.0,
+                        blur_angle: angle,
+                    },
+                    SpinPin {
+                        x: 0.7,
+                        y: 0.6,
+                        radius_x: 0.8,
+                        radius_y: 0.6,
+                        angle: -15.0,
+                        blur_angle: angle,
+                    },
                 ];
                 let out = Rect::new(-19, -8, 55, 49);
                 let a = spin(&src, out, &ctx, &pins);
                 let b = spin_impl::<0>(&src, out, &ctx, &pins, false);
-                let first = a.iter().zip(&b).position(|(a, b)| a.to_bits() != b.to_bits());
+                let first = a
+                    .iter()
+                    .zip(&b)
+                    .position(|(a, b)| a.to_bits() != b.to_bits());
                 assert_eq!(first, None, "{mode:?} alpha {alpha} angle {angle}");
             }
         }

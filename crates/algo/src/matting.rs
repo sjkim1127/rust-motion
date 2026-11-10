@@ -19,7 +19,7 @@ use photocraft_raster::Surface;
 use serde::{Deserialize, Serialize};
 
 use crate::segment::{RgbImage, Sampler};
-use crate::selection::{Region, edt};
+use crate::selection::{edt, Region};
 
 /// Select and Mask parameters (Photoshop's units).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -42,7 +42,14 @@ pub struct RefineParams {
 
 impl Default for RefineParams {
     fn default() -> Self {
-        Self { radius: 0.0, smart_radius: false, smooth: 0.0, feather: 0.0, contrast: 0.0, shift_edge: 0.0 }
+        Self {
+            radius: 0.0,
+            smart_radius: false,
+            smooth: 0.0,
+            feather: 0.0,
+            contrast: 0.0,
+            shift_edge: 0.0,
+        }
     }
 }
 
@@ -63,7 +70,11 @@ impl RefineParams {
     /// Signed shift in pixels, fractional. 100% is `max(radius, 4)` px, clamped to ±64.
     fn shift_amount(&self) -> f32 {
         let px = self.shift_edge.clamp(-100.0, 100.0) / 100.0 * self.radius.max(4.0);
-        if px.is_finite() { px.clamp(-64.0, 64.0) } else { 0.0 }
+        if px.is_finite() {
+            px.clamp(-64.0, 64.0)
+        } else {
+            0.0
+        }
     }
     /// How many pixels the mask can move: the farther of the two integer radii a fractional
     /// shift blends. Whole-pixel amounts stay exact (`ceil(4) == 4`).
@@ -71,7 +82,11 @@ impl RefineParams {
         let px = self.shift_amount();
         let reach = px.abs().ceil();
         let signed = if px.is_sign_negative() { -reach } else { reach };
-        if signed.is_finite() { signed as i32 } else { 0 }
+        if signed.is_finite() {
+            signed as i32
+        } else {
+            0
+        }
     }
     fn uses_image(&self) -> bool {
         self.radius > 0.0
@@ -84,12 +99,18 @@ impl RefineParams {
         } else {
             0
         };
-        edge + (3.0 * self.smooth_sigma()).ceil() as i32 + (3.0 * self.feather_sigma()).ceil() as i32 + self.shift_px().abs() + 2
+        edge + (3.0 * self.smooth_sigma()).ceil() as i32
+            + (3.0 * self.feather_sigma()).ceil() as i32
+            + self.shift_px().abs()
+            + 2
     }
     /// How far the refined mask can extend beyond the original.
     pub fn spread(&self) -> i32 {
-        (if self.uses_image() { self.radius.ceil() as i32 } else { 0 })
-            + (3.0 * self.smooth_sigma()).ceil() as i32
+        (if self.uses_image() {
+            self.radius.ceil() as i32
+        } else {
+            0
+        }) + (3.0 * self.smooth_sigma()).ceil() as i32
             + (3.0 * self.feather_sigma()).ceil() as i32
             + self.shift_px().max(0)
             + 1
@@ -128,7 +149,14 @@ pub fn box_mean(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
 }
 
 /// Guided filter with a grayscale guide.
-pub fn guided_filter_gray(guide: &[f32], p: &[f32], w: usize, h: usize, r: usize, eps: f32) -> Vec<f32> {
+pub fn guided_filter_gray(
+    guide: &[f32],
+    p: &[f32],
+    w: usize,
+    h: usize,
+    r: usize,
+    eps: f32,
+) -> Vec<f32> {
     let mi = box_mean(guide, w, h, r);
     let mp = box_mean(p, w, h, r);
     let ip: Vec<f32> = guide.iter().zip(p).map(|(a, b)| a * b).collect();
@@ -156,17 +184,52 @@ pub fn guided_filter_color(guide: &RgbImage, p: &[f32], r: usize, eps: f32) -> V
     let chans = [ch(0), ch(1), ch(2)];
     let m: Vec<Vec<f32>> = chans.iter().map(|c| box_mean(c, w, h, r)).collect();
     let mp = box_mean(p, w, h, r);
-    let mip: Vec<Vec<f32>> = chans.iter().map(|c| box_mean(&c.iter().zip(p).map(|(a, b)| a * b).collect::<Vec<_>>(), w, h, r)).collect();
+    let mip: Vec<Vec<f32>> = chans
+        .iter()
+        .map(|c| {
+            box_mean(
+                &c.iter().zip(p).map(|(a, b)| a * b).collect::<Vec<_>>(),
+                w,
+                h,
+                r,
+            )
+        })
+        .collect();
     let pairs = [(0, 0), (0, 1), (0, 2), (1, 1), (1, 2), (2, 2)];
-    let mii: Vec<Vec<f32>> = pairs.iter().map(|&(a, b)| box_mean(&chans[a].iter().zip(&chans[b]).map(|(x, y)| x * y).collect::<Vec<_>>(), w, h, r)).collect();
+    let mii: Vec<Vec<f32>> = pairs
+        .iter()
+        .map(|&(a, b)| {
+            box_mean(
+                &chans[a]
+                    .iter()
+                    .zip(&chans[b])
+                    .map(|(x, y)| x * y)
+                    .collect::<Vec<_>>(),
+                w,
+                h,
+                r,
+            )
+        })
+        .collect();
     let mut av = [vec![0.0f32; n], vec![0.0f32; n], vec![0.0f32; n]];
     let mut bv = vec![0.0f32; n];
     for i in 0..n {
         let mu = [m[0][i] as f64, m[1][i] as f64, m[2][i] as f64];
         let s = |k: usize, a: usize, b: usize| mii[k][i] as f64 - mu[a] * mu[b];
         let e = eps as f64;
-        let (rr, rg, rb, gg, gb, bb) = (s(0, 0, 0) + e, s(1, 0, 1), s(2, 0, 2), s(3, 1, 1) + e, s(4, 1, 2), s(5, 2, 2) + e);
-        let cov = [mip[0][i] as f64 - mu[0] * mp[i] as f64, mip[1][i] as f64 - mu[1] * mp[i] as f64, mip[2][i] as f64 - mu[2] * mp[i] as f64];
+        let (rr, rg, rb, gg, gb, bb) = (
+            s(0, 0, 0) + e,
+            s(1, 0, 1),
+            s(2, 0, 2),
+            s(3, 1, 1) + e,
+            s(4, 1, 2),
+            s(5, 2, 2) + e,
+        );
+        let cov = [
+            mip[0][i] as f64 - mu[0] * mp[i] as f64,
+            mip[1][i] as f64 - mu[1] * mp[i] as f64,
+            mip[2][i] as f64 - mu[2] * mp[i] as f64,
+        ];
         // Inverse of the symmetric 3×3 matrix.
         let i00 = gg * bb - gb * gb;
         let i01 = gb * rb - rg * bb;
@@ -191,7 +254,9 @@ pub fn guided_filter_color(guide: &RgbImage, p: &[f32], r: usize, eps: f32) -> V
     }
     let ma: Vec<Vec<f32>> = av.iter().map(|a| box_mean(a, w, h, r)).collect();
     let mb = box_mean(&bv, w, h, r);
-    (0..n).map(|i| ma[0][i] * chans[0][i] + ma[1][i] * chans[1][i] + ma[2][i] * chans[2][i] + mb[i]).collect()
+    (0..n)
+        .map(|i| ma[0][i] * chans[0][i] + ma[1][i] * chans[1][i] + ma[2][i] * chans[2][i] + mb[i])
+        .collect()
 }
 
 /// Separable Gaussian blur (edge-clamped).
@@ -200,7 +265,9 @@ pub fn gaussian_blur(src: &[f32], w: usize, h: usize, sigma: f32) -> Vec<f32> {
         return src.to_vec();
     }
     let r = (sigma * 3.0).ceil() as i64;
-    let k: Vec<f32> = (-r..=r).map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp()).collect();
+    let k: Vec<f32> = (-r..=r)
+        .map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp())
+        .collect();
     let s: f32 = k.iter().sum();
     let k: Vec<f32> = k.iter().map(|v| v / s).collect();
     let mut tmp = vec![0.0f32; w * h];
@@ -238,15 +305,28 @@ pub fn morph(src: &[f32], w: usize, h: usize, r: usize, grow: bool) -> Vec<f32> 
 mod brush;
 mod morphology;
 
-pub use brush::{EdgeBrush, EdgeStroke, MAX_SWEPT_AREA, SIZE_RANGE as BRUSH_SIZE_RANGE, swept_area};
+pub use brush::{
+    swept_area, EdgeBrush, EdgeStroke, MAX_SWEPT_AREA, SIZE_RANGE as BRUSH_SIZE_RANGE,
+};
 
 /// Running max (or min) over a window of radius `r` (edge-clipped), van Herk / Gil–Werman:
 /// three comparisons per sample whatever the radius.
-fn running_extreme(src: &[f32], out: &mut [f32], r: usize, max: bool, g: &mut Vec<f32>, hb: &mut Vec<f32>) {
+fn running_extreme(
+    src: &[f32],
+    out: &mut [f32],
+    r: usize,
+    max: bool,
+    g: &mut Vec<f32>,
+    hb: &mut Vec<f32>,
+) {
     let n = src.len();
     let k = 2 * r + 1;
     let f = |a: f32, b: f32| if max { a.max(b) } else { a.min(b) };
-    let pad = if max { f32::NEG_INFINITY } else { f32::INFINITY };
+    let pad = if max {
+        f32::NEG_INFINITY
+    } else {
+        f32::INFINITY
+    };
     let m = (n + 2 * r).div_ceil(k) * k;
     g.clear();
     g.resize(m, pad);
@@ -257,7 +337,11 @@ fn running_extreme(src: &[f32], out: &mut [f32], r: usize, max: bool, g: &mut Ve
         g[j] = if j % k == 0 { p(j) } else { f(g[j - 1], p(j)) };
     }
     for j in (0..m).rev() {
-        hb[j] = if j % k == k - 1 || j == m - 1 { p(j) } else { f(hb[j + 1], p(j)) };
+        hb[j] = if j % k == k - 1 || j == m - 1 {
+            p(j)
+        } else {
+            f(hb[j + 1], p(j))
+        };
     }
     for (i, o) in out.iter_mut().enumerate() {
         *o = f(hb[i], g[i + 2 * r]);
@@ -269,7 +353,14 @@ fn max_square(src: &[f32], w: usize, h: usize, r: usize, max: bool) -> Vec<f32> 
     let (mut g, mut hb) = (Vec::new(), Vec::new());
     let mut tmp = vec![0.0f32; w * h];
     for y in 0..h {
-        running_extreme(&src[y * w..(y + 1) * w], &mut tmp[y * w..(y + 1) * w], r.min(w.saturating_sub(1)), max, &mut g, &mut hb);
+        running_extreme(
+            &src[y * w..(y + 1) * w],
+            &mut tmp[y * w..(y + 1) * w],
+            r.min(w.saturating_sub(1)),
+            max,
+            &mut g,
+            &mut hb,
+        );
     }
     let mut out = vec![0.0f32; w * h];
     let (mut col, mut res) = (vec![0.0f32; h], vec![0.0f32; h]);
@@ -277,7 +368,14 @@ fn max_square(src: &[f32], w: usize, h: usize, r: usize, max: bool) -> Vec<f32> 
         for y in 0..h {
             col[y] = tmp[y * w + x];
         }
-        running_extreme(&col, &mut res, r.min(h.saturating_sub(1)), max, &mut g, &mut hb);
+        running_extreme(
+            &col,
+            &mut res,
+            r.min(h.saturating_sub(1)),
+            max,
+            &mut g,
+            &mut hb,
+        );
         for y in 0..h {
             out[y * w + x] = res[y];
         }
@@ -289,7 +387,11 @@ fn max_square(src: &[f32], w: usize, h: usize, r: usize, max: bool) -> Vec<f32> 
 /// gradient over a window of radius `r` (a sharp step gives ~2, a ramp of width L gives ~L).
 pub fn edge_width(img: &RgbImage, r: usize) -> Vec<f32> {
     let (w, h) = (img.w, img.h);
-    let y: Vec<f32> = img.px.iter().map(|p| 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]).collect();
+    let y: Vec<f32> = img
+        .px
+        .iter()
+        .map(|p| 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2])
+        .collect();
     let mut g = vec![0.0f32; w * h];
     for yy in 0..h {
         for xx in 0..w {
@@ -302,11 +404,19 @@ pub fn edge_width(img: &RgbImage, r: usize) -> Vec<f32> {
     let gm = max_square(&g, w, h, r, true);
     let hi = max_square(&y, w, h, r, true);
     let lo = max_square(&y, w, h, r, false);
-    (0..w * h).map(|i| (hi[i] - lo[i]) / gm[i].max(1e-4)).collect()
+    (0..w * h)
+        .map(|i| (hi[i] - lo[i]) / gm[i].max(1e-4))
+        .collect()
 }
 
 /// Refines a soft mask buffer `m` (`w × h`) with `img` as guide (required when `radius > 0`).
-pub fn refine_buffer(img: Option<&RgbImage>, m: &[f32], w: usize, h: usize, p: &RefineParams) -> Vec<f32> {
+pub fn refine_buffer(
+    img: Option<&RgbImage>,
+    m: &[f32],
+    w: usize,
+    h: usize,
+    p: &RefineParams,
+) -> Vec<f32> {
     refine_buffer_with(img, m, w, h, p, None, morph)
 }
 
@@ -318,7 +428,15 @@ struct BrushBuf<'a> {
     window: usize,
 }
 
-fn refine_buffer_with<F>(img: Option<&RgbImage>, m: &[f32], w: usize, h: usize, p: &RefineParams, brush: Option<BrushBuf>, morphology: F) -> Vec<f32>
+fn refine_buffer_with<F>(
+    img: Option<&RgbImage>,
+    m: &[f32],
+    w: usize,
+    h: usize,
+    p: &RefineParams,
+    brush: Option<BrushBuf>,
+    morphology: F,
+) -> Vec<f32>
 where
     F: Fn(&[f32], usize, usize, usize, bool) -> Vec<f32> + Copy,
 {
@@ -331,7 +449,10 @@ where
             for x in 0..w {
                 let i = y * w + x;
                 let v = bin[i];
-                let diff = (x > 0 && bin[i - 1] != v) || (x + 1 < w && bin[i + 1] != v) || (y > 0 && bin[i - w] != v) || (y + 1 < h && bin[i + w] != v);
+                let diff = (x > 0 && bin[i - 1] != v)
+                    || (x + 1 < w && bin[i + 1] != v)
+                    || (y > 0 && bin[i - w] != v)
+                    || (y + 1 < h && bin[i + w] != v);
                 boundary[i] = diff;
                 any |= diff;
             }
@@ -404,19 +525,32 @@ where
     if frac < 1.0e-4 {
         return morphology(src, w, h, whole, grow);
     }
-    let lo = if whole == 0 { src.to_vec() } else { morphology(src, w, h, whole, grow) };
+    let lo = if whole == 0 {
+        src.to_vec()
+    } else {
+        morphology(src, w, h, whole, grow)
+    };
     let hi = morphology(src, w, h, whole + 1, grow);
     let n = w.saturating_mul(h);
     if lo.len() < n || hi.len() < n || lo.len() != hi.len() {
         return hi;
     }
-    lo.into_iter().zip(hi).map(|(a, b)| a + (b - a) * frac).collect()
+    lo.into_iter()
+        .zip(hi)
+        .map(|(a, b)| a + (b - a) * frac)
+        .collect()
 }
 
 /// Refines a selection mask. `mask(r)` returns coverage over `r` (row-major); `content` bounds
 /// its non-zero pixels; the result is clipped to `canvas`. `sampler` supplies the guide image
 /// (only read when `radius > 0`). Returns `None` when nothing remains selected.
-pub fn refine_mask(sampler: &dyn Sampler, mask: &(dyn Fn(Rect) -> Vec<f32> + Sync), content: Rect, canvas: Rect, p: &RefineParams) -> Option<Region> {
+pub fn refine_mask(
+    sampler: &dyn Sampler,
+    mask: &(dyn Fn(Rect) -> Vec<f32> + Sync),
+    content: Rect,
+    canvas: Rect,
+    p: &RefineParams,
+) -> Option<Region> {
     refine_mask_with(sampler, mask, content, canvas, p, None, morph)
 }
 
@@ -450,14 +584,22 @@ where
     if content.is_empty() {
         return None;
     }
-    let bbox = content.inflate(p.spread()).union(&brush.map_or(Rect::EMPTY, EdgeBrush::added_bounds)).intersect(&canvas);
+    let bbox = content
+        .inflate(p.spread())
+        .union(&brush.map_or(Rect::EMPTY, EdgeBrush::added_bounds))
+        .intersect(&canvas);
     let halo = p.halo() + brush.map_or(0, |b| i32::try_from(b.window() * 4).unwrap_or(i32::MAX));
     let mut tiles = Vec::new();
     let mut y = bbox.y0;
     while y < bbox.y1 {
         let mut x = bbox.x0;
         while x < bbox.x1 {
-            tiles.push(Rect::new(x, y, (x + TILE).min(bbox.x1), (y + TILE).min(bbox.y1)));
+            tiles.push(Rect::new(
+                x,
+                y,
+                (x + TILE).min(bbox.x1),
+                (y + TILE).min(bbox.y1),
+            ));
             x += TILE;
         }
         y += TILE;
@@ -468,22 +610,36 @@ where
         let (rw, rh) = (r.width() as usize, r.height() as usize);
         let first = m.first().copied().unwrap_or(0.0);
         let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-        let (cx, cy, cw, ch) = ((t.x0 - r.x0) as usize, (t.y0 - r.y0) as usize, t.width() as usize, t.height() as usize);
+        let (cx, cy, cw, ch) = (
+            (t.x0 - r.x0) as usize,
+            (t.y0 - r.y0) as usize,
+            t.width() as usize,
+            t.height() as usize,
+        );
         let core = |buf: &[f32]| -> Vec<u8> {
             let mut out = Vec::with_capacity(cw * ch);
             for yy in 0..ch {
-                out.extend(buf[(cy + yy) * rw + cx..(cy + yy) * rw + cx + cw].iter().map(|v| q(*v)));
+                out.extend(
+                    buf[(cy + yy) * rw + cx..(cy + yy) * rw + cx + cw]
+                        .iter()
+                        .map(|v| q(*v)),
+                );
             }
             out
         };
-        let painted = brush.filter(|b| !b.bounds().intersect(&r).is_empty()).map(|b| b.read(r));
+        let painted = brush
+            .filter(|b| !b.bounds().intersect(&r).is_empty())
+            .map(|b| b.read(r));
         let adds = painted.as_ref().is_some_and(|v| v.iter().any(|v| *v > 0.0));
         if !adds && (first == 0.0 || first == 1.0) && m.iter().all(|v| *v == first) {
             return (*t, vec![q(first); cw * ch]);
         }
         let img = (p.uses_image() || adds).then(|| sampler.rgb(r));
         let bb = match (&painted, brush) {
-            (Some(v), Some(b)) => Some(BrushBuf { v, window: b.window() }),
+            (Some(v), Some(b)) => Some(BrushBuf {
+                v,
+                window: b.window(),
+            }),
             _ => None,
         };
         let out = refine_buffer_with(img.as_ref(), &m, rw, rh, p, bb, morphology);
@@ -539,7 +695,12 @@ fn tiles_of(area: Rect) -> Vec<Rect> {
     while y < area.y1 {
         let mut x = area.x0;
         while x < area.x1 {
-            tiles.push(Rect::new(x, y, (x + TILE).min(area.x1), (y + TILE).min(area.y1)));
+            tiles.push(Rect::new(
+                x,
+                y,
+                (x + TILE).min(area.x1),
+                (y + TILE).min(area.y1),
+            ));
             x += TILE;
         }
         y += TILE;
@@ -579,8 +740,22 @@ pub fn decontaminate(src: &Surface, alpha: &Region, radius: f32, amount: f32) ->
         let (rw, rh) = (r.width() as usize, r.height() as usize);
         let mut px = Vec::new();
         src.read_region_into(r, &mut px);
-        let al: Vec<f32> = (r.y0..r.y1).flat_map(|y| (r.x0..r.x1).map(move |x| alpha.at(x, y))).collect();
-        let wts: Vec<f32> = (0..rw * rh).map(|i| if al[i] >= 0.98 { if fmt.alpha { px[i * n + n - 1] } else { 1.0 } } else { 0.0 }).collect();
+        let al: Vec<f32> = (r.y0..r.y1)
+            .flat_map(|y| (r.x0..r.x1).map(move |x| alpha.at(x, y)))
+            .collect();
+        let wts: Vec<f32> = (0..rw * rh)
+            .map(|i| {
+                if al[i] >= 0.98 {
+                    if fmt.alpha {
+                        px[i * n + n - 1]
+                    } else {
+                        1.0
+                    }
+                } else {
+                    0.0
+                }
+            })
+            .collect();
         let den = box_mean(&wts, rw, rh, rad);
         let den2 = box_mean(&wts, rw, rh, rad * 4);
         let mut nums = Vec::with_capacity(nc);
@@ -588,13 +763,22 @@ pub fn decontaminate(src: &Surface, alpha: &Region, radius: f32, amount: f32) ->
             let v: Vec<f32> = (0..rw * rh).map(|i| wts[i] * px[i * n + c]).collect();
             nums.push((box_mean(&v, rw, rh, rad), box_mean(&v, rw, rh, rad * 4)));
         }
-        let (cx, cy, cw, ch) = ((t.x0 - r.x0) as usize, (t.y0 - r.y0) as usize, t.width() as usize, t.height() as usize);
+        let (cx, cy, cw, ch) = (
+            (t.x0 - r.x0) as usize,
+            (t.y0 - r.y0) as usize,
+            t.width() as usize,
+            t.height() as usize,
+        );
         let mut out = Vec::with_capacity(cw * ch * n);
         for yy in 0..ch {
             for xx in 0..cw {
                 let i = (cy + yy) * rw + cx + xx;
                 let a = al[i];
-                let k = if soft(a) { amount * ((1.0 - a) * 4.0).clamp(0.0, 1.0) } else { 0.0 };
+                let k = if soft(a) {
+                    amount * ((1.0 - a) * 4.0).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
                 for c in 0..n {
                     let v = px[i * n + c];
                     if c >= nc || k == 0.0 {
@@ -667,11 +851,25 @@ mod tests {
         // True foreground fraction (a = foreground) = 1 − Φ((x − 40) / σ).
         let erf = |x: f32| {
             let t = 1.0 / (1.0 + 0.327_591_1 * x.abs());
-            let y = 1.0 - (((((1.061_405_4 * t - 1.453_152_1) * t) + 1.421_413_7) * t - 0.284_496_74) * t + 0.254_829_6) * t * (-x * x).exp();
-            if x >= 0.0 { y } else { -y }
+            let y = 1.0
+                - (((((1.061_405_4 * t - 1.453_152_1) * t) + 1.421_413_7) * t - 0.284_496_74) * t
+                    + 0.254_829_6)
+                    * t
+                    * (-x * x).exp();
+            if x >= 0.0 {
+                y
+            } else {
+                -y
+            }
         };
-        let alpha: Vec<f32> = (0..w).map(|x| 0.5 * (1.0 - erf((x as f32 + 0.5 - 40.0) / (sigma * std::f32::consts::SQRT_2)))).collect();
-        let img = RgbImage::from_fn(w, h, |x, _| [0, 1, 2].map(|c| a[c] * alpha[x] + b[c] * (1.0 - alpha[x])));
+        let alpha: Vec<f32> = (0..w)
+            .map(|x| {
+                0.5 * (1.0 - erf((x as f32 + 0.5 - 40.0) / (sigma * std::f32::consts::SQRT_2)))
+            })
+            .collect();
+        let img = RgbImage::from_fn(w, h, |x, _| {
+            [0, 1, 2].map(|c| a[c] * alpha[x] + b[c] * (1.0 - alpha[x]))
+        });
         (img, alpha)
     }
 
@@ -687,7 +885,11 @@ mod tests {
                         let mut v = if max { f32::MIN } else { f32::MAX };
                         for yy in y.saturating_sub(r)..(y + r + 1).min(h) {
                             for xx in x.saturating_sub(r)..(x + r + 1).min(w) {
-                                v = if max { v.max(src[yy * w + xx]) } else { v.min(src[yy * w + xx]) };
+                                v = if max {
+                                    v.max(src[yy * w + xx])
+                                } else {
+                                    v.min(src[yy * w + xx])
+                                };
                             }
                         }
                         assert_eq!(fast[y * w + x], v, "r={r} max={max} ({x},{y})");
@@ -720,14 +922,24 @@ mod tests {
     fn guided_filter_matting_softens_blurred_edge() {
         let (w, h) = (80usize, 20usize);
         let (img, truth) = blurred_edge(w, h, 3.0);
-        let m: Vec<f32> = (0..w * h).map(|i| if (i % w) < 40 { 1.0 } else { 0.0 }).collect();
-        let p = RefineParams { radius: 10.0, ..Default::default() };
+        let m: Vec<f32> = (0..w * h)
+            .map(|i| if (i % w) < 40 { 1.0 } else { 0.0 })
+            .collect();
+        let p = RefineParams {
+            radius: 10.0,
+            ..Default::default()
+        };
         let a = refine_buffer(Some(&img), &m, w, h, &p);
         let row = &a[10 * w..11 * w];
         let soft = row.iter().filter(|v| **v > 0.05 && **v < 0.95).count();
         assert!(soft >= 6, "only {soft} soft pixels: {row:?}");
         for x in 0..w {
-            assert!((row[x] - truth[x]).abs() < 0.12, "x={x}: {} vs {}", row[x], truth[x]);
+            assert!(
+                (row[x] - truth[x]).abs() < 0.12,
+                "x={x}: {} vs {}",
+                row[x],
+                truth[x]
+            );
             if x > 0 {
                 assert!(row[x] <= row[x - 1] + 0.02, "not monotone at {x}");
             }
@@ -736,37 +948,142 @@ mod tests {
         assert_eq!(row[5], 1.0);
         assert_eq!(row[75], 0.0);
         // Smart radius keeps a sharp edge sharp.
-        let sharp = RgbImage::from_fn(w, h, |x, _| if x < 40 { [0.9, 0.8, 0.2] } else { [0.1, 0.2, 0.6] });
-        let s = refine_buffer(Some(&sharp), &m, w, h, &RefineParams { radius: 10.0, smart_radius: true, ..Default::default() });
-        let soft = s[10 * w..11 * w].iter().filter(|v| **v > 0.05 && **v < 0.95).count();
+        let sharp = RgbImage::from_fn(w, h, |x, _| {
+            if x < 40 {
+                [0.9, 0.8, 0.2]
+            } else {
+                [0.1, 0.2, 0.6]
+            }
+        });
+        let s = refine_buffer(
+            Some(&sharp),
+            &m,
+            w,
+            h,
+            &RefineParams {
+                radius: 10.0,
+                smart_radius: true,
+                ..Default::default()
+            },
+        );
+        let soft = s[10 * w..11 * w]
+            .iter()
+            .filter(|v| **v > 0.05 && **v < 0.95)
+            .count();
         assert!(soft <= 2, "sharp edge became soft: {soft}");
     }
 
     #[test]
     fn feather_contrast_and_shift() {
         let (w, h) = (60usize, 10usize);
-        let m: Vec<f32> = (0..w * h).map(|i| if (i % w) < 30 { 1.0 } else { 0.0 }).collect();
-        let f = refine_buffer(None, &m, w, h, &RefineParams { feather: 6.0, ..Default::default() });
+        let m: Vec<f32> = (0..w * h)
+            .map(|i| if (i % w) < 30 { 1.0 } else { 0.0 })
+            .collect();
+        let f = refine_buffer(
+            None,
+            &m,
+            w,
+            h,
+            &RefineParams {
+                feather: 6.0,
+                ..Default::default()
+            },
+        );
         assert!(f[5 * w + 29] > 0.5 && f[5 * w + 29] < 0.8 && f[5 * w + 31] > 0.1);
-        let c = refine_buffer(None, &f, w, h, &RefineParams { contrast: 100.0, ..Default::default() });
+        let c = refine_buffer(
+            None,
+            &f,
+            w,
+            h,
+            &RefineParams {
+                contrast: 100.0,
+                ..Default::default()
+            },
+        );
         assert!(c[5 * w + 29] == 1.0 && c[5 * w + 31] == 0.0);
-        let grown = refine_buffer(None, &m, w, h, &RefineParams { shift_edge: 100.0, ..Default::default() });
+        let grown = refine_buffer(
+            None,
+            &m,
+            w,
+            h,
+            &RefineParams {
+                shift_edge: 100.0,
+                ..Default::default()
+            },
+        );
         assert_eq!(grown[5 * w + 33], 1.0);
         assert_eq!(grown[5 * w + 34], 0.0);
-        let shrunk = refine_buffer(None, &m, w, h, &RefineParams { shift_edge: -50.0, ..Default::default() });
+        let shrunk = refine_buffer(
+            None,
+            &m,
+            w,
+            h,
+            &RefineParams {
+                shift_edge: -50.0,
+                ..Default::default()
+            },
+        );
         assert_eq!(shrunk[5 * w + 27], 1.0);
         assert_eq!(shrunk[5 * w + 28], 0.0);
         // Radius 0 scales 100% to 4 px, so 12.5% is half a pixel and 25% is one pixel.
         // The pixel just outside a hard edge fades in instead of snapping on.
-        let half = refine_buffer(None, &m, w, h, &RefineParams { shift_edge: 12.5, ..Default::default() });
-        let one = refine_buffer(None, &m, w, h, &RefineParams { shift_edge: 25.0, ..Default::default() });
+        let half = refine_buffer(
+            None,
+            &m,
+            w,
+            h,
+            &RefineParams {
+                shift_edge: 12.5,
+                ..Default::default()
+            },
+        );
+        let one = refine_buffer(
+            None,
+            &m,
+            w,
+            h,
+            &RefineParams {
+                shift_edge: 25.0,
+                ..Default::default()
+            },
+        );
         assert_eq!(m[5 * w + 30], 0.0);
-        assert!((half[5 * w + 30] - 0.5).abs() < 0.02, "half pixel {}", half[5 * w + 30]);
+        assert!(
+            (half[5 * w + 30] - 0.5).abs() < 0.02,
+            "half pixel {}",
+            half[5 * w + 30]
+        );
         assert_eq!(one[5 * w + 30], 1.0);
-        assert_eq!(half[5 * w + 31], 0.0, "the blend must not jump a second pixel");
-        let pulled = refine_buffer(None, &m, w, h, &RefineParams { shift_edge: -12.5, ..Default::default() });
-        assert!((pulled[5 * w + 29] - 0.5).abs() < 0.02, "half-pixel contract {}", pulled[5 * w + 29]);
-        let sm = refine_buffer(None, &m, w, h, &RefineParams { smooth: 50.0, ..Default::default() });
+        assert_eq!(
+            half[5 * w + 31],
+            0.0,
+            "the blend must not jump a second pixel"
+        );
+        let pulled = refine_buffer(
+            None,
+            &m,
+            w,
+            h,
+            &RefineParams {
+                shift_edge: -12.5,
+                ..Default::default()
+            },
+        );
+        assert!(
+            (pulled[5 * w + 29] - 0.5).abs() < 0.02,
+            "half-pixel contract {}",
+            pulled[5 * w + 29]
+        );
+        let sm = refine_buffer(
+            None,
+            &m,
+            w,
+            h,
+            &RefineParams {
+                smooth: 50.0,
+                ..Default::default()
+            },
+        );
         assert!(sm[5 * w + 10] == 1.0 && sm[5 * w + 50] == 0.0);
     }
 
@@ -775,16 +1092,31 @@ mod tests {
         // Tiled processing gives the same result as processing the whole image at once.
         let (w, h) = (600usize, 300usize);
         let (img, _) = blurred_edge(w, h, 2.0);
-        let s = ImageSampler { img: &img, origin: (0, 0) };
+        let s = ImageSampler {
+            img: &img,
+            origin: (0, 0),
+        };
         let mut mask = vec![0u8; w * h];
         for y in 0..h {
             for x in 0..w {
                 let (dx, dy) = (x as f32 - 40.0, y as f32 - 150.0);
-                mask[y * w + x] = if dx * dx * 0.05 + dy * dy < 120.0 * 120.0 || x < 40 { 255 } else { 0 };
+                mask[y * w + x] = if dx * dx * 0.05 + dy * dy < 120.0 * 120.0 || x < 40 {
+                    255
+                } else {
+                    0
+                };
             }
         }
-        let reg = Region { bbox: Rect::new(0, 0, w as i32, h as i32), mask };
-        let p = RefineParams { radius: 6.0, feather: 2.0, contrast: 10.0, ..Default::default() };
+        let reg = Region {
+            bbox: Rect::new(0, 0, w as i32, h as i32),
+            mask,
+        };
+        let p = RefineParams {
+            radius: 6.0,
+            feather: 2.0,
+            contrast: 10.0,
+            ..Default::default()
+        };
         let canvas = reg.bbox;
         let out = refine_mask(&s, &region_reader(&reg), canvas, canvas, &p).unwrap();
         let whole: Vec<f32> = reg.mask.iter().map(|v| *v as f32 / 255.0).collect();
@@ -814,7 +1146,10 @@ mod tests {
                     _ => 0,
                 })
                 .collect();
-            let a = Region { bbox: Rect::new(0, 0, 20, 8), mask };
+            let a = Region {
+                bbox: Rect::new(0, 0, 20, 8),
+                mask,
+            };
             let d = decontaminate(&s, &a, 3.0, 100.0);
             let p = d.pixel(10, 4);
             assert!(p[0] > 0.9 && p[2] < 0.1, "{sample:?}: {p:?}");
@@ -828,7 +1163,10 @@ mod tests {
         // Sources without alpha gain an alpha channel.
         let mut g = Surface::new(PixelFormat::GRAY8);
         g.fill_rect(Rect::new(0, 0, 4, 4), &[0.5]);
-        let a = Region { bbox: Rect::new(0, 0, 2, 4), mask: vec![255; 8] };
+        let a = Region {
+            bbox: Rect::new(0, 0, 2, 4),
+            mask: vec![255; 8],
+        };
         let c = masked_copy(&g, &a);
         assert_eq!(c.format(), PixelFormat::GRAYA8);
         assert_eq!(c.pixel(3, 1)[1], 0.0);

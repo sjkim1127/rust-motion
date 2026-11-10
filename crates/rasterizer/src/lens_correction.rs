@@ -50,7 +50,9 @@ pub fn apply_lens_correction(
         let clamp_px = |x: i32, y: i32| -> (f32, f32) {
             let cx = x.clamp(0, width as i32 - 1) as u32;
             let cy = y.clamp(0, height as i32 - 1) as u32;
-            let px = src_copy.pixel(cx, cy).unwrap_or(PremultipliedColorU8::TRANSPARENT);
+            let px = src_copy
+                .pixel(cx, cy)
+                .unwrap_or(PremultipliedColorU8::TRANSPARENT);
             let a = px.alpha();
             if a == 0 {
                 return (0.0, 0.0);

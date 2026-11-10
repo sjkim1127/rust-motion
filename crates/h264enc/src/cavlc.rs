@@ -6,8 +6,8 @@ use crate::mbinfo::{MbKind, Part};
 use crate::nal::SliceType;
 use crate::syntax::{MbCode, NbCtx};
 use crate::tables::{
-    BLK4_XY, CBP_INTER_TO_CODE, CBP_INTRA_TO_CODE, COEFF_TOKEN_CDC_CODE, COEFF_TOKEN_CDC_LEN, COEFF_TOKEN_CODE, COEFF_TOKEN_LEN, RUN_BEFORE, TOTAL_ZEROS,
-    TOTAL_ZEROS_CDC,
+    BLK4_XY, CBP_INTER_TO_CODE, CBP_INTRA_TO_CODE, COEFF_TOKEN_CDC_CODE, COEFF_TOKEN_CDC_LEN,
+    COEFF_TOKEN_CODE, COEFF_TOKEN_LEN, RUN_BEFORE, TOTAL_ZEROS, TOTAL_ZEROS_CDC,
 };
 
 /// Largest level magnitude representable with level_prefix <= 15 in every suffixLength state.
@@ -33,7 +33,10 @@ pub fn write_residual(w: &mut BitWriter, coeffs: &[i16], nc: i32) -> u8 {
     }
     // coeff_token
     if nc == -1 {
-        w.write_bits(COEFF_TOKEN_CDC_CODE[total][t1] as u32, COEFF_TOKEN_CDC_LEN[total][t1] as u32);
+        w.write_bits(
+            COEFF_TOKEN_CDC_CODE[total][t1] as u32,
+            COEFF_TOKEN_CDC_LEN[total][t1] as u32,
+        );
     } else if nc >= 8 {
         if total == 0 {
             w.write_bits(3, 6);
@@ -48,7 +51,10 @@ pub fn write_residual(w: &mut BitWriter, coeffs: &[i16], nc: i32) -> u8 {
         } else {
             2
         };
-        w.write_bits(COEFF_TOKEN_CODE[t][total][t1] as u32, COEFF_TOKEN_LEN[t][total][t1] as u32);
+        w.write_bits(
+            COEFF_TOKEN_CODE[t][total][t1] as u32,
+            COEFF_TOKEN_LEN[t][total][t1] as u32,
+        );
     }
     if total == 0 {
         return 0;
@@ -89,7 +95,11 @@ pub fn write_residual(w: &mut BitWriter, coeffs: &[i16], nc: i32) -> u8 {
     }
     let total_zeros = pos[0] + 1 - total;
     if total < max {
-        let (len, code) = if nc == -1 { TOTAL_ZEROS_CDC[total - 1][total_zeros] } else { TOTAL_ZEROS[total - 1][total_zeros] };
+        let (len, code) = if nc == -1 {
+            TOTAL_ZEROS_CDC[total - 1][total_zeros]
+        } else {
+            TOTAL_ZEROS[total - 1][total_zeros]
+        };
         w.write_bits(code as u32, len as u32);
     }
     let mut zeros_left = total_zeros;
@@ -141,7 +151,10 @@ pub fn write_mb(w: &mut BitWriter, nb: &NbCtx, c: &MbCode) {
     match c.kind {
         MbKind::I4x4 | MbKind::I8x8 => w.write_ue(intra_base),
         MbKind::I16x16 => {
-            let t = 1 + c.i16_mode as u32 + 4 * (c.cbp >> 4) as u32 + if c.cbp & 15 != 0 { 12 } else { 0 };
+            let t = 1
+                + c.i16_mode as u32
+                + 4 * (c.cbp >> 4) as u32
+                + if c.cbp & 15 != 0 { 12 } else { 0 };
             w.write_ue(intra_base + t);
         }
         MbKind::PInter => w.write_ue(match c.part {
@@ -188,7 +201,11 @@ pub fn write_mb(w: &mut BitWriter, nb: &NbCtx, c: &MbCode) {
         }
     }
     if c.kind != MbKind::I16x16 {
-        let code = if c.kind.is_intra() { CBP_INTRA_TO_CODE[c.cbp as usize] } else { CBP_INTER_TO_CODE[c.cbp as usize] };
+        let code = if c.kind.is_intra() {
+            CBP_INTRA_TO_CODE[c.cbp as usize]
+        } else {
+            CBP_INTER_TO_CODE[c.cbp as usize]
+        };
         let cbp_idx = (c.cbp & 15) | ((c.cbp >> 4) << 4);
         debug_assert_eq!(cbp_idx, c.cbp);
         w.write_ue(code as u32);

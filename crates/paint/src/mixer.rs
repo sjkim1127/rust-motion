@@ -6,11 +6,11 @@
 //! weight. The reservoir amount drains per dab unless `load` is 100 %, so low Load strokes dry out.
 //! A dry brush (`wet = 0`) paints only reservoir colour; an empty, wet brush smears canvas colour.
 
-use photocraft_raster::{Surface, from_rgba, to_rgba};
+use photocraft_raster::{from_rgba, to_rgba, Surface};
 use serde::{Deserialize, Serialize};
 
-use crate::Stroke;
 use crate::retouch::{alpha_index, apply_dab_stroke, over_native};
+use crate::Stroke;
 use photocraft_geom::Rect;
 
 /// Fraction of the way the pickup colour moves towards the canvas colour per dab at 100 % Wet.
@@ -30,7 +30,13 @@ pub struct MixerSettings {
 
 impl Default for MixerSettings {
     fn default() -> Self {
-        Self { wet: 0.5, load: 0.5, mix: 0.5, flow: 1.0, sample_all_layers: false }
+        Self {
+            wet: 0.5,
+            load: 0.5,
+            mix: 0.5,
+            flow: 1.0,
+            sample_all_layers: false,
+        }
     }
 }
 
@@ -81,16 +87,28 @@ pub fn apply_mixer_stroke(
         v
     };
     let res = state.reservoir.map(native);
-    let mut amount = if res.is_some() { state.amount.clamp(0.0, 1.0) } else { 0.0 };
+    let mut amount = if res.is_some() {
+        state.amount.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     let mut pickup: Option<Vec<f32>> = state.pickup.map(native);
-    let (wet, mix, flow, load) = (m.wet.clamp(0.0, 1.0), m.mix.clamp(0.0, 1.0), m.flow.clamp(0.0, 1.0), m.load.clamp(0.0, 1.0));
+    let (wet, mix, flow, load) = (
+        m.wet.clamp(0.0, 1.0),
+        m.mix.clamp(0.0, 1.0),
+        m.flow.clamp(0.0, 1.0),
+        m.load.clamp(0.0, 1.0),
+    );
     let mut st = stroke.clone();
     st.brush.opacity = 1.0;
     let mut acc = vec![0.0f32; n];
     let mut paint = vec![0.0f32; n];
     let dmg = apply_dab_stroke(target, &st, selection, lock_transparency, 0, |work, fp| {
         // Transfer › Wetness / Mix Jitter scale the settings per dab.
-        let (wet, mix) = (wet * fp.dab.wet.clamp(0.0, 1.0), mix * fp.dab.mix.clamp(0.0, 1.0));
+        let (wet, mix) = (
+            wet * fp.dab.wet.clamp(0.0, 1.0),
+            mix * fp.dab.mix.clamp(0.0, 1.0),
+        );
         // Sample the canvas under the dab.
         acc.iter_mut().for_each(|v| *v = 0.0);
         let (mut wsum, mut asum) = (0.0f32, 0.0f32);
@@ -104,7 +122,11 @@ pub fn apply_mixer_stroke(
                 let px: Vec<f32> = match sample {
                     Some(s) => {
                         let v = s.pixel(x, y);
-                        if s.format() == fmt { v } else { from_rgba(&fmt, s.rgba(x, y)) }
+                        if s.format() == fmt {
+                            v
+                        } else {
+                            from_rgba(&fmt, s.rgba(x, y))
+                        }
                     }
                     None => work.px(x, y).to_vec(),
                 };
@@ -118,13 +140,23 @@ pub fn apply_mixer_stroke(
         }
         if asum > 1e-6 && wet > 0.0 {
             let ca = asum / wsum.max(1e-6);
-            let canvas: Vec<f32> = (0..n).map(|c| if c < nc { acc[c] / asum } else { 1.0 }).collect();
+            let canvas: Vec<f32> = (0..n)
+                .map(|c| if c < nc { acc[c] / asum } else { 1.0 })
+                .collect();
             pickup = Some(match pickup.take() {
                 None => canvas,
-                Some(p) => p.iter().zip(&canvas).map(|(p, c)| p + (c - p) * PICKUP_RATE * wet * ca).collect(),
+                Some(p) => p
+                    .iter()
+                    .zip(&canvas)
+                    .map(|(p, c)| p + (c - p) * PICKUP_RATE * wet * ca)
+                    .collect(),
             });
         }
-        let wr = if res.is_some() { amount * (1.0 - mix * wet) } else { 0.0 };
+        let wr = if res.is_some() {
+            amount * (1.0 - mix * wet)
+        } else {
+            0.0
+        };
         let wp = if pickup.is_some() { mix * wet } else { 0.0 };
         let total = wr + wp;
         if total > 1e-6 {
@@ -158,8 +190,17 @@ mod tests {
 
     fn stroke(y: f64) -> Stroke {
         Stroke {
-            brush: BrushSettings { size: 8.0, hardness: 1.0, spacing: 0.25, pressure_size: false, ..Default::default() },
-            points: vec![StrokePoint::new(4.0, y, 1.0), StrokePoint::new(196.0, y, 1.0)],
+            brush: BrushSettings {
+                size: 8.0,
+                hardness: 1.0,
+                spacing: 0.25,
+                pressure_size: false,
+                ..Default::default()
+            },
+            points: vec![
+                StrokePoint::new(4.0, y, 1.0),
+                StrokePoint::new(196.0, y, 1.0),
+            ],
         }
     }
 
@@ -169,7 +210,21 @@ mod tests {
             let mut s = Surface::new(PixelFormat::RGBA8);
             let mut st = MixerState::default();
             st.load([1.0, 0.0, 0.0, 1.0]);
-            apply_mixer_stroke(&mut s, None, &stroke(10.0), &MixerSettings { wet: 0.0, load, mix: 0.0, flow: 1.0, ..Default::default() }, &mut st, None, false);
+            apply_mixer_stroke(
+                &mut s,
+                None,
+                &stroke(10.0),
+                &MixerSettings {
+                    wet: 0.0,
+                    load,
+                    mix: 0.0,
+                    flow: 1.0,
+                    ..Default::default()
+                },
+                &mut st,
+                None,
+                false,
+            );
             let (start, end) = (s.rgba(10, 10)[3], s.rgba(190, 10)[3]);
             assert!(start > 0.95, "{start}");
             if expect_dry {
@@ -194,7 +249,13 @@ mod tests {
             &mut s,
             None,
             &stroke(10.0),
-            &MixerSettings { wet: 1.0, load: 0.3, mix: 0.9, flow: 1.0, ..Default::default() },
+            &MixerSettings {
+                wet: 1.0,
+                load: 0.3,
+                mix: 0.9,
+                flow: 1.0,
+                ..Default::default()
+            },
             &mut st,
             None,
             false,
@@ -213,7 +274,18 @@ mod tests {
     fn dry_empty_brush_paints_nothing() {
         let mut s = Surface::new(PixelFormat::RGBA8);
         let mut st = MixerState::default();
-        let dmg = apply_mixer_stroke(&mut s, None, &stroke(10.0), &MixerSettings { wet: 0.0, ..Default::default() }, &mut st, None, false);
+        let dmg = apply_mixer_stroke(
+            &mut s,
+            None,
+            &stroke(10.0),
+            &MixerSettings {
+                wet: 0.0,
+                ..Default::default()
+            },
+            &mut st,
+            None,
+            false,
+        );
         assert!(!dmg.is_empty());
         assert_eq!(s.rgba(50, 10)[3], 0.0);
     }
@@ -227,11 +299,29 @@ mod tests {
             let mut st = MixerState::default();
             st.load([1.0, 0.0, 0.0, 1.0]);
             let mut k = stroke(10.0);
-            k.brush.transfer = crate::Transfer { enabled: true, wetness: crate::Dynamic::controlled(crate::Control::PenPressure), ..Default::default() };
+            k.brush.transfer = crate::Transfer {
+                enabled: true,
+                wetness: crate::Dynamic::controlled(crate::Control::PenPressure),
+                ..Default::default()
+            };
             for p in &mut k.points {
                 p.pressure = pressure;
             }
-            apply_mixer_stroke(&mut s, None, &k, &MixerSettings { wet: 1.0, load: 1.0, mix: 1.0, flow: 1.0, ..Default::default() }, &mut st, None, false);
+            apply_mixer_stroke(
+                &mut s,
+                None,
+                &k,
+                &MixerSettings {
+                    wet: 1.0,
+                    load: 1.0,
+                    mix: 1.0,
+                    flow: 1.0,
+                    ..Default::default()
+                },
+                &mut st,
+                None,
+                false,
+            );
             st.pickup
         };
         assert!(run(0.0).is_none());

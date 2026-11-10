@@ -4,14 +4,17 @@
 use std::time::Instant;
 
 use photocraft_algo::matting::{self, RefineParams};
-use photocraft_algo::segment::{Rng, SurfaceSampler, focus, grabcut, quick, subject};
-use photocraft_algo::selection::{Region, SelectionMode, combine_region};
+use photocraft_algo::segment::{focus, grabcut, quick, subject, Rng, SurfaceSampler};
+use photocraft_algo::selection::{combine_region, Region, SelectionMode};
 use photocraft_color::PixelFormat;
 use photocraft_geom::Rect;
 use photocraft_raster::Surface;
 
 fn main() {
-    let n: i32 = std::env::args().nth(1).and_then(|v| v.parse().ok()).unwrap_or(6016);
+    let n: i32 = std::env::args()
+        .nth(1)
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(6016);
     let (c, rad) = (n as f32 / 2.0, n as f32 / 3.0);
     let canvas = Rect::new(0, 0, n, n);
     let t = Instant::now();
@@ -63,8 +66,14 @@ fn main() {
     for size in [30.0f32, 300.0] {
         let x = c + rad - size * 2.0;
         let t = Instant::now();
-        let r = quick::quick_select(&sampler, canvas, &[(x, c - size), (x, c + size)], size).expect("region");
-        println!("quick selection stroke (brush {size} px): {:.2?}  (region {}x{})", t.elapsed(), r.bbox.width(), r.bbox.height());
+        let r = quick::quick_select(&sampler, canvas, &[(x, c - size), (x, c + size)], size)
+            .expect("region");
+        println!(
+            "quick selection stroke (brush {size} px): {:.2?}  (region {}x{})",
+            t.elapsed(),
+            r.bbox.width(),
+            r.bbox.height()
+        );
     }
 
     // Object selection (rectangle around the disc).
@@ -72,26 +81,61 @@ fn main() {
     let rect = Rect::new(c as i32 - m, c as i32 - m, c as i32 + m, c as i32 + m);
     let t = Instant::now();
     let obj = grabcut::object_select(&sampler, canvas, rect, 160_000).expect("object");
-    println!("object selection: {:.2?}  IoU {:.4}", t.elapsed(), truth_iou(&obj));
+    println!(
+        "object selection: {:.2?}  IoU {:.4}",
+        t.elapsed(),
+        truth_iou(&obj)
+    );
 
     // Select subject.
     let t = Instant::now();
     let subj = subject::select_subject(&sampler, canvas).expect("subject");
-    println!("select subject: {:.2?}  IoU {:.4}", t.elapsed(), truth_iou(&subj));
+    println!(
+        "select subject: {:.2?}  IoU {:.4}",
+        t.elapsed(),
+        truth_iou(&subj)
+    );
 
     // Refine edge on a 20 px band (selection = the object result as a surface).
     let sel = combine_region(None, Some(&obj), SelectionMode::Replace).expect("selection");
     let content = sel.content_bounds();
-    let p = RefineParams { radius: 20.0, smooth: 10.0, feather: 1.0, contrast: 10.0, ..Default::default() };
+    let p = RefineParams {
+        radius: 20.0,
+        smooth: 10.0,
+        feather: 1.0,
+        contrast: 10.0,
+        ..Default::default()
+    };
     let t = Instant::now();
-    let refined = matting::refine_mask(&sampler, &matting::surface_reader(&sel), content, canvas, &p).expect("refined");
+    let refined = matting::refine_mask(
+        &sampler,
+        &matting::surface_reader(&sel),
+        content,
+        canvas,
+        &p,
+    )
+    .expect("refined");
     println!("refine edge (radius 20): {:.2?}", t.elapsed());
     let t = Instant::now();
-    let _ = matting::refine_mask(&sampler, &matting::surface_reader(&sel), content, canvas, &RefineParams { smart_radius: true, ..p }).expect("refined");
+    let _ = matting::refine_mask(
+        &sampler,
+        &matting::surface_reader(&sel),
+        content,
+        canvas,
+        &RefineParams {
+            smart_radius: true,
+            ..p
+        },
+    )
+    .expect("refined");
     println!("refine edge (radius 20, smart): {:.2?}", t.elapsed());
     let t = Instant::now();
     let dec = matting::decontaminate(&s, &refined, 20.0, 100.0);
-    println!("decontaminate: {:.2?}  ({} tiles)", t.elapsed(), dec.tile_count());
+    println!(
+        "decontaminate: {:.2?}  ({} tiles)",
+        t.elapsed(),
+        dec.tile_count()
+    );
 
     // Focus area.
     let t = Instant::now();

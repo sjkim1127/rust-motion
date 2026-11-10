@@ -1,6 +1,6 @@
 //! Merged (composite) image data section.
 
-use crate::compression::{Compression, PlaneLayout, decode_planes, encode_planes, validate_planes};
+use crate::compression::{decode_planes, encode_planes, validate_planes, Compression, PlaneLayout};
 use crate::error::Result;
 use crate::header::Header;
 use crate::io::Reader;
@@ -31,7 +31,10 @@ impl ImageData {
 
     /// Encodes planar data (`channels × height × row_bytes`).
     pub fn encode(compression: Compression, decoded: &[u8], header: &Header) -> Result<Self> {
-        Ok(ImageData { compression, data: encode_planes(compression, decoded, &Self::layout(header))? })
+        Ok(ImageData {
+            compression,
+            data: encode_planes(compression, decoded, &Self::layout(header))?,
+        })
     }
 
     /// Decodes all channels into planar big-endian samples.

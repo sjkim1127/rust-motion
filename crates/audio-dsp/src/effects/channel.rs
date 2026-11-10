@@ -1,6 +1,8 @@
 //! Gain and channel utilities: amplify, channel volume, balance/pan, invert, swap, fill.
 
-use crate::{AudioEffect, ParamSpec, ParamValues, Smoothed, Unit, block_len, db_to_gain, param_plumbing};
+use crate::{
+    block_len, db_to_gain, param_plumbing, AudioEffect, ParamSpec, ParamValues, Smoothed, Unit,
+};
 use std::f32::consts::FRAC_PI_2;
 
 const RAMP_MS: f32 = 20.0;
@@ -12,16 +14,27 @@ pub struct Amplify {
 }
 
 impl Amplify {
-    pub const PARAMS: &'static [ParamSpec] = &[ParamSpec::new("gain", "Gain", -96.0, 24.0, 0.0, Unit::Decibels)];
+    pub const PARAMS: &'static [ParamSpec] = &[ParamSpec::new(
+        "gain",
+        "Gain",
+        -96.0,
+        24.0,
+        0.0,
+        Unit::Decibels,
+    )];
 
     pub fn new(sample_rate: f32, _channels: usize) -> Self {
-        let mut s = Amplify { pv: ParamValues::new(Self::PARAMS), gain: Smoothed::with_ms(1.0, sample_rate, RAMP_MS) };
+        let mut s = Amplify {
+            pv: ParamValues::new(Self::PARAMS),
+            gain: Smoothed::with_ms(1.0, sample_rate, RAMP_MS),
+        };
         s.apply_params(true);
         s
     }
     fn apply_params(&mut self, snap: bool) {
         let db = self.pv.v("gain");
-        self.gain.set(if db <= -96.0 { 0.0 } else { db_to_gain(db) });
+        self.gain
+            .set(if db <= -96.0 { 0.0 } else { db_to_gain(db) });
         if snap {
             self.gain.snap();
         }
@@ -50,7 +63,14 @@ pub struct ChannelVolume {
     gains: [Smoothed; 6],
 }
 
-const CHANNEL_IDS: [&str; 6] = ["left", "right", "center", "lfe", "left_surround", "right_surround"];
+const CHANNEL_IDS: [&str; 6] = [
+    "left",
+    "right",
+    "center",
+    "lfe",
+    "left_surround",
+    "right_surround",
+];
 
 impl ChannelVolume {
     pub const PARAMS: &'static [ParamSpec] = &[
@@ -58,12 +78,29 @@ impl ChannelVolume {
         ParamSpec::new("right", "Right", -96.0, 24.0, 0.0, Unit::Decibels),
         ParamSpec::new("center", "Center", -96.0, 24.0, 0.0, Unit::Decibels),
         ParamSpec::new("lfe", "LFE", -96.0, 24.0, 0.0, Unit::Decibels),
-        ParamSpec::new("left_surround", "Left Surround", -96.0, 24.0, 0.0, Unit::Decibels),
-        ParamSpec::new("right_surround", "Right Surround", -96.0, 24.0, 0.0, Unit::Decibels),
+        ParamSpec::new(
+            "left_surround",
+            "Left Surround",
+            -96.0,
+            24.0,
+            0.0,
+            Unit::Decibels,
+        ),
+        ParamSpec::new(
+            "right_surround",
+            "Right Surround",
+            -96.0,
+            24.0,
+            0.0,
+            Unit::Decibels,
+        ),
     ];
 
     pub fn new(sample_rate: f32, _channels: usize) -> Self {
-        let mut s = ChannelVolume { pv: ParamValues::new(Self::PARAMS), gains: [Smoothed::with_ms(1.0, sample_rate, RAMP_MS); 6] };
+        let mut s = ChannelVolume {
+            pv: ParamValues::new(Self::PARAMS),
+            gains: [Smoothed::with_ms(1.0, sample_rate, RAMP_MS); 6],
+        };
         s.apply_params(true);
         s
     }
@@ -106,7 +143,10 @@ pub fn constant_power_pan(p: f32) -> (f32, f32) {
 /// cosine (constant-power) law, the other side stays at unity. Centre = unity both sides.
 pub fn balance_gains(p: f32) -> (f32, f32) {
     let p = p.clamp(-1.0, 1.0);
-    ((p.max(0.0) * FRAC_PI_2).cos(), ((-p).max(0.0) * FRAC_PI_2).cos())
+    (
+        (p.max(0.0) * FRAC_PI_2).cos(),
+        ((-p).max(0.0) * FRAC_PI_2).cos(),
+    )
 }
 
 /// Stereo balance / pan. "Balance" attenuates one side of a stereo source; "Pan" sums to mono
@@ -121,8 +161,10 @@ pub struct Balance {
 }
 
 impl Balance {
-    pub const PARAMS: &'static [ParamSpec] =
-        &[ParamSpec::new("balance", "Balance", -100.0, 100.0, 0.0, Unit::Pan), ParamSpec::choice("mode", "Mode", &["Balance", "Pan (constant power)"], 0)];
+    pub const PARAMS: &'static [ParamSpec] = &[
+        ParamSpec::new("balance", "Balance", -100.0, 100.0, 0.0, Unit::Pan),
+        ParamSpec::choice("mode", "Mode", &["Balance", "Pan (constant power)"], 0),
+    ];
 
     pub fn new(sample_rate: f32, _channels: usize) -> Self {
         let mut s = Balance {
@@ -188,9 +230,16 @@ pub struct Invert {
 }
 
 impl Invert {
-    pub const PARAMS: &'static [ParamSpec] = &[ParamSpec::choice("channels", "Channels", &["All", "Left", "Right"], 0)];
+    pub const PARAMS: &'static [ParamSpec] = &[ParamSpec::choice(
+        "channels",
+        "Channels",
+        &["All", "Left", "Right"],
+        0,
+    )];
     pub fn new(_sample_rate: f32, _channels: usize) -> Self {
-        Invert { pv: ParamValues::new(Self::PARAMS) }
+        Invert {
+            pv: ParamValues::new(Self::PARAMS),
+        }
     }
     fn apply_params(&mut self, _snap: bool) {}
 }
@@ -229,7 +278,10 @@ pub struct Route {
 impl Route {
     pub const PARAMS: &'static [ParamSpec] = &[];
     pub fn new(kind: Routing) -> Self {
-        Route { pv: ParamValues::new(Self::PARAMS), kind }
+        Route {
+            pv: ParamValues::new(Self::PARAMS),
+            kind,
+        }
     }
     fn apply_params(&mut self, _snap: bool) {}
 }

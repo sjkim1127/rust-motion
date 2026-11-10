@@ -23,7 +23,13 @@ pub struct StreamResampler {
 impl StreamResampler {
     /// Rates of zero are treated as 1 Hz rather than dividing by zero.
     pub fn new(from: u32, to: u32) -> Self {
-        Self { from: from.max(1), to: to.max(1), held_start: 0, held: Vec::new(), next_out: None }
+        Self {
+            from: from.max(1),
+            to: to.max(1),
+            held_start: 0,
+            held: Vec::new(),
+            next_out: None,
+        }
     }
 
     pub fn rates(&self) -> (u32, u32) {
@@ -34,13 +40,21 @@ impl StreamResampler {
     fn source_index(&self, out: i64) -> (i64, f32) {
         let p = out as i128 * self.from as i128;
         let to = self.to as i128;
-        (p.div_euclid(to) as i64, (p.rem_euclid(to) as f64 / to as f64) as f32)
+        (
+            p.div_euclid(to) as i64,
+            (p.rem_euclid(to) as f64 / to as f64) as f32,
+        )
     }
 
     /// Output frames `[out, out + n)`, planar. `pull(start, frames)` returns source frames
     /// `[start, start + frames)`, planar (missing samples read as silence). A block that does not
     /// continue the previous one (a seek) starts the stream afresh.
-    pub fn process(&mut self, out: i64, n: usize, mut pull: impl FnMut(i64, usize) -> Vec<Vec<f32>>) -> Vec<Vec<f32>> {
+    pub fn process(
+        &mut self,
+        out: i64,
+        n: usize,
+        mut pull: impl FnMut(i64, usize) -> Vec<Vec<f32>>,
+    ) -> Vec<Vec<f32>> {
         if n == 0 {
             return vec![Vec::new(); self.held.len().max(1)];
         }
@@ -69,7 +83,11 @@ impl StreamResampler {
             // held starts at first - 1, so the earlier frame is always held
             let k = usize::try_from(s - self.held_start).unwrap_or(0);
             for (d, h) in dst.iter_mut().zip(&self.held) {
-                let a = k.checked_sub(1).and_then(|j| h.get(j)).copied().unwrap_or(0.0);
+                let a = k
+                    .checked_sub(1)
+                    .and_then(|j| h.get(j))
+                    .copied()
+                    .unwrap_or(0.0);
                 let b = h.get(k).copied().unwrap_or(0.0);
                 if let Some(x) = d.get_mut(i) {
                     *x = a + (b - a) * frac;
@@ -78,7 +96,8 @@ impl StreamResampler {
         }
         // keep what the next block can still read: from its first frame - 1 on
         let (next_first, _) = self.source_index(out.saturating_add(n as i64));
-        let drop = (next_first - 1 - self.held_start).clamp(0, self.held.first().map_or(0, Vec::len) as i64) as usize;
+        let drop = (next_first - 1 - self.held_start)
+            .clamp(0, self.held.first().map_or(0, Vec::len) as i64) as usize;
         for h in &mut self.held {
             h.drain(..drop);
         }
@@ -93,15 +112,29 @@ mod tests {
     use super::*;
 
     /// A sine at `hz`, sampled at `rate`, from absolute frame `start`; logs every pull.
-    fn sine(hz: f64, rate: u32, pulls: &mut Vec<(i64, usize)>) -> impl FnMut(i64, usize) -> Vec<Vec<f32>> + '_ {
+    fn sine(
+        hz: f64,
+        rate: u32,
+        pulls: &mut Vec<(i64, usize)>,
+    ) -> impl FnMut(i64, usize) -> Vec<Vec<f32>> + '_ {
         move |start, frames| {
             pulls.push((start, frames));
-            let ch: Vec<f32> = (0..frames).map(|i| (2.0 * std::f64::consts::PI * hz * (start + i as i64) as f64 / rate as f64).sin() as f32).collect();
+            let ch: Vec<f32> = (0..frames)
+                .map(|i| {
+                    (2.0 * std::f64::consts::PI * hz * (start + i as i64) as f64 / rate as f64)
+                        .sin() as f32
+                })
+                .collect();
             vec![ch.clone(), ch]
         }
     }
 
-    fn convert(from: u32, to: u32, blocks: &[usize], total: usize) -> (Vec<f32>, Vec<(i64, usize)>) {
+    fn convert(
+        from: u32,
+        to: u32,
+        blocks: &[usize],
+        total: usize,
+    ) -> (Vec<f32>, Vec<(i64, usize)>) {
         let mut r = StreamResampler::new(from, to);
         let mut pulls = Vec::new();
         let mut out = Vec::new();
@@ -121,7 +154,12 @@ mod tests {
 
     #[test]
     fn output_is_the_same_however_the_stream_is_cut() {
-        for (from, to) in [(48_000, 44_100), (44_100, 48_000), (48_000, 96_000), (96_000, 48_000)] {
+        for (from, to) in [
+            (48_000, 44_100),
+            (44_100, 48_000),
+            (48_000, 96_000),
+            (96_000, 48_000),
+        ] {
             let (whole, _) = convert(from, to, &[20_000], 20_000);
             for blocks in [&[512][..], &[333], &[1, 7, 512, 64]] {
                 let (cut, _) = convert(from, to, blocks, 20_000);
@@ -148,7 +186,13 @@ mod tests {
         for (from, to) in [(48_000, 44_100), (44_100, 48_000)] {
             let (_, pulls) = convert(from, to, &[512, 333], 20_000);
             for w in pulls.windows(2) {
-                assert_eq!(w[0].0 + w[0].1 as i64, w[1].0, "{from}→{to}: {:?} then {:?}", w[0], w[1]);
+                assert_eq!(
+                    w[0].0 + w[0].1 as i64,
+                    w[1].0,
+                    "{from}→{to}: {:?} then {:?}",
+                    w[0],
+                    w[1]
+                );
             }
         }
     }
@@ -159,7 +203,10 @@ mod tests {
         let mut pulls = Vec::new();
         let _ = r.process(0, 512, sine(1000.0, 48_000, &mut pulls));
         let _ = r.process(1_000_000, 512, sine(1000.0, 48_000, &mut pulls));
-        assert_eq!(pulls.last().map(|p| p.0), Some(1_000_000 * 48_000 / 44_100 - 1));
+        assert_eq!(
+            pulls.last().map(|p| p.0),
+            Some(1_000_000 * 48_000 / 44_100 - 1)
+        );
         // a mixer returning too few channels and samples, and zero rates
         let mut r = StreamResampler::new(0, 0);
         let b = r.process(5, 64, |_, _| vec![vec![1.0; 3]]);

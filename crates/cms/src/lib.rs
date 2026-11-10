@@ -13,7 +13,14 @@
 //! CIE 15, and Adobe's published black point compensation paper. This crate depends on no
 //! other workspace crate.
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 pub mod builtin;
 pub mod clut;
@@ -34,7 +41,7 @@ pub use curve::Curve;
 pub use gamut::GamutCheck;
 pub use lut3d::Lut3d;
 pub use profile::{ColorSpace, Pcs, Profile, ProfileClass};
-pub use transform::{SampleKind, Transform, TransformOptions, black_point, cached};
+pub use transform::{black_point, cached, SampleKind, Transform, TransformOptions};
 
 /// ICC rendering intent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
@@ -47,7 +54,12 @@ pub enum Intent {
 }
 
 impl Intent {
-    pub const ALL: [Intent; 4] = [Intent::Perceptual, Intent::RelativeColorimetric, Intent::Saturation, Intent::AbsoluteColorimetric];
+    pub const ALL: [Intent; 4] = [
+        Intent::Perceptual,
+        Intent::RelativeColorimetric,
+        Intent::Saturation,
+        Intent::AbsoluteColorimetric,
+    ];
 
     pub fn from_u32(v: u32) -> Option<Intent> {
         Some(match v {
@@ -62,10 +74,16 @@ impl Intent {
     /// Parses `perceptual`, `relative`/`relativeColorimetric`, `saturation`,
     /// `absolute`/`absoluteColorimetric` (case-insensitive).
     pub fn parse(s: &str) -> Option<Intent> {
-        let n: String = s.to_ascii_lowercase().chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+        let n: String = s
+            .to_ascii_lowercase()
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect();
         Some(match n.as_str() {
             "perceptual" | "0" => Intent::Perceptual,
-            "relative" | "relativecolorimetric" | "colorimetric" | "1" => Intent::RelativeColorimetric,
+            "relative" | "relativecolorimetric" | "colorimetric" | "1" => {
+                Intent::RelativeColorimetric
+            }
             "saturation" | "2" => Intent::Saturation,
             "absolute" | "absolutecolorimetric" | "3" => Intent::AbsoluteColorimetric,
             _ => return None,

@@ -75,7 +75,10 @@ pub fn parse(data: &[u8]) -> Result<Vec<ShcContour>> {
     let mut r = Reader::new(data);
     let sig = r.array::<4>()?;
     if &sig != b"8BFS" {
-        return Err(PsdError::InvalidSignature { expected: "8BFS", found: sig });
+        return Err(PsdError::InvalidSignature {
+            expected: "8BFS",
+            found: sig,
+        });
     }
     let version = r.u16()?;
     if version != 1 {
@@ -104,7 +107,11 @@ pub fn parse(data: &[u8]) -> Result<Vec<ShcContour>> {
         for _ in 0..n {
             let output = f32::from(r.u16()?).min(255.0);
             let input = f32::from(r.u16()?).min(255.0);
-            points.push(ShcPoint { input, output, continuous: true });
+            points.push(ShcPoint {
+                input,
+                output,
+                continuous: true,
+            });
         }
         if v == 2 {
             for p in &mut points {
@@ -122,14 +129,19 @@ pub fn parse(data: &[u8]) -> Result<Vec<ShcContour>> {
 /// has more than [`MAX_POINTS`] points or there are more than [`MAX_CONTOURS`].
 pub fn write(contours: &[ShcContour]) -> Result<Vec<u8>> {
     if contours.len() > MAX_CONTOURS {
-        return Err(PsdError::LimitExceeded("too many contours for an .shc file"));
+        return Err(PsdError::LimitExceeded(
+            "too many contours for an .shc file",
+        ));
     }
     let mut out = Vec::with_capacity(10 + contours.len() * 64);
     out.put(b"8BFS");
     out.put_u16(1);
     out.put_u32(contours.len() as u32);
     for c in contours {
-        let n = u16::try_from(c.points.len()).ok().filter(|n| usize::from(*n) <= MAX_POINTS).ok_or(PsdError::LimitExceeded("too many points in a contour"))?;
+        let n = u16::try_from(c.points.len())
+            .ok()
+            .filter(|n| usize::from(*n) <= MAX_POINTS)
+            .ok_or(PsdError::LimitExceeded("too many points in a contour"))?;
         out.put_u32(2);
         // Capped on a character boundary, so a surrogate pair is never split.
         let units = crate::io::utf16_units(&c.name, MAX_NAME_UNITS);
@@ -139,7 +151,13 @@ pub fn write(contours: &[ShcContour]) -> Result<Vec<u8>> {
         }
         out.put_u16(0);
         out.put_u16(n);
-        let level = |v: f32| if v.is_finite() { v.round().clamp(0.0, 255.0) as u16 } else { 0 };
+        let level = |v: f32| {
+            if v.is_finite() {
+                v.round().clamp(0.0, 255.0) as u16
+            } else {
+                0
+            }
+        };
         for p in &c.points {
             out.put_u16(level(p.output));
             out.put_u16(level(p.input));
@@ -162,9 +180,21 @@ mod tests {
         let cone = ShcContour {
             name: "Cone".into(),
             points: vec![
-                ShcPoint { input: 0.0, output: 0.0, continuous: true },
-                ShcPoint { input: 128.0, output: 255.0, continuous: false },
-                ShcPoint { input: 255.0, output: 0.0, continuous: true },
+                ShcPoint {
+                    input: 0.0,
+                    output: 0.0,
+                    continuous: true,
+                },
+                ShcPoint {
+                    input: 128.0,
+                    output: 255.0,
+                    continuous: false,
+                },
+                ShcPoint {
+                    input: 255.0,
+                    output: 0.0,
+                    continuous: true,
+                },
             ],
         };
         let bytes = write(std::slice::from_ref(&cone)).unwrap();
@@ -196,18 +226,37 @@ mod tests {
         }
         assert!(parse(b"8BFX\0\x01\0\0\0\0").is_err());
         assert!(parse(b"8BFS\0\x01\xff\xff\xff\xff").is_err());
-        let many = ShcContour { name: String::new(), points: vec![ShcPoint { input: 0.0, output: 0.0, continuous: true }; MAX_POINTS + 1] };
+        let many = ShcContour {
+            name: String::new(),
+            points: vec![
+                ShcPoint {
+                    input: 0.0,
+                    output: 0.0,
+                    continuous: true
+                };
+                MAX_POINTS + 1
+            ],
+        };
         assert!(write(&[many]).is_err());
     }
 
     fn pts(n: usize) -> Vec<ShcPoint> {
-        (0..n).map(|i| ShcPoint { input: (i * 10) as f32, output: (i * 20) as f32, continuous: i % 2 == 0 }).collect()
+        (0..n)
+            .map(|i| ShcPoint {
+                input: (i * 10) as f32,
+                output: (i * 20) as f32,
+                continuous: i % 2 == 0,
+            })
+            .collect()
     }
 
     #[test]
     fn shc_name_cap_never_splits_a_surrogate_pair() {
         let name = format!("{}\u{1F600}", "a".repeat(MAX_NAME_UNITS - 1));
-        let c = ShcContour { name, points: pts(2) };
+        let c = ShcContour {
+            name,
+            points: pts(2),
+        };
         let back = parse(&write(&[c]).unwrap()).unwrap();
         assert_eq!(back[0].name, "a".repeat(MAX_NAME_UNITS - 1));
     }
@@ -216,9 +265,16 @@ mod tests {
     fn shc_names_at_and_over_the_cap_keep_the_stream_in_sync() {
         for len in [MAX_NAME_UNITS, MAX_NAME_UNITS + 1, MAX_NAME_UNITS * 3] {
             for first_points in [0, 3] {
-                let long = ShcContour { name: "b".repeat(len), points: pts(first_points) };
-                let next = ShcContour { name: "Next".into(), points: pts(4) };
-                let back = parse(&write(&[long, next.clone()]).unwrap()).unwrap_or_else(|e| panic!("len {len}, points {first_points}: {e}"));
+                let long = ShcContour {
+                    name: "b".repeat(len),
+                    points: pts(first_points),
+                };
+                let next = ShcContour {
+                    name: "Next".into(),
+                    points: pts(4),
+                };
+                let back = parse(&write(&[long, next.clone()]).unwrap())
+                    .unwrap_or_else(|e| panic!("len {len}, points {first_points}: {e}"));
                 assert_eq!(back.len(), 2);
                 assert_eq!(back[0].name, "b".repeat(len.min(MAX_NAME_UNITS)));
                 assert_eq!(back[0].points.len(), first_points);

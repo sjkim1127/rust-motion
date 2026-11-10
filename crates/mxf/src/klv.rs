@@ -14,7 +14,11 @@ impl Ul {
     }
     /// Compare ignoring byte 7 (the registry version, which varies between writers).
     pub fn matches(&self, other: &[u8; 16]) -> bool {
-        self.0.iter().zip(other).enumerate().all(|(i, (a, b))| i == 7 || a == b)
+        self.0
+            .iter()
+            .zip(other)
+            .enumerate()
+            .all(|(i, (a, b))| i == 7 || a == b)
     }
     /// Bytes 8.. start with `prefix` (registry-independent comparison of the item designator).
     pub fn item_starts_with(&self, prefix: &[u8]) -> bool {
@@ -55,13 +59,19 @@ impl Rational {
         self.num > 0 && self.den > 0
     }
     pub fn as_f64(&self) -> f64 {
-        if self.den == 0 { 0.0 } else { self.num as f64 / self.den as f64 }
+        if self.den == 0 {
+            0.0
+        } else {
+            self.num as f64 / self.den as f64
+        }
     }
 }
 
 /// Partition pack keys: 06 0E 2B 34 02 05 01 01 0D 01 02 01 01 kk ss 00 (kk: 02 header, 03 body,
 /// 04 footer; ss: status).
-pub const PARTITION_PREFIX: [u8; 13] = [0x06, 0x0E, 0x2B, 0x34, 0x02, 0x05, 0x01, 0x01, 0x0D, 0x01, 0x02, 0x01, 0x01];
+pub const PARTITION_PREFIX: [u8; 13] = [
+    0x06, 0x0E, 0x2B, 0x34, 0x02, 0x05, 0x01, 0x01, 0x0D, 0x01, 0x02, 0x01, 0x01,
+];
 
 /// The kinds of KLV packets the demuxer distinguishes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,14 +98,19 @@ pub fn classify(k: &Ul) -> KeyClass {
         return KeyClass::Other;
     }
     if b[..13] == PARTITION_PREFIX && (2..=4).contains(&b[13]) && b[15] == 0 {
-        return KeyClass::Partition { kind: b[13], status: b[14] };
+        return KeyClass::Partition {
+            kind: b[13],
+            status: b[14],
+        };
     }
     // 06 0E 2B 34 02 05 01 01 0D 01 02 01 01 05 01 00
-    if b[4] == 0x02 && b[5] == 0x05 && b[8..16] == [0x0D, 0x01, 0x02, 0x01, 0x01, 0x05, 0x01, 0x00] {
+    if b[4] == 0x02 && b[5] == 0x05 && b[8..16] == [0x0D, 0x01, 0x02, 0x01, 0x01, 0x05, 0x01, 0x00]
+    {
         return KeyClass::Primer;
     }
     // 06 0E 2B 34 02 05 01 01 0D 01 02 01 01 11 01 00
-    if b[4] == 0x02 && b[5] == 0x05 && b[8..16] == [0x0D, 0x01, 0x02, 0x01, 0x01, 0x11, 0x01, 0x00] {
+    if b[4] == 0x02 && b[5] == 0x05 && b[8..16] == [0x0D, 0x01, 0x02, 0x01, 0x01, 0x11, 0x01, 0x00]
+    {
         return KeyClass::RandomIndexPack;
     }
     // 06 0E 2B 34 02 53 01 01 0D 01 02 01 01 10 01 00 (also seen with 2-byte BER lengths: 02 13 / 02 33)
@@ -127,7 +142,10 @@ pub fn ber_length(b: &[u8]) -> Option<(u64, usize)> {
     if n == 0 || n > 8 || b.len() < 1 + n {
         return None;
     }
-    Some((b[1..=n].iter().fold(0u64, |a, &x| (a << 8) | x as u64), 1 + n))
+    Some((
+        b[1..=n].iter().fold(0u64, |a, &x| (a << 8) | x as u64),
+        1 + n,
+    ))
 }
 
 /// Offset of the header partition pack key in the run-in (ST 377-1: at most 65 535 bytes).
@@ -165,10 +183,12 @@ impl<'a> Cur<'a> {
         self.bytes(2).map(|b| u16::from_be_bytes([b[0], b[1]]))
     }
     pub fn u32(&mut self) -> Option<u32> {
-        self.bytes(4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+        self.bytes(4)
+            .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
     }
     pub fn u64(&mut self) -> Option<u64> {
-        self.bytes(8).map(|b| u64::from_be_bytes(b.try_into().unwrap_or([0; 8])))
+        self.bytes(8)
+            .map(|b| u64::from_be_bytes(b.try_into().unwrap_or([0; 8])))
     }
     pub fn ul(&mut self) -> Option<Ul> {
         self.bytes(16).map(|b| Ul(b.try_into().unwrap_or([0; 16])))
@@ -193,7 +213,10 @@ pub fn rational_of(v: &[u8]) -> Option<Rational> {
     if v.len() < 8 {
         return None;
     }
-    Some(Rational::new(i32::from_be_bytes([v[0], v[1], v[2], v[3]]), i32::from_be_bytes([v[4], v[5], v[6], v[7]])))
+    Some(Rational::new(
+        i32::from_be_bytes([v[0], v[1], v[2], v[3]]),
+        i32::from_be_bytes([v[4], v[5], v[6], v[7]]),
+    ))
 }
 
 /// A UL property.
@@ -204,7 +227,9 @@ pub fn ul_of(v: &[u8]) -> Option<Ul> {
 /// A batch / array property: count (u32), item size (u32), items.
 pub fn batch_of(v: &[u8]) -> Vec<&[u8]> {
     let mut c = Cur::new(v);
-    let (Some(n), Some(size)) = (c.u32(), c.u32()) else { return Vec::new() };
+    let (Some(n), Some(size)) = (c.u32(), c.u32()) else {
+        return Vec::new();
+    };
     let size = size as usize;
     if size == 0 {
         return Vec::new();
@@ -221,7 +246,13 @@ pub fn batch_of(v: &[u8]) -> Vec<&[u8]> {
 
 /// A UTF-16BE string property (trailing NULs removed).
 pub fn utf16_of(v: &[u8]) -> String {
-    let units: Vec<u16> = v.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
+    let units: Vec<u16> = v
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_be_bytes([c[0], c[1]]))
+        .take_while(|&u| u != 0)
+        .collect();
     String::from_utf16_lossy(&units)
 }
 

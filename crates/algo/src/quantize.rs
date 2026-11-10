@@ -161,7 +161,16 @@ fn forced_colors(f: Forced) -> Vec<Rgb8> {
     match f {
         Forced::None => Vec::new(),
         Forced::BlackWhite => vec![[0, 0, 0], [255, 255, 255]],
-        Forced::Primaries => vec![[0, 0, 0], [255, 255, 255], [255, 0, 0], [0, 255, 0], [0, 0, 255], [0, 255, 255], [255, 0, 255], [255, 255, 0]],
+        Forced::Primaries => vec![
+            [0, 0, 0],
+            [255, 255, 255],
+            [255, 0, 0],
+            [0, 255, 0],
+            [0, 0, 255],
+            [0, 255, 255],
+            [255, 0, 255],
+            [255, 255, 0],
+        ],
         Forced::Web => web_palette(),
     }
 }
@@ -192,7 +201,9 @@ fn median_cut(pts: &[([f32; 3], u32)], n: usize) -> Vec<[f32; 3]> {
             .map(|(i, b)| {
                 let mut best = (0usize, -1.0f32);
                 for a in 0..3 {
-                    let (lo, hi) = b.iter().fold((f32::MAX, f32::MIN), |(lo, hi), p| (lo.min(p.0[a]), hi.max(p.0[a])));
+                    let (lo, hi) = b.iter().fold((f32::MAX, f32::MIN), |(lo, hi), p| {
+                        (lo.min(p.0[a]), hi.max(p.0[a]))
+                    });
                     if hi - lo > best.1 {
                         best = (a, hi - lo);
                     }
@@ -200,7 +211,10 @@ fn median_cut(pts: &[([f32; 3], u32)], n: usize) -> Vec<[f32; 3]> {
                 let w: f32 = b.iter().map(|p| p.1 as f32).sum();
                 (i, best.0, best.1 * w.sqrt())
             })
-            .fold((usize::MAX, 0, -1.0f32), |acc, x| if x.2 > acc.2 { x } else { acc });
+            .fold(
+                (usize::MAX, 0, -1.0f32),
+                |acc, x| if x.2 > acc.2 { x } else { acc },
+            );
         if bi == usize::MAX || score <= 0.0 {
             break;
         }
@@ -224,7 +238,12 @@ fn median_cut(pts: &[([f32; 3], u32)], n: usize) -> Vec<[f32; 3]> {
         .iter()
         .map(|b| {
             let w: f64 = b.iter().map(|p| f64::from(p.1)).sum();
-            std::array::from_fn(|a| (b.iter().map(|p| f64::from(p.0[a]) * f64::from(p.1)).sum::<f64>() / w) as f32)
+            std::array::from_fn(|a| {
+                (b.iter()
+                    .map(|p| f64::from(p.0[a]) * f64::from(p.1))
+                    .sum::<f64>()
+                    / w) as f32
+            })
         })
         .collect()
 }
@@ -260,13 +279,23 @@ fn lab_to_rgb8(lab: [f32; 3]) -> Rgb8 {
 
 /// Builds the palette for `px`. `colors` is the requested count (2..=256) for the computed
 /// kinds; forced colours are included first and count toward it.
-pub fn build_palette(px: &[[f32; 4]], kind: PaletteKind, colors: usize, forced: Forced) -> Result<Vec<Rgb8>, String> {
+pub fn build_palette(
+    px: &[[f32; 4]],
+    kind: PaletteKind,
+    colors: usize,
+    forced: Forced,
+) -> Result<Vec<Rgb8>, String> {
     let colors = colors.clamp(2, 256);
     let mut pal = forced_colors(forced);
     let room = colors.saturating_sub(pal.len());
     // Fixed palettes, or computed palettes already filled by forced colours, need no scan.
     // Exact still counts every colour to enforce its 256-colour limit.
-    let hist = if kind == PaletteKind::Exact || (room > 0 && matches!(kind, PaletteKind::Adaptive | PaletteKind::Perceptual | PaletteKind::Selective)) {
+    let hist = if kind == PaletteKind::Exact
+        || (room > 0
+            && matches!(
+                kind,
+                PaletteKind::Adaptive | PaletteKind::Perceptual | PaletteKind::Selective
+            )) {
         histogram(px)
     } else {
         Vec::new()
@@ -274,7 +303,10 @@ pub fn build_palette(px: &[[f32; 4]], kind: PaletteKind, colors: usize, forced: 
     let computed: Vec<Rgb8> = match kind {
         PaletteKind::Exact => {
             if hist.len() > 256 {
-                return Err(format!("the image has {} colours; Exact needs 256 or fewer", hist.len()));
+                return Err(format!(
+                    "the image has {} colours; Exact needs 256 or fewer",
+                    hist.len()
+                ));
             }
             hist.iter().map(|h| h.0).collect()
         }
@@ -286,17 +318,24 @@ pub fn build_palette(px: &[[f32; 4]], kind: PaletteKind, colors: usize, forced: 
             if hist.len() <= room {
                 hist.iter().map(|h| h.0).collect()
             } else {
-                let pts: Vec<([f32; 3], u32)> = hist.iter().map(|(c, n)| (c.map(f32::from), *n)).collect();
+                let pts: Vec<([f32; 3], u32)> =
+                    hist.iter().map(|(c, n)| (c.map(f32::from), *n)).collect();
                 let mut centers = median_cut(&pts, room);
                 kmeans(&pts, &mut centers, 2);
-                centers.iter().map(|c| c.map(|v| v.round().clamp(0.0, 255.0) as u8)).collect()
+                centers
+                    .iter()
+                    .map(|c| c.map(|v| v.round().clamp(0.0, 255.0) as u8))
+                    .collect()
             }
         }
         PaletteKind::Perceptual | PaletteKind::Selective => {
             if hist.len() <= room {
                 hist.iter().map(|h| h.0).collect()
             } else {
-                let pts: Vec<([f32; 3], u32)> = hist.iter().map(|(c, n)| (srgb_to_lab(c.map(|v| f32::from(v) / 255.0)), *n)).collect();
+                let pts: Vec<([f32; 3], u32)> = hist
+                    .iter()
+                    .map(|(c, n)| (srgb_to_lab(c.map(|v| f32::from(v) / 255.0)), *n))
+                    .collect();
                 let mut centers = median_cut(&pts, room);
                 kmeans(&pts, &mut centers, 4);
                 let mut v: Vec<Rgb8> = centers.iter().map(|c| lab_to_rgb8(*c)).collect();
@@ -321,7 +360,13 @@ pub fn build_palette(px: &[[f32; 4]], kind: PaletteKind, colors: usize, forced: 
             pal.push(c);
         }
     }
-    if matches!(kind, PaletteKind::Adaptive | PaletteKind::Perceptual | PaletteKind::Selective | PaletteKind::Uniform) {
+    if matches!(
+        kind,
+        PaletteKind::Adaptive
+            | PaletteKind::Perceptual
+            | PaletteKind::Selective
+            | PaletteKind::Uniform
+    ) {
         pal.truncate(colors.max(forced_colors(forced).len()));
     }
     if pal.is_empty() {
@@ -333,14 +378,17 @@ pub fn build_palette(px: &[[f32; 4]], kind: PaletteKind, colors: usize, forced: 
 /// 8×8 Bayer threshold in -0.5..0.5.
 pub fn bayer8(x: usize, y: usize) -> f32 {
     const M: [u8; 64] = [
-        0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38, 60, 28, 52, 20, 62, 30, 54, 22, 3, 35, 11, 43, 1, 33, 9, 41,
-        51, 19, 59, 27, 49, 17, 57, 25, 15, 47, 7, 39, 13, 45, 5, 37, 63, 31, 55, 23, 61, 29, 53, 21,
+        0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38,
+        60, 28, 52, 20, 62, 30, 54, 22, 3, 35, 11, 43, 1, 33, 9, 41, 51, 19, 59, 27, 49, 17, 57,
+        25, 15, 47, 7, 39, 13, 45, 5, 37, 63, 31, 55, 23, 61, 29, 53, 21,
     ];
     (f32::from(M[(y % 8) * 8 + x % 8]) + 0.5) / 64.0 - 0.5
 }
 
 fn hash01(x: usize, y: usize, seed: u32) -> f32 {
-    let mut h = (x as u32).wrapping_mul(0x8da6_b343) ^ (y as u32).wrapping_mul(0xd816_3841) ^ seed.wrapping_mul(0xcb1a_b31f);
+    let mut h = (x as u32).wrapping_mul(0x8da6_b343)
+        ^ (y as u32).wrapping_mul(0xd816_3841)
+        ^ seed.wrapping_mul(0xcb1a_b31f);
     h ^= h >> 13;
     h = h.wrapping_mul(0x5bd1_e995);
     h ^= h >> 15;
@@ -350,9 +398,18 @@ fn hash01(x: usize, y: usize, seed: u32) -> f32 {
 /// Maps every opaque pixel to its palette entry (in place) with the chosen dither; returns the
 /// index per pixel. Pixels with alpha < ½ become index `transparent` (and alpha 0) when given;
 /// otherwise alpha is kept. `amount` (0..=1) scales diffusion / pattern / noise strength.
-pub fn quantize(px: &mut [[f32; 4]], w: usize, pal: &[Rgb8], dither: Dither, amount: f32, transparent: Option<usize>) -> Vec<u8> {
+pub fn quantize(
+    px: &mut [[f32; 4]],
+    w: usize,
+    pal: &[Rgb8],
+    dither: Dither,
+    amount: f32,
+    transparent: Option<usize>,
+) -> Vec<u8> {
     let lookup = Nearest::new(pal.iter().map(|c| c.map(f32::from)));
-    quantize_with(px, w, pal, dither, amount, transparent, |c| lookup.find(c.map(|v| v * 255.0)))
+    quantize_with(px, w, pal, dither, amount, transparent, |c| {
+        lookup.find(c.map(|v| v * 255.0))
+    })
 }
 
 fn quantize_with(
@@ -394,7 +451,12 @@ fn quantize_with(
                 let k = nearest(c);
                 *ip = k as u8;
                 let e = pal[k].map(|v| f32::from(v) / 255.0);
-                *p = [e[0], e[1], e[2], if transparent.is_some() { 1.0 } else { pv[3] }];
+                *p = [
+                    e[0],
+                    e[1],
+                    e[2],
+                    if transparent.is_some() { 1.0 } else { pv[3] },
+                ];
             }
         });
         return idx;
@@ -452,7 +514,12 @@ fn quantize_with(
                     next[x + 2][q] += d[q] / 16.0;
                 }
             }
-            px[i] = [e[0], e[1], e[2], if transparent.is_some() { 1.0 } else { p[3] }];
+            px[i] = [
+                e[0],
+                e[1],
+                e[2],
+                if transparent.is_some() { 1.0 } else { p[3] },
+            ];
         }
     }
     idx
@@ -513,10 +580,16 @@ fn spot(shape: HalftoneShape, u: f32, v: f32) -> f32 {
 pub fn to_bitmap(gray: &mut [f32], w: usize, method: BitmapMethod) {
     let h = gray.len().checked_div(w).unwrap_or(0);
     match method {
-        BitmapMethod::Threshold => gray.iter_mut().for_each(|v| *v = if *v >= 0.5 { 1.0 } else { 0.0 }),
+        BitmapMethod::Threshold => gray
+            .iter_mut()
+            .for_each(|v| *v = if *v >= 0.5 { 1.0 } else { 0.0 }),
         BitmapMethod::Pattern => {
             for (i, v) in gray.iter_mut().enumerate() {
-                *v = if *v > bayer8(i % w, i / w) + 0.5 { 1.0 } else { 0.0 };
+                *v = if *v > bayer8(i % w, i / w) + 0.5 {
+                    1.0
+                } else {
+                    0.0
+                };
             }
         }
         BitmapMethod::Diffusion => {
@@ -547,7 +620,15 @@ pub fn to_bitmap(gray: &mut [f32], w: usize, method: BitmapMethod) {
             let cell = cell.max(2.0);
             let (s, c) = angle.to_radians().sin_cos();
             // Rank the spot function over the cell so coverage is proportional to the tone.
-            let mut table: Vec<f32> = (0..32 * 32).map(|k| spot(shape, ((k % 32) as f32 + 0.5) / 16.0 - 1.0, ((k / 32) as f32 + 0.5) / 16.0 - 1.0)).collect();
+            let mut table: Vec<f32> = (0..32 * 32)
+                .map(|k| {
+                    spot(
+                        shape,
+                        ((k % 32) as f32 + 0.5) / 16.0 - 1.0,
+                        ((k / 32) as f32 + 0.5) / 16.0 - 1.0,
+                    )
+                })
+                .collect();
             table.sort_by(f32::total_cmp);
             let cdf = |x: f32| table.partition_point(|t| *t < x) as f32 / table.len() as f32;
             for (i, v) in gray.iter_mut().enumerate() {
@@ -556,7 +637,11 @@ pub fn to_bitmap(gray: &mut [f32], w: usize, method: BitmapMethod) {
                 let u = (rx / cell).rem_euclid(1.0) * 2.0 - 1.0;
                 let vv = (ry / cell).rem_euclid(1.0) * 2.0 - 1.0;
                 // Ink (black) covers where the spot function exceeds the gray level.
-                *v = if cdf(spot(shape, u, vv)) >= *v { 0.0 } else { 1.0 };
+                *v = if cdf(spot(shape, u, vv)) >= *v {
+                    0.0
+                } else {
+                    1.0
+                };
             }
         }
     }
@@ -567,7 +652,16 @@ mod tests {
     use super::*;
 
     fn gradient(w: usize, h: usize) -> Vec<[f32; 4]> {
-        (0..w * h).map(|i| [(i % w) as f32 / (w - 1) as f32, (i / w) as f32 / (h - 1) as f32, 0.3, 1.0]).collect()
+        (0..w * h)
+            .map(|i| {
+                [
+                    (i % w) as f32 / (w - 1) as f32,
+                    (i / w) as f32 / (h - 1) as f32,
+                    0.3,
+                    1.0,
+                ]
+            })
+            .collect()
     }
 
     #[test]
@@ -584,15 +678,28 @@ mod tests {
 
     #[test]
     fn exact_palette_and_failure() {
-        let px = vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 0.0, 0.0, 1.0]];
-        assert_eq!(build_palette(&px, PaletteKind::Exact, 256, Forced::None).unwrap().len(), 2);
+        let px = vec![
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0, 1.0],
+            [1.0, 0.0, 0.0, 1.0],
+        ];
+        assert_eq!(
+            build_palette(&px, PaletteKind::Exact, 256, Forced::None)
+                .unwrap()
+                .len(),
+            2
+        );
         assert!(build_palette(&gradient(64, 64), PaletteKind::Exact, 256, Forced::None).is_err());
     }
 
     #[test]
     fn adaptive_and_perceptual_respect_count_and_forced() {
         let px = gradient(40, 40);
-        for kind in [PaletteKind::Adaptive, PaletteKind::Perceptual, PaletteKind::Selective] {
+        for kind in [
+            PaletteKind::Adaptive,
+            PaletteKind::Perceptual,
+            PaletteKind::Selective,
+        ] {
             let pal = build_palette(&px, kind, 16, Forced::BlackWhite).unwrap();
             assert!(pal.len() <= 16 && pal.len() >= 8, "{kind:?} {}", pal.len());
             assert_eq!(&pal[..2], &[[0, 0, 0], [255, 255, 255]]);
@@ -605,7 +712,11 @@ mod tests {
         // computed entries; the median cut used to return no centres and
         // k-means indexed into the empty list.
         let px = vec![[1.0, 1.0, 1.0, 1.0]; 16];
-        for kind in [PaletteKind::Adaptive, PaletteKind::Perceptual, PaletteKind::Selective] {
+        for kind in [
+            PaletteKind::Adaptive,
+            PaletteKind::Perceptual,
+            PaletteKind::Selective,
+        ] {
             let pal = build_palette(&px, kind, 2, Forced::BlackWhite).unwrap();
             assert_eq!(pal, vec![[0, 0, 0], [255, 255, 255]], "{kind:?}");
             let pal = build_palette(&gradient(8, 8), kind, 8, Forced::Primaries).unwrap();
@@ -624,20 +735,44 @@ mod tests {
             let mut before = None;
             let mut after = None;
             // Reverse the order on alternating rounds; exclude the first round as warmup.
-            for old in if run % 2 == 0 { [true, false] } else { [false, true] } {
+            for old in if run % 2 == 0 {
+                [true, false]
+            } else {
+                [false, true]
+            } {
                 let start = std::time::Instant::now();
                 if old {
-                    let indices = quantize_with(&mut linear, 6000, &pal, Dither::Diffusion, 0.75, None, |c| linear_rgb_nearest(&pal, c));
+                    let indices = quantize_with(
+                        &mut linear,
+                        6000,
+                        &pal,
+                        Dither::Diffusion,
+                        0.75,
+                        None,
+                        |c| linear_rgb_nearest(&pal, c),
+                    );
                     before = Some((start.elapsed().as_secs_f64() * 1000.0, indices));
                 } else {
-                    let indices = quantize(&mut accelerated, 6000, &pal, Dither::Diffusion, 0.75, None);
+                    let indices =
+                        quantize(&mut accelerated, 6000, &pal, Dither::Diffusion, 0.75, None);
                     after = Some((start.elapsed().as_secs_f64() * 1000.0, indices));
                 }
             }
             let (before_ms, before_indices) = before.unwrap();
             let (after_ms, after_indices) = after.unwrap();
-            assert_eq!(before_indices.iter().zip(&after_indices).position(|(a, b)| a != b), None, "first differing index");
-            assert_eq!(linear.iter().zip(&accelerated).position(|(a, b)| a != b), None, "first differing pixel");
+            assert_eq!(
+                before_indices
+                    .iter()
+                    .zip(&after_indices)
+                    .position(|(a, b)| a != b),
+                None,
+                "first differing index"
+            );
+            assert_eq!(
+                linear.iter().zip(&accelerated).position(|(a, b)| a != b),
+                None,
+                "first differing pixel"
+            );
             println!(
                 "{}",
                 serde_json::json!({"run":run,"warmup":run==0,"pixels":24_000_000,"palette_entries":216,"linear_ms":before_ms,"accelerated_ms":after_ms})
@@ -648,7 +783,9 @@ mod tests {
     fn linear_rgb_nearest(pal: &[Rgb8], c: [f32; 3]) -> usize {
         let mut best = (f32::MAX, 0);
         for (i, e) in pal.iter().enumerate() {
-            let d: f32 = (0..3).map(|k| (c[k] * 255.0 - f32::from(e[k])).powi(2)).sum();
+            let d: f32 = (0..3)
+                .map(|k| (c[k] * 255.0 - f32::from(e[k])).powi(2))
+                .sum();
             if d < best.0 {
                 best = (d, i);
             }
@@ -664,13 +801,22 @@ mod tests {
             p[3] = [0.0, 0.2, 0.7, 1.0][i % 4];
         }
         for count in [8, 16, 32, 64, 128, 256] {
-            let pal = build_palette(&source, PaletteKind::Selective, count, Forced::BlackWhite).unwrap();
-            for dither in [Dither::None, Dither::Diffusion, Dither::Pattern, Dither::Noise] {
+            let pal =
+                build_palette(&source, PaletteKind::Selective, count, Forced::BlackWhite).unwrap();
+            for dither in [
+                Dither::None,
+                Dither::Diffusion,
+                Dither::Pattern,
+                Dither::Noise,
+            ] {
                 for transparent in [None, Some(1)] {
                     let mut actual = source.clone();
                     let mut expected = source.clone();
                     let indices = quantize(&mut actual, 93, &pal, dither, 0.75, transparent);
-                    let old_indices = quantize_with(&mut expected, 93, &pal, dither, 0.75, transparent, |c| linear_rgb_nearest(&pal, c));
+                    let old_indices =
+                        quantize_with(&mut expected, 93, &pal, dither, 0.75, transparent, |c| {
+                            linear_rgb_nearest(&pal, c)
+                        });
                     assert_eq!(indices, old_indices, "{count} {dither:?} {transparent:?}");
                     assert_eq!(actual, expected, "{count} {dither:?} {transparent:?}");
                 }
@@ -681,7 +827,12 @@ mod tests {
     #[test]
     fn quantize_maps_to_palette_with_each_dither() {
         let pal = vec![[0, 0, 0], [255, 255, 255]];
-        for d in [Dither::None, Dither::Diffusion, Dither::Pattern, Dither::Noise] {
+        for d in [
+            Dither::None,
+            Dither::Diffusion,
+            Dither::Pattern,
+            Dither::Noise,
+        ] {
             let mut px: Vec<[f32; 4]> = (0..64)
                 .map(|i| [i as f32 / 63.0; 4])
                 .map(|mut p| {
@@ -709,7 +860,11 @@ mod tests {
             BitmapMethod::Threshold,
             BitmapMethod::Pattern,
             BitmapMethod::Diffusion,
-            BitmapMethod::Halftone { cell: 6.0, angle: 45.0, shape: HalftoneShape::Round },
+            BitmapMethod::Halftone {
+                cell: 6.0,
+                angle: 45.0,
+                shape: HalftoneShape::Round,
+            },
         ] {
             let mut g = vec![0.25f32; 32 * 32];
             to_bitmap(&mut g, 32, m);

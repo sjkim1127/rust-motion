@@ -4,8 +4,8 @@
 #[cfg(feature = "threads")]
 use rayon::prelude::*;
 
-use crate::tiff::{Ifd, Tiff, tags};
-use crate::{Error, Result, ljpeg};
+use crate::tiff::{tags, Ifd, Tiff};
+use crate::{ljpeg, Error, Result};
 
 /// Largest raw image decoded, in samples (width × height × samples per pixel).
 pub const MAX_SAMPLES: usize = 1 << 27;
@@ -48,8 +48,12 @@ fn uint_or(t: &Tiff, ifd: &Ifd, tag: u16, default: u64) -> Result<u64> {
 pub fn find_raw_ifd<'i>(t: &Tiff, ifds: &'i [Ifd]) -> Result<&'i Ifd> {
     let mut best: Option<(&Ifd, u64)> = None;
     for ifd in ifds {
-        let Ok(kind) = uint_or(t, ifd, tags::NEW_SUBFILE_TYPE, 0) else { continue };
-        let Ok(photometric) = uint_or(t, ifd, tags::PHOTOMETRIC, 0) else { continue };
+        let Ok(kind) = uint_or(t, ifd, tags::NEW_SUBFILE_TYPE, 0) else {
+            continue;
+        };
+        let Ok(photometric) = uint_or(t, ifd, tags::PHOTOMETRIC, 0) else {
+            continue;
+        };
         if kind != 0 || !matches!(photometric, PHOTOMETRIC_CFA | PHOTOMETRIC_LINEAR_RAW) {
             continue;
         }
@@ -60,7 +64,8 @@ pub fn find_raw_ifd<'i>(t: &Tiff, ifds: &'i [Ifd]) -> Result<&'i Ifd> {
             best = Some((ifd, area));
         }
     }
-    best.map(|(i, _)| i).ok_or(Error::Unsupported("no raw image in this DNG".into()))
+    best.map(|(i, _)| i)
+        .ok_or(Error::Unsupported("no raw image in this DNG".into()))
 }
 
 /// Read and check the layout tags of a raw IFD.
@@ -88,7 +93,9 @@ pub fn layout(t: &Tiff, ifd: &Ifd) -> Result<RawLayout> {
         return Err(Error::Unsupported(format!("{spp} samples per pixel")));
     }
     if photometric == PHOTOMETRIC_CFA && spp != 1 {
-        return Err(Error::Malformed("a CFA image with more than one sample per pixel"));
+        return Err(Error::Malformed(
+            "a CFA image with more than one sample per pixel",
+        ));
     }
     if !(1..=16).contains(&bits) {
         return Err(Error::Unsupported(format!("{bits}-bit raw samples")));
@@ -102,7 +109,9 @@ pub fn layout(t: &Tiff, ifd: &Ifd) -> Result<RawLayout> {
     match compression {
         1 => {
             if uint_or(t, ifd, tags::PREDICTOR, 1)? != 1 {
-                return Err(Error::Unsupported("a TIFF predictor on uncompressed raw data".into()));
+                return Err(Error::Unsupported(
+                    "a TIFF predictor on uncompressed raw data".into(),
+                ));
             }
         }
         7 => {}
@@ -111,7 +120,14 @@ pub fn layout(t: &Tiff, ifd: &Ifd) -> Result<RawLayout> {
         52546 => return Err(Error::Unsupported("JPEG XL DNG".into())),
         c => return Err(Error::Unsupported(format!("DNG compression {c}"))),
     }
-    Ok(RawLayout { width: width as usize, height: height as usize, samples_per_pixel: spp as usize, bits: bits as u32, compression, photometric })
+    Ok(RawLayout {
+        width: width as usize,
+        height: height as usize,
+        samples_per_pixel: spp as usize,
+        bits: bits as u32,
+        compression,
+        photometric,
+    })
 }
 
 /// One strip or tile: where it sits in the image and its bytes.
@@ -125,15 +141,21 @@ struct Chunk<'a> {
 }
 
 fn chunks<'a>(t: &Tiff<'a>, ifd: &Ifd, l: &RawLayout) -> Result<Vec<Chunk<'a>>> {
-    let (offs, counts, tw, th) = if let (Some(o), Some(c)) = (ifd.get(tags::TILE_OFFSETS), ifd.get(tags::TILE_BYTE_COUNTS)) {
+    let (offs, counts, tw, th) = if let (Some(o), Some(c)) =
+        (ifd.get(tags::TILE_OFFSETS), ifd.get(tags::TILE_BYTE_COUNTS))
+    {
         let tw = uint_or(t, ifd, tags::TILE_WIDTH, 0)? as usize;
         let th = uint_or(t, ifd, tags::TILE_LENGTH, 0)? as usize;
         if tw == 0 || th == 0 || tw > 65_535 || th > 65_535 {
             return Err(Error::Malformed("tile size"));
         }
         (t.uints(o)?, t.uints(c)?, tw, th)
-    } else if let (Some(o), Some(c)) = (ifd.get(tags::STRIP_OFFSETS), ifd.get(tags::STRIP_BYTE_COUNTS)) {
-        let rows = (uint_or(t, ifd, tags::ROWS_PER_STRIP, l.height as u64)? as usize).clamp(1, l.height);
+    } else if let (Some(o), Some(c)) = (
+        ifd.get(tags::STRIP_OFFSETS),
+        ifd.get(tags::STRIP_BYTE_COUNTS),
+    ) {
+        let rows =
+            (uint_or(t, ifd, tags::ROWS_PER_STRIP, l.height as u64)? as usize).clamp(1, l.height);
         (t.uints(o)?, t.uints(c)?, l.width, rows)
     } else {
         return Err(Error::Malformed("no strips or tiles"));
@@ -142,7 +164,9 @@ fn chunks<'a>(t: &Tiff<'a>, ifd: &Ifd, l: &RawLayout) -> Result<Vec<Chunk<'a>>> 
     let down = l.height.div_ceil(th);
     let n = across * down;
     if offs.len() < n || counts.len() < n {
-        return Err(Error::Malformed("fewer strips or tiles than the image needs"));
+        return Err(Error::Malformed(
+            "fewer strips or tiles than the image needs",
+        ));
     }
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
@@ -152,8 +176,18 @@ fn chunks<'a>(t: &Tiff<'a>, ifd: &Ifd, l: &RawLayout) -> Result<Vec<Chunk<'a>>> 
         let end = start.checked_add(len).ok_or(Error::Truncated)?;
         let bytes = t.data.get(start..end).ok_or(Error::Truncated)?;
         // strips end at the image; tiles are coded whole
-        let h = if ifd.get(tags::TILE_OFFSETS).is_some() { th } else { th.min(l.height - y) };
-        out.push(Chunk { x, y, w: tw, h, bytes });
+        let h = if ifd.get(tags::TILE_OFFSETS).is_some() {
+            th
+        } else {
+            th.min(l.height - y)
+        };
+        out.push(Chunk {
+            x,
+            y,
+            w: tw,
+            h,
+            bytes,
+        });
     }
     Ok(out)
 }
@@ -161,7 +195,14 @@ fn chunks<'a>(t: &Tiff<'a>, ifd: &Ifd, l: &RawLayout) -> Result<Vec<Chunk<'a>>> 
 /// Unpack `w` × `h` × `spp` uncompressed samples of `bits` bits: 8 and 16-bit samples as bytes /
 /// words in the file's byte order, other depths packed most significant bit first with each row
 /// starting on a byte boundary (TIFF 6.0 §7, DNG BitsPerSample).
-pub fn unpack(bytes: &[u8], w: usize, h: usize, spp: usize, bits: u32, big_endian: bool) -> Result<Vec<u16>> {
+pub fn unpack(
+    bytes: &[u8],
+    w: usize,
+    h: usize,
+    spp: usize,
+    bits: u32,
+    big_endian: bool,
+) -> Result<Vec<u16>> {
     let per_row = w * spp;
     let row_bytes = (per_row * bits as usize).div_ceil(8);
     let need = row_bytes.checked_mul(h).ok_or(Error::TooLarge)?;
@@ -172,7 +213,13 @@ pub fn unpack(bytes: &[u8], w: usize, h: usize, spp: usize, bits: u32, big_endia
     for row in bytes.chunks_exact(row_bytes.max(1)).take(h) {
         match bits {
             8 => out.extend(row.iter().map(|&b| u16::from(b))),
-            16 => out.extend(row.as_chunks::<2>().0.iter().map(|&b| if big_endian { u16::from_be_bytes(b) } else { u16::from_le_bytes(b) })),
+            16 => out.extend(row.as_chunks::<2>().0.iter().map(|&b| {
+                if big_endian {
+                    u16::from_be_bytes(b)
+                } else {
+                    u16::from_le_bytes(b)
+                }
+            })),
             _ => {
                 let mut acc: u32 = 0;
                 let mut n: u32 = 0;
@@ -202,7 +249,9 @@ fn decode_chunk(c: &Chunk, l: &RawLayout, big_endian: bool) -> Result<Vec<u16>> 
             // differ from the chunk's, e.g. two components of half the width)
             let d = ljpeg::decode(c.bytes, need.saturating_add(65_536 * 4))?;
             if d.samples.len() < need {
-                return Err(Error::Malformed("lossless JPEG smaller than its tile or strip"));
+                return Err(Error::Malformed(
+                    "lossless JPEG smaller than its tile or strip",
+                ));
             }
             let mut s = d.samples;
             s.truncate(need);
@@ -215,18 +264,28 @@ fn decode_chunk(c: &Chunk, l: &RawLayout, big_endian: bool) -> Result<Vec<u16>> 
 pub fn read(t: &Tiff, ifd: &Ifd) -> Result<RawImage> {
     let l = layout(t, ifd)?;
     let spp = l.samples_per_pixel;
-    let total = l.width.checked_mul(l.height).and_then(|v| v.checked_mul(spp)).ok_or(Error::TooLarge)?;
+    let total = l
+        .width
+        .checked_mul(l.height)
+        .and_then(|v| v.checked_mul(spp))
+        .ok_or(Error::TooLarge)?;
     if total > MAX_SAMPLES {
         return Err(Error::TooLarge);
     }
     let chunks = chunks(t, ifd, &l)?;
     // every sample takes at least one bit of file (a Huffman code is at least one bit long)
-    let coded: usize = chunks.iter().map(|c| c.bytes.len()).fold(0usize, usize::saturating_add);
+    let coded: usize = chunks
+        .iter()
+        .map(|c| c.bytes.len())
+        .fold(0usize, usize::saturating_add);
     if total / 8 > coded {
         return Err(Error::Truncated);
     }
     for c in &chunks {
-        let n = c.w.checked_mul(c.h).and_then(|v| v.checked_mul(spp)).ok_or(Error::TooLarge)?;
+        let n =
+            c.w.checked_mul(c.h)
+                .and_then(|v| v.checked_mul(spp))
+                .ok_or(Error::TooLarge)?;
         if n > MAX_SAMPLES {
             return Err(Error::TooLarge);
         }
@@ -235,9 +294,15 @@ pub fn read(t: &Tiff, ifd: &Ifd) -> Result<RawImage> {
         }
     }
     #[cfg(feature = "threads")]
-    let decoded: Vec<Result<Vec<u16>>> = chunks.par_iter().map(|c| decode_chunk(c, &l, t.big_endian)).collect();
+    let decoded: Vec<Result<Vec<u16>>> = chunks
+        .par_iter()
+        .map(|c| decode_chunk(c, &l, t.big_endian))
+        .collect();
     #[cfg(not(feature = "threads"))]
-    let decoded: Vec<Result<Vec<u16>>> = chunks.iter().map(|c| decode_chunk(c, &l, t.big_endian)).collect();
+    let decoded: Vec<Result<Vec<u16>>> = chunks
+        .iter()
+        .map(|c| decode_chunk(c, &l, t.big_endian))
+        .collect();
     let mut data = vec![0u16; total];
     let row_len = l.width * spp;
     for (c, d) in chunks.iter().zip(decoded) {
@@ -245,10 +310,20 @@ pub fn read(t: &Tiff, ifd: &Ifd) -> Result<RawImage> {
         let cw = c.w.min(l.width - c.x);
         let ch = c.h.min(l.height - c.y);
         for r in 0..ch {
-            let src = d.get(r * c.w * spp..(r * c.w + cw) * spp).ok_or(Error::Truncated)?;
+            let src = d
+                .get(r * c.w * spp..(r * c.w + cw) * spp)
+                .ok_or(Error::Truncated)?;
             let at = (c.y + r) * row_len + c.x * spp;
-            data.get_mut(at..at + cw * spp).ok_or(Error::Truncated)?.copy_from_slice(src);
+            data.get_mut(at..at + cw * spp)
+                .ok_or(Error::Truncated)?
+                .copy_from_slice(src);
         }
     }
-    Ok(RawImage { width: l.width, height: l.height, samples_per_pixel: spp, bits: l.bits, data })
+    Ok(RawImage {
+        width: l.width,
+        height: l.height,
+        samples_per_pixel: spp,
+        bits: l.bits,
+        data,
+    })
 }

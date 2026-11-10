@@ -50,7 +50,9 @@ pub struct LayerComp {
 impl LayerComp {
     /// PSD `capturedInfo` bit flags: 1 visibility, 2 position, 4 appearance.
     pub fn captured_info(&self) -> i32 {
-        i32::from(self.apply_visibility) | i32::from(self.apply_position) << 1 | i32::from(self.apply_appearance) << 2
+        i32::from(self.apply_visibility)
+            | i32::from(self.apply_position) << 1
+            | i32::from(self.apply_appearance) << 2
     }
     pub fn set_captured_info(&mut self, v: i32) {
         self.apply_visibility = v & 1 != 0;
@@ -62,8 +64,13 @@ impl LayerComp {
     }
     /// Ids of recorded layers that no longer exist in `doc` (Photoshop's warning triangle).
     pub fn missing_layers(&self, doc: &Document) -> Vec<LayerId> {
-        let live: std::collections::HashSet<LayerId> = doc.walk().into_iter().map(|(_, _, l)| l.id).collect();
-        self.states.iter().map(|s| s.layer).filter(|id| !live.contains(id)).collect()
+        let live: std::collections::HashSet<LayerId> =
+            doc.walk().into_iter().map(|(_, _, l)| l.id).collect();
+        self.states
+            .iter()
+            .map(|s| s.layer)
+            .filter(|id| !live.contains(id))
+            .collect()
     }
 }
 
@@ -91,7 +98,12 @@ pub fn capture_states(doc: &Document) -> Vec<CompLayerState> {
             layer: l.id,
             visible: Some(l.visible),
             position: layer_position(l),
-            appearance: Some(CompAppearance { blend: l.blend, opacity: l.opacity, fill_opacity: l.fill_opacity, effects: l.effects.clone() }),
+            appearance: Some(CompAppearance {
+                blend: l.blend,
+                opacity: l.opacity,
+                fill_opacity: l.fill_opacity,
+                effects: l.effects.clone(),
+            }),
         })
         .collect()
 }
@@ -99,7 +111,14 @@ pub fn capture_states(doc: &Document) -> Vec<CompLayerState> {
 /// A fresh comp id, unique among `doc`'s comps (never 0).
 pub fn next_comp_id(doc: &Document) -> u32 {
     // Photoshop uses large pseudo-random ids; any unique non-zero value round-trips.
-    let mut id = doc.layer_comps.iter().map(|c| c.id).max().unwrap_or(0).wrapping_add(1).max(1);
+    let mut id = doc
+        .layer_comps
+        .iter()
+        .map(|c| c.id)
+        .max()
+        .unwrap_or(0)
+        .wrapping_add(1)
+        .max(1);
     while doc.layer_comps.iter().any(|c| c.id == id) {
         id = id.wrapping_add(1).max(1);
     }
@@ -163,7 +182,11 @@ pub struct Artboard {
 
 impl Artboard {
     pub fn new(rect: Rect) -> Self {
-        Self { rect, background: ArtboardBackground::White, preset: String::new() }
+        Self {
+            rect,
+            background: ArtboardBackground::White,
+            preset: String::new(),
+        }
     }
 }
 
@@ -213,9 +236,17 @@ mod tests {
     use crate::{ColorMode, PixelFormat, SampleType, Size};
 
     fn doc() -> Document {
-        let mut d = Document::with_background("t", Size::new(64, 64), ColorMode::Rgb, SampleType::U8, Color::WHITE);
+        let mut d = Document::with_background(
+            "t",
+            Size::new(64, 64),
+            ColorMode::Rgb,
+            SampleType::U8,
+            Color::WHITE,
+        );
         let mut l = Layer::raster("A", PixelFormat::RGBA8);
-        l.surface_mut().unwrap().fill_rect(Rect::new(10, 12, 20, 22), &[1.0, 0.0, 0.0, 1.0]);
+        l.surface_mut()
+            .unwrap()
+            .fill_rect(Rect::new(10, 12, 20, 22), &[1.0, 0.0, 0.0, 1.0]);
         d.layers.push(l);
         d
     }

@@ -1,6 +1,9 @@
 //! Reading compound files ([MS-CFB] §2.2–2.6).
 
-use crate::{ENDOFCHAIN, Error, FREESECT, MAXREGSECT, MINI_SECTOR_SIZE, NOSTREAM, Result, SIGNATURE, compare_names};
+use crate::{
+    compare_names, Error, Result, ENDOFCHAIN, FREESECT, MAXREGSECT, MINI_SECTOR_SIZE, NOSTREAM,
+    SIGNATURE,
+};
 
 /// Directory entry object type (§2.6.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,7 +91,10 @@ impl<'a> CompoundFile<'a> {
         header_clsid.copy_from_slice(&data[8..24]);
         let max_sectors = data.len() / sector_size + 1;
         if n_fat > max_sectors {
-            return Err(invalid(format!("{n_fat} FAT sectors in a {}-byte file", data.len())));
+            return Err(invalid(format!(
+                "{n_fat} FAT sectors in a {}-byte file",
+                data.len()
+            )));
         }
         let mut cf = CompoundFile {
             data,
@@ -102,7 +108,10 @@ impl<'a> CompoundFile<'a> {
             entries: Vec::new(),
         };
         // FAT sector numbers: 109 in the header, then the DIFAT chain.
-        let mut fat_sectors: Vec<u32> = (0..109).map(|i| u32_at(data, 76 + i * 4)).filter(|&s| s <= MAXREGSECT).collect();
+        let mut fat_sectors: Vec<u32> = (0..109)
+            .map(|i| u32_at(data, 76 + i * 4))
+            .filter(|&s| s <= MAXREGSECT)
+            .collect();
         let mut d = first_difat;
         let mut seen = 0;
         while d <= MAXREGSECT && fat_sectors.len() < n_fat {
@@ -110,7 +119,10 @@ impl<'a> CompoundFile<'a> {
             // a DIFAT chain cannot have more sectors than the file holds; the header's DIFAT sector
             // count (up to 2^32 - 1) is not trusted, or a self-pointing sector loops that often
             if seen > max_sectors {
-                return Err(invalid(format!("DIFAT chain loops: more than {max_sectors} sectors in a {}-byte file", data.len())));
+                return Err(invalid(format!(
+                    "DIFAT chain loops: more than {max_sectors} sectors in a {}-byte file",
+                    data.len()
+                )));
             }
             let s = cf.sector(d)?;
             let per = sector_size / 4 - 1;
@@ -136,7 +148,8 @@ impl<'a> CompoundFile<'a> {
             return Err(invalid("empty directory"));
         }
         for i in 0..n_entries {
-            cf.entries.push(parse_entry(&dir[i * 128..(i + 1) * 128], version));
+            cf.entries
+                .push(parse_entry(&dir[i * 128..(i + 1) * 128], version));
         }
         if cf.entries[0].kind != EntryKind::Root {
             return Err(invalid("first directory entry is not the root"));
@@ -144,7 +157,12 @@ impl<'a> CompoundFile<'a> {
         // Mini FAT and mini stream.
         if first_minifat <= MAXREGSECT {
             let mf = cf.read_chain(first_minifat, None)?;
-            cf.minifat = mf.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
+            cf.minifat = mf
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                .collect();
         }
         let root = &cf.entries[0];
         if root.start <= MAXREGSECT && root.size > 0 {
@@ -157,8 +175,12 @@ impl<'a> CompoundFile<'a> {
 
     /// Sector `n` (a whole sector; a truncated last sector is an error).
     fn sector(&self, n: u32) -> Result<&'a [u8]> {
-        let start = (n as usize + 1).checked_mul(self.sector_size).ok_or_else(|| invalid("sector number overflow"))?;
-        let end = start.checked_add(self.sector_size).ok_or_else(|| invalid("sector number overflow"))?;
+        let start = (n as usize + 1)
+            .checked_mul(self.sector_size)
+            .ok_or_else(|| invalid("sector number overflow"))?;
+        let end = start
+            .checked_add(self.sector_size)
+            .ok_or_else(|| invalid("sector number overflow"))?;
         if n > MAXREGSECT || end > self.data.len() {
             return Err(invalid(format!("sector {n} is outside the file")));
         }
@@ -180,14 +202,20 @@ impl<'a> CompoundFile<'a> {
             }
             steps += 1;
             if steps > max_steps {
-                return Err(invalid(format!("sector chain loops: more than {max_steps} sectors in a {}-byte file", self.data.len())));
+                return Err(invalid(format!(
+                    "sector chain loops: more than {max_steps} sectors in a {}-byte file",
+                    self.data.len()
+                )));
             }
             let b = self.sector(s)?;
             out.extend_from_slice(b);
             if limit.is_some_and(|l| out.len() >= l) {
                 break;
             }
-            s = *self.fat.get(s as usize).ok_or_else(|| invalid(format!("sector {s} has no FAT entry")))?;
+            s = *self
+                .fat
+                .get(s as usize)
+                .ok_or_else(|| invalid(format!("sector {s} has no FAT entry")))?;
             if s == FREESECT {
                 return Err(invalid("chain runs into a free sector"));
             }
@@ -214,9 +242,15 @@ impl<'a> CompoundFile<'a> {
                 return Err(invalid("mini sector chain loops"));
             }
             let at = s as usize * MINI_SECTOR_SIZE;
-            let b = self.mini_stream.get(at..at + MINI_SECTOR_SIZE).ok_or_else(|| invalid("mini sector outside the mini stream"))?;
+            let b = self
+                .mini_stream
+                .get(at..at + MINI_SECTOR_SIZE)
+                .ok_or_else(|| invalid("mini sector outside the mini stream"))?;
             out.extend_from_slice(b);
-            s = *self.minifat.get(s as usize).ok_or_else(|| invalid("mini sector has no mini FAT entry"))?;
+            s = *self
+                .minifat
+                .get(s as usize)
+                .ok_or_else(|| invalid("mini sector has no mini FAT entry"))?;
         }
         out.truncate(size);
         Ok(out)
@@ -227,7 +261,10 @@ impl<'a> CompoundFile<'a> {
         let mut owner = vec![false; n];
         owner[0] = true;
         for parent in 0..n {
-            if !matches!(self.entries[parent].kind, EntryKind::Root | EntryKind::Storage) {
+            if !matches!(
+                self.entries[parent].kind,
+                EntryKind::Root | EntryKind::Storage
+            ) {
                 continue;
             }
             let mut kids = Vec::new();
@@ -239,7 +276,9 @@ impl<'a> CompoundFile<'a> {
                 while cur != NOSTREAM {
                     let i = cur as usize;
                     if i >= n || owner[i] {
-                        return Err(invalid(format!("directory entry {cur} is referenced twice or does not exist")));
+                        return Err(invalid(format!(
+                            "directory entry {cur} is referenced twice or does not exist"
+                        )));
                     }
                     owner[i] = true;
                     stack.push(cur);
@@ -269,21 +308,31 @@ impl<'a> CompoundFile<'a> {
 
     /// Child of storage `parent` named `name` (case-insensitive as in §2.6.4).
     pub fn child(&self, parent: usize, name: &str) -> Option<usize> {
-        self.entries.get(parent)?.children.iter().copied().find(|&c| compare_names(&self.entries[c].name, name).is_eq())
+        self.entries
+            .get(parent)?
+            .children
+            .iter()
+            .copied()
+            .find(|&c| compare_names(&self.entries[c].name, name).is_eq())
     }
 
     /// Entry at a `/`-separated path below the root (`""` is the root).
     pub fn find(&self, path: &str) -> Result<usize> {
         let mut cur = 0;
         for part in path.split('/').filter(|p| !p.is_empty()) {
-            cur = self.child(cur, part).ok_or_else(|| Error::NotFound(path.to_string()))?;
+            cur = self
+                .child(cur, part)
+                .ok_or_else(|| Error::NotFound(path.to_string()))?;
         }
         Ok(cur)
     }
 
     /// Contents of stream `id`.
     pub fn read(&self, id: usize) -> Result<Vec<u8>> {
-        let e = self.entries.get(id).ok_or_else(|| Error::NotFound(format!("entry {id}")))?;
+        let e = self
+            .entries
+            .get(id)
+            .ok_or_else(|| Error::NotFound(format!("entry {id}")))?;
         if e.kind != EntryKind::Stream {
             return Err(invalid(format!("{:?} is not a stream", e.name)));
         }
@@ -292,9 +341,16 @@ impl<'a> CompoundFile<'a> {
             return Ok(Vec::new());
         }
         if size as u64 > self.data.len() as u64 {
-            return Err(invalid(format!("stream {:?} is larger than the file", e.name)));
+            return Err(invalid(format!(
+                "stream {:?} is larger than the file",
+                e.name
+            )));
         }
-        if e.size < self.mini_cutoff { self.read_mini_chain(e.start, size) } else { self.read_chain(e.start, Some(size)) }
+        if e.size < self.mini_cutoff {
+            self.read_mini_chain(e.start, size)
+        } else {
+            self.read_chain(e.start, Some(size))
+        }
     }
 
     /// Contents of the stream at `path`.
@@ -310,7 +366,10 @@ impl<'a> CompoundFile<'a> {
 
 fn parse_entry(b: &[u8], version: u16) -> Entry {
     let name_len = (u16_at(b, 64) as usize).min(64);
-    let units: Vec<u16> = (0..name_len / 2).map(|i| u16_at(b, i * 2)).take_while(|&u| u != 0).collect();
+    let units: Vec<u16> = (0..name_len / 2)
+        .map(|i| u16_at(b, i * 2))
+        .take_while(|&u| u != 0)
+        .collect();
     let kind = match b[66] {
         5 => EntryKind::Root,
         1 => EntryKind::Storage,
@@ -329,7 +388,11 @@ fn parse_entry(b: &[u8], version: u16) -> Entry {
         modified: u64_at(b, 108),
         start: u32_at(b, 116),
         // version 3 files may leave garbage in the high 32 bits (§2.6.3)
-        size: if version == 3 { size & 0xFFFF_FFFF } else { size },
+        size: if version == 3 {
+            size & 0xFFFF_FFFF
+        } else {
+            size
+        },
         children: Vec::new(),
         left: u32_at(b, 68),
         right: u32_at(b, 72),

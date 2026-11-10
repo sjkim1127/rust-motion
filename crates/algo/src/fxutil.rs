@@ -5,9 +5,9 @@ use photocraft_color::{ColorMode, PixelFormat, SampleType};
 use photocraft_geom::Rect;
 use photocraft_raster::{from_rgba_into, to_rgba};
 
-use crate::Ctx;
 use crate::image::Image;
 use crate::noise::hash01;
+use crate::Ctx;
 
 /// Max channels per pixel we keep on the stack (CMYK + alpha + spare).
 pub(crate) const MAXC: usize = 8;
@@ -21,7 +21,11 @@ pub(crate) fn fmt(ctx: &Ctx) -> PixelFormat {
 /// Colour channels (excluding alpha).
 #[inline]
 pub(crate) fn ncol(ctx: &Ctx, n: usize) -> usize {
-    if ctx.alpha { n - 1 } else { n }
+    if ctx.alpha {
+        n - 1
+    } else {
+        n
+    }
 }
 
 /// Whether channel values are ink amounts (1 = dark) rather than light.
@@ -171,8 +175,17 @@ pub(crate) fn gauss_box_radii(sigma: f32) -> [usize; 3] {
     }
     let wl = wl.max(1);
     let wu = wl + 2;
-    let m = ((12.0 * sigma * sigma - n * (wl * wl) as f32 - 4.0 * n * wl as f32 - 3.0 * n) / (-4.0 * wl as f32 - 4.0)).round().clamp(0.0, n) as usize;
-    let mut radii = std::array::from_fn(|i| if i < m { (wl as usize - 1) / 2 } else { (wu as usize - 1) / 2 });
+    let m = ((12.0 * sigma * sigma - n * (wl * wl) as f32 - 4.0 * n * wl as f32 - 3.0 * n)
+        / (-4.0 * wl as f32 - 4.0))
+        .round()
+        .clamp(0.0, n) as usize;
+    let mut radii = std::array::from_fn(|i| {
+        if i < m {
+            (wl as usize - 1) / 2
+        } else {
+            (wu as usize - 1) / 2
+        }
+    });
     // Kovesi's rounded triple degenerates below sigma ~ 0.577: `wl` floors to 1 and every
     // radius becomes 0, so the passes would be no-ops and callers with documented small
     // sigmas (Camera Raw `sharpenRadius` 0.5, colour noise, HDR Toning `radius` 1) would
@@ -204,7 +217,10 @@ pub(crate) fn gauss_blur_n(buf: &mut [f32], w: usize, h: usize, n: usize, sigma:
 /// Jittered feature point of grid cell `(cx, cy)` (cells of `cell` px anchored at `origin`).
 #[inline]
 pub(crate) fn cell_point(cx: i32, cy: i32, cell: f32, seed: u32, origin: (f32, f32)) -> (f32, f32) {
-    (origin.0 + (cx as f32 + 0.1 + 0.8 * hash01(cx, cy, 11, seed)) * cell, origin.1 + (cy as f32 + 0.1 + 0.8 * hash01(cx, cy, 12, seed)) * cell)
+    (
+        origin.0 + (cx as f32 + 0.1 + 0.8 * hash01(cx, cy, 11, seed)) * cell,
+        origin.1 + (cy as f32 + 0.1 + 0.8 * hash01(cx, cy, 12, seed)) * cell,
+    )
 }
 
 #[inline]
@@ -220,7 +236,14 @@ pub(crate) fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
 /// clamped to `clip`, which must lie inside `src.rect`) into `acc`. A fast path for blurs that
 /// average many samples; unpremultiply the sum once at the end.
 #[inline]
-pub(crate) fn add_sample_premul(src: &Image, x: f32, y: f32, clip: Rect, alpha: bool, acc: &mut [f32]) {
+pub(crate) fn add_sample_premul(
+    src: &Image,
+    x: f32,
+    y: f32,
+    clip: Rect,
+    alpha: bool,
+    acc: &mut [f32],
+) {
     if !x.is_finite() || !y.is_finite() || clip.is_empty() {
         return;
     }
@@ -231,8 +254,14 @@ pub(crate) fn add_sample_premul(src: &Image, x: f32, y: f32, clip: Rect, alpha: 
     let (x1, y1) = ((x0 + 1).min(clip.x1 - 1), (y0 + 1).min(clip.y1 - 1));
     let (ax, ay) = (fx - x0 as f32, fy - y0 as f32);
     let w = src.rect.width() as usize;
-    let idx = |xx: i32, yy: i32| ((yy - src.rect.y0) as usize * w + (xx - src.rect.x0) as usize) * n;
-    for (i, k) in [(idx(x0, y0), (1.0 - ax) * (1.0 - ay)), (idx(x1, y0), ax * (1.0 - ay)), (idx(x0, y1), (1.0 - ax) * ay), (idx(x1, y1), ax * ay)] {
+    let idx =
+        |xx: i32, yy: i32| ((yy - src.rect.y0) as usize * w + (xx - src.rect.x0) as usize) * n;
+    for (i, k) in [
+        (idx(x0, y0), (1.0 - ax) * (1.0 - ay)),
+        (idx(x1, y0), ax * (1.0 - ay)),
+        (idx(x0, y1), (1.0 - ax) * ay),
+        (idx(x1, y1), ax * ay),
+    ] {
         if k <= 0.0 {
             continue;
         }

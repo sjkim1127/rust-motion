@@ -2,7 +2,7 @@
 
 use photocraft_color::blend::{self, BlendMode};
 use photocraft_geom::Rect;
-use photocraft_raster::{Surface, from_rgba_into};
+use photocraft_raster::{from_rgba_into, Surface};
 use serde::{Deserialize, Serialize};
 
 /// Gradient tool shape.
@@ -18,7 +18,13 @@ pub enum GradientShape {
 }
 
 /// Gradient tool parameter `t` for a drag from `from` to `to`.
-pub fn tool_gradient_t(shape: GradientShape, from: (f32, f32), to: (f32, f32), x: f32, y: f32) -> f32 {
+pub fn tool_gradient_t(
+    shape: GradientShape,
+    from: (f32, f32),
+    to: (f32, f32),
+    x: f32,
+    y: f32,
+) -> f32 {
     let (dx, dy) = (to.0 - from.0, to.1 - from.1);
     let len = (dx * dx + dy * dy).sqrt().max(1e-6);
     let (ux, uy) = (dx / len, dy / len);
@@ -46,7 +52,11 @@ pub fn sample_stops(stops: &[(f32, [f32; 4])], t: f32) -> [f32; 4] {
             }
             for w in stops.windows(2) {
                 if t <= w[1].0 {
-                    let k = if w[1].0 > w[0].0 { (t - w[0].0) / (w[1].0 - w[0].0) } else { 0.0 };
+                    let k = if w[1].0 > w[0].0 {
+                        (t - w[0].0) / (w[1].0 - w[0].0)
+                    } else {
+                        0.0
+                    };
                     return std::array::from_fn(|i| w[0].1[i] + (w[1].1[i] - w[0].1[i]) * k);
                 }
             }
@@ -69,7 +79,11 @@ fn composite_area(
     // so their copy-on-write storage (and GPU residency) survives.
     let fmt = s.format();
     let n = fmt.channels();
-    let tiles: Vec<Rect> = area.tiles().map(|tc| tc.rect().intersect(&area)).filter(|r| !r.is_empty()).collect();
+    let tiles: Vec<Rect> = area
+        .tiles()
+        .map(|tc| tc.rect().intersect(&area))
+        .filter(|r| !r.is_empty())
+        .collect();
     let src: &Surface = s;
     let work = |r: &Rect| -> Option<(Rect, Vec<f32>)> {
         let w = r.width() as usize;
@@ -173,7 +187,18 @@ pub fn bucket_fill(
     selection: Option<&Surface>,
     lock_transparency: bool,
 ) -> bool {
-    bucket_fill_src(s, area, seed, tolerance, contiguous, anti_alias, opacity, selection, lock_transparency, |_, _| color)
+    bucket_fill_src(
+        s,
+        area,
+        seed,
+        tolerance,
+        contiguous,
+        anti_alias,
+        opacity,
+        selection,
+        lock_transparency,
+        |_, _| color,
+    )
 }
 
 /// Like [`bucket_fill`] but the fill colour comes from `src(x, y)` — e.g. a pattern sampled at the
@@ -191,7 +216,19 @@ pub fn bucket_fill_src(
     lock_transparency: bool,
     src: impl Fn(i32, i32) -> [f32; 4] + Sync,
 ) -> bool {
-    bucket_fill_inks(s, area, seed, tolerance, contiguous, anti_alias, opacity, selection, lock_transparency, src, None)
+    bucket_fill_inks(
+        s,
+        area,
+        seed,
+        tolerance,
+        contiguous,
+        anti_alias,
+        opacity,
+        selection,
+        lock_transparency,
+        src,
+        None,
+    )
 }
 
 /// [`bucket_fill_src`] where `inks` (CMYK, 0..1) are what a fully covered pixel of a CMYK target
@@ -214,7 +251,11 @@ pub fn bucket_fill_inks(
         return false;
     }
     let img = crate::selection::rgba8_image(s, area);
-    let Some(region) = crate::selection::wand_region(&img, area, seed, tolerance, contiguous, anti_alias) else { return false };
+    let Some(region) =
+        crate::selection::wand_region(&img, area, seed, tolerance, contiguous, anti_alias)
+    else {
+        return false;
+    };
     drop(img);
     bucket_fill_region_inks(s, &region, opacity, selection, lock_transparency, src, inks);
     true
@@ -267,7 +308,10 @@ mod tests {
         assert_eq!(tool_gradient_t(GradientShape::Linear, f, t, 5.0, 3.0), 0.5);
         assert_eq!(tool_gradient_t(GradientShape::Linear, f, t, -5.0, 0.0), 0.0);
         assert_eq!(tool_gradient_t(GradientShape::Radial, f, t, 0.0, 5.0), 0.5);
-        assert_eq!(tool_gradient_t(GradientShape::Reflected, f, t, -5.0, 0.0), 0.5);
+        assert_eq!(
+            tool_gradient_t(GradientShape::Reflected, f, t, -5.0, 0.0),
+            0.5
+        );
         assert_eq!(tool_gradient_t(GradientShape::Diamond, f, t, 2.5, 2.5), 0.5);
         assert!((tool_gradient_t(GradientShape::Angle, f, t, 0.0, 5.0) - 0.25).abs() < 1e-5);
     }
@@ -303,19 +347,46 @@ mod tests {
         let a = Rect::new(0, 0, 10, 10);
         s.fill_rect(a, &[1.0, 1.0, 1.0, 1.0]);
         s.fill_rect(Rect::new(5, 0, 6, 10), &[0.0, 0.0, 0.0, 1.0]);
-        assert!(bucket_fill(&mut s, a, (1, 1), 10.0, true, false, [1.0, 0.0, 0.0, 1.0], 1.0, None, false));
+        assert!(bucket_fill(
+            &mut s,
+            a,
+            (1, 1),
+            10.0,
+            true,
+            false,
+            [1.0, 0.0, 0.0, 1.0],
+            1.0,
+            None,
+            false
+        ));
         assert_eq!(s.pixel(2, 2), vec![1.0, 0.0, 0.0, 1.0]);
         assert_eq!(s.pixel(8, 2), vec![1.0, 1.0, 1.0, 1.0]);
-        assert!(!bucket_fill(&mut s, a, (50, 1), 10.0, true, false, [1.0, 0.0, 0.0, 1.0], 1.0, None, false));
+        assert!(!bucket_fill(
+            &mut s,
+            a,
+            (50, 1),
+            10.0,
+            true,
+            false,
+            [1.0, 0.0, 0.0, 1.0],
+            1.0,
+            None,
+            false
+        ));
     }
 
     #[test]
     fn bucket_region_uses_document_coordinates_and_multiplies_coverage() {
         let mut s = Surface::new(PixelFormat::RGBA8);
-        let region = crate::selection::Region { bbox: Rect::new(-3, 4, 0, 5), mask: vec![255, 128, 255] };
+        let region = crate::selection::Region {
+            bbox: Rect::new(-3, 4, 0, 5),
+            mask: vec![255, 128, 255],
+        };
         let mut selection = Surface::new(PixelFormat::GRAY8);
         selection.fill_rect(Rect::new(-3, 4, -1, 5), &[0.5]);
-        bucket_fill_region_src(&mut s, &region, 0.5, Some(&selection), false, |_, _| [1.0, 0.0, 0.0, 1.0]);
+        bucket_fill_region_src(&mut s, &region, 0.5, Some(&selection), false, |_, _| {
+            [1.0, 0.0, 0.0, 1.0]
+        });
         assert!((s.rgba(-3, 4)[3] - 0.25).abs() < 0.005);
         assert!((s.rgba(-2, 4)[3] - 0.125).abs() < 0.005);
         assert_eq!(s.rgba(-1, 4), [0.0; 4], "outside the selection");

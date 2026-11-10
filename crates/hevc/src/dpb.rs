@@ -5,7 +5,7 @@
 //! decoder's [`crate::picture::FrameRef`], a hardware decoder's surface) is up to the decoder, so
 //! hardware decoders driven by the same headers (VA-API) share this logic and output order.
 
-use crate::error::{Result, ensure};
+use crate::error::{ensure, Result};
 use crate::slice::SliceHeader;
 use std::sync::Arc;
 
@@ -65,7 +65,11 @@ pub struct RefPicSet<F> {
 
 impl<F> Default for RefPicSet<F> {
     fn default() -> Self {
-        Self { st_curr_before: Vec::new(), st_curr_after: Vec::new(), lt_curr: Vec::new() }
+        Self {
+            st_curr_before: Vec::new(),
+            st_curr_after: Vec::new(),
+            lt_curr: Vec::new(),
+        }
     }
 }
 
@@ -79,22 +83,37 @@ pub struct Dpb<F> {
 
 impl<F> Default for Dpb<F> {
     fn default() -> Self {
-        Self { entries: Vec::new(), max_dec_pic_buffering: 0, max_num_reorder: 0, max_latency: 0 }
+        Self {
+            entries: Vec::new(),
+            max_dec_pic_buffering: 0,
+            max_num_reorder: 0,
+            max_latency: 0,
+        }
     }
 }
 
 impl<F: Clone> Dpb<F> {
     fn bump(&mut self, outs: &mut Vec<Output<F>>) -> bool {
-        let Some(i) = (0..self.entries.len()).filter(|&i| self.entries[i].needed_for_output).min_by_key(|&i| self.entries[i].poc) else { return false };
+        let Some(i) = (0..self.entries.len())
+            .filter(|&i| self.entries[i].needed_for_output)
+            .min_by_key(|&i| self.entries[i].poc)
+        else {
+            return false;
+        };
         let e = &mut self.entries[i];
         e.needed_for_output = false;
-        outs.push(Output { frame: e.frame.clone(), poc: e.poc, meta: e.meta.clone() });
+        outs.push(Output {
+            frame: e.frame.clone(),
+            poc: e.poc,
+            meta: e.meta.clone(),
+        });
         self.remove_unused();
         true
     }
 
     fn remove_unused(&mut self) {
-        self.entries.retain(|e| e.needed_for_output || e.marking != Marking::Unused);
+        self.entries
+            .retain(|e| e.needed_for_output || e.marking != Marking::Unused);
     }
 
     fn num_output(&self) -> usize {
@@ -102,7 +121,11 @@ impl<F: Clone> Dpb<F> {
     }
 
     fn latency_exceeded(&self) -> bool {
-        self.max_latency != 0 && self.entries.iter().any(|e| e.needed_for_output && e.latency >= self.max_latency)
+        self.max_latency != 0
+            && self
+                .entries
+                .iter()
+                .any(|e| e.needed_for_output && e.latency >= self.max_latency)
     }
 
     /// Output everything (end of stream or IRAP without no_output_of_prior_pics).
@@ -137,13 +160,27 @@ impl<F: Clone> Dpb<F> {
     }
 
     /// C.5.2.3: insert the current picture and apply "additional bumping".
-    pub fn insert(&mut self, frame: F, poc: i32, output: bool, meta: Arc<OutputMeta>, outs: &mut Vec<Output<F>>) {
+    pub fn insert(
+        &mut self,
+        frame: F,
+        poc: i32,
+        output: bool,
+        meta: Arc<OutputMeta>,
+        outs: &mut Vec<Output<F>>,
+    ) {
         for e in &mut self.entries {
             if e.needed_for_output {
                 e.latency += 1;
             }
         }
-        self.entries.push(Entry { frame, poc, marking: Marking::Short, needed_for_output: output, latency: 0, meta });
+        self.entries.push(Entry {
+            frame,
+            poc,
+            marking: Marking::Short,
+            needed_for_output: output,
+            latency: 0,
+            meta,
+        });
         while self.num_output() > self.max_num_reorder || self.latency_exceeded() {
             if !self.bump(outs) {
                 break;
@@ -181,20 +218,32 @@ impl<F: Clone> Dpb<F> {
             if msb_present {
                 p += poc - (cycle as i32).wrapping_mul(max_poc_lsb) - (poc & (max_poc_lsb - 1));
             }
-            let found =
-                self.entries.iter().position(|e| e.marking != Marking::Unused && if msb_present { e.poc == p } else { (e.poc & (max_poc_lsb - 1)) == p });
+            let found = self.entries.iter().position(|e| {
+                e.marking != Marking::Unused
+                    && if msb_present {
+                        e.poc == p
+                    } else {
+                        (e.poc & (max_poc_lsb - 1)) == p
+                    }
+            });
             lt_idx.push((found, p, used, msb_present));
         }
         // Short-term entries.
         let mut st: Vec<(Option<usize>, i32, bool, bool)> = Vec::new(); // (entry, poc, used, before)
         for &(d, used) in &sh.st_rps.s0 {
             let p = poc + d;
-            let found = self.entries.iter().position(|e| e.marking == Marking::Short && e.poc == p);
+            let found = self
+                .entries
+                .iter()
+                .position(|e| e.marking == Marking::Short && e.poc == p);
             st.push((found, p, used, true));
         }
         for &(d, used) in &sh.st_rps.s1 {
             let p = poc + d;
-            let found = self.entries.iter().position(|e| e.marking == Marking::Short && e.poc == p);
+            let found = self
+                .entries
+                .iter()
+                .position(|e| e.marking == Marking::Short && e.poc == p);
             st.push((found, p, used, false));
         }
         for &(f, _, _, _) in lt_idx.iter() {
@@ -217,16 +266,25 @@ impl<F: Clone> Dpb<F> {
                 self.entries[i].marking = Marking::Long;
             }
         }
-        let mut make = |found: Option<usize>, p: i32, lt: bool, entries: &mut Vec<Entry<F>>| -> Ref<F> {
-            match found {
-                Some(i) => Ref { frame: entries[i].frame.clone(), poc: entries[i].poc, long_term: lt },
-                None => {
-                    // 8.3.3: generate an unavailable reference picture
-                    let frame = make_missing(p);
-                    Ref { frame, poc: p, long_term: lt }
+        let mut make =
+            |found: Option<usize>, p: i32, lt: bool, entries: &mut Vec<Entry<F>>| -> Ref<F> {
+                match found {
+                    Some(i) => Ref {
+                        frame: entries[i].frame.clone(),
+                        poc: entries[i].poc,
+                        long_term: lt,
+                    },
+                    None => {
+                        // 8.3.3: generate an unavailable reference picture
+                        let frame = make_missing(p);
+                        Ref {
+                            frame,
+                            poc: p,
+                            long_term: lt,
+                        }
+                    }
                 }
-            }
-        };
+            };
         for &(f, p, used, before) in &st {
             if !used {
                 continue;
@@ -259,7 +317,11 @@ pub fn build_ref_lists<F: Clone>(sh: &SliceHeader, rps: &RefPicSet<F>) -> Result
     for l in 0..if sh.is_b() { 2 } else { 1 } {
         let n = (sh.num_ref_idx[l] as usize).max(total);
         let mut temp = Vec::with_capacity(n);
-        let (first, second) = if l == 0 { (&rps.st_curr_before, &rps.st_curr_after) } else { (&rps.st_curr_after, &rps.st_curr_before) };
+        let (first, second) = if l == 0 {
+            (&rps.st_curr_before, &rps.st_curr_after)
+        } else {
+            (&rps.st_curr_after, &rps.st_curr_before)
+        };
         while temp.len() < n {
             for r in first.iter().chain(second.iter()).chain(rps.lt_curr.iter()) {
                 if temp.len() < n {
@@ -306,7 +368,11 @@ impl PocState {
 
     /// Update after decoding a picture with the given header and POC.
     pub fn update(&mut self, sh: &SliceHeader, poc: i32) {
-        if sh.nal.temporal_id == 0 && !sh.nal.is_rasl() && !sh.nal.is_radl() && !sh.nal.is_sub_layer_non_ref() {
+        if sh.nal.temporal_id == 0
+            && !sh.nal.is_rasl()
+            && !sh.nal.is_radl()
+            && !sh.nal.is_sub_layer_non_ref()
+        {
             self.prev_tid0_poc = poc;
         }
     }

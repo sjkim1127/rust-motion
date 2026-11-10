@@ -33,6 +33,7 @@ pub mod audio_cache;
 pub mod backend;
 pub mod camera3d;
 pub mod emoji;
+pub mod film_emulation;
 pub mod font;
 pub mod frame_cache;
 pub mod gif_cache;
@@ -41,7 +42,6 @@ mod image_cache;
 pub mod lens_correction;
 pub(crate) mod lottie_cache;
 pub mod lut3d;
-pub mod film_emulation;
 pub mod mesh3d;
 pub mod motion_blur;
 pub mod parenting;
@@ -55,23 +55,23 @@ pub(crate) mod text_atlas;
 pub mod text_layout;
 pub mod time_remap;
 pub mod tiny_skia_backend;
-mod video_cache;
 pub mod vfx;
+mod video_cache;
 pub mod web;
 pub mod web_backend;
 #[cfg(feature = "gpu")]
 pub mod wgpu_backend;
 
-pub extern crate rust_motion_color as photocraft_color;
 pub extern crate photocraft_affinity;
 pub extern crate photocraft_algo;
+pub extern crate rust_motion_color as photocraft_color;
 pub use photocraft_algo as algo;
 pub extern crate photocraft_plugins;
-pub use photocraft_plugins as plugins;
+pub use photocraft_doc as doc;
 pub use photocraft_geom as geom;
 pub use photocraft_paint as paint;
+pub use photocraft_plugins as plugins;
 pub use photocraft_tablet as tablet;
-pub use photocraft_doc as doc;
 pub use photocraft_vector as vector;
 pub mod affinity_loader;
 pub use affinity_loader::*;
@@ -86,17 +86,15 @@ pub use camera3d::{
 pub use emoji::{is_emoji_char, is_emoji_grapheme, render_emoji, split_text_and_emojis, TextRun};
 pub use gltf::{parse_glb, parse_gltf, GltfModel};
 pub use mesh3d::{Mat4, Mesh3D, Quat, SkinnedVertex, Vec3};
-pub use particles::{
-    ConfettiEmitter, ConfettiShape, EmitterGeometry, Particle, ParticleEmitter,
-};
+pub use particles::{ConfettiEmitter, ConfettiShape, EmitterGeometry, Particle, ParticleEmitter};
+#[cfg(feature = "gpu")]
+pub use shader::WgpuShaderRunner;
+pub use shader::{render_shader_cpu, wrap_wgsl_shader, ShaderUniforms};
 pub use vfx::{
     apply_displacement_map, apply_optical_glow, generate_fractal_noise_pixmap, DisplacementChannel,
     DisplacementMap, DisplacementWrap, FractalNoise, FractalNoiseType, FractalType, GlowBlendMode,
     OpticalGlow,
 };
-#[cfg(feature = "gpu")]
-pub use shader::WgpuShaderRunner;
-pub use shader::{render_shader_cpu, wrap_wgsl_shader, ShaderUniforms};
 
 pub use backend::{
     BackendCapabilities, BackendRenderStats, FrameConfig, FrameSink, RasterError, RasterizerBackend,
@@ -142,9 +140,7 @@ pub use text_layout::{
     LayoutLine, PositionedGlyph, TextAlignment, TextDirection, TextLayout, TextLayoutEngine,
     TextStyle,
 };
-pub use time_remap::{
-    FrameInterpolationMode, OpticalFlowEngine, TimeRemapCurve, TimeRemapPoint,
-};
+pub use time_remap::{FrameInterpolationMode, OpticalFlowEngine, TimeRemapCurve, TimeRemapPoint};
 pub use tiny_skia_backend::TinySkiaBackend;
 pub use video_cache::{probe_video_metadata, VideoMetadata};
 #[cfg(feature = "gpu")]

@@ -15,7 +15,7 @@
 //! * Sample peak and true peak (polyphase oversampling to ≥ 176.4 kHz, see [`crate::oversample`]).
 
 use crate::biquad::{Biquad, Coeffs};
-use crate::oversample::{Interpolator, PolyphaseBank, true_peak_factor};
+use crate::oversample::{true_peak_factor, Interpolator, PolyphaseBank};
 use std::f64::consts::PI;
 
 const HIST_MIN: f64 = -70.0;
@@ -30,7 +30,11 @@ const M_SUBBLOCKS: usize = 4;
 /// Loudness of a mean-square energy (already channel-weighted), in LUFS.
 #[inline]
 pub fn energy_to_lufs(e: f64) -> f64 {
-    if e <= 0.0 { f64::NEG_INFINITY } else { -0.691 + 10.0 * e.log10() }
+    if e <= 0.0 {
+        f64::NEG_INFINITY
+    } else {
+        -0.691 + 10.0 * e.log10()
+    }
 }
 
 #[cfg(test)]
@@ -63,7 +67,13 @@ pub fn k_rlb(sample_rate: f64) -> Coeffs {
     let q = 0.500_327_037_323_877_3;
     let k = (PI * f0 / sample_rate).tan();
     let a0 = 1.0 + k / q + k * k;
-    Coeffs { b0: 1.0, b1: -2.0, b2: 1.0, a1: 2.0 * (k * k - 1.0) / a0, a2: (1.0 - k / q + k * k) / a0 }
+    Coeffs {
+        b0: 1.0,
+        b1: -2.0,
+        b2: 1.0,
+        a1: 2.0 * (k * k - 1.0) / a0,
+        a2: (1.0 - k / q + k * k) / a0,
+    }
 }
 
 /// Default BS.1770 channel weights for a channel count (L R C LFE Ls Rs [Lb Rb] order for 5.1 /
@@ -86,7 +96,10 @@ struct Histogram {
 
 impl Histogram {
     fn new() -> Self {
-        Histogram { count: vec![0; HIST_BINS], energy: vec![0.0; HIST_BINS] }
+        Histogram {
+            count: vec![0; HIST_BINS],
+            energy: vec![0.0; HIST_BINS],
+        }
     }
     fn clear(&mut self) {
         self.count.iter_mut().for_each(|c| *c = 0);
@@ -238,7 +251,12 @@ impl LoudnessMeter {
     /// Feed a block of planar audio (one slice per channel; extra channels are ignored, missing
     /// channels count as silence).
     pub fn process(&mut self, channels: &[&[f32]]) {
-        let n = channels.iter().take(self.channels).map(|c| c.len()).min().unwrap_or(0);
+        let n = channels
+            .iter()
+            .take(self.channels)
+            .map(|c| c.len())
+            .min()
+            .unwrap_or(0);
         let mut pos = 0;
         while pos < n {
             let take = (n - pos).min(self.sub_len - self.sub_pos);
@@ -332,7 +350,10 @@ impl LoudnessMeter {
     /// Gated integrated loudness (BS.1770-4), LUFS. −∞ if nothing passed the gates.
     pub fn integrated(&self) -> f64 {
         let h = &self.integrated_hist;
-        match h.relative_gate_bin(-10.0).and_then(|b| h.mean_energy_from(b)) {
+        match h
+            .relative_gate_bin(-10.0)
+            .and_then(|b| h.mean_energy_from(b))
+        {
             Some((e, _)) => energy_to_lufs(e),
             None => f64::NEG_INFINITY,
         }
@@ -349,7 +370,9 @@ impl LoudnessMeter {
     /// Loudness range (EBU Tech 3342), LU. 0 when too little signal.
     pub fn loudness_range(&self) -> f64 {
         let h = &self.lra_hist;
-        let Some(start) = h.relative_gate_bin(-20.0) else { return 0.0 };
+        let Some(start) = h.relative_gate_bin(-20.0) else {
+            return 0.0;
+        };
         let n: u64 = h.count[start..].iter().sum();
         if n == 0 {
             return 0.0;
@@ -424,15 +447,28 @@ pub fn measure(channels: &[&[f32]], sample_rate: f64) -> LoudnessSummary {
 /// Gain (dB) that moves a programme measured at `measured_lufs` to `target_lufs`.
 /// Returns 0 for silent / unmeasurable input.
 pub fn normalize_gain_db(measured_lufs: f64, target_lufs: f64) -> f64 {
-    if measured_lufs.is_finite() && target_lufs.is_finite() { target_lufs - measured_lufs } else { 0.0 }
+    if measured_lufs.is_finite() && target_lufs.is_finite() {
+        target_lufs - measured_lufs
+    } else {
+        0.0
+    }
 }
 
 /// Like [`normalize_gain_db`] but limited so that the resulting true peak does not exceed
 /// `max_true_peak_dbtp` (a linear gain can't fix peaks, so the loudness target is sacrificed —
 /// the behaviour of "Normalize" / Essential Sound auto-match without a limiter).
-pub fn normalize_gain_db_peak_limited(measured_lufs: f64, target_lufs: f64, true_peak_dbtp: f64, max_true_peak_dbtp: f64) -> f64 {
+pub fn normalize_gain_db_peak_limited(
+    measured_lufs: f64,
+    target_lufs: f64,
+    true_peak_dbtp: f64,
+    max_true_peak_dbtp: f64,
+) -> f64 {
     let g = normalize_gain_db(measured_lufs, target_lufs);
-    if true_peak_dbtp.is_finite() { g.min(max_true_peak_dbtp - true_peak_dbtp) } else { g }
+    if true_peak_dbtp.is_finite() {
+        g.min(max_true_peak_dbtp - true_peak_dbtp)
+    } else {
+        g
+    }
 }
 
 /// Expected loudness energy weighting of a pure tone at `freq` through K-weighting (|H|², for
@@ -506,7 +542,11 @@ mod tests {
             for level in [-23.0, -33.0] {
                 let x = segments(freq, sr, &[(20.0, level)]);
                 let m = stereo_measure(&x, sr);
-                assert!((m.integrated() - level).abs() < 0.1, "sr {sr} I {}", m.integrated());
+                assert!(
+                    (m.integrated() - level).abs() < 0.1,
+                    "sr {sr} I {}",
+                    m.integrated()
+                );
                 assert!((m.momentary() - level).abs() < 0.1, "M {}", m.momentary());
                 assert!((m.short_term() - level).abs() < 0.1, "S {}", m.short_term());
                 assert!((m.max_momentary() - level).abs() < 0.1);
@@ -534,7 +574,17 @@ mod tests {
         let m = stereo_measure(&x, sr);
         assert!((m.integrated() + 23.0).abs() < 0.1, "{}", m.integrated());
         // Case 4: -72 / -36 / -23 / -36 / -72 dBFS for 10/10/60/10/10 s → -23.0 LUFS.
-        let x = segments(1000.0, sr, &[(10.0, -72.0), (10.0, -36.0), (60.0, -23.0), (10.0, -36.0), (10.0, -72.0)]);
+        let x = segments(
+            1000.0,
+            sr,
+            &[
+                (10.0, -72.0),
+                (10.0, -36.0),
+                (60.0, -23.0),
+                (10.0, -36.0),
+                (10.0, -72.0),
+            ],
+        );
         let m = stereo_measure(&x, sr);
         assert!((m.integrated() + 23.0).abs() < 0.1, "{}", m.integrated());
     }
@@ -567,12 +617,25 @@ mod tests {
             (&[(20.0, -20.0), (20.0, -30.0)], 10.0),
             (&[(20.0, -20.0), (20.0, -15.0)], 5.0),
             (&[(20.0, -40.0), (20.0, -20.0)], 20.0),
-            (&[(20.0, -50.0), (20.0, -35.0), (20.0, -20.0), (20.0, -35.0), (20.0, -50.0)], 15.0),
+            (
+                &[
+                    (20.0, -50.0),
+                    (20.0, -35.0),
+                    (20.0, -20.0),
+                    (20.0, -35.0),
+                    (20.0, -50.0),
+                ],
+                15.0,
+            ),
         ];
         for (segs, expect) in cases {
             let x = segments(1000.0, sr, segs);
             let m = stereo_measure(&x, sr);
-            assert!((m.loudness_range() - expect).abs() < 1.0, "LRA {} expected {expect}", m.loudness_range());
+            assert!(
+                (m.loudness_range() - expect).abs() < 1.0,
+                "LRA {} expected {expect}",
+                m.loudness_range()
+            );
         }
     }
 
@@ -602,7 +665,10 @@ mod tests {
         // Gating removes the quiet low-frequency start, so integrated ≥ ungated expectation; the
         // difference must be small for a sweep that is mostly well above the gates.
         let i = m.integrated();
-        assert!(i >= expect - 0.1 && i - expect < 0.6, "I {i} vs ungated analytic {expect}");
+        assert!(
+            i >= expect - 0.1 && i - expect < 0.6,
+            "I {i} vs ungated analytic {expect}"
+        );
     }
 
     #[test]
@@ -626,7 +692,9 @@ mod tests {
         for sr in [48000.0, 44100.0] {
             // fs/4 sine with 45° phase: every sample is at ±0.5·√2·A, true peak A (0 dBFS).
             let n = sr as usize;
-            let x: Vec<f32> = (0..n).map(|i| (PI / 2.0 * i as f64 + PI / 4.0).sin() as f32).collect();
+            let x: Vec<f32> = (0..n)
+                .map(|i| (PI / 2.0 * i as f64 + PI / 4.0).sin() as f32)
+                .collect();
             let m = stereo_measure(&x, sr);
             assert!((20.0 * m.sample_peak().log10() + 3.01).abs() < 0.01);
             // EBU Tech 3341 true-peak tolerance: +0.2 / −0.4 dB.
@@ -640,7 +708,11 @@ mod tests {
         // Tech 3341 case 15-ish: 0 dBFS 1 kHz-ish tone at 48 kHz sampled off-peak.
         let x = sine(11025.0, 1.0, 44100.0, 44100, 0.0);
         let m = stereo_measure(&x, 44100.0);
-        assert!((-0.4..=0.2).contains(&m.true_peak_dbtp()), "{}", m.true_peak_dbtp());
+        assert!(
+            (-0.4..=0.2).contains(&m.true_peak_dbtp()),
+            "{}",
+            m.true_peak_dbtp()
+        );
     }
 
     #[test]
@@ -660,8 +732,14 @@ mod tests {
     fn normalize_helpers() {
         assert_eq!(normalize_gain_db(-30.0, -23.0), 7.0);
         assert_eq!(normalize_gain_db(f64::NEG_INFINITY, -23.0), 0.0);
-        assert_eq!(normalize_gain_db_peak_limited(-30.0, -23.0, -3.0, -1.0), 2.0);
-        assert_eq!(normalize_gain_db_peak_limited(-30.0, -23.0, -10.0, -1.0), 7.0);
+        assert_eq!(
+            normalize_gain_db_peak_limited(-30.0, -23.0, -3.0, -1.0),
+            2.0
+        );
+        assert_eq!(
+            normalize_gain_db_peak_limited(-30.0, -23.0, -10.0, -1.0),
+            7.0
+        );
         // Applying the gain lands on target.
         let sr = 48000.0;
         let x = segments(1000.0, sr, &[(10.0, -31.3)]);
@@ -688,6 +766,10 @@ mod tests {
         assert_eq!(a.true_peak(), b.true_peak());
         // Mono is summed without the dual-mono +3 dB (BS.1770).
         let expect = -0.691 + 20.0 * rms(&x).log10() + 10.0 * k_weighting_power(440.0, sr).log10();
-        assert!((a.integrated() - expect).abs() < 0.1, "{} vs {expect}", a.integrated());
+        assert!(
+            (a.integrated() - expect).abs() < 0.1,
+            "{} vs {expect}",
+            a.integrated()
+        );
     }
 }

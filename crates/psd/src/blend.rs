@@ -108,7 +108,11 @@ impl BlendMode {
 
     /// Parses a stored key; unknown keys map to [`BlendMode::Unknown`].
     pub fn from_key(key: [u8; 4]) -> Self {
-        BlendMode::ALL.iter().copied().find(|m| m.key() == key).unwrap_or(BlendMode::Unknown(key))
+        BlendMode::ALL
+            .iter()
+            .copied()
+            .find(|m| m.key() == key)
+            .unwrap_or(BlendMode::Unknown(key))
     }
 }
 

@@ -19,7 +19,8 @@ fn max_line(out: &mut [f32], radius: usize, get: impl Fn(usize) -> f32) {
     let mut suffix = Vec::new();
     if r <= 2 || suffix.try_reserve_exact(len).is_err() {
         for (x, v) in out.iter_mut().enumerate() {
-            *v = (x.saturating_sub(r)..=x.saturating_add(r).min(len - 1)).fold(0.0f32, |m, i| m.max(get(i)));
+            *v = (x.saturating_sub(r)..=x.saturating_add(r).min(len - 1))
+                .fold(0.0f32, |m, i| m.max(get(i)));
         }
         return;
     }
@@ -40,7 +41,8 @@ fn max_line(out: &mut [f32], radius: usize, get: impl Fn(usize) -> f32) {
     // Preserve the original left-to-right fold for these uncommon float lines.
     if negative_zero {
         for (x, v) in out.iter_mut().enumerate() {
-            *v = (x.saturating_sub(r)..=x.saturating_add(r).min(len - 1)).fold(0.0f32, |m, i| m.max(get(i)));
+            *v = (x.saturating_sub(r)..=x.saturating_add(r).min(len - 1))
+                .fold(0.0f32, |m, i| m.max(get(i)));
         }
         return;
     }
@@ -59,7 +61,11 @@ fn max_line(out: &mut [f32], radius: usize, get: impl Fn(usize) -> f32) {
         } else if hi == len - 1 && lo / block == hi / block {
             suffix.get(lo).copied().unwrap_or(0.0)
         } else {
-            suffix.get(lo).copied().unwrap_or(0.0).max(out.get(hi).copied().unwrap_or(0.0))
+            suffix
+                .get(lo)
+                .copied()
+                .unwrap_or(0.0)
+                .max(out.get(hi).copied().unwrap_or(0.0))
         };
         if let Some(v) = out.get_mut(x) {
             *v = value;
@@ -74,7 +80,9 @@ fn dilate_channel(src: &[f32], w: usize, h: usize, ch: usize, c: usize, r: usize
     }
     let mut tmp = vec![0.0f32; w * h];
     par_rows(&mut tmp, w, 1, |y, row| {
-        max_line(row, r, |x| src.get((y * w + x) * ch + c).copied().unwrap_or(0.0));
+        max_line(row, r, |x| {
+            src.get((y * w + x) * ch + c).copied().unwrap_or(0.0)
+        });
     });
     let mut out = vec![0.0f32; w * h];
     par_rows(&mut out, h, 1, |x, column| {
@@ -83,7 +91,14 @@ fn dilate_channel(src: &[f32], w: usize, h: usize, ch: usize, c: usize, r: usize
     out
 }
 
-fn dilate_channel_direct(src: &[f32], w: usize, h: usize, ch: usize, c: usize, r: usize) -> Vec<f32> {
+fn dilate_channel_direct(
+    src: &[f32],
+    w: usize,
+    h: usize,
+    ch: usize,
+    c: usize,
+    r: usize,
+) -> Vec<f32> {
     let get = |buf: &[f32], x: usize, y: usize| buf[(y * w + x) * ch + c];
     // Horizontal pass.
     let mut tmp = vec![0.0f32; w * h];
@@ -118,11 +133,18 @@ fn dilate_channel_direct(src: &[f32], w: usize, h: usize, ch: usize, c: usize, r
 /// spread; any alpha channel (`ch > 4`) is untouched. A pixel keeps its original ink where it has
 /// no ink at all (paper), so only internal colour edges gain a trap band.
 pub fn trap(px: &mut [f32], w: usize, h: usize, ch: usize, width: usize) {
-    if width == 0 || w == 0 || h == 0 || ch < 4 || w.checked_mul(h).and_then(|n| n.checked_mul(ch)) != Some(px.len()) {
+    if width == 0
+        || w == 0
+        || h == 0
+        || ch < 4
+        || w.checked_mul(h).and_then(|n| n.checked_mul(ch)) != Some(px.len())
+    {
         return;
     }
     let inks = 4.min(ch);
-    let dil: Vec<Vec<f32>> = (0..inks).map(|c| dilate_channel(px, w, h, ch, c, width)).collect();
+    let dil: Vec<Vec<f32>> = (0..inks)
+        .map(|c| dilate_channel(px, w, h, ch, c, width))
+        .collect();
     par_rows(px, w, ch, |y, row| {
         for (x, pixel) in row.chunks_exact_mut(ch).enumerate() {
             let i = if width <= 2 { y * w + x } else { x * h + y };
@@ -210,24 +232,53 @@ mod linear_tests {
                     seed ^= seed << 13;
                     seed ^= seed >> 17;
                     seed ^= seed << 5;
-                    [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -0.0, 0.0, -2.0, 0.25, 1.0, 2.0][seed as usize % 9]
+                    [
+                        f32::NAN,
+                        f32::INFINITY,
+                        f32::NEG_INFINITY,
+                        -0.0,
+                        0.0,
+                        -2.0,
+                        0.25,
+                        1.0,
+                        2.0,
+                    ][seed as usize % 9]
                 })
                 .collect();
             for radius in [0, 1, 2, 3, 5, 16, 50, 128, usize::MAX] {
                 let mut out = vec![0.0; len];
                 max_line(&mut out, radius, |i| values[i]);
                 for (x, v) in out.iter().enumerate() {
-                    let want = (x.saturating_sub(radius)..=x.saturating_add(radius).min(len - 1)).fold(0.0f32, |m, i| m.max(values[i]));
-                    assert_eq!(v.to_bits(), want.to_bits(), "len {len} radius {radius} x {x}");
+                    let want = (x.saturating_sub(radius)..=x.saturating_add(radius).min(len - 1))
+                        .fold(0.0f32, |m, i| m.max(values[i]));
+                    assert_eq!(
+                        v.to_bits(),
+                        want.to_bits(),
+                        "len {len} radius {radius} x {x}"
+                    );
                 }
             }
         }
     }
     #[test]
     fn trap_preserves_paper_alpha_and_spare_channels_exactly() {
-        for (w, h, ch) in [(1, 31, 5), (47, 1, 4), (37, 29, 4), (37, 29, 5), (23, 19, 8)] {
+        for (w, h, ch) in [
+            (1, 31, 5),
+            (47, 1, 4),
+            (37, 29, 4),
+            (37, 29, 5),
+            (23, 19, 8),
+        ] {
             for radius in [1, 3, 10, 128] {
-                let src: Vec<f32> = (0..w * h * ch).map(|i| if (i / ch) % 5 == 0 { 0.0 } else { ((i * 71 + i / ch * 103) % 65536) as f32 / 65535.0 }).collect();
+                let src: Vec<f32> = (0..w * h * ch)
+                    .map(|i| {
+                        if (i / ch) % 5 == 0 {
+                            0.0
+                        } else {
+                            ((i * 71 + i / ch * 103) % 65536) as f32 / 65535.0
+                        }
+                    })
+                    .collect();
                 let mut want = src.clone();
                 for y in 0..h {
                     for x in 0..w {
@@ -237,8 +288,11 @@ mod linear_tests {
                         }
                         for c in 0..4 {
                             let mut m = 0.0f32;
-                            for yy in y.saturating_sub(radius)..=y.saturating_add(radius).min(h - 1) {
-                                for xx in x.saturating_sub(radius)..=x.saturating_add(radius).min(w - 1) {
+                            for yy in y.saturating_sub(radius)..=y.saturating_add(radius).min(h - 1)
+                            {
+                                for xx in
+                                    x.saturating_sub(radius)..=x.saturating_add(radius).min(w - 1)
+                                {
                                     m = m.max(src[(yy * w + xx) * ch + c]);
                                 }
                             }
@@ -248,7 +302,10 @@ mod linear_tests {
                 }
                 let mut got = src;
                 trap(&mut got, w, h, ch, radius);
-                assert_eq!(got.iter().map(|v| v.to_bits()).collect::<Vec<_>>(), want.iter().map(|v| v.to_bits()).collect::<Vec<_>>());
+                assert_eq!(
+                    got.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+                    want.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+                );
             }
         }
     }

@@ -21,9 +21,9 @@
 
 use photocraft_geom::Rect;
 
-use crate::Ctx;
-use crate::fxutil::{MAXC, native, ncol};
+use crate::fxutil::{native, ncol, MAXC};
 use crate::image::Image;
+use crate::Ctx;
 
 /// The opacity `a` (0–1) a pixel needs to be a mix of some in-range colour and `key`, per the
 /// module docs. Out-of-range samples (32-bit HDR values beyond what `key` can reach) need full
@@ -33,9 +33,17 @@ pub fn opacity(colour: &[f32], key: &[f32]) -> f32 {
     for (&p, &c) in colour.iter().zip(key) {
         let ai = if p > c {
             // Past a key at the top of the range (`1 − C = 0`) no in-range colour reaches `P`.
-            if c < 1.0 { (p - c) / (1.0 - c) } else { 1.0 }
+            if c < 1.0 {
+                (p - c) / (1.0 - c)
+            } else {
+                1.0
+            }
         } else if p < c {
-            if c > 0.0 { (c - p) / c } else { 1.0 }
+            if c > 0.0 {
+                (c - p) / c
+            } else {
+                1.0
+            }
         } else {
             0.0
         };
@@ -67,7 +75,11 @@ pub fn unmix(colour: &mut [f32], key: &[f32], transparency: f32, opacity_thresho
         return 1.0;
     }
     for (p, &c) in colour.iter_mut().zip(key) {
-        *p = if a <= 0.0 { c } else { (c + (*p - c) / a).clamp(0.0, 1.0) };
+        *p = if a <= 0.0 {
+            c
+        } else {
+            (c + (*p - c) / a).clamp(0.0, 1.0)
+        };
     }
     a.max(0.0)
 }
@@ -75,7 +87,14 @@ pub fn unmix(colour: &mut [f32], key: &[f32], transparency: f32, opacity_thresho
 /// The filter kernel: `color` is straight sRGB (its alpha is ignored), converted to the document's
 /// colour model. Surfaces without an alpha channel (a channel or Quick Mask target) are returned
 /// unchanged, since there is nowhere to put the transparency.
-pub(crate) fn color_to_alpha(src: &Image, out: Rect, ctx: &Ctx, color: [f32; 4], transparency: f32, opacity_threshold: f32) -> Vec<f32> {
+pub(crate) fn color_to_alpha(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    color: [f32; 4],
+    transparency: f32,
+    opacity_threshold: f32,
+) -> Vec<f32> {
     let n = src.ch;
     let mut res = src.crop(out);
     if !ctx.alpha || n < 2 {
@@ -85,7 +104,9 @@ pub(crate) fn color_to_alpha(src: &Image, out: Rect, ctx: &Ctx, color: [f32; 4],
     let key_all = native(ctx, [color[0], color[1], color[2], 1.0]);
     let key = key_all.get(..cc).unwrap_or(&[]);
     for px in res.chunks_exact_mut(n) {
-        let Some((alpha, colour)) = px.split_last_mut() else { continue };
+        let Some((alpha, colour)) = px.split_last_mut() else {
+            continue;
+        };
         let a = unmix(colour, key, transparency, opacity_threshold);
         *alpha *= a;
     }
@@ -95,7 +116,7 @@ pub(crate) fn color_to_alpha(src: &Image, out: Rect, ctx: &Ctx, color: [f32; 4],
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{FilterParams, apply, output_area};
+    use crate::{apply, output_area, FilterParams};
     use photocraft_color::{ColorMode, PixelFormat, SampleType};
     use photocraft_raster::Surface;
 
@@ -104,7 +125,11 @@ mod tests {
     }
 
     fn c2a(color: [f32; 4], t: f32, o: f32) -> FilterParams {
-        FilterParams::ColorToAlpha { color, transparency_threshold: t, opacity_threshold: o }
+        FilterParams::ColorToAlpha {
+            color,
+            transparency_threshold: t,
+            opacity_threshold: o,
+        }
     }
 
     fn run(s: &Surface, p: &FilterParams, r: Rect) -> Surface {
@@ -136,7 +161,12 @@ mod tests {
     #[test]
     fn unmixed_colour_composited_over_the_key_gives_back_the_pixel() {
         let key = [0.2, 0.6, 0.9];
-        for p in [[0.5, 0.5, 0.5], [0.1, 0.9, 0.95], [0.25, 0.6, 0.0], [1.0, 0.0, 0.3]] {
+        for p in [
+            [0.5, 0.5, 0.5],
+            [0.1, 0.9, 0.95],
+            [0.25, 0.6, 0.0],
+            [1.0, 0.0, 0.3],
+        ] {
             let mut q = p;
             let a = unmix(&mut q, &key, 0.0, 1.0);
             assert!(q.iter().all(|v| (0.0..=1.0).contains(v)), "{q:?}");
@@ -178,7 +208,10 @@ mod tests {
         let mut px = [0.25, 0.5, 0.0];
         let a = unmix(&mut px, &[0.0; 3], 0.0, 1.0);
         assert!(close(a, 0.5, 1e-6));
-        assert!(close(px[0], 0.5, 1e-6) && close(px[1], 1.0, 1e-6) && close(px[2], 0.0, 1e-6), "{px:?}");
+        assert!(
+            close(px[0], 0.5, 1e-6) && close(px[1], 1.0, 1e-6) && close(px[2], 0.0, 1e-6),
+            "{px:?}"
+        );
     }
 
     #[test]
@@ -186,14 +219,29 @@ mod tests {
         let r = Rect::new(0, 0, 4, 1);
         for st in [SampleType::U8, SampleType::U16, SampleType::F32] {
             let mut s = Surface::new(PixelFormat::new(ColorMode::Rgb, st, true));
-            s.write_region(r, &[1.0, 1.0, 1.0, 1.0, 0.6, 0.6, 0.6, 1.0, 0.0, 0.0, 0.0, 1.0, 0.6, 0.6, 0.6, 0.5]);
+            s.write_region(
+                r,
+                &[
+                    1.0, 1.0, 1.0, 1.0, 0.6, 0.6, 0.6, 1.0, 0.0, 0.0, 0.0, 1.0, 0.6, 0.6, 0.6, 0.5,
+                ],
+            );
             let out = run(&s, &c2a([1.0, 1.0, 1.0, 1.0], 0.0, 1.0), r);
-            let tol = if st == SampleType::U8 { 2.0 / 255.0 } else { 1e-3 };
+            let tol = if st == SampleType::U8 {
+                2.0 / 255.0
+            } else {
+                1e-3
+            };
             assert!(close(out.pixel(0, 0)[3], 0.0, tol), "{st:?} white gone");
             let edge = out.pixel(1, 0);
-            assert!(close(edge[3], 0.4, tol) && close(edge[0], 0.0, tol), "{st:?} edge {edge:?}");
+            assert!(
+                close(edge[3], 0.4, tol) && close(edge[0], 0.0, tol),
+                "{st:?} edge {edge:?}"
+            );
             assert_eq!(out.pixel(2, 0), s.pixel(2, 0), "{st:?} black kept");
-            assert!(close(out.pixel(3, 0)[3], 0.2, tol), "{st:?} alpha multiplied");
+            assert!(
+                close(out.pixel(3, 0)[3], 0.2, tol),
+                "{st:?} alpha multiplied"
+            );
         }
     }
 
@@ -204,10 +252,17 @@ mod tests {
             let mut s = Surface::new(PixelFormat::new(ColorMode::Grayscale, st, true));
             s.write_region(r, &[1.0, 1.0, 0.75, 1.0]);
             let out = run(&s, &c2a([1.0, 1.0, 1.0, 1.0], 0.0, 1.0), r);
-            let tol = if st == SampleType::U8 { 2.0 / 255.0 } else { 1e-3 };
+            let tol = if st == SampleType::U8 {
+                2.0 / 255.0
+            } else {
+                1e-3
+            };
             assert!(close(out.pixel(0, 0)[1], 0.0, tol), "{st:?}");
             let p = out.pixel(1, 0);
-            assert!(close(p[0], 0.0, tol) && close(p[1], 0.25, tol), "{st:?} {p:?}");
+            assert!(
+                close(p[0], 0.0, tol) && close(p[1], 0.25, tol),
+                "{st:?} {p:?}"
+            );
         }
     }
 
@@ -222,13 +277,20 @@ mod tests {
         let out = run(&s, &c2a(blue, 0.0, 1.0), r);
         assert!(out.pixel(0, 0)[3] < 1e-6);
         let p = out.pixel(1, 0);
-        assert!(close(p[3], 0.5, 1e-5) && p[..3].iter().all(|v| close(*v, 0.0, 1e-5)), "{p:?}");
+        assert!(
+            close(p[3], 0.5, 1e-5) && p[..3].iter().all(|v| close(*v, 0.0, 1e-5)),
+            "{p:?}"
+        );
     }
 
     #[test]
     fn surfaces_without_alpha_are_left_alone() {
         let r = Rect::new(0, 0, 2, 2);
-        let mut s = Surface::new(PixelFormat::new(ColorMode::Grayscale, SampleType::U8, false));
+        let mut s = Surface::new(PixelFormat::new(
+            ColorMode::Grayscale,
+            SampleType::U8,
+            false,
+        ));
         s.fill_rect(r, &[1.0]);
         let out = run(&s, &c2a([1.0; 4], 0.0, 1.0), r);
         assert_eq!(out.read_region(r), s.read_region(r));

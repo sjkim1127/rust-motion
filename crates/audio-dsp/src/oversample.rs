@@ -52,7 +52,11 @@ impl PolyphaseBank {
         let proto: Vec<f64> = (0..len)
             .map(|m| {
                 let t = (m as f64 - centre) / factor as f64;
-                let sinc = if t.abs() < 1e-12 { 1.0 } else { (PI * t).sin() / (PI * t) };
+                let sinc = if t.abs() < 1e-12 {
+                    1.0
+                } else {
+                    (PI * t).sin() / (PI * t)
+                };
                 let r = (m as f64 - centre) / (centre + 1.0);
                 let w = bessel_i0(beta * (1.0 - r * r).max(0.0).sqrt()) / i0b;
                 sinc * w
@@ -87,7 +91,10 @@ pub struct Interpolator {
 
 impl Default for Interpolator {
     fn default() -> Self {
-        Interpolator { hist: [0.0; 2 * TAPS_PER_PHASE], pos: 0 }
+        Interpolator {
+            hist: [0.0; 2 * TAPS_PER_PHASE],
+            pos: 0,
+        }
     }
 }
 
@@ -104,7 +111,11 @@ impl Interpolator {
             return x.abs();
         }
         // Newest sample at window[TAPS-1-0]... store so that window[j] = x[n - j].
-        self.pos = if self.pos == 0 { TAPS_PER_PHASE - 1 } else { self.pos - 1 };
+        self.pos = if self.pos == 0 {
+            TAPS_PER_PHASE - 1
+        } else {
+            self.pos - 1
+        };
         self.hist[self.pos] = x;
         self.hist[self.pos + TAPS_PER_PHASE] = x;
         let win = &self.hist[self.pos..self.pos + TAPS_PER_PHASE];
@@ -126,14 +137,17 @@ mod tests {
     fn phases_have_unity_dc_and_interpolate_sines() {
         let bank = PolyphaseBank::new(4);
         for p in 0..4 {
-            let s: f32 = bank.coeffs[p * TAPS_PER_PHASE..(p + 1) * TAPS_PER_PHASE].iter().sum();
+            let s: f32 = bank.coeffs[p * TAPS_PER_PHASE..(p + 1) * TAPS_PER_PHASE]
+                .iter()
+                .sum();
             assert!((s - 1.0).abs() < 1e-5);
         }
         // Sine at fs/4 with 45° phase: samples at ±0.707, true peak 1.0.
         let mut ip = Interpolator::default();
         let mut peak = 0.0f32;
         for n in 0..400 {
-            let x = (std::f64::consts::FRAC_PI_2 * n as f64 + std::f64::consts::FRAC_PI_4).sin() as f32;
+            let x =
+                (std::f64::consts::FRAC_PI_2 * n as f64 + std::f64::consts::FRAC_PI_4).sin() as f32;
             let p = ip.push_peak(&bank, x);
             if n > 40 {
                 peak = peak.max(p);

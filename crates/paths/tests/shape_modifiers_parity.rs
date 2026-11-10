@@ -21,7 +21,9 @@ fn test_trim_paths_bezier_curve_precision() {
     );
 
     // Must still contain a valid CubicCurveTo
-    assert!(trimmed.iter().any(|i| matches!(i, Instruction::CubicCurveTo { .. })));
+    assert!(trimmed
+        .iter()
+        .any(|i| matches!(i, Instruction::CubicCurveTo { .. })));
 }
 
 #[test]
@@ -76,7 +78,10 @@ fn test_radial_repeater_circle_array() {
     let inst2 = &instances[2].instructions;
     if let Instruction::LineTo { x, y } = inst2[1] {
         // (0, -50) rotated +90° = (50, 0)
-        assert!((x - 50.0).abs() < 1e-3, "Rotated 90 deg line endpoint X: {x}");
+        assert!(
+            (x - 50.0).abs() < 1e-3,
+            "Rotated 90 deg line endpoint X: {x}"
+        );
         assert!(y.abs() < 1e-3, "Rotated 90 deg line endpoint Y: {y}");
     } else {
         panic!("Expected LineTo instruction");
@@ -106,6 +111,10 @@ fn test_wiggle_paths_smooth_vs_corner() {
     let corner_wiggle = wiggle_paths(&insts, 5.0, 1.0, 0.0, WigglePointType::Corner);
     let smooth_wiggle = wiggle_paths(&insts, 5.0, 1.0, 0.0, WigglePointType::Smooth);
 
-    assert!(corner_wiggle.iter().all(|i| !matches!(i, Instruction::QuadCurveTo { .. })));
-    assert!(smooth_wiggle.iter().any(|i| matches!(i, Instruction::QuadCurveTo { .. })));
+    assert!(corner_wiggle
+        .iter()
+        .all(|i| !matches!(i, Instruction::QuadCurveTo { .. })));
+    assert!(smooth_wiggle
+        .iter()
+        .any(|i| matches!(i, Instruction::QuadCurveTo { .. })));
 }

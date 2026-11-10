@@ -88,7 +88,9 @@ impl ColorMode {
     /// Number of color (non-alpha) channels for the mode, when fixed.
     pub fn color_channels(self) -> Option<u16> {
         match self {
-            ColorMode::Bitmap | ColorMode::Grayscale | ColorMode::Indexed | ColorMode::Duotone => Some(1),
+            ColorMode::Bitmap | ColorMode::Grayscale | ColorMode::Indexed | ColorMode::Duotone => {
+                Some(1)
+            }
             ColorMode::Rgb | ColorMode::Lab => Some(3),
             ColorMode::Cmyk => Some(4),
             ColorMode::Multichannel | ColorMode::Unknown(_) => None,
@@ -118,8 +120,23 @@ pub struct Header {
 
 impl Header {
     /// Creates a header with zeroed reserved bytes.
-    pub fn new(version: Version, width: u32, height: u32, channels: u16, depth: u16, color_mode: ColorMode) -> Self {
-        Header { version, reserved: [0; 6], channels, height, width, depth, color_mode }
+    pub fn new(
+        version: Version,
+        width: u32,
+        height: u32,
+        channels: u16,
+        depth: u16,
+        color_mode: ColorMode,
+    ) -> Self {
+        Header {
+            version,
+            reserved: [0; 6],
+            channels,
+            height,
+            width,
+            depth,
+            color_mode,
+        }
     }
 
     /// Bytes per row of one channel plane.
@@ -130,7 +147,10 @@ impl Header {
     pub(crate) fn read(r: &mut Reader<'_>) -> Result<Self> {
         let sig = r.array::<4>()?;
         if &sig != b"8BPS" {
-            return Err(PsdError::InvalidSignature { expected: "8BPS", found: sig });
+            return Err(PsdError::InvalidSignature {
+                expected: "8BPS",
+                found: sig,
+            });
         }
         let version = match r.u16()? {
             1 => Version::Psd,
@@ -143,7 +163,15 @@ impl Header {
         let width = r.u32()?;
         let depth = r.u16()?;
         let color_mode = ColorMode::from_u16(r.u16()?);
-        let h = Header { version, reserved, channels, height, width, depth, color_mode };
+        let h = Header {
+            version,
+            reserved,
+            channels,
+            height,
+            width,
+            depth,
+            color_mode,
+        };
         h.validate()?;
         Ok(h)
     }
@@ -151,16 +179,25 @@ impl Header {
     /// Checks the header against spec constraints and safety limits.
     pub fn validate(&self) -> Result<()> {
         if self.channels == 0 || self.channels > MAX_CHANNELS {
-            return Err(PsdError::invalid(format!("channel count {} out of range 1..=56", self.channels)));
+            return Err(PsdError::invalid(format!(
+                "channel count {} out of range 1..=56",
+                self.channels
+            )));
         }
         if self.width == 0 || self.height == 0 {
-            return Err(PsdError::invalid(format!("image dimensions {}x{} must be at least 1x1", self.width, self.height)));
+            return Err(PsdError::invalid(format!(
+                "image dimensions {}x{} must be at least 1x1",
+                self.width, self.height
+            )));
         }
         if self.width > MAX_DIMENSION || self.height > MAX_DIMENSION {
             return Err(PsdError::LimitExceeded("image dimensions exceed 300000"));
         }
         if !matches!(self.depth, 1 | 8 | 16 | 32) {
-            return Err(PsdError::invalid(format!("unsupported bit depth {}", self.depth)));
+            return Err(PsdError::invalid(format!(
+                "unsupported bit depth {}",
+                self.depth
+            )));
         }
         Ok(())
     }
@@ -207,14 +244,20 @@ mod tests {
     fn bad_signature() {
         let mut b = bytes(&Header::new(Version::Psd, 1, 1, 1, 8, ColorMode::Grayscale));
         b[0] = b'X';
-        assert!(matches!(Header::read(&mut Reader::new(&b)), Err(PsdError::InvalidSignature { .. })));
+        assert!(matches!(
+            Header::read(&mut Reader::new(&b)),
+            Err(PsdError::InvalidSignature { .. })
+        ));
     }
 
     #[test]
     fn bad_version() {
         let mut b = bytes(&Header::new(Version::Psd, 1, 1, 1, 8, ColorMode::Grayscale));
         b[5] = 3;
-        assert_eq!(Header::read(&mut Reader::new(&b)), Err(PsdError::UnsupportedVersion(3)));
+        assert_eq!(
+            Header::read(&mut Reader::new(&b)),
+            Err(PsdError::UnsupportedVersion(3))
+        );
     }
 
     #[test]

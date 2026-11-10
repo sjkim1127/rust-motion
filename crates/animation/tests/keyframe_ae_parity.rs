@@ -1,6 +1,4 @@
-use rust_motion_animation::keyframe::{
-    InterpolationType, Keyframe, KeyframeEase, KeyframeTrack,
-};
+use rust_motion_animation::keyframe::{InterpolationType, Keyframe, KeyframeEase, KeyframeTrack};
 
 #[test]
 fn test_ae_speed_graph_asymmetric_influence() {
@@ -9,8 +7,18 @@ fn test_ae_speed_graph_asymmetric_influence() {
     let out_ease = KeyframeEase::new(0.0, 15.0);
     let in_ease = KeyframeEase::new(0.0, 85.0);
 
-    track.insert_keyframe(Keyframe::bezier(0.0, 0.0, KeyframeEase::easy_ease(), out_ease));
-    track.insert_keyframe(Keyframe::bezier(30.0, 100.0, in_ease, KeyframeEase::easy_ease()));
+    track.insert_keyframe(Keyframe::bezier(
+        0.0,
+        0.0,
+        KeyframeEase::easy_ease(),
+        out_ease,
+    ));
+    track.insert_keyframe(Keyframe::bezier(
+        30.0,
+        100.0,
+        in_ease,
+        KeyframeEase::easy_ease(),
+    ));
 
     // At frame 10 (1/3rd of duration), because of fast launch, value should be well above 33.3%
     let v10 = track.evaluate(10.0);

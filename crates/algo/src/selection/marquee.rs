@@ -8,8 +8,8 @@
 
 use std::sync::Arc;
 
-use photocraft_color::{PixelFormat, SampleType, read_sample, write_sample};
-use photocraft_geom::{Rect, TILE_SIZE, TileCoord};
+use photocraft_color::{read_sample, write_sample, PixelFormat, SampleType};
+use photocraft_geom::{Rect, TileCoord, TILE_SIZE};
 use photocraft_raster::{Surface, Tile};
 
 use crate::photo_util::par_map;
@@ -63,7 +63,10 @@ impl Ellipse {
         if !aa {
             return self.inside(fx + 0.5, fy + 0.5);
         }
-        self.inside(fx, fy) && self.inside(fx + 1.0, fy) && self.inside(fx, fy + 1.0) && self.inside(fx + 1.0, fy + 1.0)
+        self.inside(fx, fy)
+            && self.inside(fx + 1.0, fy)
+            && self.inside(fx, fy + 1.0)
+            && self.inside(fx + 1.0, fy + 1.0)
     }
 
     /// Coverage of pixel `(x, y)` in sixteenths: 16 when [`Ellipse::full`], else (anti-aliased)
@@ -77,7 +80,14 @@ impl Ellipse {
             return 0;
         }
         let (fx, fy) = (x as f32, y as f32);
-        (0..16u8).filter(|i| self.inside(fx + ((i % 4) as f32 + 0.5) / 4.0, fy + ((i / 4) as f32 + 0.5) / 4.0)).count() as u8
+        (0..16u8)
+            .filter(|i| {
+                self.inside(
+                    fx + ((i % 4) as f32 + 0.5) / 4.0,
+                    fy + ((i / 4) as f32 + 0.5) / 4.0,
+                )
+            })
+            .count() as u8
     }
 }
 
@@ -95,15 +105,29 @@ struct RowSpan {
 /// margin that covers the f32 tests' rounding. The bounds are then checked with the exact tests
 /// (the fully selected run at both ends, nothing just outside); any doubt evaluates the whole row.
 fn row_span(e: &Ellipse, y: i32, cut: Rect, aa: bool) -> RowSpan {
-    let exact = RowSpan { lo: cut.x0, full_lo: cut.x1, full_hi: cut.x1, hi: cut.x1 };
-    let (cx, cy, rx, ry) = (f64::from(e.cx), f64::from(e.cy), f64::from(e.rx), f64::from(e.ry));
+    let exact = RowSpan {
+        lo: cut.x0,
+        full_lo: cut.x1,
+        full_hi: cut.x1,
+        hi: cut.x1,
+    };
+    let (cx, cy, rx, ry) = (
+        f64::from(e.cx),
+        f64::from(e.cy),
+        f64::from(e.rx),
+        f64::from(e.ry),
+    );
     // Every point the tests sample in this row lies in `y..y + 1`.
     let (ya, yb) = (f64::from(y), f64::from(y) + 1.0);
     let near = if cy < ya { ya - cy } else { (cy - yb).max(0.0) };
     let far = (ya - cy).abs().max((yb - cy).abs());
     let half = |d: f64| {
         let t = 1.0 - (d / ry) * (d / ry);
-        if t >= 0.0 { rx * t.sqrt() } else { -1.0 }
+        if t >= 0.0 {
+            rx * t.sqrt()
+        } else {
+            -1.0
+        }
     };
     let (outer, inner) = (half(near).max(0.0), half(far));
     // Near the top and bottom a rounding error δ in the test moves the edge by up to rx·√δ.
@@ -119,8 +143,19 @@ fn row_span(e: &Ellipse, y: i32, cut: Rect, aa: bool) -> RowSpan {
         (full_lo, full_hi) = (hi, hi);
     }
     let empty = |x: i32| e.coverage(x, y, aa) == 0;
-    let ok = (lo <= cut.x0 || empty(lo - 1)) && (hi >= cut.x1 || empty(hi)) && (full_lo >= full_hi || (e.full(full_lo, y, aa) && e.full(full_hi - 1, y, aa)));
-    if ok { RowSpan { lo, full_lo, full_hi, hi } } else { exact }
+    let ok = (lo <= cut.x0 || empty(lo - 1))
+        && (hi >= cut.x1 || empty(hi))
+        && (full_lo >= full_hi || (e.full(full_lo, y, aa) && e.full(full_hi - 1, y, aa)));
+    if ok {
+        RowSpan {
+            lo,
+            full_lo,
+            full_hi,
+            hi,
+        }
+    } else {
+        exact
+    }
 }
 
 /// The Elliptical Marquee's shape: the ellipse inscribed in `r`, cut to `clip`, as a GRAY8
@@ -135,7 +170,9 @@ pub fn ellipse_surface(r: Rect, clip: Rect, anti_alias: bool) -> Surface {
     let e = Ellipse::new(r);
     let enc: [u8; 17] = std::array::from_fn(|n| encode8(n as f32 / 16.0));
     let one = encode8(1.0);
-    let rows = par_map(cut.height() as usize, |i| row_span(&e, cut.y0 + i as i32, cut, anti_alias));
+    let rows = par_map(cut.height() as usize, |i| {
+        row_span(&e, cut.y0 + i as i32, cut, anti_alias)
+    });
     let span = |y: i32| rows.get(usize::try_from(y - cut.y0).ok()?);
     let full = s.solid_tile(&[1.0]);
     let blank = s.solid_tile(&[0.0]);
@@ -144,7 +181,10 @@ pub fn ellipse_surface(r: Rect, clip: Rect, anti_alias: bool) -> Surface {
         let tc = *coords.get(k)?;
         let rect = tc.rect();
         let tr = rect.intersect(&cut);
-        if tr == rect && (tr.y0..tr.y1).all(|y| span(y).is_some_and(|s| s.full_lo <= tr.x0 && s.full_hi >= tr.x1)) {
+        if tr == rect
+            && (tr.y0..tr.y1)
+                .all(|y| span(y).is_some_and(|s| s.full_lo <= tr.x0 && s.full_hi >= tr.x1))
+        {
             return Some((tc, Arc::clone(&full)));
         }
         let mut tile: Option<Tile> = None;
@@ -154,14 +194,24 @@ pub fn ellipse_surface(r: Rect, clip: Rect, anti_alias: bool) -> Surface {
             let at = |x: i32| row + (x - rect.x0) as usize;
             let (a, b) = (sp.full_lo.max(tr.x0), sp.full_hi.min(tr.x1));
             if a < b {
-                if let Some(d) = tile.get_or_insert_with(|| Tile::clone(&blank)).bytes_mut().get_mut(at(a)..at(b)) {
+                if let Some(d) = tile
+                    .get_or_insert_with(|| Tile::clone(&blank))
+                    .bytes_mut()
+                    .get_mut(at(a)..at(b))
+                {
                     d.fill(one);
                 }
             }
-            for x in (sp.lo.max(tr.x0)..sp.full_lo.min(tr.x1)).chain(sp.full_hi.max(tr.x0)..sp.hi.min(tr.x1)) {
+            for x in (sp.lo.max(tr.x0)..sp.full_lo.min(tr.x1))
+                .chain(sp.full_hi.max(tr.x0)..sp.hi.min(tr.x1))
+            {
                 let n = e.coverage(x, y, anti_alias);
                 if n > 0 {
-                    if let Some(d) = tile.get_or_insert_with(|| Tile::clone(&blank)).bytes_mut().get_mut(at(x)) {
+                    if let Some(d) = tile
+                        .get_or_insert_with(|| Tile::clone(&blank))
+                        .bytes_mut()
+                        .get_mut(at(x))
+                    {
                         *d = enc.get(usize::from(n)).copied().unwrap_or(one);
                     }
                 }
@@ -177,7 +227,12 @@ pub fn ellipse_surface(r: Rect, clip: Rect, anti_alias: bool) -> Surface {
 /// outside `area`: the same bytes as reading both over `area`, mapping and writing the result.
 /// GRAY8 inputs (every selection) go tile by tile in parallel through a table of all 256×256
 /// byte pairs; a tile `f` leaves unchanged stays shared with its input.
-pub fn combine_surfaces(a: &Surface, b: &Surface, area: Rect, f: impl Fn(f32, f32) -> f32) -> Surface {
+pub fn combine_surfaces(
+    a: &Surface,
+    b: &Surface,
+    area: Rect,
+    f: impl Fn(f32, f32) -> f32,
+) -> Surface {
     let mut out = Surface::new(PixelFormat::GRAY8);
     if area.is_empty() {
         return out;
@@ -191,9 +246,18 @@ pub fn combine_surfaces(a: &Surface, b: &Surface, area: Rect, f: impl Fn(f32, f3
         }
         return out;
     }
-    let lut: Vec<u8> = (0..=u16::MAX).map(|i| encode8(f(decode8((i >> 8) as u8), decode8(i as u8)))).collect();
-    let pair = |x: u8, y: u8| lut.get(usize::from(x) << 8 | usize::from(y)).copied().unwrap_or(0);
-    let (da, db) = (a.default_bytes().first().copied().unwrap_or(0), b.default_bytes().first().copied().unwrap_or(0));
+    let lut: Vec<u8> = (0..=u16::MAX)
+        .map(|i| encode8(f(decode8((i >> 8) as u8), decode8(i as u8))))
+        .collect();
+    let pair = |x: u8, y: u8| {
+        lut.get(usize::from(x) << 8 | usize::from(y))
+            .copied()
+            .unwrap_or(0)
+    };
+    let (da, db) = (
+        a.default_bytes().first().copied().unwrap_or(0),
+        b.default_bytes().first().copied().unwrap_or(0),
+    );
     // Whether `f` passes one side through where the other side has no tile (e.g. Add, Subtract).
     let keeps_a = (0..=255u8).all(|v| pair(v, db) == v);
     let keeps_b = (0..=255u8).all(|v| pair(da, v) == v);
@@ -213,7 +277,11 @@ pub fn combine_surfaces(a: &Surface, b: &Surface, area: Rect, f: impl Fn(f32, f3
                 _ => None,
             };
             if let Some(t) = pass {
-                return t.bytes().iter().any(|v| *v != 0).then(|| (tc, Arc::clone(t)));
+                return t
+                    .bytes()
+                    .iter()
+                    .any(|v| *v != 0)
+                    .then(|| (tc, Arc::clone(t)));
             }
         }
         let mut tile = Tile::clone(&blank);
@@ -222,15 +290,30 @@ pub fn combine_surfaces(a: &Surface, b: &Surface, area: Rect, f: impl Fn(f32, f3
         let (x0, x1) = ((tr.x0 - rect.x0) as usize, (tr.x1 - rect.x0) as usize);
         for ly in (tr.y0 - rect.y0) as usize..(tr.y1 - rect.y0) as usize {
             let (s, e) = (ly * TS + x0, ly * TS + x1);
-            let src_a = ta.and_then(|t| t.bytes().get(s..e)).unwrap_or(&row_a[..x1 - x0]);
-            let src_b = tb.and_then(|t| t.bytes().get(s..e)).unwrap_or(&row_b[..x1 - x0]);
-            let Some(dst) = data.get_mut(s..e) else { continue };
+            let src_a = ta
+                .and_then(|t| t.bytes().get(s..e))
+                .unwrap_or(&row_a[..x1 - x0]);
+            let src_b = tb
+                .and_then(|t| t.bytes().get(s..e))
+                .unwrap_or(&row_b[..x1 - x0]);
+            let Some(dst) = data.get_mut(s..e) else {
+                continue;
+            };
             for (d, (x, y)) in dst.iter_mut().zip(src_a.iter().zip(src_b)) {
                 *d = pair(*x, *y);
                 (lo, hi) = (lo.min(*d), hi.max(*d));
             }
         }
-        (hi > 0).then(|| (tc, if lo == u8::MAX { Arc::clone(&full) } else { Arc::new(tile) }))
+        (hi > 0).then(|| {
+            (
+                tc,
+                if lo == u8::MAX {
+                    Arc::clone(&full)
+                } else {
+                    Arc::new(tile)
+                },
+            )
+        })
     });
     out.put_tiles(built.into_iter().flatten());
     out
@@ -253,13 +336,32 @@ mod tests {
         for y in cut.y0..cut.y1 {
             for x in cut.x0..cut.x1 {
                 let (fx, fy) = (x as f32, y as f32);
-                let corners = [(fx, fy), (fx + 1.0, fy), (fx, fy + 1.0), (fx + 1.0, fy + 1.0)].iter().filter(|(a, b)| inside(*a, *b)).count();
+                let corners = [
+                    (fx, fy),
+                    (fx + 1.0, fy),
+                    (fx, fy + 1.0),
+                    (fx + 1.0, fy + 1.0),
+                ]
+                .iter()
+                .filter(|(a, b)| inside(*a, *b))
+                .count();
                 let cov = if !aa {
-                    if inside(fx + 0.5, fy + 0.5) { 1.0 } else { 0.0 }
+                    if inside(fx + 0.5, fy + 0.5) {
+                        1.0
+                    } else {
+                        0.0
+                    }
                 } else if corners == 4 {
                     1.0
                 } else {
-                    let n = (0..16).filter(|i| inside(fx + ((i % 4) as f32 + 0.5) / 4.0, fy + ((i / 4) as f32 + 0.5) / 4.0)).count();
+                    let n = (0..16)
+                        .filter(|i| {
+                            inside(
+                                fx + ((i % 4) as f32 + 0.5) / 4.0,
+                                fy + ((i / 4) as f32 + 0.5) / 4.0,
+                            )
+                        })
+                        .count();
                     n as f32 / 16.0
                 };
                 if cov > 0.0 {
@@ -289,7 +391,7 @@ mod tests {
             Rect::from_xywh(10, 10, 2, 7),
             Rect::from_xywh(100, 200, 37, 301),
             Rect::from_xywh(255, 255, 258, 2),
-            Rect::from_xywh(-300, -200, 900, 600),   // dragged past the canvas
+            Rect::from_xywh(-300, -200, 900, 600), // dragged past the canvas
             Rect::from_xywh(-500, -500, 2100, 1700), // larger than the canvas
             Rect::from_xywh(1090, 690, 40, 40),
             Rect::from_xywh(2000, 0, 50, 50), // entirely outside
@@ -304,7 +406,8 @@ mod tests {
         let mut rect = Surface::new(PixelFormat::GRAY8);
         rect.fill_rect(Rect::from_xywh(200, 100, 600, 520), &[1.0]);
         let ell = old_ellipse(Rect::from_xywh(-60, 250, 700, 500), area, true);
-        let ops: [fn(f32, f32) -> f32; 3] = [|a, b| a.max(b), |a, b| a * (1.0 - b), |a, b| a.min(b)];
+        let ops: [fn(f32, f32) -> f32; 3] =
+            [|a, b| a.max(b), |a, b| a * (1.0 - b), |a, b| a.min(b)];
         for (a, b) in [(&rect, &ell), (&ell, &rect), (&ell, &ell)] {
             for f in ops {
                 assert!(combine_surfaces(a, b, area, f) == old_combine(a, b, area, f));

@@ -2,11 +2,13 @@
 
 use std::collections::HashMap;
 
-use crate::essence::{Codec, PictureInfo, SoundFormat, SoundInfo, decode_pcm, identify_picture, sniff_picture};
+use crate::essence::{
+    decode_pcm, identify_picture, sniff_picture, Codec, PictureInfo, SoundFormat, SoundInfo,
+};
 use crate::index::{IndexEntry, IndexSegment};
-use crate::klv::{KeyClass, Ul, ber_length, classify, find_header_partition};
-use crate::meta::{Metadata, Primer, SUB_DESCRIPTORS_ITEM, Set, set_type as st, tag};
-use crate::source::{ByteSource, read_upto};
+use crate::klv::{ber_length, classify, find_header_partition, KeyClass, Ul};
+use crate::meta::{set_type as st, tag, Metadata, Primer, Set, SUB_DESCRIPTORS_ITEM};
+use crate::source::{read_upto, ByteSource};
 use crate::{Error, Rational, Result};
 
 /// Partition kinds (ST 377-1 §7).
@@ -69,7 +71,10 @@ impl Partition {
             essence_start: None,
         };
         let rest = &v[c.pos..];
-        p.essence_containers = crate::klv::batch_of(rest).into_iter().filter_map(crate::klv::ul_of).collect();
+        p.essence_containers = crate::klv::batch_of(rest)
+            .into_iter()
+            .filter_map(crate::klv::ul_of)
+            .collect();
         Some(p)
     }
     pub fn closed(&self) -> bool {
@@ -101,13 +106,18 @@ impl OperationalPattern {
         }
         match (ul.0[12], ul.0[13]) {
             (0x10, _) => OperationalPattern::Atom,
-            (i @ 1..=3, p @ 1..=3) => OperationalPattern::Generalized { item: i, package: p },
+            (i @ 1..=3, p @ 1..=3) => OperationalPattern::Generalized {
+                item: i,
+                package: p,
+            },
             _ => OperationalPattern::Unknown,
         }
     }
     pub fn name(&self) -> String {
         match self {
-            OperationalPattern::Generalized { item, package } => format!("OP{item}{}", (b'a' + package - 1) as char),
+            OperationalPattern::Generalized { item, package } => {
+                format!("OP{item}{}", (b'a' + package - 1) as char)
+            }
             OperationalPattern::Atom => "OP-Atom".into(),
             OperationalPattern::Unknown => "OP?".into(),
         }
@@ -135,10 +145,23 @@ impl Timecode {
             let per_min = base * 60 - drop;
             let d = f / per_10min;
             let m = f % per_10min;
-            f += 9 * drop * d + if m > drop { drop * ((m - drop) / per_min) } else { 0 };
+            f += 9 * drop * d
+                + if m > drop {
+                    drop * ((m - drop) / per_min)
+                } else {
+                    0
+                };
         }
-        let (hh, mm, ss, ff) = (f / (base * 3600), (f / (base * 60)) % 60, (f / base) % 60, f % base);
-        format!("{hh:02}:{mm:02}:{ss:02}{}{ff:02}", if self.drop_frame { ';' } else { ':' })
+        let (hh, mm, ss, ff) = (
+            f / (base * 3600),
+            (f / (base * 60)) % 60,
+            (f / base) % 60,
+            f % base,
+        );
+        format!(
+            "{hh:02}:{mm:02}:{ss:02}{}{ff:02}",
+            if self.drop_frame { ';' } else { ':' }
+        )
     }
 }
 
@@ -227,11 +250,17 @@ impl EssenceTrack {
     }
     /// Total sound sample frames stored.
     pub fn stored_sample_frames(&self) -> u64 {
-        self.chunks.last().map_or(0, |c| c.first_sample.saturating_add(c.samples))
+        self.chunks
+            .last()
+            .map_or(0, |c| c.first_sample.saturating_add(c.samples))
     }
     /// Sound sample frames per edit unit (rational), e.g. 48000/25.
     pub fn samples_per_edit_unit(&self) -> (i64, i64) {
-        let sr = self.sound.as_ref().map(|s| s.sample_rate).unwrap_or_default();
+        let sr = self
+            .sound
+            .as_ref()
+            .map(|s| s.sample_rate)
+            .unwrap_or_default();
         let er = self.edit_rate;
         if !sr.is_valid() || !er.is_valid() {
             return (1, 1);
@@ -321,9 +350,21 @@ impl<S: ByteSource + ?Sized> Window<'_, S> {
 fn walk(src: &(impl ByteSource + ?Sized)) -> Result<WalkResult> {
     let len = src.len();
     let head = read_upto(src, 0, 65_536 + 32)?;
-    let run_in = find_header_partition(&head).ok_or_else(|| Error::NotMxf("no header partition pack".into()))? as u64;
-    let mut w = WalkResult { run_in, partitions: Vec::new(), metadata: Vec::new(), index: Vec::new(), elements: Vec::new(), warnings: Vec::new() };
-    let mut win = Window { src, off: 0, buf: Vec::new() };
+    let run_in = find_header_partition(&head)
+        .ok_or_else(|| Error::NotMxf("no header partition pack".into()))? as u64;
+    let mut w = WalkResult {
+        run_in,
+        partitions: Vec::new(),
+        metadata: Vec::new(),
+        index: Vec::new(),
+        elements: Vec::new(),
+        warnings: Vec::new(),
+    };
+    let mut win = Window {
+        src,
+        off: 0,
+        buf: Vec::new(),
+    };
     let mut pos = run_in;
     let mut cur_meta: Option<usize> = None;
     while pos + 17 <= len {
@@ -333,7 +374,8 @@ fn walk(src: &(impl ByteSource + ?Sized)) -> Result<WalkResult> {
             // Lost sync (corrupt data): look for the next partition pack.
             match resync(src, pos + 1, len)? {
                 Some(p) => {
-                    w.warnings.push(format!("lost KLV sync at byte {pos}; resumed at {p}"));
+                    w.warnings
+                        .push(format!("lost KLV sync at byte {pos}; resumed at {p}"));
                     pos = p;
                     continue;
                 }
@@ -348,19 +390,36 @@ fn walk(src: &(impl ByteSource + ?Sized)) -> Result<WalkResult> {
             break;
         };
         let vstart = pos + 16 + n as u64;
-        let Some(vend) = vstart.checked_add(vlen) else { break };
+        let Some(vend) = vstart.checked_add(vlen) else {
+            break;
+        };
         let class = classify(&key);
         if vend > len {
-            w.warnings.push(format!("file truncated: KLV at byte {pos} needs {} bytes, {} left", vlen, len.saturating_sub(vstart)));
-            if class == KeyClass::Essence && vstart < len && len - vstart > 0 && is_essence_item(&key) {
+            w.warnings.push(format!(
+                "file truncated: KLV at byte {pos} needs {} bytes, {} left",
+                vlen,
+                len.saturating_sub(vstart)
+            ));
+            if class == KeyClass::Essence
+                && vstart < len
+                && len - vstart > 0
+                && is_essence_item(&key)
+            {
                 // keep a truncated clip-wrapped element's whole edit units
-                w.elements.push(Element { key, value_offset: vstart, size: len - vstart, truncated: true });
+                w.elements.push(Element {
+                    key,
+                    value_offset: vstart,
+                    size: len - vstart,
+                    truncated: true,
+                });
             }
             break;
         }
         let read_value = || -> Result<Vec<u8>> {
             if vlen > MAX_META_VALUE {
-                return Err(Error::Invalid(format!("metadata value of {vlen} bytes at {pos}")));
+                return Err(Error::Invalid(format!(
+                    "metadata value of {vlen} bytes at {pos}"
+                )));
             }
             Ok(read_upto(src, vstart, vlen as usize)?)
         };
@@ -369,7 +428,9 @@ fn walk(src: &(impl ByteSource + ?Sized)) -> Result<WalkResult> {
                 let v = read_value()?;
                 match Partition::parse(pos, kind, status, &v) {
                     Some(p) => w.partitions.push(p),
-                    None => w.warnings.push(format!("short partition pack at byte {pos}")),
+                    None => w
+                        .warnings
+                        .push(format!("short partition pack at byte {pos}")),
                 }
                 cur_meta = None;
             }
@@ -399,7 +460,12 @@ fn walk(src: &(impl ByteSource + ?Sized)) -> Result<WalkResult> {
                     }
                 }
                 if is_essence_item(&key) {
-                    w.elements.push(Element { key, value_offset: vstart, size: vlen, truncated: false });
+                    w.elements.push(Element {
+                        key,
+                        value_offset: vstart,
+                        size: vlen,
+                        truncated: false,
+                    });
                 }
             }
             KeyClass::Fill | KeyClass::RandomIndexPack | KeyClass::Other => {}
@@ -427,7 +493,8 @@ fn resync(src: &(impl ByteSource + ?Sized), from: u64, len: u64) -> Result<Optio
             break;
         }
         for i in 0..=chunk.len() - 16 {
-            if chunk[i..i + 13] == crate::klv::PARTITION_PREFIX && (2..=4).contains(&chunk[i + 13]) {
+            if chunk[i..i + 13] == crate::klv::PARTITION_PREFIX && (2..=4).contains(&chunk[i + 13])
+            {
                 return Ok(Some(at + i as u64));
             }
         }
@@ -452,9 +519,20 @@ fn track_kind_of(def: Option<Ul>) -> Option<(bool, TrackKind)> {
 
 /// The structural components of a track's sequence (or the component itself).
 fn components<'a>(md: &'a Metadata, track: &Set) -> (Option<&'a Set>, Vec<&'a Set>) {
-    let Some(seq) = track.reference(tag::TRACK_SEQUENCE).and_then(|r| md.get(&r)) else { return (None, Vec::new()) };
+    let Some(seq) = track
+        .reference(tag::TRACK_SEQUENCE)
+        .and_then(|r| md.get(&r))
+    else {
+        return (None, Vec::new());
+    };
     if seq.kind() == Some(st::SEQUENCE) {
-        (Some(seq), seq.references(tag::STRUCTURAL_COMPONENTS).iter().filter_map(|r| md.get(r)).collect())
+        (
+            Some(seq),
+            seq.references(tag::STRUCTURAL_COMPONENTS)
+                .iter()
+                .filter_map(|r| md.get(r))
+                .collect(),
+        )
     } else {
         (Some(seq), vec![seq])
     }
@@ -473,7 +551,11 @@ fn package_timecode(md: &Metadata, pkg: &Set) -> Option<Timecode> {
     for r in pkg.references(tag::PACKAGE_TRACKS) {
         let Some(t) = md.get(&r) else { continue };
         let (_, comps) = components(md, t);
-        if let Some(tc) = comps.iter().filter(|c| c.kind() == Some(st::TIMECODE_COMPONENT)).find_map(|c| timecode_of(c)) {
+        if let Some(tc) = comps
+            .iter()
+            .filter(|c| c.kind() == Some(st::TIMECODE_COMPONENT))
+            .find_map(|c| timecode_of(c))
+        {
             return Some(tc);
         }
     }
@@ -482,19 +564,36 @@ fn package_timecode(md: &Metadata, pkg: &Set) -> Option<Timecode> {
 
 /// The descriptor of file package track `track_id`: the package descriptor, or the matching
 /// sub-descriptor of a multiple descriptor.
-fn descriptor_for<'a>(md: &'a Metadata, pkg: &Set, track_id: u32, kind: TrackKind) -> Option<&'a Set> {
+fn descriptor_for<'a>(
+    md: &'a Metadata,
+    pkg: &Set,
+    track_id: u32,
+    kind: TrackKind,
+) -> Option<&'a Set> {
     let d = md.get(&pkg.reference(tag::SOURCE_PACKAGE_DESCRIPTOR)?)?;
     if d.kind() != Some(st::MULTIPLE_DESCRIPTOR) {
         return Some(d);
     }
-    let subs: Vec<&Set> = d.references(tag::SUB_DESCRIPTORS).iter().filter_map(|r| md.get(r)).collect();
-    subs.iter().find(|s| s.u(tag::LINKED_TRACK_ID) == Some(track_id as i64)).or_else(|| subs.iter().find(|s| descriptor_kind(s) == Some(kind))).copied()
+    let subs: Vec<&Set> = d
+        .references(tag::SUB_DESCRIPTORS)
+        .iter()
+        .filter_map(|r| md.get(r))
+        .collect();
+    subs.iter()
+        .find(|s| s.u(tag::LINKED_TRACK_ID) == Some(track_id as i64))
+        .or_else(|| subs.iter().find(|s| descriptor_kind(s) == Some(kind)))
+        .copied()
 }
 
 fn descriptor_kind(s: &Set) -> Option<TrackKind> {
     match s.kind()? {
-        st::GENERIC_PICTURE_DESCRIPTOR | st::CDCI_DESCRIPTOR | st::RGBA_DESCRIPTOR | st::MPEG2_VIDEO_DESCRIPTOR => Some(TrackKind::Picture),
-        st::GENERIC_SOUND_DESCRIPTOR | st::AES3_DESCRIPTOR | st::WAVE_DESCRIPTOR => Some(TrackKind::Sound),
+        st::GENERIC_PICTURE_DESCRIPTOR
+        | st::CDCI_DESCRIPTOR
+        | st::RGBA_DESCRIPTOR
+        | st::MPEG2_VIDEO_DESCRIPTOR => Some(TrackKind::Picture),
+        st::GENERIC_SOUND_DESCRIPTOR | st::AES3_DESCRIPTOR | st::WAVE_DESCRIPTOR => {
+            Some(TrackKind::Sound)
+        }
         st::GENERIC_DATA_DESCRIPTOR => Some(TrackKind::Data),
         _ => None,
     }
@@ -525,7 +624,11 @@ fn picture_info(d: &Set) -> PictureInfo {
 
 fn sound_info(d: &Set) -> SoundInfo {
     SoundInfo {
-        sample_rate: d.rational(tag::AUDIO_SAMPLING_RATE).filter(Rational::is_valid).or_else(|| d.rational(tag::SAMPLE_RATE)).unwrap_or_default(),
+        sample_rate: d
+            .rational(tag::AUDIO_SAMPLING_RATE)
+            .filter(Rational::is_valid)
+            .or_else(|| d.rational(tag::SAMPLE_RATE))
+            .unwrap_or_default(),
         channels: d.u(tag::CHANNEL_COUNT).unwrap_or(1) as u32,
         bits: d.u(tag::QUANTIZATION_BITS).unwrap_or(16) as u32,
         block_align: d.u(tag::BLOCK_ALIGN).unwrap_or(0) as u32,
@@ -551,25 +654,47 @@ struct TrackRef {
 }
 
 fn umid_of(s: &Set, t: u16) -> Option<[u8; 32]> {
-    s.get(t).and_then(|v| v.get(..32)).map(|b| b.try_into().unwrap_or([0; 32]))
+    s.get(t)
+        .and_then(|v| v.get(..32))
+        .map(|b| b.try_into().unwrap_or([0; 32]))
 }
 
 /// Material package tracks → file package tracks with descriptors.
-fn resolve_tracks(md: &Metadata, warnings: &mut Vec<String>) -> (Vec<TrackRef>, Option<Timecode>, Option<String>) {
+fn resolve_tracks(
+    md: &Metadata,
+    warnings: &mut Vec<String>,
+) -> (Vec<TrackRef>, Option<Timecode>, Option<String>) {
     let sources: Vec<&Set> = md.of_kind(st::SOURCE_PACKAGE).collect();
-    let file_pkg = |umid: &[u8; 32]| sources.iter().find(|p| umid_of(p, tag::PACKAGE_UID).as_ref() == Some(umid)).copied();
+    let file_pkg = |umid: &[u8; 32]| {
+        sources
+            .iter()
+            .find(|p| umid_of(p, tag::PACKAGE_UID).as_ref() == Some(umid))
+            .copied()
+    };
     // EssenceContainerData: package → (body SID, index SID)
     let mut sids: HashMap<[u8; 32], (u32, u32)> = HashMap::new();
     for e in md.of_kind(st::ESSENCE_CONTAINER_DATA) {
         if let Some(u) = umid_of(e, tag::ESSENCE_CONTAINER_DATA_LINKED_PACKAGE) {
-            sids.insert(u, (e.u(tag::BODY_SID).unwrap_or(0) as u32, e.u(tag::INDEX_SID).unwrap_or(0) as u32));
+            sids.insert(
+                u,
+                (
+                    e.u(tag::BODY_SID).unwrap_or(0) as u32,
+                    e.u(tag::INDEX_SID).unwrap_or(0) as u32,
+                ),
+            );
         }
     }
     let material = md.of_kind(st::MATERIAL_PACKAGE).next();
     let mut out = Vec::new();
     let mut timecode = material.and_then(|m| package_timecode(md, m));
     let name = material.and_then(|m| m.string(tag::PACKAGE_NAME));
-    let file_track = |pkg: &Set, kind: Option<TrackKind>, id: Option<u32>, start: i64, duration: Option<i64>, name: Option<String>| -> Option<TrackRef> {
+    let file_track = |pkg: &Set,
+                      kind: Option<TrackKind>,
+                      id: Option<u32>,
+                      start: i64,
+                      duration: Option<i64>,
+                      name: Option<String>|
+     -> Option<TrackRef> {
         let umid = umid_of(pkg, tag::PACKAGE_UID).unwrap_or([0; 32]);
         for r in pkg.references(tag::PACKAGE_TRACKS) {
             let Some(t) = md.get(&r) else { continue };
@@ -591,7 +716,12 @@ fn resolve_tracks(md: &Metadata, warnings: &mut Vec<String>) -> (Vec<TrackRef>, 
             let subs: Vec<Set> = desc
                 .and_then(|d| d.dynamic_item(&SUB_DESCRIPTORS_ITEM))
                 .map(|v| {
-                    crate::klv::batch_of(v).into_iter().filter_map(|b| b.get(..16)).filter_map(|b| md.get(&b.try_into().unwrap_or([0; 16]))).cloned().collect()
+                    crate::klv::batch_of(v)
+                        .into_iter()
+                        .filter_map(|b| b.get(..16))
+                        .filter_map(|b| md.get(&b.try_into().unwrap_or([0; 16])))
+                        .cloned()
+                        .collect()
                 })
                 .unwrap_or_default();
             let (body_sid, index_sid) = sids.get(&umid).copied().unwrap_or((0, 0));
@@ -616,30 +746,56 @@ fn resolve_tracks(md: &Metadata, warnings: &mut Vec<String>) -> (Vec<TrackRef>, 
         for r in m.references(tag::PACKAGE_TRACKS) {
             let Some(t) = md.get(&r) else { continue };
             let (seq, comps) = components(md, t);
-            let Some((false, kind)) = track_kind_of(seq.and_then(|s| s.ul(tag::DATA_DEFINITION))) else { continue };
+            let Some((false, kind)) = track_kind_of(seq.and_then(|s| s.ul(tag::DATA_DEFINITION)))
+            else {
+                continue;
+            };
             if kind == TrackKind::Data {
                 continue;
             }
-            let Some(clip) = comps.iter().find(|c| c.kind() == Some(st::SOURCE_CLIP)) else { continue };
-            let Some(umid) = umid_of(clip, tag::SOURCE_PACKAGE_ID) else { continue };
+            let Some(clip) = comps.iter().find(|c| c.kind() == Some(st::SOURCE_CLIP)) else {
+                continue;
+            };
+            let Some(umid) = umid_of(clip, tag::SOURCE_PACKAGE_ID) else {
+                continue;
+            };
             let Some(pkg) = file_pkg(&umid) else {
-                warnings.push(format!("material track {} refers to a package not in this file", t.u(tag::TRACK_ID).unwrap_or(0)));
+                warnings.push(format!(
+                    "material track {} refers to a package not in this file",
+                    t.u(tag::TRACK_ID).unwrap_or(0)
+                ));
                 continue;
             };
             let src_track = clip.u(tag::SOURCE_TRACK_ID).map(|v| v as u32);
-            let duration = clip.i(tag::DURATION).or_else(|| seq.and_then(|s| s.i(tag::DURATION))).filter(|d| *d >= 0);
+            let duration = clip
+                .i(tag::DURATION)
+                .or_else(|| seq.and_then(|s| s.i(tag::DURATION)))
+                .filter(|d| *d >= 0);
             // durations are in the material track's edit rate; convert when the file track's differs
             let mrate = t.rational(tag::EDIT_RATE).unwrap_or_default();
-            if let Some(mut tr) = file_track(pkg, Some(kind), src_track, clip.i(tag::START_POSITION).unwrap_or(0), duration, t.string(tag::TRACK_NAME)) {
+            if let Some(mut tr) = file_track(
+                pkg,
+                Some(kind),
+                src_track,
+                clip.i(tag::START_POSITION).unwrap_or(0),
+                duration,
+                t.string(tag::TRACK_NAME),
+            ) {
                 if mrate.is_valid() && tr.edit_rate.is_valid() && mrate != tr.edit_rate {
-                    let conv = |v: i64| (v as i128 * tr.edit_rate.num as i128 * mrate.den as i128 / (tr.edit_rate.den as i128 * mrate.num as i128)) as i64;
+                    let conv = |v: i64| {
+                        (v as i128 * tr.edit_rate.num as i128 * mrate.den as i128
+                            / (tr.edit_rate.den as i128 * mrate.num as i128))
+                            as i64
+                    };
                     tr.duration = tr.duration.map(conv);
                     tr.start_position = conv(tr.start_position);
                 }
                 if timecode.is_none() {
                     timecode = package_timecode(md, pkg);
                 }
-                if !out.iter().any(|o: &TrackRef| o.track_id == tr.track_id && o.track_number == tr.track_number) {
+                if !out.iter().any(|o: &TrackRef| {
+                    o.track_id == tr.track_id && o.track_number == tr.track_number
+                }) {
                     out.push(tr);
                 }
             }
@@ -682,25 +838,35 @@ pub fn open(src: &(impl ByteSource + ?Sized)) -> Result<MxfFile> {
             (p.complete(), p.closed(), p.offset)
         })
         .map(|(i, _)| i);
-    let Some(best) = best else { return Err(Error::Invalid("no header metadata".into())) };
+    let Some(best) = best else {
+        return Err(Error::Invalid("no header metadata".into()));
+    };
     let (meta_partition, primer, sets) = &w.metadata[best];
     let mut md = Metadata::default();
     for (k, v) in sets {
         md.push(Set::parse(*k, v, primer));
     }
     let preface = md.of_kind(st::PREFACE).next();
-    let op_label = preface.and_then(|p| p.ul(tag::OPERATIONAL_PATTERN)).unwrap_or(w.partitions[0].operational_pattern);
+    let op_label = preface
+        .and_then(|p| p.ul(tag::OPERATIONAL_PATTERN))
+        .unwrap_or(w.partitions[0].operational_pattern);
     let ident = md.of_kind(st::IDENTIFICATION).last();
     let product_name = ident.and_then(|i| i.string(tag::PRODUCT_NAME));
     let company_name = ident.and_then(|i| i.string(tag::COMPANY_NAME));
     let (refs, timecode, material_name) = resolve_tracks(&md, &mut warnings);
     if refs.is_empty() {
-        return Err(Error::Invalid("no essence tracks in the header metadata".into()));
+        return Err(Error::Invalid(
+            "no essence tracks in the header metadata".into(),
+        ));
     }
     let mut tracks = Vec::new();
     let mut claimed: Vec<[u8; 4]> = Vec::new();
     let all_numbers: Vec<[u8; 4]> = {
-        let mut v: Vec<[u8; 4]> = w.elements.iter().map(|e| e.key.0[12..16].try_into().unwrap_or([0; 4])).collect();
+        let mut v: Vec<[u8; 4]> = w
+            .elements
+            .iter()
+            .map(|e| e.key.0[12..16].try_into().unwrap_or([0; 4]))
+            .collect();
         v.dedup();
         v.sort_unstable();
         v.dedup();
@@ -717,21 +883,42 @@ pub fn open(src: &(impl ByteSource + ?Sized)) -> Result<MxfFile> {
                 TrackKind::Sound => &[0x06, 0x16],
                 TrackKind::Data => &[0x07, 0x17],
             };
-            let cands: Vec<[u8; 4]> = all_numbers.iter().filter(|n| kind_items.contains(&n[0]) && !claimed.contains(n)).copied().collect();
+            let cands: Vec<[u8; 4]> = all_numbers
+                .iter()
+                .filter(|n| kind_items.contains(&n[0]) && !claimed.contains(n))
+                .copied()
+                .collect();
             if cands.len() == 1 {
                 key4 = Some(cands[0]);
             }
         }
         let Some(key4) = key4 else {
-            warnings.push(format!("no essence in this file for track {} (number {:08x})", r.track_id, r.track_number));
+            warnings.push(format!(
+                "no essence in this file for track {} (number {:08x})",
+                r.track_id, r.track_number
+            ));
             continue;
         };
         claimed.push(key4);
-        let elements: Vec<Element> = w.elements.iter().filter(|e| e.key.0[12..16] == key4).copied().collect();
-        tracks.push(build_track(src, r, &elements, key4, &w.index, &mut warnings)?);
+        let elements: Vec<Element> = w
+            .elements
+            .iter()
+            .filter(|e| e.key.0[12..16] == key4)
+            .copied()
+            .collect();
+        tracks.push(build_track(
+            src,
+            r,
+            &elements,
+            key4,
+            &w.index,
+            &mut warnings,
+        )?);
     }
     if tracks.is_empty() {
-        return Err(Error::Unsupported("no essence of the material package is stored in this file".into()));
+        return Err(Error::Unsupported(
+            "no essence of the material package is stored in this file".into(),
+        ));
     }
     Ok(MxfFile {
         run_in: w.run_in,
@@ -751,9 +938,15 @@ pub fn open(src: &(impl ByteSource + ?Sized)) -> Result<MxfFile> {
 }
 
 /// Index entries per stored edit unit for an index SID (all segments when `sid` is 0 or unmatched).
-fn index_entries(index: &[IndexSegment], sid: u32) -> (std::collections::BTreeMap<usize, IndexEntry>, u32) {
+fn index_entries(
+    index: &[IndexSegment],
+    sid: u32,
+) -> (std::collections::BTreeMap<usize, IndexEntry>, u32) {
     let any = index.iter().any(|s| s.index_sid == sid);
-    let segs: Vec<&IndexSegment> = index.iter().filter(|s| !any || s.index_sid == sid).collect();
+    let segs: Vec<&IndexSegment> = index
+        .iter()
+        .filter(|s| !any || s.index_sid == sid)
+        .collect();
     // ST 377-1 segments use absolute edit-unit positions, which need not start at zero.
     // Keep positions sparse so even hostile gaps allocate only for real (already parsed) entries.
     let mut out = std::collections::BTreeMap::new();
@@ -763,8 +956,12 @@ fn index_entries(index: &[IndexSegment], sid: u32) -> (std::collections::BTreeMa
             eubc = s.edit_unit_byte_count;
         }
         for (k, e) in s.entries.iter().enumerate() {
-            let Some(position) = s.start_position.checked_add(k as i64) else { break };
-            let Ok(p) = usize::try_from(position) else { continue };
+            let Some(position) = s.start_position.checked_add(k as i64) else {
+                break;
+            };
+            let Ok(p) = usize::try_from(position) else {
+                continue;
+            };
             out.insert(p, *e);
         }
     }
@@ -810,7 +1007,11 @@ fn build_track(
             let pi = desc.map(picture_info).unwrap_or_default();
             let mpeg_desc = desc.is_some_and(|d| d.kind() == Some(st::MPEG2_VIDEO_DESCRIPTOR));
             let mut codec = identify_picture(pi.picture_coding, container, mpeg_desc);
-            if r.sub_descriptors.iter().any(|s| s.kind() == Some(st::AVC_SUBDESCRIPTOR)) && !matches!(codec, Codec::Avc { .. }) {
+            if r.sub_descriptors
+                .iter()
+                .any(|s| s.kind() == Some(st::AVC_SUBDESCRIPTOR))
+                && !matches!(codec, Codec::Avc { .. })
+            {
                 codec = Codec::Avc { intra: false };
             }
             // A wrong or missing label: trust the essence bytes.
@@ -828,11 +1029,23 @@ fn build_track(
             build_pictures(src, &mut t, elements, index, warnings)?;
         }
         TrackKind::Sound => {
-            let si = desc.map(sound_info).unwrap_or(SoundInfo { channels: 1, bits: 16, ..Default::default() });
-            let d10 = container.is_some_and(|c| c.item_starts_with(&[0x0D, 0x01, 0x03, 0x01, 0x02, 0x01]));
+            let si = desc.map(sound_info).unwrap_or(SoundInfo {
+                channels: 1,
+                bits: 16,
+                ..Default::default()
+            });
+            let d10 = container
+                .is_some_and(|c| c.item_starts_with(&[0x0D, 0x01, 0x03, 0x01, 0x02, 0x01]));
             let aes_element = d10 || key4[0] == 0x06 && key4[2] == 0x10;
-            let pcm_desc = desc.is_some_and(|d| matches!(d.kind(), Some(st::AES3_DESCRIPTOR) | Some(st::WAVE_DESCRIPTOR)));
-            let pcm_coding = si.sound_coding.is_none_or(|c| !c.is_smpte() || c.item_starts_with(&[0x04, 0x02, 0x02, 0x01]) || c.0 == [0; 16]);
+            let pcm_desc = desc.is_some_and(|d| {
+                matches!(
+                    d.kind(),
+                    Some(st::AES3_DESCRIPTOR) | Some(st::WAVE_DESCRIPTOR)
+                )
+            });
+            let pcm_coding = si.sound_coding.is_none_or(|c| {
+                !c.is_smpte() || c.item_starts_with(&[0x04, 0x02, 0x02, 0x01]) || c.0 == [0; 16]
+            });
             t.sound_format = if aes_element {
                 SoundFormat::Aes3Element
             } else if pcm_desc || pcm_coding {
@@ -852,10 +1065,19 @@ fn build_track(
                     SoundFormat::Aes3Element => e.size.saturating_sub(4) / 32,
                     _ => e.size / fb.max(1),
                 };
-                t.chunks.push(Chunk { offset: e.value_offset, size: e.size, first_sample: first, samples: n });
+                t.chunks.push(Chunk {
+                    offset: e.value_offset,
+                    size: e.size,
+                    first_sample: first,
+                    samples: n,
+                });
                 first += n;
             }
-            t.wrapping = if elements.len() == 1 && r.duration.is_some_and(|d| d > 1) { Wrapping::Clip } else { Wrapping::Frame };
+            t.wrapping = if elements.len() == 1 && r.duration.is_some_and(|d| d > 1) {
+                Wrapping::Clip
+            } else {
+                Wrapping::Frame
+            };
             t.sound = Some(si);
         }
         TrackKind::Data => {}
@@ -871,8 +1093,11 @@ fn build_pictures(
     warnings: &mut Vec<String>,
 ) -> Result<()> {
     let (entries, eubc) = index_entries(index, t.index_sid);
-    let expected = t.duration.map(|d| d.saturating_add(t.first_edit_unit()).max(0) as usize);
-    let clip = elements.len() == 1 && expected.is_none_or(|n| n > 1) && (eubc > 0 || entries.len() > 1);
+    let expected = t
+        .duration
+        .map(|d| d.saturating_add(t.first_edit_unit()).max(0) as usize);
+    let clip =
+        elements.len() == 1 && expected.is_none_or(|n| n > 1) && (eubc > 0 || entries.len() > 1);
     let mut samples: Vec<Sample> = Vec::new();
     if clip {
         t.wrapping = Wrapping::Clip;
@@ -880,24 +1105,50 @@ fn build_pictures(
         if eubc > 0 {
             let n = e.size / eubc as u64;
             for i in 0..n {
-                samples.push(Sample { offset: e.value_offset + i * eubc as u64, size: eubc, pts: i as i64, key: true, b_picture: false });
+                samples.push(Sample {
+                    offset: e.value_offset + i * eubc as u64,
+                    size: eubc,
+                    pts: i as i64,
+                    key: true,
+                    b_picture: false,
+                });
             }
         } else {
-            let offs: Vec<u64> =
-                entries.iter().enumerate().map_while(|(position, (&indexed, entry))| (position == indexed).then_some(entry.stream_offset)).collect();
+            let offs: Vec<u64> = entries
+                .iter()
+                .enumerate()
+                .map_while(|(position, (&indexed, entry))| {
+                    (position == indexed).then_some(entry.stream_offset)
+                })
+                .collect();
             let base = offs.first().copied().unwrap_or(0);
             for (i, o) in offs.iter().enumerate() {
                 let start = o - base.min(*o);
-                let end = offs.get(i + 1).map_or(e.size, |n| n - base.min(*n)).min(e.size);
+                let end = offs
+                    .get(i + 1)
+                    .map_or(e.size, |n| n - base.min(*n))
+                    .min(e.size);
                 if end <= start {
                     break;
                 }
-                samples.push(Sample { offset: e.value_offset + start, size: (end - start) as u32, pts: i as i64, key: true, b_picture: false });
+                samples.push(Sample {
+                    offset: e.value_offset + start,
+                    size: (end - start) as u32,
+                    pts: i as i64,
+                    key: true,
+                    b_picture: false,
+                });
             }
         }
     } else {
         for (i, e) in elements.iter().filter(|e| !e.truncated).enumerate() {
-            samples.push(Sample { offset: e.value_offset, size: e.size.min(u32::MAX as u64) as u32, pts: i as i64, key: true, b_picture: false });
+            samples.push(Sample {
+                offset: e.value_offset,
+                size: e.size.min(u32::MAX as u64) as u32,
+                pts: i as i64,
+                key: true,
+                b_picture: false,
+            });
         }
     }
     let n = samples.len();
@@ -929,7 +1180,10 @@ fn build_pictures(
         let mut pts = vec![i64::MIN; n];
         let mut ok = true;
         for d in 0..n {
-            let to = entries.get(&d).copied().map_or(0, |e| e.temporal_offset as i64);
+            let to = entries
+                .get(&d)
+                .copied()
+                .map_or(0, |e| e.temporal_offset as i64);
             let s = d as i64 + to;
             if s < 0 || s >= n as i64 || pts[s as usize] != i64::MIN {
                 ok = false;
@@ -985,15 +1239,30 @@ fn is_random_access(codec: Codec, head: &[u8]) -> bool {
 impl MxfFile {
     /// The first track of a kind.
     pub fn track_of_kind(&self, kind: TrackKind) -> Option<usize> {
-        self.tracks.iter().position(|t| t.kind == kind && (!t.samples.is_empty() || !t.chunks.is_empty()))
+        self.tracks
+            .iter()
+            .position(|t| t.kind == kind && (!t.samples.is_empty() || !t.chunks.is_empty()))
     }
 
     /// The bytes of picture sample `i` (stored order) of track `track`.
-    pub fn read_sample(&self, src: &(impl ByteSource + ?Sized), track: usize, i: usize) -> Result<Vec<u8>> {
-        let t = self.tracks.get(track).ok_or_else(|| Error::Invalid(format!("no track {track}")))?;
-        let s = t.samples.get(i).ok_or_else(|| Error::Invalid(format!("no sample {i}")))?;
+    pub fn read_sample(
+        &self,
+        src: &(impl ByteSource + ?Sized),
+        track: usize,
+        i: usize,
+    ) -> Result<Vec<u8>> {
+        let t = self
+            .tracks
+            .get(track)
+            .ok_or_else(|| Error::Invalid(format!("no track {track}")))?;
+        let s = t
+            .samples
+            .get(i)
+            .ok_or_else(|| Error::Invalid(format!("no sample {i}")))?;
         if u64::from(s.size) > src.len().saturating_sub(s.offset) {
-            return Err(Error::Invalid("picture sample extends past the end of the source".into()));
+            return Err(Error::Invalid(
+                "picture sample extends past the end of the source".into(),
+            ));
         }
         let mut v = vec![0u8; s.size as usize];
         src.read_at(s.offset, &mut v)?;
@@ -1002,31 +1271,60 @@ impl MxfFile {
 
     /// `frames` sound sample frames from stored sample `start` of track `track`, planar f32
     /// (zero past the end of the essence).
-    pub fn read_pcm(&self, src: &(impl ByteSource + ?Sized), track: usize, start: u64, frames: usize) -> Result<Vec<Vec<f32>>> {
-        let t = self.tracks.get(track).ok_or_else(|| Error::Invalid(format!("no track {track}")))?;
-        let si = t.sound.as_ref().ok_or_else(|| Error::Invalid("not a sound track".into()))?;
+    pub fn read_pcm(
+        &self,
+        src: &(impl ByteSource + ?Sized),
+        track: usize,
+        start: u64,
+        frames: usize,
+    ) -> Result<Vec<Vec<f32>>> {
+        let t = self
+            .tracks
+            .get(track)
+            .ok_or_else(|| Error::Invalid(format!("no track {track}")))?;
+        let si = t
+            .sound
+            .as_ref()
+            .ok_or_else(|| Error::Invalid("not a sound track".into()))?;
         let ch = si.channels.max(1) as usize;
         if ch > 256 {
-            return Err(Error::Invalid("sound track declares more than 256 channels".into()));
+            return Err(Error::Invalid(
+                "sound track declares more than 256 channels".into(),
+            ));
         }
         // Bound the output by what the file can actually hold (every stored sample frame takes at
         // least one byte per channel), plus slack for zero padding past the end: header-declared
         // sizes cannot force a giant allocation, while any legitimately long read still works.
-        let backed = t.stored_sample_frames().saturating_sub(start).min(src.len() / ch as u64);
-        let allowed = usize::try_from(backed).unwrap_or(usize::MAX).saturating_add(PCM_PAD_FRAMES_LIMIT / ch);
+        let backed = t
+            .stored_sample_frames()
+            .saturating_sub(start)
+            .min(src.len() / ch as u64);
+        let allowed = usize::try_from(backed)
+            .unwrap_or(usize::MAX)
+            .saturating_add(PCM_PAD_FRAMES_LIMIT / ch);
         if frames > allowed {
-            return Err(Error::Invalid("sound request extends far past the stored essence".into()));
+            return Err(Error::Invalid(
+                "sound request extends far past the stored essence".into(),
+            ));
         }
         if t.sound_format == SoundFormat::Pcm && (si.bits == 0 || si.bits > 32) {
-            return Err(Error::Unsupported("invalid PCM bit depth or block alignment".into()));
+            return Err(Error::Unsupported(
+                "invalid PCM bit depth or block alignment".into(),
+            ));
         }
-        let fb = if t.sound_format == SoundFormat::Pcm { si.frame_bytes() } else { 0 };
+        let fb = if t.sound_format == SoundFormat::Pcm {
+            si.frame_bytes()
+        } else {
+            0
+        };
         if t.sound_format == SoundFormat::Pcm && (fb == 0 || fb > 4096) {
             return Err(Error::Unsupported("invalid PCM block alignment".into()));
         }
         let mut out = vec![vec![0f32; frames]; ch];
         let end = start.saturating_add(frames as u64);
-        let mut ci = t.chunks.partition_point(|c| c.first_sample.saturating_add(c.samples) <= start);
+        let mut ci = t
+            .chunks
+            .partition_point(|c| c.first_sample.saturating_add(c.samples) <= start);
         while let Some(c) = t.chunks.get(ci) {
             if c.first_sample >= end {
                 break;
@@ -1040,9 +1338,12 @@ impl MxfFile {
                             .checked_mul(fb as u64)
                             .and_then(|n| c.offset.checked_add(n))
                             .ok_or_else(|| Error::Invalid("PCM chunk offset overflows".into()))?;
-                        let bytes = ((b - a) as usize).checked_mul(fb).ok_or_else(|| Error::Invalid("PCM chunk size overflows".into()))?;
+                        let bytes = ((b - a) as usize)
+                            .checked_mul(fb)
+                            .ok_or_else(|| Error::Invalid("PCM chunk size overflows".into()))?;
                         // Never allocate past the end of the source (a truncated or lying element).
-                        let in_file = usize::try_from(src.len().saturating_sub(off)).unwrap_or(usize::MAX);
+                        let in_file =
+                            usize::try_from(src.len().saturating_sub(off)).unwrap_or(usize::MAX);
                         let bytes = bytes.min(in_file / fb * fb);
                         let mut v = vec![0u8; bytes];
                         src.read_at(off, &mut v)?;
@@ -1050,14 +1351,20 @@ impl MxfFile {
                     }
                     SoundFormat::Aes3Element => {
                         let size = c.size.min(src.len().saturating_sub(c.offset));
-                        let size = usize::try_from(size).map_err(|_| Error::Invalid("AES3 chunk exceeds the address space".into()))?;
+                        let size = usize::try_from(size).map_err(|_| {
+                            Error::Invalid("AES3 chunk exceeds the address space".into())
+                        })?;
                         let mut v = vec![0u8; size];
                         src.read_at(c.offset, &mut v)?;
                         let all = decode_pcm(&v, SoundFormat::Aes3Element, ch, si.bits, 0)?;
                         let s0 = (a - c.first_sample) as usize;
-                        all.into_iter().map(|p| p.get(s0..).map(<[f32]>::to_vec).unwrap_or_default()).collect()
+                        all.into_iter()
+                            .map(|p| p.get(s0..).map(<[f32]>::to_vec).unwrap_or_default())
+                            .collect()
                     }
-                    SoundFormat::Other => return Err(Error::Unsupported("sound essence coding".into())),
+                    SoundFormat::Other => {
+                        return Err(Error::Unsupported("sound essence coding".into()))
+                    }
                 };
                 let at = (a - start) as usize;
                 for (c, d) in decoded.iter().enumerate().take(ch) {
@@ -1078,19 +1385,34 @@ mod index_bounds_tests {
 
     #[test]
     fn nonzero_segment_positions_and_sparse_gaps_preserve_entries() {
-        let entry = IndexEntry { flags: 0x80, stream_offset: 1234, ..Default::default() };
+        let entry = IndexEntry {
+            flags: 0x80,
+            stream_offset: 1234,
+            ..Default::default()
+        };
         for start_position in [5, 49_999_999, i64::MAX] {
-            let segment = IndexSegment { start_position, entries: vec![entry, entry], ..Default::default() };
+            let segment = IndexSegment {
+                start_position,
+                entries: vec![entry, entry],
+                ..Default::default()
+            };
             let (entries, _) = index_entries(&[segment], 0);
             let start = usize::try_from(start_position).unwrap();
             assert_eq!(entries.get(&start), Some(&entry));
-            assert_eq!(entries.len(), if start_position == i64::MAX { 1 } else { 2 });
+            assert_eq!(
+                entries.len(),
+                if start_position == i64::MAX { 1 } else { 2 }
+            );
         }
     }
 
     #[test]
     fn negative_preroll_positions_do_not_drop_later_valid_entries() {
-        let segment = IndexSegment { start_position: -1, entries: vec![IndexEntry::default(); 3], ..Default::default() };
+        let segment = IndexSegment {
+            start_position: -1,
+            entries: vec![IndexEntry::default(); 3],
+            ..Default::default()
+        };
         let (entries, _) = index_entries(&[segment], 0);
         assert_eq!(entries.keys().copied().collect::<Vec<_>>(), vec![0, 1]);
     }

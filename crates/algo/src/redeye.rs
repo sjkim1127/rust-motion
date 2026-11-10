@@ -17,13 +17,21 @@ pub const MAX_POINTS: usize = 64;
 /// `1` (erode) + `ceil(σ × 3)` (Gaussian) + `1` (margin) — recompute if [`SIGMA`] changes.
 pub fn halo_radius() -> i32 {
     let blur = (SIGMA * 3.0).ceil();
-    let blur = if blur.is_finite() { blur.clamp(0.0, 64.0) as i32 } else { 3 };
+    let blur = if blur.is_finite() {
+        blur.clamp(0.0, 64.0) as i32
+    } else {
+        3
+    };
     1 + blur + 1
 }
 
 /// Search radius in document pixels for a Pupil Size in 1..=100.
 pub fn search_radius(pupil_size: f32) -> f32 {
-    let p = if pupil_size.is_finite() { pupil_size.clamp(1.0, 100.0) } else { 50.0 };
+    let p = if pupil_size.is_finite() {
+        pupil_size.clamp(1.0, 100.0)
+    } else {
+        50.0
+    };
     (4.0 + 1.20 * p).clamp(8.0, 128.0)
 }
 
@@ -78,7 +86,14 @@ fn within_search(dx: i32, dy: i32, radius: f32) -> bool {
     d.is_finite() && d <= radius
 }
 
-fn nearest_seed(mask: &[bool], w: usize, h: usize, origin: (i32, i32), click: (i32, i32), radius: f32) -> Option<usize> {
+fn nearest_seed(
+    mask: &[bool],
+    w: usize,
+    h: usize,
+    origin: (i32, i32),
+    click: (i32, i32),
+    radius: f32,
+) -> Option<usize> {
     let mut best: Option<(usize, i64)> = None;
     for y in 0..h {
         for x in 0..w {
@@ -91,7 +106,9 @@ fn nearest_seed(mask: &[bool], w: usize, h: usize, origin: (i32, i32), click: (i
             if !within_search(dx, dy, radius) {
                 continue;
             }
-            let d2 = (dx as i64).saturating_mul(dx as i64).saturating_add((dy as i64).saturating_mul(dy as i64));
+            let d2 = (dx as i64)
+                .saturating_mul(dx as i64)
+                .saturating_add((dy as i64).saturating_mul(dy as i64));
             match best {
                 Some((_, bd)) if d2 >= bd => {}
                 _ => best = Some((i, d2)),
@@ -109,7 +126,9 @@ fn flood_keep(mask: &mut [bool], w: usize, h: usize, seed: usize) {
     let mut keep = vec![false; n];
     let mut stack = vec![seed];
     while let Some(i) = stack.pop() {
-        let Some(slot) = keep.get_mut(i) else { continue };
+        let Some(slot) = keep.get_mut(i) else {
+            continue;
+        };
         if *slot || !mask.get(i).copied().unwrap_or(false) {
             continue;
         }
@@ -181,7 +200,11 @@ fn blur(src: &[f32], w: usize, h: usize, sigma: f32) -> Vec<f32> {
         return src.get(..n.min(src.len())).unwrap_or(src).to_vec();
     }
     let r = (sigma * 3.0).ceil();
-    let r = if r.is_finite() { r.clamp(1.0, 32.0) as i32 } else { 3 };
+    let r = if r.is_finite() {
+        r.clamp(1.0, 32.0) as i32
+    } else {
+        3
+    };
     let mut k = Vec::new();
     let mut sum = 0.0f32;
     for i in -r..=r {
@@ -233,18 +256,32 @@ fn blur(src: &[f32], w: usize, h: usize, sigma: f32) -> Vec<f32> {
 ///
 /// `origin` is the document coordinate of `px[0]`. Returns how many pixels changed.
 /// Pixels farther than [`search_radius`] from `click` are left untouched.
-pub fn apply(px: &mut [[f32; 4]], w: usize, h: usize, click: (i32, i32), origin: (i32, i32), pupil_size: f32, darken: f32) -> u32 {
+pub fn apply(
+    px: &mut [[f32; 4]],
+    w: usize,
+    h: usize,
+    click: (i32, i32),
+    origin: (i32, i32),
+    pupil_size: f32,
+    darken: f32,
+) -> u32 {
     let n = w.saturating_mul(h);
     if w == 0 || h == 0 || px.len() < n {
         return 0;
     }
     let radius = search_radius(pupil_size);
-    let t_amt = if darken.is_finite() { (darken.clamp(0.0, 100.0) / 100.0).clamp(0.0, 1.0) } else { 0.5 };
+    let t_amt = if darken.is_finite() {
+        (darken.clamp(0.0, 100.0) / 100.0).clamp(0.0, 1.0)
+    } else {
+        0.5
+    };
     let mut hard = vec![false; n];
     for y in 0..h {
         for x in 0..w {
             let Some(i) = idx(x, y, w) else { continue };
-            let Some(p) = px.get(i).copied() else { continue };
+            let Some(p) = px.get(i).copied() else {
+                continue;
+            };
             let dx = origin.0.saturating_add(x as i32).saturating_sub(click.0);
             let dy = origin.1.saturating_add(y as i32).saturating_sub(click.1);
             if within_search(dx, dy, radius) && is_red_eye(p) {
@@ -357,15 +394,30 @@ mod tests {
         // 5 px from the centre: in the red ring, outside the catchlight, inside the eroded mask.
         let after = px[11 * w + 16];
         let neut = (0.10 + 0.10) / 2.0;
-        assert!((after[0] - after[1]).abs() < 0.08 && (after[0] - after[2]).abs() < 0.08, "red no longer dominates: {after:?}");
-        assert!((after[0] - neut * 0.55).abs() < 0.08, "R ≈ (G+B)/2 then darkened: {after:?}");
-        assert!(luma(after) < luma([0.95, 0.10, 0.10, 1.0]) - 0.05, "pupil darkened");
+        assert!(
+            (after[0] - after[1]).abs() < 0.08 && (after[0] - after[2]).abs() < 0.08,
+            "red no longer dominates: {after:?}"
+        );
+        assert!(
+            (after[0] - neut * 0.55).abs() < 0.08,
+            "R ≈ (G+B)/2 then darkened: {after:?}"
+        );
+        assert!(
+            luma(after) < luma([0.95, 0.10, 0.10, 1.0]) - 0.05,
+            "pupil darkened"
+        );
         let iris_after = px[2 * w + 2];
         for c in 0..4 {
-            assert!((iris_after[c] - iris_before[c]).abs() < 1e-5, "iris {iris_after:?} vs {iris_before:?}");
+            assert!(
+                (iris_after[c] - iris_before[c]).abs() < 1e-5,
+                "iris {iris_after:?} vs {iris_before:?}"
+            );
         }
         let catch = px[16 * w + 16];
-        assert!(catch[0] >= 0.9 && catch[1] >= 0.9 && catch[2] >= 0.9, "catchlight {catch:?}");
+        assert!(
+            catch[0] >= 0.9 && catch[1] >= 0.9 && catch[2] >= 0.9,
+            "catchlight {catch:?}"
+        );
     }
 
     #[test]
@@ -378,7 +430,16 @@ mod tests {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn apply_tiled(src: &[[f32; 4]], w: usize, h: usize, click: (i32, i32), pupil: f32, darken: f32, tile: usize, halo: i32) -> Vec<[f32; 4]> {
+    fn apply_tiled(
+        src: &[[f32; 4]],
+        w: usize,
+        h: usize,
+        click: (i32, i32),
+        pupil: f32,
+        darken: f32,
+        tile: usize,
+        halo: i32,
+    ) -> Vec<[f32; 4]> {
         let mut out = src.to_vec();
         let halo = halo.max(0) as usize;
         let mut y0 = 0;
@@ -402,7 +463,15 @@ mod tests {
                         }
                     }
                 }
-                apply(&mut buf, bw, bh, click, (rx0 as i32, ry0 as i32), pupil, darken);
+                apply(
+                    &mut buf,
+                    bw,
+                    bh,
+                    click,
+                    (rx0 as i32, ry0 as i32),
+                    pupil,
+                    darken,
+                );
                 for yy in y0..y1 {
                     for xx in x0..x1 {
                         let b = (yy - ry0) * bw + (xx - rx0);
@@ -424,9 +493,14 @@ mod tests {
             return 0.0;
         }
         for y in 0..h {
-            let Some(a) = px.get(y * w + (x - 1)) else { continue };
+            let Some(a) = px.get(y * w + (x - 1)) else {
+                continue;
+            };
             let Some(b) = px.get(y * w + x) else { continue };
-            let d = (a[0] - b[0]).abs().max((a[1] - b[1]).abs()).max((a[2] - b[2]).abs());
+            let d = (a[0] - b[0])
+                .abs()
+                .max((a[1] - b[1]).abs())
+                .max((a[2] - b[2]).abs());
             if d > m {
                 m = d;
             }
@@ -438,7 +512,13 @@ mod tests {
     fn tile_seam_matches_an_untiled_reference() {
         let w = 128usize;
         // A red half-plane ending on the 64 px tile boundary: the mask edge is where a short halo fails.
-        let src = sample(w, w, |x, _y| if x < 64 { [0.95, 0.10, 0.10, 1.0] } else { [0.38, 0.28, 0.16, 1.0] });
+        let src = sample(w, w, |x, _y| {
+            if x < 64 {
+                [0.95, 0.10, 0.10, 1.0]
+            } else {
+                [0.38, 0.28, 0.16, 1.0]
+            }
+        });
         let mut reference = src.clone();
         apply(&mut reference, w, w, (60, 64), (0, 0), 50.0, 50.0);
         let tiled = apply_tiled(&src, w, w, (60, 64), 50.0, 50.0, 64, halo_radius());
@@ -451,7 +531,10 @@ mod tests {
         assert!(err < 1e-4, "tiled vs reference max err {err}");
         let jump_ref = max_neighbour_jump(&reference, w, w, 64);
         let jump_tiled = max_neighbour_jump(&tiled, w, w, 64);
-        assert!((jump_ref - jump_tiled).abs() < 1e-4, "seam jump {jump_tiled} vs {jump_ref}");
+        assert!(
+            (jump_ref - jump_tiled).abs() < 1e-4,
+            "seam jump {jump_tiled} vs {jump_ref}"
+        );
 
         // Reach is erode (1) + ceil(σ×3) (3). A 1 px halo cannot cover that; the documented halo can.
         let short = apply_tiled(&src, w, w, (60, 64), 50.0, 50.0, 64, 1);
@@ -461,7 +544,10 @@ mod tests {
                 short_err = short_err.max((a[c] - b[c]).abs());
             }
         }
-        assert!(short_err > err + 1e-4, "a halo smaller than the blur reach must diverge (short {short_err}, full {err})");
+        assert!(
+            short_err > err + 1e-4,
+            "a halo smaller than the blur reach must diverge (short {short_err}, full {err})"
+        );
     }
 
     #[test]

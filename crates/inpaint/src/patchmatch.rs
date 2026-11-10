@@ -21,8 +21,8 @@
 //! `w × h` hole mask, and return a full buffer equal to the input outside the hole. They are
 //! deterministic (fixed-seed hash RNG, results independent of thread count).
 
-use crate::Cancelled;
 use crate::membrane::membrane_fill;
+use crate::Cancelled;
 
 /// Below this many grid cells a level runs single-threaded (thread hand-off costs more than it saves).
 #[cfg(not(target_arch = "wasm32"))]
@@ -70,7 +70,14 @@ pub struct CompleteParams {
 
 impl Default for CompleteParams {
     fn default() -> Self {
-        Self { patch_radius: 3, em_iters: 8, min_em_iters: 2, pm_iters: 2, refine_extent: 96, seed: 1 }
+        Self {
+            patch_radius: 3,
+            em_iters: 8,
+            min_em_iters: 2,
+            pm_iters: 2,
+            refine_extent: 96,
+            seed: 1,
+        }
     }
 }
 
@@ -175,7 +182,11 @@ struct Solver<'a> {
 impl Solver<'_> {
     #[inline]
     fn is_valid(&self, x: i32, y: i32) -> bool {
-        x >= 0 && y >= 0 && (x as usize) < self.w && (y as usize) < self.h && self.valid[y as usize * self.w + x as usize]
+        x >= 0
+            && y >= 0
+            && (x as usize) < self.w
+            && (y as usize) < self.h
+            && self.valid[y as usize * self.w + x as usize]
     }
 
     /// SSD between the (clipped) target patch at `t` and the source patch at `s`, per sample.
@@ -208,11 +219,22 @@ impl Solver<'_> {
                 return f32::INFINITY;
             }
         }
-        if n == 0 { f32::INFINITY } else { sum / n as f32 }
+        if n == 0 {
+            f32::INFINITY
+        } else {
+            sum / n as f32
+        }
     }
 
     /// One PatchMatch pass over all target rows, in parallel bands (each band propagates within itself).
-    fn patchmatch(&self, nnf: &mut [(i32, i32)], cost: &mut [f32], pass: usize, seed: u64, search_radius: i32) {
+    fn patchmatch(
+        &self,
+        nnf: &mut [(i32, i32)],
+        cost: &mut [f32],
+        pass: usize,
+        seed: u64,
+        search_radius: i32,
+    ) {
         const BAND: usize = 16;
         let w = self.w;
         let reverse = pass % 2 == 1;
@@ -220,7 +242,9 @@ impl Solver<'_> {
             if (self.ctl)() {
                 return;
             }
-            let mut rng = Rng::new(seed ^ (bi as u64).wrapping_mul(0x2545_F491_4F6C_DD1D) ^ ((pass as u64) << 40));
+            let mut rng = Rng::new(
+                seed ^ (bi as u64).wrapping_mul(0x2545_F491_4F6C_DD1D) ^ ((pass as u64) << 40),
+            );
             let y0 = bi * BAND;
             let rows = nn.len() / w;
             let step: i32 = if reverse { -1 } else { 1 };
@@ -278,10 +302,17 @@ impl Solver<'_> {
         #[cfg(not(target_arch = "wasm32"))]
         if w * self.h >= PAR_MIN {
             use rayon::prelude::*;
-            nnf.par_chunks_mut(BAND * w).zip(cost.par_chunks_mut(BAND * w)).enumerate().for_each(|(bi, (nn, co))| band_fn(bi, nn, co));
+            nnf.par_chunks_mut(BAND * w)
+                .zip(cost.par_chunks_mut(BAND * w))
+                .enumerate()
+                .for_each(|(bi, (nn, co))| band_fn(bi, nn, co));
             return;
         }
-        for (bi, (nn, co)) in nnf.chunks_mut(BAND * w).zip(cost.chunks_mut(BAND * w)).enumerate() {
+        for (bi, (nn, co)) in nnf
+            .chunks_mut(BAND * w)
+            .zip(cost.chunks_mut(BAND * w))
+            .enumerate()
+        {
             band_fn(bi, nn, co);
         }
     }
@@ -290,7 +321,12 @@ impl Solver<'_> {
     fn vote(&mut self, nnf: &[(i32, i32)], cost: &[f32]) {
         let (w, h, ch, r) = (self.w, self.h, self.ch, self.r);
         // σ² from the 75th percentile of match costs (Wexler et al. use a robust scale like this).
-        let mut cs: Vec<f32> = cost.iter().zip(&self.targets).filter(|(c, t)| **t && c.is_finite()).map(|(c, _)| *c).collect();
+        let mut cs: Vec<f32> = cost
+            .iter()
+            .zip(&self.targets)
+            .filter(|(c, t)| **t && c.is_finite())
+            .map(|(c, _)| *c)
+            .collect();
         let sigma2 = if cs.is_empty() {
             1.0
         } else {
@@ -360,7 +396,14 @@ impl Solver<'_> {
 
 /// Content-aware completion of `hole` (see module docs). Returns `None` when there is no fully-known
 /// patch to copy from (the caller can fall back to [`membrane_fill`]).
-pub fn complete(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], p: &CompleteParams) -> Option<Vec<f32>> {
+pub fn complete(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    hole: &[bool],
+    p: &CompleteParams,
+) -> Option<Vec<f32>> {
     // Never cancelled, so never `Err`.
     complete_with(w, h, ch, img, hole, p, &|| false).unwrap_or(None)
 }
@@ -378,14 +421,24 @@ pub fn complete_with(
     cancelled: &(dyn Fn() -> bool + Sync),
 ) -> Result<Option<Vec<f32>>, Cancelled> {
     let check = || if cancelled() { Err(Cancelled) } else { Ok(()) };
-    if ch == 0 || Some(hole.len()) != w.checked_mul(h) || Some(img.len()) != hole.len().checked_mul(ch) {
+    if ch == 0
+        || Some(hole.len()) != w.checked_mul(h)
+        || Some(img.len()) != hole.len().checked_mul(ch)
+    {
         return Ok(None);
     }
-    let Some((bx0, by0, bx1, by1)) = hole_bbox(w, h, hole) else { return Ok(Some(img.to_vec())) };
+    let Some((bx0, by0, bx1, by1)) = hole_bbox(w, h, hole) else {
+        return Ok(Some(img.to_vec()));
+    };
     let r = p.patch_radius.max(1);
     let psz = 2 * r + 1;
     // Pyramid: shrink until the hole is a few patches across.
-    let mut levels = vec![Level { w, h, img: img.to_vec(), hole: hole.to_vec() }];
+    let mut levels = vec![Level {
+        w,
+        h,
+        img: img.to_vec(),
+        hole: hole.to_vec(),
+    }];
     let mut ext = (bx1 - bx0).max(by1 - by0);
     let mut exts = vec![ext];
     while let Some(l) = levels.last() {
@@ -403,7 +456,12 @@ pub fn complete_with(
     let mut prev: Option<(usize, usize, Vec<f32>)> = None;
     for li in (0..nlev).rev() {
         check()?;
-        let Level { w: lw, h: lh, img: mut limg, hole: lhole } = levels[li].clone();
+        let Level {
+            w: lw,
+            h: lh,
+            img: mut limg,
+            hole: lhole,
+        } = levels[li].clone();
         // Initialise the hole: membrane at the coarsest level, upsampled result elsewhere.
         match &prev {
             None => limg = membrane_fill(lw, lh, ch, &limg, &lhole),
@@ -447,7 +505,18 @@ pub fn complete_with(
             nnf.clear();
             continue;
         }
-        let mut solver = Solver { w: lw, h: lh, ch, r: ri, img: &mut limg, hole: &lhole, valid, valid_list, targets, ctl: cancelled };
+        let mut solver = Solver {
+            w: lw,
+            h: lh,
+            ch,
+            r: ri,
+            img: &mut limg,
+            hole: &lhole,
+            valid,
+            valid_list,
+            targets,
+            ctl: cancelled,
+        };
         // NNF init: upsampled from the coarser level where possible, random otherwise.
         let mut rng = Rng::new(p.seed ^ (li as u64) << 20);
         let pw_prev = prev.as_ref().map_or(0, |p| p.0);
@@ -471,7 +540,9 @@ pub fn complete_with(
                         }
                     }
                 }
-                new_nnf[y * lw + x] = cand.unwrap_or_else(|| solver.valid_list[(rng.next() % solver.valid_list.len() as u64) as usize]);
+                new_nnf[y * lw + x] = cand.unwrap_or_else(|| {
+                    solver.valid_list[(rng.next() % solver.valid_list.len() as u64) as usize]
+                });
             }
         }
         nnf = new_nnf;
@@ -506,7 +577,13 @@ pub fn complete_with(
             };
             for pass in 0..pm_iters {
                 check()?;
-                solver.patchmatch(&mut nnf, &mut cost, pass + it * pm_iters, p.seed.wrapping_add((li * 1000 + it) as u64), radius);
+                solver.patchmatch(
+                    &mut nnf,
+                    &mut cost,
+                    pass + it * pm_iters,
+                    p.seed.wrapping_add((li * 1000 + it) as u64),
+                    radius,
+                );
             }
             check()?;
             solver.vote(&nnf, &cost);
@@ -536,7 +613,9 @@ mod tests {
     }
 
     fn disc(w: usize, h: usize, cx: f32, cy: f32, r: f32) -> Vec<bool> {
-        (0..w * h).map(|i| ((i % w) as f32 - cx).hypot((i / w) as f32 - cy) < r).collect()
+        (0..w * h)
+            .map(|i| ((i % w) as f32 - cx).hypot((i / w) as f32 - cy) < r)
+            .collect()
     }
 
     fn hole_rmse(a: &[f32], b: &[f32], hole: &[bool], ch: usize) -> f32 {
@@ -566,20 +645,36 @@ mod tests {
         let out = complete(w, h, ch, &dirty, &hole, &CompleteParams::default()).unwrap();
         let before = hole_rmse(&dirty, &clean, &hole, ch);
         let after = hole_rmse(&out, &clean, &hole, ch);
-        assert!(after < 0.06 && after < before * 0.15, "rmse before {before} after {after}");
+        assert!(
+            after < 0.06 && after < before * 0.15,
+            "rmse before {before} after {after}"
+        );
         // Outside the hole untouched.
-        assert!(out.iter().zip(&dirty).zip(hole.iter().flat_map(|h| [*h; 3])).all(|((a, b), h)| h || a == b));
+        assert!(out
+            .iter()
+            .zip(&dirty)
+            .zip(hole.iter().flat_map(|h| [*h; 3]))
+            .all(|((a, b), h)| h || a == b));
         // Deterministic.
-        assert_eq!(out, complete(w, h, ch, &dirty, &hole, &CompleteParams::default()).unwrap());
+        assert_eq!(
+            out,
+            complete(w, h, ch, &dirty, &hole, &CompleteParams::default()).unwrap()
+        );
     }
 
     #[test]
     fn completion_continues_structure() {
         // Vertical stripes: the filled hole should keep the stripes (not a blur).
         let (w, h, ch) = (80, 80, 1);
-        let clean: Vec<f32> = (0..w * h).map(|i| if (i % w / 4) % 2 == 0 { 0.2 } else { 0.8 }).collect();
+        let clean: Vec<f32> = (0..w * h)
+            .map(|i| if (i % w / 4) % 2 == 0 { 0.2 } else { 0.8 })
+            .collect();
         let hole = disc(w, h, 40.0, 40.0, 7.0);
-        let dirty: Vec<f32> = clean.iter().zip(&hole).map(|(c, h)| if *h { 0.5 } else { *c }).collect();
+        let dirty: Vec<f32> = clean
+            .iter()
+            .zip(&hole)
+            .map(|(c, h)| if *h { 0.5 } else { *c })
+            .collect();
         let out = complete(w, h, ch, &dirty, &hole, &CompleteParams::default()).unwrap();
         let err = hole_rmse(&out, &clean, &hole, ch);
         assert!(err < 0.15, "{err}");

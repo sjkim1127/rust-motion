@@ -72,9 +72,7 @@ pub fn trim_paths(
             }
             result
         }
-        TrimMode::Individually => {
-            trim_subpaths_individually(&subpaths, start, end, offset)
-        }
+        TrimMode::Individually => trim_subpaths_individually(&subpaths, start, end, offset),
     }
 }
 
@@ -136,7 +134,10 @@ fn trim_subpaths_individually(
     end: f64,
     offset: f64,
 ) -> Vec<Instruction> {
-    let lengths: Vec<f64> = subpaths.iter().map(|s| get_instructions_length(s)).collect();
+    let lengths: Vec<f64> = subpaths
+        .iter()
+        .map(|s| get_instructions_length(s))
+        .collect();
     let total_len: f64 = lengths.iter().sum();
     if total_len <= 1e-6 {
         return Vec::new();
@@ -315,10 +316,7 @@ fn slice_subpath(instructions: &[Instruction], from_len: f64, to_len: f64) -> Ve
                     );
 
                     if !has_moved {
-                        result.push(Instruction::MoveTo {
-                            x: sp0.0,
-                            y: sp0.1,
-                        });
+                        result.push(Instruction::MoveTo { x: sp0.0, y: sp0.1 });
                         has_moved = true;
                     }
                     result.push(Instruction::CubicCurveTo {
@@ -385,10 +383,7 @@ fn slice_subpath(instructions: &[Instruction], from_len: f64, to_len: f64) -> Ve
                     );
 
                     if !has_moved {
-                        result.push(Instruction::MoveTo {
-                            x: sp0.0,
-                            y: sp0.1,
-                        });
+                        result.push(Instruction::MoveTo { x: sp0.0, y: sp0.1 });
                         has_moved = true;
                     }
                     result.push(Instruction::CubicCurveTo {
@@ -463,8 +458,14 @@ fn cubic_t_at_length(
 
     let eval = |t: f64| -> (f64, f64) {
         let it = 1.0 - t;
-        let x = it * it * it * p0.0 + 3.0 * it * it * t * p1.0 + 3.0 * it * t * t * p2.0 + t * t * t * p3.0;
-        let y = it * it * it * p0.1 + 3.0 * it * it * t * p1.1 + 3.0 * it * t * t * p2.1 + t * t * t * p3.1;
+        let x = it * it * it * p0.0
+            + 3.0 * it * it * t * p1.0
+            + 3.0 * it * t * t * p2.0
+            + t * t * t * p3.0;
+        let y = it * it * it * p0.1
+            + 3.0 * it * it * t * p1.1
+            + 3.0 * it * t * t * p2.1
+            + t * t * t * p3.1;
         (x, y)
     };
 
@@ -536,7 +537,8 @@ fn split_cubic_at(
     ((f64, f64), (f64, f64), (f64, f64), (f64, f64)),
     ((f64, f64), (f64, f64), (f64, f64), (f64, f64)),
 ) {
-    let lerp = |a: (f64, f64), b: (f64, f64), t: f64| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+    let lerp =
+        |a: (f64, f64), b: (f64, f64), t: f64| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
 
     let p01 = lerp(p0, p1, t);
     let p12 = lerp(p1, p2, t);
@@ -553,8 +555,7 @@ fn split_cubic_at(
 // ─── Repeater ─────────────────────────────────────────────────────────────────
 
 /// Configuration for the After Effects Repeater modifier.
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RepeaterConfig {
     /// Number of copies to create.
     pub copies: usize,
@@ -590,8 +591,7 @@ impl Default for RepeaterConfig {
 }
 
 /// An individual generated copy from the Repeater modifier.
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RepeaterInstance {
     /// Copy index (0 to `copies - 1`).
     pub index: usize,
@@ -602,7 +602,10 @@ pub struct RepeaterInstance {
 }
 
 /// Generates repeated, transformed copies of input path instructions.
-pub fn repeat_paths(instructions: &[Instruction], config: &RepeaterConfig) -> Vec<RepeaterInstance> {
+pub fn repeat_paths(
+    instructions: &[Instruction],
+    config: &RepeaterConfig,
+) -> Vec<RepeaterInstance> {
     if config.copies == 0 || instructions.is_empty() {
         return Vec::new();
     }
@@ -835,8 +838,7 @@ fn rotate_insts(insts: &[Instruction], angle_deg: f64) -> Vec<Instruction> {
 // ─── Wiggle Paths ─────────────────────────────────────────────────────────────
 
 /// Wiggle Paths point connection type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum WigglePointType {
     /// Sharp corner vertices.
     #[default]
@@ -1022,8 +1024,14 @@ pub fn round_corners(instructions: &[Instruction], radius: f64) -> Vec<Instructi
         let d2_0 = (v2_0.x * v2_0.x + v2_0.y * v2_0.y).sqrt();
         let r0 = radius.min(d1_0 * 0.5).min(d2_0 * 0.5);
 
-        let p_start0 = Point::new(curr0.x + (v1_0.x / d1_0) * r0, curr0.y + (v1_0.y / d1_0) * r0);
-        let p_end0 = Point::new(curr0.x + (v2_0.x / d2_0) * r0, curr0.y + (v2_0.y / d2_0) * r0);
+        let p_start0 = Point::new(
+            curr0.x + (v1_0.x / d1_0) * r0,
+            curr0.y + (v1_0.y / d1_0) * r0,
+        );
+        let p_end0 = Point::new(
+            curr0.x + (v2_0.x / d2_0) * r0,
+            curr0.y + (v2_0.y / d2_0) * r0,
+        );
 
         // Start at fillet end of vertex 0
         result.push(Instruction::MoveTo {
@@ -1147,7 +1155,9 @@ mod tests {
 
         let rounded = round_corners(&insts, 10.0);
         // The original has 4 LineTo/MoveTo instructions. Rounded should contain QuadCurveTo fillets.
-        let has_curves = rounded.iter().any(|i| matches!(i, Instruction::QuadCurveTo { .. }));
+        let has_curves = rounded
+            .iter()
+            .any(|i| matches!(i, Instruction::QuadCurveTo { .. }));
         assert!(has_curves, "Rounded path should contain curves");
     }
 
@@ -1158,9 +1168,15 @@ mod tests {
 
         let wiggled1 = wiggle_paths(&insts, 10.0, 1.0, 0.0, WigglePointType::Corner);
         let wiggled2 = wiggle_paths(&insts, 10.0, 1.0, 0.0, WigglePointType::Corner);
-        assert_eq!(wiggled1, wiggled2, "Same phase must produce deterministic output");
+        assert_eq!(
+            wiggled1, wiggled2,
+            "Same phase must produce deterministic output"
+        );
 
         let wiggled_next_frame = wiggle_paths(&insts, 10.0, 1.0, 1.0, WigglePointType::Corner);
-        assert_ne!(wiggled1, wiggled_next_frame, "Different phase must evolve temporally");
+        assert_ne!(
+            wiggled1, wiggled_next_frame,
+            "Different phase must evolve temporally"
+        );
     }
 }

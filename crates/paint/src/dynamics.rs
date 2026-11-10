@@ -7,7 +7,7 @@
 use photocraft_geom::Point;
 
 use crate::brush::{BrushSettings, Control, Dynamic, Smoothing};
-use crate::rng::{rand_signed, rand01, stream};
+use crate::rng::{rand01, rand_signed, stream};
 use crate::{Dab, StrokePoint};
 
 /// Maximum pulled-string length at 100 % smoothing, in screen pixels.
@@ -58,7 +58,12 @@ pub struct Smoother {
 impl Smoother {
     /// `zoom` is the view zoom (only used with `adjust_for_zoom`).
     pub fn new(cfg: &Smoothing, zoom: f32) -> Self {
-        Self { cfg: cfg.clone(), zoom: f64::from(zoom.max(0.01)), pos: None, last_input: None }
+        Self {
+            cfg: cfg.clone(),
+            zoom: f64::from(zoom.max(0.01)),
+            pos: None,
+            last_input: None,
+        }
     }
 
     fn active(&self) -> bool {
@@ -87,7 +92,11 @@ impl Smoother {
             let d = (dx * dx + dy * dy).sqrt();
             if d > len {
                 let k = (d - len) / d;
-                let np = StrokePoint { x: pos.x + dx * k, y: pos.y + dy * k, ..p };
+                let np = StrokePoint {
+                    x: pos.x + dx * k,
+                    y: pos.y + dy * k,
+                    ..p
+                };
                 self.pos = Some(np);
                 out.push(np);
             }
@@ -107,13 +116,20 @@ impl Smoother {
             let steps = dt / SMOOTHING_STEP_MS;
             let iters = steps.ceil().clamp(1.0, 64.0);
             // Each of `iters` moves covers `steps / iters` steps' worth of pull.
-            (iters as usize, 1.0 - (1.0 - a).powf(steps.min(64.0) / iters))
+            (
+                iters as usize,
+                1.0 - (1.0 - a).powf(steps.min(64.0) / iters),
+            )
         } else {
             (1, a)
         };
         let mut cur = pos;
         for _ in 0..iters {
-            cur = StrokePoint { x: cur.x + (p.x - cur.x) * step, y: cur.y + (p.y - cur.y) * step, ..p };
+            cur = StrokePoint {
+                x: cur.x + (p.x - cur.x) * step,
+                y: cur.y + (p.y - cur.y) * step,
+                ..p
+            };
             out.push(cur);
         }
         self.pos = Some(cur);
@@ -122,7 +138,11 @@ impl Smoother {
     /// Is Stroke Catch-Up still pulling the brush towards a pointer that has stopped? Then the
     /// stroke needs time to keep passing (repeats of the last point) while the pointer is held.
     pub fn lagging(&self) -> bool {
-        match (self.active() && self.cfg.catch_up && !self.cfg.pulled_string, self.pos, self.last_input) {
+        match (
+            self.active() && self.cfg.catch_up && !self.cfg.pulled_string,
+            self.pos,
+            self.last_input,
+        ) {
             (true, Some(pos), Some(last)) => (pos.x - last.x).abs() + (pos.y - last.y).abs() > 0.01,
             _ => false,
         }
@@ -133,7 +153,8 @@ impl Smoother {
     /// smoothing is off). The canvas draws it, as Photoshop does for Pulled String Mode.
     pub fn string(&self) -> Option<([f64; 2], [f64; 2])> {
         let (pos, last) = (self.pos?, self.last_input?);
-        (self.active() && (pos.x != last.x || pos.y != last.y)).then_some(([pos.x, pos.y], [last.x, last.y]))
+        (self.active() && (pos.x != last.x || pos.y != last.y))
+            .then_some(([pos.x, pos.y], [last.x, last.y]))
     }
 
     /// End of stroke: with Catch-Up On Stroke End the brush finishes at the last pointer position.
@@ -227,7 +248,13 @@ impl PathWalker {
 
     /// Emits the pixel steps from `a` to `p` (see [`PathWalker::pixel_grid`]). False, emitting
     /// nothing, when the span is not finite or implausibly long: distance spacing takes over.
-    fn grid_steps(&mut self, a: &StrokePoint, p: &StrokePoint, offset: f64, out: &mut impl FnMut(StepInput)) -> bool {
+    fn grid_steps(
+        &mut self,
+        a: &StrokePoint,
+        p: &StrokePoint,
+        offset: f64,
+        out: &mut impl FnMut(StepInput),
+    ) -> bool {
         let cell = |v: f64| if offset > 0.0 { v.floor() } else { v.round() };
         let (x0, y0) = (cell(a.x), cell(a.y));
         let (dx, dy) = (cell(p.x) - x0, cell(p.y) - y0);
@@ -254,12 +281,22 @@ impl PathWalker {
     }
 
     fn emit(&mut self, point: StrokePoint, out: &mut impl FnMut(StepInput)) {
-        let s = StepInput { point, direction: self.dir, initial_direction: self.initial_dir.unwrap_or(self.dir), step: self.step };
+        let s = StepInput {
+            point,
+            direction: self.dir,
+            initial_direction: self.initial_dir.unwrap_or(self.dir),
+            step: self.step,
+        };
         self.step += 1;
         out(s);
     }
 
-    pub fn push(&mut self, p: StrokePoint, step_len: &impl Fn(&StrokePoint) -> f64, out: &mut impl FnMut(StepInput)) {
+    pub fn push(
+        &mut self,
+        p: StrokePoint,
+        step_len: &impl Fn(&StrokePoint) -> f64,
+        out: &mut impl FnMut(StepInput),
+    ) {
         let Some(a) = self.last else {
             self.last = Some(p);
             self.pending_first = Some(p);
@@ -362,7 +399,11 @@ pub fn dynamic_value(d: &Dynamic, s: &StepInput) -> f32 {
     let v = control_value(d.control, d.fade_steps, s);
     match d.control {
         Control::Off | Control::InitialDirection | Control::Direction => v,
-        Control::Fade | Control::PenPressure | Control::PenTilt | Control::StylusWheel | Control::Rotation => d.curve.eval(v),
+        Control::Fade
+        | Control::PenPressure
+        | Control::PenTilt
+        | Control::StylusWheel
+        | Control::Rotation => d.curve.eval(v),
     }
 }
 
@@ -435,15 +476,30 @@ pub fn dynamic_color(b: &BrushSettings, s: &StepInput, seed: u64, index: u64) ->
     let cd = &b.color_dynamics;
     let (fg, bg) = (b.color, b.background);
     let r = |st: u64| rand01(seed, index, st);
-    let base = if cd.fg_bg.control != Control::Off { 1.0 - dynamic_value(&cd.fg_bg, s) } else { 0.0 };
-    let t = (base + (1.0 - base) * cd.fg_bg.jitter.clamp(0.0, 1.0) * r(stream::FG_BG)).clamp(0.0, 1.0);
-    let rgb = [fg[0] + (bg[0] - fg[0]) * t, fg[1] + (bg[1] - fg[1]) * t, fg[2] + (bg[2] - fg[2]) * t];
+    let base = if cd.fg_bg.control != Control::Off {
+        1.0 - dynamic_value(&cd.fg_bg, s)
+    } else {
+        0.0
+    };
+    let t =
+        (base + (1.0 - base) * cd.fg_bg.jitter.clamp(0.0, 1.0) * r(stream::FG_BG)).clamp(0.0, 1.0);
+    let rgb = [
+        fg[0] + (bg[0] - fg[0]) * t,
+        fg[1] + (bg[1] - fg[1]) * t,
+        fg[2] + (bg[2] - fg[2]) * t,
+    ];
     let [mut h, mut sat, mut v] = rgb_to_hsv(rgb);
     h += rand_signed(seed, index, stream::HUE) * cd.hue_jitter.clamp(0.0, 1.0) * 0.5;
-    sat = (sat + rand_signed(seed, index, stream::SAT) * cd.saturation_jitter.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+    sat = (sat + rand_signed(seed, index, stream::SAT) * cd.saturation_jitter.clamp(0.0, 1.0))
+        .clamp(0.0, 1.0);
     let pu = cd.purity.clamp(-1.0, 1.0);
-    sat = if pu >= 0.0 { sat + (1.0 - sat) * pu } else { sat * (1.0 + pu) };
-    v = (v + rand_signed(seed, index, stream::BRIGHT) * cd.brightness_jitter.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+    sat = if pu >= 0.0 {
+        sat + (1.0 - sat) * pu
+    } else {
+        sat * (1.0 + pu)
+    };
+    v = (v + rand_signed(seed, index, stream::BRIGHT) * cd.brightness_jitter.clamp(0.0, 1.0))
+        .clamp(0.0, 1.0);
     let o = hsv_to_rgb(h, sat, v);
     [o[0], o[1], o[2], fg[3] + (bg[3] - fg[3]) * t]
 }
@@ -473,11 +529,21 @@ pub struct DabBuilder {
 
 impl DabBuilder {
     pub fn new(brush: &BrushSettings) -> Self {
-        Self { brush: brush.clone(), seed: brush.seed, stroke_color: None, next_index: 0 }
+        Self {
+            brush: brush.clone(),
+            seed: brush.seed,
+            stroke_color: None,
+            next_index: 0,
+        }
     }
 
     pub fn step_len(&self, p: &StrokePoint) -> f64 {
-        let s = StepInput { point: *p, direction: 0.0, initial_direction: 0.0, step: 0 };
+        let s = StepInput {
+            point: *p,
+            direction: 0.0,
+            initial_direction: 0.0,
+            step: 0,
+        };
         let d = base_diameter(&self.brush, &s).max(1.0);
         f64::from(d * self.brush.spacing.max(0.01)).max(0.5)
     }
@@ -510,9 +576,10 @@ impl DabBuilder {
                     let f = (1.0 - sd.size.jitter.clamp(0.0, 1.0) * r(stream::SIZE)).max(min);
                     diameter *= f;
                 }
-                angle +=
-                    control_angle(sd.angle.control, sd.angle.fade_steps, s) + rand_signed(seed, i, stream::ANGLE) * sd.angle.jitter.clamp(0.0, 1.0) * 180.0;
-                roundness = (roundness * scalar(&sd.roundness, s, r(stream::ROUNDNESS))).clamp(0.01, 1.0);
+                angle += control_angle(sd.angle.control, sd.angle.fade_steps, s)
+                    + rand_signed(seed, i, stream::ANGLE) * sd.angle.jitter.clamp(0.0, 1.0) * 180.0;
+                roundness =
+                    (roundness * scalar(&sd.roundness, s, r(stream::ROUNDNESS))).clamp(0.01, 1.0);
                 if sd.flip_x_jitter && r(stream::FLIP_X) < 0.5 {
                     fx = !fx;
                 }
@@ -542,7 +609,10 @@ impl DabBuilder {
             if sc.enabled && sc.scatter.jitter > 0.0 {
                 let cv = dynamic_value(&sc.scatter, s);
                 let amt = f64::from(sc.scatter.jitter * cv * radius);
-                let (ox, oy) = (rand_signed(seed, i, stream::SCATTER_X) as f64 * amt, rand_signed(seed, i, stream::SCATTER_Y) as f64 * amt);
+                let (ox, oy) = (
+                    rand_signed(seed, i, stream::SCATTER_X) as f64 * amt,
+                    rand_signed(seed, i, stream::SCATTER_Y) as f64 * amt,
+                );
                 if sc.both_axes {
                     c.x += ox;
                     c.y += oy;
@@ -560,20 +630,36 @@ impl DabBuilder {
                 opacity = scalar(&tr.opacity, s, r(stream::OPACITY));
                 flow *= scalar(&tr.flow, s, r(stream::FLOW));
             }
-            let (wet, mix) = if tr.enabled { (scalar(&tr.wetness, s, r(stream::WET)), scalar(&tr.mix, s, r(stream::MIX))) } else { (1.0, 1.0) };
+            let (wet, mix) = if tr.enabled {
+                (
+                    scalar(&tr.wetness, s, r(stream::WET)),
+                    scalar(&tr.mix, s, r(stream::MIX)),
+                )
+            } else {
+                (1.0, 1.0)
+            };
             if b.pressure_opacity && !(tr.enabled && tr.opacity.control != Control::Off) {
                 opacity *= s.point.pressure.clamp(0.0, 1.0);
             }
             // Colour.
             let color = if b.color_dynamics.enabled {
-                if b.color_dynamics.per_tip { dynamic_color(b, s, seed, i) } else { *self.stroke_color.get_or_insert_with(|| dynamic_color(b, s, seed, 0)) }
+                if b.color_dynamics.per_tip {
+                    dynamic_color(b, s, seed, i)
+                } else {
+                    *self
+                        .stroke_color
+                        .get_or_insert_with(|| dynamic_color(b, s, seed, 0))
+                }
             } else {
                 b.color
             };
             // Texture depth (per tip).
             let tx = &b.texture;
-            let depth =
-                if tx.enabled && tx.each_tip { tx.depth.clamp(0.0, 1.0) * scalar(&tx.depth_jitter, s, r(stream::DEPTH)) } else { tx.depth.clamp(0.0, 1.0) };
+            let depth = if tx.enabled && tx.each_tip {
+                tx.depth.clamp(0.0, 1.0) * scalar(&tx.depth_jitter, s, r(stream::DEPTH))
+            } else {
+                tx.depth.clamp(0.0, 1.0)
+            };
             out.push(Dab {
                 center: c,
                 radius,
@@ -604,7 +690,10 @@ pub struct DualBuilder {
 
 impl DualBuilder {
     pub fn new(brush: &BrushSettings) -> Self {
-        Self { brush: brush.clone(), next_index: 0 }
+        Self {
+            brush: brush.clone(),
+            next_index: 0,
+        }
     }
     pub fn step_len(&self, _p: &StrokePoint) -> f64 {
         let d = &self.brush.dual_brush;
@@ -618,7 +707,10 @@ impl DualBuilder {
             self.next_index += 1;
             let radius = (d.size / 2.0).max(0.5);
             let amt = f64::from(d.scatter * radius);
-            let (ox, oy) = (rand_signed(seed, i, stream::DUAL_X) as f64 * amt, rand_signed(seed, i, stream::DUAL_Y) as f64 * amt);
+            let (ox, oy) = (
+                rand_signed(seed, i, stream::DUAL_X) as f64 * amt,
+                rand_signed(seed, i, stream::DUAL_Y) as f64 * amt,
+            );
             let mut c = Point::new(s.point.x, s.point.y);
             if d.both_axes {
                 c.x += ox;
@@ -693,12 +785,20 @@ impl DabGenerator {
 
     pub fn new(brush: &BrushSettings, zoom: f32) -> Self {
         let brush = brush.bounded_for_render();
-        let interval = brush.build_up.then(|| 1000.0 / f64::from(brush.build_up_rate.clamp(0.1, 1000.0)));
+        let interval = brush
+            .build_up
+            .then(|| 1000.0 / f64::from(brush.build_up_rate.clamp(0.1, 1000.0)));
         let dual_on = brush.dual_brush.enabled;
-        let mut walker = if brush.spacing_enabled { PathWalker::new(interval) } else { PathWalker::new(interval).speed_spacing(SPEED_SPACING_MS) };
+        let mut walker = if brush.spacing_enabled {
+            PathWalker::new(interval)
+        } else {
+            PathWalker::new(interval).speed_spacing(SPEED_SPACING_MS)
+        };
         // A small aliased tip whose dabs are at most a pixel apart steps pixel by pixel (#2139).
         if brush.aliased && brush.size * brush.spacing.max(0.01) <= 1.0 {
-            walker = walker.pixel_grid(f64::from(crate::render::grid_center(0.0, 0.0, brush.size).0));
+            walker = walker.pixel_grid(f64::from(
+                crate::render::grid_center(0.0, 0.0, brush.size).0,
+            ));
         }
         Self {
             smoother: Smoother::new(&brush.smoothing, zoom),

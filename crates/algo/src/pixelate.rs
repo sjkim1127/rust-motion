@@ -12,14 +12,22 @@ mod screen;
 #[cfg(test)]
 mod tests;
 
-use crate::fxutil::{MAXC, cell_point, luma, native, ncol, rgba, set_rgba, subtractive, via_rgb, xy};
+use crate::fxutil::{
+    cell_point, luma, native, ncol, rgba, set_rgba, subtractive, via_rgb, xy, MAXC,
+};
 use crate::image::Image;
 use crate::noise::hash01;
 use crate::{Ctx, MezzotintType};
 
 /// Colour Halftone: each channel is screened at its own angle into dots
 /// whose area follows the channel's ink (1 − value in additive models).
-pub(crate) fn color_halftone(src: &Image, out: Rect, ctx: &Ctx, max_radius: f32, angles: [f32; 4]) -> Vec<f32> {
+pub(crate) fn color_halftone(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    max_radius: f32,
+    angles: [f32; 4],
+) -> Vec<f32> {
     let n = src.ch;
     let cc = ncol(ctx, n);
     let rmax = max_radius.max(1.0);
@@ -30,7 +38,9 @@ pub(crate) fn color_halftone(src: &Image, out: Rect, ctx: &Ctx, max_radius: f32,
     let mut res = src.crop(out);
     let b = ctx.bounds;
     let (ox, oy) = (b.x0 as f32, b.y0 as f32);
-    let rot: Vec<(f32, f32)> = (0..cc.max(3)).map(|c| angles[c.min(3)].to_radians().sin_cos()).collect();
+    let rot: Vec<(f32, f32)> = (0..cc.max(3))
+        .map(|c| angles[c.min(3)].to_radians().sin_cos())
+        .collect();
     let clip = b.intersect(&src.rect);
     if clip.is_empty() {
         return res;
@@ -42,7 +52,10 @@ pub(crate) fn color_halftone(src: &Image, out: Rect, ctx: &Ctx, max_radius: f32,
         let mut px = [0.0f32; MAXC];
         for (dx, dy) in [(0.0, 0.0), (-d, -d), (d, -d), (-d, d), (d, d)] {
             // Clamp to the bounds so cells straddling the edge read real pixels.
-            let (ix, iy) = (((x + dx).floor() as i32).clamp(clip.x0, clip.x1 - 1), ((y + dy).floor() as i32).clamp(clip.y0, clip.y1 - 1));
+            let (ix, iy) = (
+                ((x + dx).floor() as i32).clamp(clip.x0, clip.x1 - 1),
+                ((y + dy).floor() as i32).clamp(clip.y0, clip.y1 - 1),
+            );
             if rgb {
                 for (k, p) in px.iter_mut().enumerate().take(n) {
                     *p = src.get(ix, iy, k);
@@ -92,7 +105,9 @@ pub(crate) fn color_halftone(src: &Image, out: Rect, ctx: &Ctx, max_radius: f32,
                         if ink <= touch {
                             cell * (ink / std::f32::consts::PI).sqrt()
                         } else {
-                            cell * (0.5 + (ink - touch) / (1.0 - touch) * (std::f32::consts::FRAC_1_SQRT_2 - 0.5))
+                            cell * (0.5
+                                + (ink - touch) / (1.0 - touch)
+                                    * (std::f32::consts::FRAC_1_SQRT_2 - 0.5))
                         }
                     };
                     let r = match screens.get_mut(c).and_then(Option::as_mut) {
@@ -100,7 +115,11 @@ pub(crate) fn color_halftone(src: &Image, out: Rect, ctx: &Ctx, max_radius: f32,
                         None => radius(),
                     };
                     // Tiny dots cannot cover more than their own area.
-                    cov = cov.max((r - d + 0.5).clamp(0.0, 1.0).min(std::f32::consts::PI * r * r));
+                    cov = cov.max(
+                        (r - d + 0.5)
+                            .clamp(0.0, 1.0)
+                            .min(std::f32::consts::PI * r * r),
+                    );
                 }
             }
             *v = if sub && !rgb { cov } else { 1.0 - cov };
@@ -120,18 +139,33 @@ pub(crate) fn color_halftone(src: &Image, out: Rect, ctx: &Ctx, max_radius: f32,
 /// being distressed) keeps hard edges and its weight instead of greying where cells straddle
 /// an edge. A cell whose point falls outside the image takes the (premultiplied) average
 /// colour of its pixels.
-pub(crate) fn crystallize(src: &Image, out: Rect, ctx: &Ctx, cell_size: f32, seed: u32) -> Vec<f32> {
+pub(crate) fn crystallize(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    cell_size: f32,
+    seed: u32,
+) -> Vec<f32> {
     let n = src.ch;
     let cell = cell_size.max(2.0);
     let b = ctx.bounds;
     let origin = (b.x0 as f32, b.y0 as f32);
     // Cells whose territory can reach `out`, and the window holding all their pixels.
-    let c0 = (((out.x0 - b.x0) as f32 / cell).floor() as i32 - 2, ((out.y0 - b.y0) as f32 / cell).floor() as i32 - 2);
-    let c1 = (((out.x1 - b.x0) as f32 / cell).floor() as i32 + 2, ((out.y1 - b.y0) as f32 / cell).floor() as i32 + 2);
+    let c0 = (
+        ((out.x0 - b.x0) as f32 / cell).floor() as i32 - 2,
+        ((out.y0 - b.y0) as f32 / cell).floor() as i32 - 2,
+    );
+    let c1 = (
+        ((out.x1 - b.x0) as f32 / cell).floor() as i32 + 2,
+        ((out.y1 - b.y0) as f32 / cell).floor() as i32 + 2,
+    );
     let (gw, gh) = ((c1.0 - c0.0 + 1) as usize, (c1.1 - c0.1 + 1) as usize);
     let owner = |x: i32, y: i32| -> (i32, i32) {
         let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
-        let (cx, cy) = (((fx - origin.0) / cell).floor() as i32, ((fy - origin.1) / cell).floor() as i32);
+        let (cx, cy) = (
+            ((fx - origin.0) / cell).floor() as i32,
+            ((fy - origin.1) / cell).floor() as i32,
+        );
         let mut best = (f32::MAX, (cx, cy));
         for dy in -1..=1 {
             for dx in -1..=1 {
@@ -158,7 +192,8 @@ pub(crate) fn crystallize(src: &Image, out: Rect, ctx: &Ctx, cell_size: f32, see
         for x in win.x0..win.x1 {
             let (cx, cy) = owner(x, y);
             if out.contains(x, y) {
-                owners[((y - out.y0) as usize) * out.width() as usize + (x - out.x0) as usize] = (cx, cy);
+                owners[((y - out.y0) as usize) * out.width() as usize + (x - out.x0) as usize] =
+                    (cx, cy);
             }
             if cx < c0.0 || cy < c0.1 || cx > c1.0 || cy > c1.1 {
                 continue;
@@ -179,7 +214,11 @@ pub(crate) fn crystallize(src: &Image, out: Rect, ctx: &Ctx, cell_size: f32, see
         if !b.contains(x, y) {
             continue;
         }
-        let (cx, cy) = if win.contains(x, y) { owners[i] } else { owner(x, y) };
+        let (cx, cy) = if win.contains(x, y) {
+            owners[i]
+        } else {
+            owner(x, y)
+        };
         let (sx, sy) = cell_point(cx, cy, cell, seed, origin);
         let (sx, sy) = (sx.floor() as i32, sy.floor() as i32);
         if src.rect.contains(sx, sy) && b.contains(sx, sy) {
@@ -256,7 +295,11 @@ pub(crate) fn fragment(src: &Image, out: Rect, ctx: &Ctx) -> Vec<f32> {
         for x in out.x0..out.x1 {
             acc[..n].fill(0.0);
             for (dx, dy) in [(-4, 0), (4, 0), (0, -4), (0, 4)] {
-                let a = if ctx.alpha { src.get(x + dx, y + dy, n - 1) } else { 1.0 };
+                let a = if ctx.alpha {
+                    src.get(x + dx, y + dy, n - 1)
+                } else {
+                    1.0
+                };
                 for (c, v) in acc.iter_mut().enumerate().take(n) {
                     let s = src.get(x + dx, y + dy, c);
                     *v += if ctx.alpha && c < n - 1 { s * a } else { s } * 0.25;
@@ -283,7 +326,10 @@ fn mezzo_threshold(kind: MezzotintType, x: i32, y: i32, c: u32, seed: u32) -> f3
     match kind {
         MezzotintType::FineDots => hash01(x, y, c, seed),
         MezzotintType::MediumDots => hash01(x.div_euclid(2), y.div_euclid(2), c, seed),
-        MezzotintType::GrainyDots => 0.5 * hash01(x, y, c, seed) + 0.5 * hash01(x.div_euclid(3), y.div_euclid(3), c + 7, seed),
+        MezzotintType::GrainyDots => {
+            0.5 * hash01(x, y, c, seed)
+                + 0.5 * hash01(x.div_euclid(3), y.div_euclid(3), c + 7, seed)
+        }
         MezzotintType::CoarseDots => hash01(x.div_euclid(3), y.div_euclid(3), c, seed),
         MezzotintType::ShortLines => lines(6),
         MezzotintType::MediumLines => lines(14),
@@ -296,7 +342,13 @@ fn mezzo_threshold(kind: MezzotintType, x: i32, y: i32, c: u32, seed: u32) -> f3
 
 /// Mezzotint: every colour channel is thresholded against a random pattern,
 /// giving pure channel values (fully saturated dots/lines in colour images).
-pub(crate) fn mezzotint(src: &Image, out: Rect, ctx: &Ctx, kind: MezzotintType, seed: u32) -> Vec<f32> {
+pub(crate) fn mezzotint(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    kind: MezzotintType,
+    seed: u32,
+) -> Vec<f32> {
     let n = src.ch;
     let cc = ncol(ctx, n);
     let rgb = via_rgb(ctx);
@@ -306,12 +358,20 @@ pub(crate) fn mezzotint(src: &Image, out: Rect, ctx: &Ctx, kind: MezzotintType, 
         if rgb {
             let mut c = rgba(ctx, px);
             for (k, v) in c.iter_mut().enumerate().take(3) {
-                *v = if *v > mezzo_threshold(kind, x, y, k as u32, seed) { 1.0 } else { 0.0 };
+                *v = if *v > mezzo_threshold(kind, x, y, k as u32, seed) {
+                    1.0
+                } else {
+                    0.0
+                };
             }
             set_rgba(ctx, px, c);
         } else {
             for (k, v) in px.iter_mut().enumerate().take(cc) {
-                *v = if *v > mezzo_threshold(kind, x, y, k as u32, seed) { 1.0 } else { 0.0 };
+                *v = if *v > mezzo_threshold(kind, x, y, k as u32, seed) {
+                    1.0
+                } else {
+                    0.0
+                };
             }
         }
     }
@@ -320,7 +380,14 @@ pub(crate) fn mezzotint(src: &Image, out: Rect, ctx: &Ctx, kind: MezzotintType, 
 
 /// Pointillize: randomly sized dots, coloured from the image at their centre,
 /// on a canvas of the background colour.
-pub(crate) fn pointillize(src: &Image, out: Rect, ctx: &Ctx, cell_size: f32, seed: u32, background: [f32; 4]) -> Vec<f32> {
+pub(crate) fn pointillize(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    cell_size: f32,
+    seed: u32,
+    background: [f32; 4],
+) -> Vec<f32> {
     let n = src.ch;
     let cell = cell_size.max(2.0);
     let b = ctx.bounds;
@@ -331,7 +398,10 @@ pub(crate) fn pointillize(src: &Image, out: Rect, ctx: &Ctx, cell_size: f32, see
     for (i, px) in res.chunks_exact_mut(n).enumerate() {
         let (x, y) = xy(out, i);
         let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
-        let (cx, cy) = (((fx - origin.0) / cell).floor() as i32, ((fy - origin.1) / cell).floor() as i32);
+        let (cx, cy) = (
+            ((fx - origin.0) / cell).floor() as i32,
+            ((fy - origin.1) / cell).floor() as i32,
+        );
         // The dot whose edge the pixel is deepest inside wins.
         let mut best: Option<(f32, i32, i32, f32, f32)> = None;
         for dy in -1..=1 {

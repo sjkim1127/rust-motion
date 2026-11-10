@@ -13,18 +13,31 @@ use std::time::Instant;
 /// sizing, Rayon groups, writes, progress and pruning follow the current upstream implementation.
 #[allow(clippy::panic)] // Fixed benchmark parameters, never a production entry point.
 fn apply_reference(surface: &Surface, params: &FilterParams, area: Rect) -> Surface {
-    let FilterParams::MotionBlur { angle, distance } = params else { panic!("Motion Blur benchmark parameters required") };
-    let crate::Halo::Radius(halo) = params.halo_for(area) else { panic!("Motion Blur must declare a radius halo") };
+    let FilterParams::MotionBlur { angle, distance } = params else {
+        panic!("Motion Blur benchmark parameters required")
+    };
+    let crate::Halo::Radius(halo) = params.halo_for(area) else {
+        panic!("Motion Blur must declare a radius halo")
+    };
     let tile = crate::auto_tile(params, area);
     let fmt = surface.format();
-    let ctx = Ctx { bounds: area, mode: fmt.mode, alpha: fmt.alpha };
+    let ctx = Ctx {
+        bounds: area,
+        mode: fmt.mode,
+        alpha: fmt.alpha,
+    };
     let mut out = surface.clone();
     let mut tiles = Vec::new();
     let mut y = area.y0;
     while y < area.y1 {
         let mut x = area.x0;
         while x < area.x1 {
-            tiles.push(Rect::new(x, y, (x + tile).min(area.x1), (y + tile).min(area.y1)));
+            tiles.push(Rect::new(
+                x,
+                y,
+                (x + tile).min(area.x1),
+                (y + tile).min(area.y1),
+            ));
             x += tile;
         }
         y += tile;
@@ -43,7 +56,9 @@ fn apply_reference(surface: &Surface, params: &FilterParams, area: Rect) -> Surf
         (*t, data)
     };
     let per_tile = (tile.max(1) as usize).pow(2) * fmt.channels() * std::mem::size_of::<f32>();
-    let group = (crate::RESULT_BUDGET / per_tile.max(1)).max(rayon::current_num_threads()).max(1);
+    let group = (crate::RESULT_BUDGET / per_tile.max(1))
+        .max(rayon::current_num_threads())
+        .max(1);
     for chunk in tiles.chunks(group) {
         let results: Vec<_> = chunk.par_iter().map(run).collect();
         for (t, data) in results {
@@ -68,8 +83,16 @@ fn source(area: Rect, variable_alpha: bool, channels: usize) -> Surface {
     let bytes: Vec<u8> = (area.y0..area.y1)
         .flat_map(|y| {
             (area.x0..area.x1).flat_map(move |x| {
-                let (r, g, b) = ((x % 256) as u8, ((x * 3 + y) / 11 % 256) as u8, ((x ^ y) % 256) as u8);
-                let alpha = if variable_alpha { (x ^ (y * 7)) as u8 } else { 255 };
+                let (r, g, b) = (
+                    (x % 256) as u8,
+                    ((x * 3 + y) / 11 % 256) as u8,
+                    ((x ^ y) % 256) as u8,
+                );
+                let alpha = if variable_alpha {
+                    (x ^ (y * 7)) as u8
+                } else {
+                    255
+                };
                 let pixel = match channels {
                     1 => [r, 0, 0, 0, 0],
                     2 => [r, alpha, 0, 0, 0],
@@ -113,27 +136,59 @@ fn cases() -> Vec<(f32, f32)> {
         .unwrap_or_else(|_| "30:10,30:50,30:64,30:128,30:256,30:500,30:1000,30:2000,0:256,0:1000,0:2000,90:256,90:1000,90:2000,45:256,45:1000,45:2000".into());
     spec.split(',')
         .map(|case| {
-            let Some((angle, distance)) = case.trim().split_once(':') else { panic!("expected angle:distance in PHOTOCRAFT_MOTION_CASES") };
-            let (Ok(angle), Ok(distance)) = (angle.parse::<f32>(), distance.parse::<f32>()) else { panic!("invalid Motion Blur benchmark case {case}") };
-            assert!(angle.is_finite() && (0.5..=2000.0).contains(&distance), "out-of-range benchmark case {case}");
+            let Some((angle, distance)) = case.trim().split_once(':') else {
+                panic!("expected angle:distance in PHOTOCRAFT_MOTION_CASES")
+            };
+            let (Ok(angle), Ok(distance)) = (angle.parse::<f32>(), distance.parse::<f32>()) else {
+                panic!("invalid Motion Blur benchmark case {case}")
+            };
+            assert!(
+                angle.is_finite() && (0.5..=2000.0).contains(&distance),
+                "out-of-range benchmark case {case}"
+            );
             (angle, distance)
         })
         .collect()
 }
 
 #[allow(clippy::panic)] // A cancellation with Interrupt::NONE is a benchmark failure.
-fn candidate(surface: &Surface, params: &FilterParams, area: Rect, forced: bool) -> (Surface, bool) {
+fn candidate(
+    surface: &Surface,
+    params: &FilterParams,
+    area: Rect,
+    forced: bool,
+) -> (Surface, bool) {
     if forced {
-        match super::motion_apply::apply_for_bench(surface, params, area, area, None, Some(area), crate::auto_tile(params, area), &Interrupt::NONE) {
+        match super::motion_apply::apply_for_bench(
+            surface,
+            params,
+            area,
+            area,
+            None,
+            Some(area),
+            crate::auto_tile(params, area),
+            &Interrupt::NONE,
+        ) {
             Some(Some(result)) => return (result, true),
             Some(None) => panic!("uncancellable forced FFT benchmark was cancelled"),
             None => {}
         }
     }
-    (crate::apply_in(surface, params, area, area, None, area), false)
+    (
+        crate::apply_in(surface, params, area, area, None, area),
+        false,
+    )
 }
 
-fn compare(surface: &Surface, area: Rect, angle: f32, distance: f32, runs: usize, forced: bool, variable_alpha: bool) {
+fn compare(
+    surface: &Surface,
+    area: Rect,
+    angle: f32,
+    distance: f32,
+    runs: usize,
+    forced: bool,
+    variable_alpha: bool,
+) {
     let params = FilterParams::MotionBlur { angle, distance };
     let channels = surface.channels();
     let mut upstream_ms = Vec::with_capacity(runs);
@@ -210,15 +265,28 @@ fn motion_upstream_performance() {
     assert!((1..=5).contains(&channels));
     let area = Rect::new(0, 0, width as i32, height as i32);
     let mode = std::env::var("PHOTOCRAFT_MOTION_MODE").unwrap_or_else(|_| "forced_fft".into());
-    assert!(matches!(mode.as_str(), "public" | "forced_fft"), "PHOTOCRAFT_MOTION_MODE must be public or forced_fft");
+    assert!(
+        matches!(mode.as_str(), "public" | "forced_fft"),
+        "PHOTOCRAFT_MOTION_MODE must be public or forced_fft"
+    );
     let forced = mode == "forced_fft";
-    let variable_alpha = matches!(channels, 2 | 4 | 5) && std::env::var("PHOTOCRAFT_MOTION_VARIABLE_ALPHA").is_ok_and(|value| value != "0" && value != "false");
+    let variable_alpha = matches!(channels, 2 | 4 | 5)
+        && std::env::var("PHOTOCRAFT_MOTION_VARIABLE_ALPHA")
+            .is_ok_and(|value| value != "0" && value != "false");
     println!(
         "{}",
         json!({"event":"motion_upstream_config", "width":width, "height":height, "channels":channels, "runs":runs, "mode":if forced {"forced_fft"} else {"public"}, "variable_alpha":variable_alpha, "rayon_workers":rayon::current_num_threads(), "os":std::env::consts::OS, "arch":std::env::consts::ARCH, "baseline":"merged upstream PR902 motion_rows plus current upstream tiled pipeline", "timing_scope":"source decode/halo reads, filtering, writes, pruning; excludes construction/comparison/UI"})
     );
     let surface = source(area, variable_alpha, channels);
     for (angle, distance) in cases() {
-        compare(&surface, area, angle, distance, runs, forced, variable_alpha);
+        compare(
+            &surface,
+            area,
+            angle,
+            distance,
+            runs,
+            forced,
+            variable_alpha,
+        );
     }
 }

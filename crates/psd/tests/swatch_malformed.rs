@@ -21,23 +21,57 @@
 
 use photocraft_psd::aco::{AcoColor, AcoSwatch};
 use photocraft_psd::grd::{GrdColor, GrdGradient, GrdStop};
-use photocraft_psd::{PsdError, aco, ase, grd};
-use std::panic::{RefUnwindSafe, UnwindSafe, catch_unwind};
+use photocraft_psd::{aco, ase, grd, PsdError};
+use std::panic::{catch_unwind, RefUnwindSafe, UnwindSafe};
 
 fn sample_ase() -> Vec<u8> {
-    use photocraft_psd::ase::{AseColor, AseEntry, AseFile, AseKind, AseSwatch as Sw, write};
-    let sw = |name: &str| Sw { name: name.into(), color: AseColor::Rgb([1.0, 0.0, 0.0]), kind: AseKind::Process };
-    write(&AseFile { entries: vec![AseEntry::Group { name: "Brand".into(), swatches: vec![sw("Red"), sw("Blue")] }, AseEntry::Swatch(sw("Loose"))] })
-        .expect("writing a sample .ase")
+    use photocraft_psd::ase::{write, AseColor, AseEntry, AseFile, AseKind, AseSwatch as Sw};
+    let sw = |name: &str| Sw {
+        name: name.into(),
+        color: AseColor::Rgb([1.0, 0.0, 0.0]),
+        kind: AseKind::Process,
+    };
+    write(&AseFile {
+        entries: vec![
+            AseEntry::Group {
+                name: "Brand".into(),
+                swatches: vec![sw("Red"), sw("Blue")],
+            },
+            AseEntry::Swatch(sw("Loose")),
+        ],
+    })
+    .expect("writing a sample .ase")
 }
 
 fn sample_aco_swatches() -> Vec<AcoSwatch> {
     vec![
-        AcoSwatch { name: "Pure Red".into(), color: AcoColor::Rgb([65535, 0, 0]) },
-        AcoSwatch { name: "Cyan ink".into(), color: AcoColor::Cmyk([65535, 0, 0, 1234]) },
-        AcoSwatch { name: "Lab".into(), color: AcoColor::Lab { l: 5321, a: -12800, b: 12700 } },
-        AcoSwatch { name: "Gray".into(), color: AcoColor::Gray(5000) },
-        AcoSwatch { name: "Book".into(), color: AcoColor::Other { space: 3, values: [1, 2, 3, 4] } },
+        AcoSwatch {
+            name: "Pure Red".into(),
+            color: AcoColor::Rgb([65535, 0, 0]),
+        },
+        AcoSwatch {
+            name: "Cyan ink".into(),
+            color: AcoColor::Cmyk([65535, 0, 0, 1234]),
+        },
+        AcoSwatch {
+            name: "Lab".into(),
+            color: AcoColor::Lab {
+                l: 5321,
+                a: -12800,
+                b: 12700,
+            },
+        },
+        AcoSwatch {
+            name: "Gray".into(),
+            color: AcoColor::Gray(5000),
+        },
+        AcoSwatch {
+            name: "Book".into(),
+            color: AcoColor::Other {
+                space: 3,
+                values: [1, 2, 3, 4],
+            },
+        },
     ]
 }
 
@@ -52,12 +86,25 @@ fn sample_grd() -> Vec<u8> {
             name: "Sunset".into(),
             noise: false,
             stops: vec![
-                GrdStop { location: 0.0, midpoint: 0.5, color: GrdColor::Rgb([1.0, 0.0, 0.0]) },
-                GrdStop { location: 1.0, midpoint: 0.5, color: GrdColor::Background },
+                GrdStop {
+                    location: 0.0,
+                    midpoint: 0.5,
+                    color: GrdColor::Rgb([1.0, 0.0, 0.0]),
+                },
+                GrdStop {
+                    location: 1.0,
+                    midpoint: 0.5,
+                    color: GrdColor::Background,
+                },
             ],
             opacity: vec![(0.0, 1.0, 0.5), (1.0, 0.25, 0.5)],
         },
-        GrdGradient { name: "Noisy".into(), noise: true, stops: Vec::new(), opacity: Vec::new() },
+        GrdGradient {
+            name: "Noisy".into(),
+            noise: true,
+            stops: Vec::new(),
+            opacity: Vec::new(),
+        },
     ])
 }
 
@@ -72,7 +119,11 @@ where
             let mut b = bytes.to_vec();
             b[byte] ^= 1 << bit;
             let r = catch_unwind(|| parse(&b));
-            assert!(r.is_ok(), "{name}: parse panicked after flipping bit {bit} of byte {byte} of {}", bytes.len());
+            assert!(
+                r.is_ok(),
+                "{name}: parse panicked after flipping bit {bit} of byte {byte} of {}",
+                bytes.len()
+            );
         }
     }
 }
@@ -102,8 +153,16 @@ fn assert_finite(values: &[f32], what: &str) {
 /// documents, so a caller never divides by or formats a NaN and never reads past a 0..=1 bound.
 fn assert_gradient_sane(g: &GrdGradient) {
     for s in &g.stops {
-        assert!(s.location.is_finite() && (0.0..=1.0).contains(&s.location), "stop location {} out of range", s.location);
-        assert!(s.midpoint.is_finite() && (0.0..=1.0).contains(&s.midpoint), "stop midpoint {} out of range", s.midpoint);
+        assert!(
+            s.location.is_finite() && (0.0..=1.0).contains(&s.location),
+            "stop location {} out of range",
+            s.location
+        );
+        assert!(
+            s.midpoint.is_finite() && (0.0..=1.0).contains(&s.midpoint),
+            "stop midpoint {} out of range",
+            s.midpoint
+        );
         match s.color {
             GrdColor::Rgb(v) => assert_finite(&v, "RGB"),
             GrdColor::Hsb(v) => assert_finite(&v, "HSB"),
@@ -114,9 +173,15 @@ fn assert_gradient_sane(g: &GrdGradient) {
         }
     }
     for &(l, o, m) in &g.opacity {
-        assert!(l.is_finite() && (0.0..=1.0).contains(&l), "transparency location {l} out of range");
+        assert!(
+            l.is_finite() && (0.0..=1.0).contains(&l),
+            "transparency location {l} out of range"
+        );
         assert!((0.0..=1.0).contains(&o), "opacity {o} outside 0..=1");
-        assert!(m.is_finite() && (0.0..=1.0).contains(&m), "transparency midpoint {m} out of range");
+        assert!(
+            m.is_finite() && (0.0..=1.0).contains(&m),
+            "transparency midpoint {m} out of range"
+        );
     }
 }
 
@@ -137,7 +202,13 @@ fn grd_parsed_values_respect_caps_and_are_finite() {
 /// for. The input deliberately exceeds the cap, otherwise the assertion below cannot fail.
 #[test]
 fn grd_gradient_count_is_capped() {
-    let over = vec![GrdGradient { name: "g".into(), ..Default::default() }; grd::MAX_GRADIENTS + 1];
+    let over = vec![
+        GrdGradient {
+            name: "g".into(),
+            ..Default::default()
+        };
+        grd::MAX_GRADIENTS + 1
+    ];
     let bytes = grd::write(&over);
     // Precondition: the file really must carry more gradients than the cap, or the assertion
     // below would hold for the wrong reason (the writer capping rather than the reader).
@@ -145,17 +216,34 @@ fn grd_gradient_count_is_capped() {
     // the same file at the cap. Counting `Grdn` windows would not work — the object nests — and
     // would keep passing even if the writer started capping, which is what this must catch.
     let at_cap = grd::write(&over[..grd::MAX_GRADIENTS]).len();
-    assert!(bytes.len() > at_cap, "the written file is not larger than the capped one: {} vs {at_cap}", bytes.len());
+    assert!(
+        bytes.len() > at_cap,
+        "the written file is not larger than the capped one: {} vs {at_cap}",
+        bytes.len()
+    );
     let f = grd::parse(&bytes).expect("a file over the gradient cap still parses");
-    assert_eq!(f.len(), grd::MAX_GRADIENTS, "gradients must be capped at MAX_GRADIENTS, not taken as declared");
+    assert_eq!(
+        f.len(),
+        grd::MAX_GRADIENTS,
+        "gradients must be capped at MAX_GRADIENTS, not taken as declared"
+    );
 }
 
 /// Same for the per-gradient stop lists: colour stops and transparency stops are capped
 /// separately, so both are driven over their cap.
 #[test]
 fn grd_stop_counts_are_capped() {
-    let stop = GrdStop { location: 0.5, midpoint: 0.5, color: GrdColor::Rgb([1.0, 0.0, 0.0]) };
-    let over = GrdGradient { name: "wide".into(), noise: false, stops: vec![stop; grd::MAX_STOPS + 1], opacity: vec![(0.5, 1.0, 0.5); grd::MAX_STOPS + 1] };
+    let stop = GrdStop {
+        location: 0.5,
+        midpoint: 0.5,
+        color: GrdColor::Rgb([1.0, 0.0, 0.0]),
+    };
+    let over = GrdGradient {
+        name: "wide".into(),
+        noise: false,
+        stops: vec![stop; grd::MAX_STOPS + 1],
+        opacity: vec![(0.5, 1.0, 0.5); grd::MAX_STOPS + 1],
+    };
     let bytes = grd::write(std::slice::from_ref(&over));
     // Precondition by size: a file carrying one stop more than the cap must be larger than the
     // same file at the cap. Counting `Lctn` windows would not work — it appears in both the colour
@@ -164,15 +252,43 @@ fn grd_stop_counts_are_capped() {
     // capped independently.
     let capped_stops = over.stops[..grd::MAX_STOPS].to_vec();
     let capped_opacity = over.opacity[..grd::MAX_STOPS].to_vec();
-    let colour_only_over = GrdGradient { opacity: Vec::new(), ..over.clone() };
-    let colour_only_capped = GrdGradient { stops: capped_stops, opacity: Vec::new(), ..over.clone() };
-    assert!(grd::write(&[colour_only_over]).len() > grd::write(&[colour_only_capped]).len(), "colour stops over the cap are not larger than at the cap");
-    let trans_only_over = GrdGradient { stops: Vec::new(), ..over.clone() };
-    let trans_only_capped = GrdGradient { stops: Vec::new(), opacity: capped_opacity, ..over };
-    assert!(grd::write(&[trans_only_over]).len() > grd::write(&[trans_only_capped]).len(), "transparency stops over the cap are not larger than at the cap");
+    let colour_only_over = GrdGradient {
+        opacity: Vec::new(),
+        ..over.clone()
+    };
+    let colour_only_capped = GrdGradient {
+        stops: capped_stops,
+        opacity: Vec::new(),
+        ..over.clone()
+    };
+    assert!(
+        grd::write(&[colour_only_over]).len() > grd::write(&[colour_only_capped]).len(),
+        "colour stops over the cap are not larger than at the cap"
+    );
+    let trans_only_over = GrdGradient {
+        stops: Vec::new(),
+        ..over.clone()
+    };
+    let trans_only_capped = GrdGradient {
+        stops: Vec::new(),
+        opacity: capped_opacity,
+        ..over
+    };
+    assert!(
+        grd::write(&[trans_only_over]).len() > grd::write(&[trans_only_capped]).len(),
+        "transparency stops over the cap are not larger than at the cap"
+    );
     let f = grd::parse(&bytes).expect("a file over the stop cap still parses");
-    assert_eq!(f[0].stops.len(), grd::MAX_STOPS, "colour stops must be capped at MAX_STOPS");
-    assert_eq!(f[0].opacity.len(), grd::MAX_STOPS, "transparency stops must be capped at MAX_STOPS");
+    assert_eq!(
+        f[0].stops.len(),
+        grd::MAX_STOPS,
+        "colour stops must be capped at MAX_STOPS"
+    );
+    assert_eq!(
+        f[0].opacity.len(),
+        grd::MAX_STOPS,
+        "transparency stops must be capped at MAX_STOPS"
+    );
 }
 
 /// `Opct` is a unit float (`UntF` + a 4-byte unit tag), not a `doub`, so patching it needs a
@@ -194,7 +310,10 @@ fn grd_non_finite_opacity_and_midpoint_do_not_survive() {
     for key in ["Opct", "Rd  ", "Grn ", "Bl  "] {
         for v in bad {
             let mut b = sample_grd();
-            let at = b.windows(4).position(|w| w == key.as_bytes()).unwrap_or_else(|| panic!("the sample stores {key:?}"));
+            let at = b
+                .windows(4)
+                .position(|w| w == key.as_bytes())
+                .unwrap_or_else(|| panic!("the sample stores {key:?}"));
             let skip = match &b[at + 4..at + 8] {
                 b"doub" => 8usize,
                 b"UntF" => 12usize,
@@ -227,13 +346,16 @@ fn grd_midpoint_stored_as_a_double_is_still_sanitised() {
         let trns = Descriptor::new("TrnS").with("Mdpn", Value::Double(v));
         let grad = Descriptor::new("Grdn").with("Trns", Value::List(vec![Value::Descriptor(trns)]));
         let outer = Descriptor::new("Grdn").with("Grad", Value::Descriptor(grad));
-        let file = Descriptor::new("null").with("GrdL", Value::List(vec![Value::Descriptor(outer)]));
+        let file =
+            Descriptor::new("null").with("GrdL", Value::List(vec![Value::Descriptor(outer)]));
         let mut g = b"8BGR".to_vec();
         g.extend_from_slice(&5u16.to_be_bytes());
         g.extend_from_slice(&VersionedDescriptor::new(file).to_bytes());
 
         let parsed = grd::parse(&g).unwrap_or_else(|e| panic!("Mdpn = {v} still parses: {e:?}"));
-        let Some((_, _, m)) = parsed[0].opacity.first() else { panic!("the transparency stop was dropped") };
+        let Some((_, _, m)) = parsed[0].opacity.first() else {
+            panic!("the transparency stop was dropped")
+        };
         // Pin the exact value, not just the range. Only a NaN is truly absent, so only it falls
         // back to the centred default; every other shape saturates and then clamps, so a large
         // positive lands at 1.0 and a large negative at 0.0 — monotonic, never a snap to 0.5.
@@ -244,7 +366,10 @@ fn grd_midpoint_stored_as_a_double_is_still_sanitised() {
         } else {
             0.0
         };
-        assert_eq!(*m, expected, "a midpoint of {v} must be {expected}, got {m}");
+        assert_eq!(
+            *m, expected,
+            "a midpoint of {v} must be {expected}, got {m}"
+        );
     }
 }
 
@@ -253,15 +378,28 @@ fn grd_midpoint_stored_as_a_double_is_still_sanitised() {
 /// silently invert every CMYK swatch.
 #[test]
 fn aco_cmyk_is_stored_inverted_and_reads_back_as_ink() {
-    let swatches = vec![AcoSwatch { name: "k".into(), color: AcoColor::Cmyk([65535, 0, 0, 1234]) }];
+    let swatches = vec![AcoSwatch {
+        name: "k".into(),
+        color: AcoColor::Cmyk([65535, 0, 0, 1234]),
+    }];
     let bytes = aco::write(&swatches).expect("writing one CMYK swatch");
 
     // Version 1 section: version u16, count u16, then a 10-byte record.
     let space = u16::from_be_bytes([bytes[4], bytes[5]]);
-    let stored: Vec<u16> = (0..4).map(|i| u16::from_be_bytes([bytes[6 + i * 2], bytes[7 + i * 2]])).collect();
+    let stored: Vec<u16> = (0..4)
+        .map(|i| u16::from_be_bytes([bytes[6 + i * 2], bytes[7 + i * 2]]))
+        .collect();
     assert_eq!(space, aco::space::CMYK, "the record must be tagged CMYK");
-    assert_eq!(stored, vec![0, u16::MAX, u16::MAX, u16::MAX - 1234], "the file stores the complement of the ink amounts");
-    assert_eq!(aco::parse(&bytes).expect("the file parses").swatches, swatches, "the ink amounts must survive the round trip");
+    assert_eq!(
+        stored,
+        vec![0, u16::MAX, u16::MAX, u16::MAX - 1234],
+        "the file stores the complement of the ink amounts"
+    );
+    assert_eq!(
+        aco::parse(&bytes).expect("the file parses").swatches,
+        swatches,
+        "the ink amounts must survive the round trip"
+    );
 }
 
 #[test]
@@ -270,7 +408,10 @@ fn grd_unrepresentable_numbers_follow_the_documented_policy() {
     // it could not tell "fell back to the default" from "the patch had no effect".
     let patch = |key: &[u8], v: f64| {
         let mut b = sample_grd();
-        let at = b.windows(4).rposition(|w| w == key).expect("the sample stores the key");
+        let at = b
+            .windows(4)
+            .rposition(|w| w == key)
+            .expect("the sample stores the key");
         let skip = match &b[at + 4..at + 8] {
             b"doub" => 8usize,
             b"UntF" => 12usize,
@@ -292,7 +433,10 @@ fn grd_unrepresentable_numbers_follow_the_documented_policy() {
         (-3.0e38, 0.0),           // finite as f32 -> clamps down
     ] {
         let got = patch(b"Opct", v)[0].opacity[1].1;
-        assert_eq!(got, expected, "Opct = {v} must read back as {expected}, got {got}");
+        assert_eq!(
+            got, expected,
+            "Opct = {v} must read back as {expected}, got {got}"
+        );
     }
     // A colour channel has its own default (zero) for the absent case, and the same monotonic
     // saturate-then-clamp for everything else. Pin the exact number: a value reaching the clamp
@@ -307,8 +451,13 @@ fn grd_unrepresentable_numbers_follow_the_documented_policy() {
         (-3.0e38, 0.0),           // finite as f32 -> clamps down
     ] {
         let f = patch(b"Bl  ", v);
-        let GrdColor::Rgb([_, _, b]) = f[0].stops[0].color else { panic!("expected an RGB stop") };
-        assert_eq!(b, expected, "a blue component of {v} must be {expected}, got {b}");
+        let GrdColor::Rgb([_, _, b]) = f[0].stops[0].color else {
+            panic!("expected an RGB stop")
+        };
+        assert_eq!(
+            b, expected,
+            "a blue component of {v} must be {expected}, got {b}"
+        );
     }
 }
 
@@ -320,24 +469,52 @@ fn grd_unrepresentable_numbers_follow_the_documented_policy() {
 fn aco_and_ase_never_split_a_surrogate_pair() {
     // "a" plus 600 emoji: 1 + 1200 units, so a 1024-unit cap lands mid-pair.
     let name = format!("a{}", "\u{1F600}".repeat(600));
-    assert!(name.encode_utf16().count() > ase::MAX_NAME_UNITS, "the name must be longer than the cap");
+    assert!(
+        name.encode_utf16().count() > ase::MAX_NAME_UNITS,
+        "the name must be longer than the cap"
+    );
 
-    let swatches = vec![aco::AcoSwatch { name: name.clone(), color: aco::AcoColor::Gray(5000) }];
+    let swatches = vec![aco::AcoSwatch {
+        name: name.clone(),
+        color: aco::AcoColor::Gray(5000),
+    }];
     let once = aco::write(&swatches).expect("writing a long non-ASCII name is capped, not refused");
     let back = aco::parse(&once).expect("the written file parses");
     // The exact expected name, not merely "it is valid UTF-16": the cap must drop the whole
     // character that does not fit, leaving "a" plus 511 complete pairs and nothing half-written.
     let expected = format!("a{}", "\u{1F600}".repeat(511));
-    assert_eq!(back.swatches[0].name, expected, "the capped name must be whole characters only");
-    assert_eq!(aco::write(&back.swatches).unwrap(), once, "the file must be stable across a round trip");
+    assert_eq!(
+        back.swatches[0].name, expected,
+        "the capped name must be whole characters only"
+    );
+    assert_eq!(
+        aco::write(&back.swatches).unwrap(),
+        once,
+        "the file must be stable across a round trip"
+    );
 
-    use photocraft_psd::ase::{AseColor, AseEntry, AseFile, AseKind, AseSwatch, write};
-    let file = AseFile { entries: vec![AseEntry::Swatch(AseSwatch { name, color: AseColor::Rgb([1.0, 0.0, 0.0]), kind: AseKind::Process })] };
+    use photocraft_psd::ase::{write, AseColor, AseEntry, AseFile, AseKind, AseSwatch};
+    let file = AseFile {
+        entries: vec![AseEntry::Swatch(AseSwatch {
+            name,
+            color: AseColor::Rgb([1.0, 0.0, 0.0]),
+            kind: AseKind::Process,
+        })],
+    };
     let a1 = write(&file).expect("writing a long non-ASCII name is capped, not refused");
     let ab = ase::parse(&a1).expect("the written file parses");
-    let ase::AseEntry::Swatch(s) = &ab.entries[0] else { panic!("expected a loose swatch") };
-    assert_eq!(s.name, expected, "the capped name must be whole characters only");
-    assert_eq!(write(&ab).unwrap(), a1, "the file must be stable across a round trip");
+    let ase::AseEntry::Swatch(s) = &ab.entries[0] else {
+        panic!("expected a loose swatch")
+    };
+    assert_eq!(
+        s.name, expected,
+        "the capped name must be whole characters only"
+    );
+    assert_eq!(
+        write(&ab).unwrap(),
+        a1,
+        "the file must be stable across a round trip"
+    );
 }
 
 /// Locations, midpoints and opacity are documented as 0..=1. A hostile file stores raw integers,
@@ -348,8 +525,16 @@ fn grd_out_of_range_numbers_are_clamped() {
         name: "out of range".into(),
         noise: false,
         stops: vec![
-            GrdStop { location: 2.0, midpoint: 5.0, color: GrdColor::Rgb([1.0, 0.0, 0.0]) },
-            GrdStop { location: -3.0, midpoint: -1.0, color: GrdColor::Rgb([0.0, 1.0, 0.0]) },
+            GrdStop {
+                location: 2.0,
+                midpoint: 5.0,
+                color: GrdColor::Rgb([1.0, 0.0, 0.0]),
+            },
+            GrdStop {
+                location: -3.0,
+                midpoint: -1.0,
+                color: GrdColor::Rgb([0.0, 1.0, 0.0]),
+            },
         ],
         opacity: vec![(9.0, 5.0, 7.0), (-2.0, -1.0, 42.0)],
     };
@@ -358,12 +543,32 @@ fn grd_out_of_range_numbers_are_clamped() {
     // Range membership alone would be a tautology once the values are already in range: assert the
     // exact clamped result, so a clamp silently degrading into a pass-through is caught. Positive
     // over-range -> 1.0, negative -> 0.0.
-    assert_eq!(f[0].stops[0].location, 1.0, "location 2.0 must clamp to 1.0");
-    assert_eq!(f[0].stops[0].midpoint, 1.0, "midpoint 5.0 must clamp to 1.0");
-    assert_eq!(f[0].stops[1].location, 0.0, "location -3.0 must clamp to 0.0");
-    assert_eq!(f[0].stops[1].midpoint, 0.0, "midpoint -1.0 must clamp to 0.0");
-    assert_eq!(f[0].opacity[0], (1.0, 1.0, 1.0), "all-positive over-range opacity must clamp to 1.0");
-    assert_eq!(f[0].opacity[1], (0.0, 0.0, 1.0), "location/opacity clamp to 0.0, midpoint 42.0 to 1.0");
+    assert_eq!(
+        f[0].stops[0].location, 1.0,
+        "location 2.0 must clamp to 1.0"
+    );
+    assert_eq!(
+        f[0].stops[0].midpoint, 1.0,
+        "midpoint 5.0 must clamp to 1.0"
+    );
+    assert_eq!(
+        f[0].stops[1].location, 0.0,
+        "location -3.0 must clamp to 0.0"
+    );
+    assert_eq!(
+        f[0].stops[1].midpoint, 0.0,
+        "midpoint -1.0 must clamp to 0.0"
+    );
+    assert_eq!(
+        f[0].opacity[0],
+        (1.0, 1.0, 1.0),
+        "all-positive over-range opacity must clamp to 1.0"
+    );
+    assert_eq!(
+        f[0].opacity[1],
+        (0.0, 0.0, 1.0),
+        "location/opacity clamp to 0.0, midpoint 42.0 to 1.0"
+    );
 }
 
 /// `num` returns the raw f64 unfiltered; `finite()` is the single guard, and a NaN is not the only
@@ -374,7 +579,10 @@ fn grd_out_of_range_numbers_are_clamped() {
 fn grd_huge_f64_does_not_overflow_to_infinity() {
     for key in ["Rd  ", "Grn ", "Bl  "] {
         let mut b = sample_grd();
-        let at = b.windows(4).position(|w| w == key.as_bytes()).unwrap_or_else(|| panic!("the sample stores {key:?}"));
+        let at = b
+            .windows(4)
+            .position(|w| w == key.as_bytes())
+            .unwrap_or_else(|| panic!("the sample stores {key:?}"));
         assert_eq!(&b[at + 4..at + 8], b"doub", "{key} is stored as a double");
         b[at + 8..at + 16].copy_from_slice(&1e300f64.to_be_bytes());
         let f = grd::parse(&b).expect("a huge but finite component still parses");
@@ -389,8 +597,15 @@ fn grd_huge_f64_does_not_overflow_to_infinity() {
 #[test]
 fn grd_non_finite_numbers_do_not_survive_the_reader() {
     let mut b = sample_grd();
-    let at = b.windows(4).position(|w| w == b"Rd  ").expect("the sample stores an RGB component");
-    assert_eq!(&b[at + 4..at + 8], b"doub", "an RGB component is stored as a double");
+    let at = b
+        .windows(4)
+        .position(|w| w == b"Rd  ")
+        .expect("the sample stores an RGB component");
+    assert_eq!(
+        &b[at + 4..at + 8],
+        b"doub",
+        "an RGB component is stored as a double"
+    );
     b[at + 8..at + 16].copy_from_slice(&f64::NAN.to_be_bytes());
     let f = grd::parse(&b).expect("a NaN component still parses");
     assert!(!f.is_empty());
@@ -410,7 +625,11 @@ fn ase_round_trip_preserves_swatch_count() {
     let n = f.swatch_count();
     let out = write(&f).expect("re-writing a parsed .ase");
     let back = ase::parse(&out).expect("the rewritten .ase parses");
-    assert_eq!(back.swatch_count(), n, "swatch count changed across a round trip");
+    assert_eq!(
+        back.swatch_count(),
+        n,
+        "swatch count changed across a round trip"
+    );
 }
 
 /// A file with more colour blocks than [`ase::MAX_SWATCHES`] must be refused. Each block here is
@@ -435,13 +654,19 @@ fn ase_swatch_cap_is_enforced_on_hostile_input() {
     for _ in 0..total {
         f.extend_from_slice(&block);
     }
-    assert!(matches!(ase::parse(&f), Err(PsdError::LimitExceeded(_))), "a file over MAX_SWATCHES must be refused, not silently truncated");
+    assert!(
+        matches!(ase::parse(&f), Err(PsdError::LimitExceeded(_))),
+        "a file over MAX_SWATCHES must be refused, not silently truncated"
+    );
     // The same file one block under the cap is accepted, so the cap is what refuses it.
     f.truncate(f.len() - block.len());
     let trimmed = total - 1;
     // signature (4) + major (2) + minor (2) puts the block count at offset 8.
     f[8..12].copy_from_slice(&(trimmed as u32).to_be_bytes());
-    assert!(ase::parse(&f).is_ok(), "a file exactly at MAX_SWATCHES must still parse");
+    assert!(
+        ase::parse(&f).is_ok(),
+        "a file exactly at MAX_SWATCHES must still parse"
+    );
 }
 
 /// A name longer than [`ase::MAX_NAME_UNITS`] is truncated on read rather than refused: the file
@@ -468,8 +693,14 @@ fn ase_over_long_name_is_truncated_on_read() {
     f.extend_from_slice(&body);
 
     let parsed = ase::parse(&f).expect("an over-long name is truncated, not refused");
-    let ase::AseEntry::Swatch(s) = &parsed.entries[0] else { panic!("expected a loose swatch") };
-    assert_eq!(s.name.encode_utf16().count(), ase::MAX_NAME_UNITS, "name must be capped at MAX_NAME_UNITS");
+    let ase::AseEntry::Swatch(s) = &parsed.entries[0] else {
+        panic!("expected a loose swatch")
+    };
+    assert_eq!(
+        s.name.encode_utf16().count(),
+        ase::MAX_NAME_UNITS,
+        "name must be capped at MAX_NAME_UNITS"
+    );
 }
 
 /// An `.aco` that parses must re-serialize to the same swatch count, with no name over the cap.
@@ -482,7 +713,11 @@ fn aco_round_trip_preserves_swatch_count() {
     let f = aco::parse(&sample_aco()).expect("sample .aco parses");
     let out = write(&f.swatches).expect("re-writing parsed swatches");
     let back = aco::parse(&out).expect("the rewritten .aco parses");
-    assert_eq!(back.swatches.len(), f.swatches.len(), "swatch count changed across a round trip");
+    assert_eq!(
+        back.swatches.len(),
+        f.swatches.len(),
+        "swatch count changed across a round trip"
+    );
 }
 
 /// A version 2 section whose name declares more units than [`aco::MAX_NAME_UNITS`] must come back
@@ -504,14 +739,21 @@ fn aco_over_long_name_is_truncated_on_read() {
     }
     f.extend_from_slice(&0u16.to_be_bytes()); // terminating null
     let parsed = aco::parse(&f).expect("an over-long name is truncated, not refused");
-    assert_eq!(parsed.swatches[0].name.encode_utf16().count(), aco::MAX_NAME_UNITS, "name must be capped at MAX_NAME_UNITS");
+    assert_eq!(
+        parsed.swatches[0].name.encode_utf16().count(),
+        aco::MAX_NAME_UNITS,
+        "name must be capped at MAX_NAME_UNITS"
+    );
 }
 
 /// `write` must cap too, or a long name from a caller is written whole. The declared length in
 /// the version 2 record counts the terminating null, so it must read back as MAX_NAME_UNITS + 1.
 #[test]
 fn aco_write_caps_the_name() {
-    let swatches = vec![AcoSwatch { name: "x".repeat(5000), color: AcoColor::Gray(5000) }];
+    let swatches = vec![AcoSwatch {
+        name: "x".repeat(5000),
+        color: AcoColor::Gray(5000),
+    }];
     let bytes = aco::write(&swatches).expect("an over-long name is capped on write, not refused");
     // Names go out as UTF-16 big-endian, so 'x' is the byte pair 00 78.
     let run = [0u8, b'x'];
@@ -519,11 +761,21 @@ fn aco_write_caps_the_name() {
     for _ in 0..8 {
         needle.extend_from_slice(&run);
     }
-    let at = bytes.windows(needle.len()).position(|w| w == needle.as_slice()).expect("the name is written into the file");
+    let at = bytes
+        .windows(needle.len())
+        .position(|w| w == needle.as_slice())
+        .expect("the name is written into the file");
     let declared = u32::from_be_bytes([bytes[at - 4], bytes[at - 3], bytes[at - 2], bytes[at - 1]]);
-    assert_eq!(declared as usize, aco::MAX_NAME_UNITS + 1, "write must declare at most MAX_NAME_UNITS units plus the null");
+    assert_eq!(
+        declared as usize,
+        aco::MAX_NAME_UNITS + 1,
+        "write must declare at most MAX_NAME_UNITS units plus the null"
+    );
     let back = aco::parse(&bytes).expect("the written file parses");
-    assert_eq!(back.swatches[0].name.encode_utf16().count(), aco::MAX_NAME_UNITS);
+    assert_eq!(
+        back.swatches[0].name.encode_utf16().count(),
+        aco::MAX_NAME_UNITS
+    );
 }
 
 /// `write` must cap an over-long name too, and it must count the terminating null in the u16
@@ -531,19 +783,35 @@ fn aco_write_caps_the_name() {
 /// 65 535 units — so the case that proves it uses 70 000, not merely "long".
 #[test]
 fn ase_write_caps_the_name() {
-    use photocraft_psd::ase::{AseColor, AseEntry, AseFile, AseKind, AseSwatch, write};
-    let sw = AseSwatch { name: "x".repeat(70_000), color: AseColor::Rgb([1.0, 0.0, 0.0]), kind: AseKind::Process };
-    let bytes = write(&AseFile { entries: vec![AseEntry::Swatch(sw)] }).expect("an over-long name is capped, not refused");
+    use photocraft_psd::ase::{write, AseColor, AseEntry, AseFile, AseKind, AseSwatch};
+    let sw = AseSwatch {
+        name: "x".repeat(70_000),
+        color: AseColor::Rgb([1.0, 0.0, 0.0]),
+        kind: AseKind::Process,
+    };
+    let bytes = write(&AseFile {
+        entries: vec![AseEntry::Swatch(sw)],
+    })
+    .expect("an over-long name is capped, not refused");
     let run = [0u8, b'x'];
     let mut needle = Vec::new();
     for _ in 0..8 {
         needle.extend_from_slice(&run);
     }
-    let at = bytes.windows(needle.len()).position(|w| w == needle.as_slice()).expect("the name is written into the file");
+    let at = bytes
+        .windows(needle.len())
+        .position(|w| w == needle.as_slice())
+        .expect("the name is written into the file");
     let declared = u16::from_be_bytes([bytes[at - 2], bytes[at - 1]]) as usize;
-    assert_eq!(declared, ase::MAX_NAME_UNITS + 1, "write must declare at most MAX_NAME_UNITS units plus the null");
+    assert_eq!(
+        declared,
+        ase::MAX_NAME_UNITS + 1,
+        "write must declare at most MAX_NAME_UNITS units plus the null"
+    );
     let back = ase::parse(&bytes).expect("the written file parses");
-    let ase::AseEntry::Swatch(s) = &back.entries[0] else { panic!("expected a loose swatch") };
+    let ase::AseEntry::Swatch(s) = &back.entries[0] else {
+        panic!("expected a loose swatch")
+    };
     assert_eq!(s.name.encode_utf16().count(), ase::MAX_NAME_UNITS);
 }
 
@@ -554,8 +822,16 @@ fn truncate_grd_is_always_an_error() {
     let b = sample_grd();
     for cut in 0..b.len() {
         let r = catch_unwind(|| grd::parse(&b[..cut]));
-        assert!(r.is_ok(), "grd: parse panicked on a {cut}/{}-byte prefix", b.len());
-        assert!(r.unwrap().is_err(), "grd: truncation at {cut}/{} parsed successfully", b.len());
+        assert!(
+            r.is_ok(),
+            "grd: parse panicked on a {cut}/{}-byte prefix",
+            b.len()
+        );
+        assert!(
+            r.unwrap().is_err(),
+            "grd: truncation at {cut}/{} parsed successfully",
+            b.len()
+        );
     }
     assert!(grd::parse(&b).is_ok(), "grd: the full file must parse");
 }
@@ -567,8 +843,16 @@ fn truncate_ase_is_always_an_error() {
     let b = sample_ase();
     for cut in 0..b.len() {
         let r = catch_unwind(|| ase::parse(&b[..cut]));
-        assert!(r.is_ok(), "ase: parse panicked on a {cut}/{}-byte prefix", b.len());
-        assert!(r.unwrap().is_err(), "ase: truncation at {cut}/{} parsed successfully", b.len());
+        assert!(
+            r.is_ok(),
+            "ase: parse panicked on a {cut}/{}-byte prefix",
+            b.len()
+        );
+        assert!(
+            r.unwrap().is_err(),
+            "ase: truncation at {cut}/{} parsed successfully",
+            b.len()
+        );
     }
     assert!(ase::parse(&b).is_ok(), "ase: the full file must parse");
 }
@@ -583,11 +867,20 @@ fn truncate_aco_inside_first_section_is_an_error() {
     let b = sample_aco();
     // version u16 + count u16, then one 10-byte colour record per swatch.
     let first_section = 4 + sample_aco_swatches().len() * 10;
-    assert!(first_section <= b.len(), "the sample must contain a whole first section");
+    assert!(
+        first_section <= b.len(),
+        "the sample must contain a whole first section"
+    );
     for cut in 0..first_section {
         let r = catch_unwind(|| aco::parse(&b[..cut]));
-        assert!(r.is_ok(), "aco: parse panicked on a {cut}/{first_section}-byte prefix");
-        assert!(r.unwrap().is_err(), "aco: truncation inside the first section at {cut} parsed successfully");
+        assert!(
+            r.is_ok(),
+            "aco: parse panicked on a {cut}/{first_section}-byte prefix"
+        );
+        assert!(
+            r.unwrap().is_err(),
+            "aco: truncation inside the first section at {cut} parsed successfully"
+        );
     }
     match catch_unwind(|| aco::parse(&b[..first_section])) {
         Ok(Ok(_)) => {}
@@ -639,7 +932,10 @@ fn ase_structurally_hostile_blocks() {
     let mut f = header(1);
     f.extend_from_slice(&group_end());
     let parsed = ase::parse(&f).expect("an unbalanced group end must parse");
-    assert!(parsed.entries.is_empty(), "a stray group end must not invent an entry or an empty group");
+    assert!(
+        parsed.entries.is_empty(),
+        "a stray group end must not invent an entry or an empty group"
+    );
 
     // A group started inside another: the outer one closes, both groups are emitted.
     let mut f = header(3);
@@ -647,10 +943,17 @@ fn ase_structurally_hostile_blocks() {
     f.extend_from_slice(&group_start("inner"));
     f.extend_from_slice(&colour(b"Gray", &1f32.to_be_bytes()));
     let parsed = ase::parse(&f).expect("a nested group start must parse");
-    assert_eq!(parsed.swatch_count(), 1, "the colour must land in exactly one group");
+    assert_eq!(
+        parsed.swatch_count(),
+        1,
+        "the colour must land in exactly one group"
+    );
     // The message above is only true if the colour is in the *inner* group; check it.
     let inner_holds_it = parsed.entries.iter().any(|e| matches!(e, AseEntry::Group { name, swatches } if name == "inner" && swatches.len() == 1));
-    assert!(inner_holds_it, "the colour must land in the inner group, not the outer one");
+    assert!(
+        inner_holds_it,
+        "the colour must land in the inner group, not the outer one"
+    );
     let names: Vec<&str> = parsed
         .entries
         .iter()
@@ -659,7 +962,11 @@ fn ase_structurally_hostile_blocks() {
             AseEntry::Swatch(_) => None,
         })
         .collect();
-    assert_eq!(names, vec!["outer", "inner"], "both groups must be closed and emitted");
+    assert_eq!(
+        names,
+        vec!["outer", "inner"],
+        "both groups must be closed and emitted"
+    );
 
     // A block length shorter than the body it describes: the colour's floats are cut off.
     // Gray carries exactly one component, so declaring the block one byte shorter leaves that
@@ -675,7 +982,10 @@ fn ase_structurally_hostile_blocks() {
     f.extend_from_slice(&b);
     let r = catch_unwind(|| ase::parse(&f));
     assert!(r.is_ok(), "a truncated colour component must not panic");
-    assert!(r.unwrap().is_err(), "a colour component cut short must be refused, not guessed at");
+    assert!(
+        r.unwrap().is_err(),
+        "a colour component cut short must be refused, not guessed at"
+    );
 
     // A block that ends after the components, with no colour type at all, is *accepted*: some
     // writers omit it and the reader defaults it to process. Pinning that, because it is the one
@@ -686,7 +996,11 @@ fn ase_structurally_hostile_blocks() {
     b.extend_from_slice(&short[..short.len() - 2]);
     f.extend_from_slice(&b);
     let parsed = ase::parse(&f).expect("a colour block with no colour type is accepted by design");
-    assert_eq!(parsed.swatch_count(), 1, "it must still yield exactly one swatch");
+    assert_eq!(
+        parsed.swatch_count(),
+        1,
+        "it must still yield exactly one swatch"
+    );
 
     // An unknown colour model keeps whatever bytes follow it verbatim.
     // The model tag is four bytes; give it four, then a known payload, so "kept verbatim" can be
@@ -695,11 +1009,23 @@ fn ase_structurally_hostile_blocks() {
     let payload = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
     f.extend_from_slice(&colour(b"XYZ ", &payload));
     let parsed = ase::parse(&f).expect("an unknown colour model is kept verbatim");
-    assert_eq!(parsed.swatch_count(), 1, "an unknown model still yields one swatch");
-    let AseEntry::Swatch(sw) = &parsed.entries[0] else { panic!("expected a loose swatch") };
-    let AseColor::Other { model, data } = &sw.color else { panic!("an unknown model must be kept as Other, got {:?}", sw.color) };
+    assert_eq!(
+        parsed.swatch_count(),
+        1,
+        "an unknown model still yields one swatch"
+    );
+    let AseEntry::Swatch(sw) = &parsed.entries[0] else {
+        panic!("expected a loose swatch")
+    };
+    let AseColor::Other { model, data } = &sw.color else {
+        panic!("an unknown model must be kept as Other, got {:?}", sw.color)
+    };
     assert_eq!(model, b"XYZ ", "the model tag must be preserved verbatim");
-    assert_eq!(data.as_slice(), &payload, "the component bytes must be preserved verbatim");
+    assert_eq!(
+        data.as_slice(),
+        &payload,
+        "the component bytes must be preserved verbatim"
+    );
 }
 
 /// A `.aco` whose version 1 and version 2 sections disagree about the number of swatches is the
@@ -722,10 +1048,19 @@ fn aco_mismatched_section_counts_do_not_panic() {
     }
     let r = catch_unwind(|| aco::parse(&f));
     assert!(r.is_ok(), "mismatched section counts must not panic");
-    let parsed = r.unwrap().expect("the version 2 section is the one with names");
-    assert_eq!(parsed.swatches.len(), 5, "the named section is authoritative when present");
+    let parsed = r
+        .unwrap()
+        .expect("the version 2 section is the one with names");
+    assert_eq!(
+        parsed.swatches.len(),
+        5,
+        "the named section is authoritative when present"
+    );
     for sw in &parsed.swatches {
-        assert_eq!(sw.name, "N", "each version 2 record must keep its name beside its own colour");
+        assert_eq!(
+            sw.name, "N",
+            "each version 2 record must keep its name beside its own colour"
+        );
     }
 }
 
@@ -740,7 +1075,7 @@ fn aco_mismatched_section_counts_do_not_panic() {
 /// nothing ever recursed. It passed for the wrong reason.
 #[test]
 fn grd_deeply_nested_descriptor_hits_the_depth_limit() {
-    use photocraft_psd::descriptor::{Descriptor, MAX_DEPTH, Value, VersionedDescriptor};
+    use photocraft_psd::descriptor::{Descriptor, Value, VersionedDescriptor, MAX_DEPTH};
     let mut d = Descriptor::new("null");
     for _ in 0..(MAX_DEPTH + 5) {
         d = Descriptor::new("null").with("in  ", Value::Descriptor(d));
@@ -749,7 +1084,10 @@ fn grd_deeply_nested_descriptor_hits_the_depth_limit() {
     g.extend_from_slice(&5u16.to_be_bytes());
     g.extend_from_slice(&VersionedDescriptor::new(d).to_bytes());
     // This is the real assertion: nesting past the limit is refused, not recursed into.
-    assert!(matches!(grd::parse(&g), Err(PsdError::LimitExceeded(_))), "nesting past MAX_DEPTH must be refused through the .grd path, not recursed into");
+    assert!(
+        matches!(grd::parse(&g), Err(PsdError::LimitExceeded(_))),
+        "nesting past MAX_DEPTH must be refused through the .grd path, not recursed into"
+    );
 
     // The limit discriminates rather than being a blanket refusal: a shallow nesting is accepted
     // (rejected later, for holding no gradients — a different error), while a deep one is a depth
@@ -765,9 +1103,15 @@ fn grd_deeply_nested_descriptor_hits_the_depth_limit() {
         g.extend_from_slice(&VersionedDescriptor::new(d).to_bytes());
         g
     };
-    assert!(!matches!(grd::parse(&build(4)), Err(PsdError::LimitExceeded(_))), "a shallow descriptor must not be refused for depth");
     assert!(
-        matches!(grd::parse(&build(MAX_DEPTH + 1)), Err(PsdError::LimitExceeded(_))),
+        !matches!(grd::parse(&build(4)), Err(PsdError::LimitExceeded(_))),
+        "a shallow descriptor must not be refused for depth"
+    );
+    assert!(
+        matches!(
+            grd::parse(&build(MAX_DEPTH + 1)),
+            Err(PsdError::LimitExceeded(_))
+        ),
         "a descriptor past the depth limit must be a depth refusal, not an abort"
     );
 }
@@ -789,19 +1133,33 @@ fn grd_every_colour_model_is_clamped_and_finite() {
         }
         let stop = Descriptor::new("Clrt")
             .with("Clr ", Value::Descriptor(colour))
-            .with("Type", Value::Enumerated { type_id: photocraft_psd::descriptor::Id::new("Clry"), value: photocraft_psd::descriptor::Id::new("UsrS") })
+            .with(
+                "Type",
+                Value::Enumerated {
+                    type_id: photocraft_psd::descriptor::Id::new("Clry"),
+                    value: photocraft_psd::descriptor::Id::new("UsrS"),
+                },
+            )
             .with("Lctn", Value::Integer(0))
             .with("Mdpn", Value::Integer(50));
         let grad = Descriptor::new("Grdn").with("Clrs", Value::List(vec![Value::Descriptor(stop)]));
         let outer = Descriptor::new("Grdn").with("Grad", Value::Descriptor(grad));
-        let file = Descriptor::new("null").with("GrdL", Value::List(vec![Value::Descriptor(outer)]));
+        let file =
+            Descriptor::new("null").with("GrdL", Value::List(vec![Value::Descriptor(outer)]));
         let mut g = b"8BGR".to_vec();
         g.extend_from_slice(&5u16.to_be_bytes());
         g.extend_from_slice(&VersionedDescriptor::new(file).to_bytes());
         g
     };
 
-    let hostile = [1e300, 3.0e38, -3.0e38, f64::NAN, f64::INFINITY, f64::NEG_INFINITY];
+    let hostile = [
+        1e300,
+        3.0e38,
+        -3.0e38,
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+    ];
     for &x in &hostile {
         // The exact boundary each clamp must land on, so a weaker clamp (e.g. a*/b* to -100..=100
         // instead of -128..=127, or a unit range to 0..=0.5) is caught, not just an out-of-range
@@ -817,22 +1175,39 @@ fn grd_every_colour_model_is_clamped_and_finite() {
             -128.0
         };
         // RGB components are 0..=255 before the /255; the result must land in 0..=1.
-        let f = grd::parse(&build("RGBC", &[("Rd  ", x), ("Grn ", x), ("Bl  ", x)])).expect("RGB parses");
-        let GrdColor::Rgb(rgb) = f[0].stops[0].color else { panic!("expected an RGB stop") };
+        let f = grd::parse(&build("RGBC", &[("Rd  ", x), ("Grn ", x), ("Bl  ", x)]))
+            .expect("RGB parses");
+        let GrdColor::Rgb(rgb) = f[0].stops[0].color else {
+            panic!("expected an RGB stop")
+        };
         for v in rgb {
-            assert_eq!(v, unit, "RGB component for input {x} must saturate to {unit}");
+            assert_eq!(
+                v, unit,
+                "RGB component for input {x} must saturate to {unit}"
+            );
         }
         // HSB: hue 0..=360, saturation and brightness 0..=1.
-        let f = grd::parse(&build("HSBC", &[("H   ", x), ("Strt", x), ("Brgh", x)])).expect("HSB parses");
+        let f = grd::parse(&build("HSBC", &[("H   ", x), ("Strt", x), ("Brgh", x)]))
+            .expect("HSB parses");
         if let GrdColor::Hsb([h, sat, br]) = f[0].stops[0].color {
-            assert!(h.is_finite() && (0.0..=360.0).contains(&h), "hue {h} out of range for input {x}");
-            assert_eq!(sat, unit, "saturation for input {x} must saturate to {unit}");
+            assert!(
+                h.is_finite() && (0.0..=360.0).contains(&h),
+                "hue {h} out of range for input {x}"
+            );
+            assert_eq!(
+                sat, unit,
+                "saturation for input {x} must saturate to {unit}"
+            );
             assert_eq!(br, unit, "brightness for input {x} must saturate to {unit}");
         } else {
             panic!("expected an HSB stop");
         }
         // CMYK: every ink 0..=1.
-        let f = grd::parse(&build("CMYC", &[("Cyn ", x), ("Mgnt", x), ("Ylw ", x), ("Blck", x)])).expect("CMYK parses");
+        let f = grd::parse(&build(
+            "CMYC",
+            &[("Cyn ", x), ("Mgnt", x), ("Ylw ", x), ("Blck", x)],
+        ))
+        .expect("CMYK parses");
         if let GrdColor::Cmyk(c) = f[0].stops[0].color {
             for v in c {
                 assert_eq!(v, unit, "CMYK ink for input {x} must saturate to {unit}");
@@ -841,11 +1216,18 @@ fn grd_every_colour_model_is_clamped_and_finite() {
             panic!("expected a CMYK stop");
         }
         // Lab: L* 0..=100, a*/b* bounded to the CIELAB gamut -128..=127.
-        let f = grd::parse(&build("LbCl", &[("Lmnc", x), ("A   ", x), ("B   ", x)])).expect("Lab parses");
+        let f = grd::parse(&build("LbCl", &[("Lmnc", x), ("A   ", x), ("B   ", x)]))
+            .expect("Lab parses");
         if let GrdColor::Lab([l, a, b]) = f[0].stops[0].color {
             assert_eq!(l, lab_l, "L* for input {x} must saturate to {lab_l}");
-            assert_eq!(a, lab_ab, "a* for input {x} must saturate to the gamut edge {lab_ab}");
-            assert_eq!(b, lab_ab, "b* for input {x} must saturate to the gamut edge {lab_ab}");
+            assert_eq!(
+                a, lab_ab,
+                "a* for input {x} must saturate to the gamut edge {lab_ab}"
+            );
+            assert_eq!(
+                b, lab_ab,
+                "b* for input {x} must saturate to the gamut edge {lab_ab}"
+            );
         } else {
             panic!("expected a Lab stop");
         }
@@ -866,15 +1248,25 @@ fn grd_every_colour_model_is_clamped_and_finite() {
 fn grd_hue_wraps_rather_than_clamping() {
     use photocraft_psd::descriptor::{Descriptor, Id, Value, VersionedDescriptor};
     let build = |hue: f64| {
-        let colour = Descriptor::new("HSBC").with("H   ", Value::Double(hue)).with("Strt", Value::Double(50.0)).with("Brgh", Value::Double(50.0));
+        let colour = Descriptor::new("HSBC")
+            .with("H   ", Value::Double(hue))
+            .with("Strt", Value::Double(50.0))
+            .with("Brgh", Value::Double(50.0));
         let stop = Descriptor::new("Clrt")
             .with("Clr ", Value::Descriptor(colour))
-            .with("Type", Value::Enumerated { type_id: Id::new("Clry"), value: Id::new("UsrS") })
+            .with(
+                "Type",
+                Value::Enumerated {
+                    type_id: Id::new("Clry"),
+                    value: Id::new("UsrS"),
+                },
+            )
             .with("Lctn", Value::Integer(0))
             .with("Mdpn", Value::Integer(50));
         let grad = Descriptor::new("Grdn").with("Clrs", Value::List(vec![Value::Descriptor(stop)]));
         let outer = Descriptor::new("Grdn").with("Grad", Value::Descriptor(grad));
-        let file = Descriptor::new("null").with("GrdL", Value::List(vec![Value::Descriptor(outer)]));
+        let file =
+            Descriptor::new("null").with("GrdL", Value::List(vec![Value::Descriptor(outer)]));
         let mut g = b"8BGR".to_vec();
         g.extend_from_slice(&5u16.to_be_bytes());
         g.extend_from_slice(&VersionedDescriptor::new(file).to_bytes());
@@ -882,17 +1274,32 @@ fn grd_hue_wraps_rather_than_clamping() {
     };
     let hue_of = |bytes: &[u8]| -> f32 {
         let f = grd::parse(bytes).expect("parses");
-        let GrdColor::Hsb([h, _, _]) = f[0].stops[0].color else { panic!("expected an HSB stop") };
+        let GrdColor::Hsb([h, _, _]) = f[0].stops[0].color else {
+            panic!("expected an HSB stop")
+        };
         h
     };
-    assert!((hue_of(&build(370.0)) - 10.0).abs() < 0.01, "370 degrees must wrap to 10, not clamp to 360");
-    assert!((hue_of(&build(-10.0)) - 350.0).abs() < 0.01, "-10 degrees must wrap to 350, not clamp to 0");
+    assert!(
+        (hue_of(&build(370.0)) - 10.0).abs() < 0.01,
+        "370 degrees must wrap to 10, not clamp to 360"
+    );
+    assert!(
+        (hue_of(&build(-10.0)) - 350.0).abs() < 0.01,
+        "-10 degrees must wrap to 350, not clamp to 0"
+    );
     // And a value already in range is unchanged.
-    assert!((hue_of(&build(123.0)) - 123.0).abs() < 0.01, "an in-range hue must be unchanged");
+    assert!(
+        (hue_of(&build(123.0)) - 123.0).abs() < 0.01,
+        "an in-range hue must be unchanged"
+    );
     // Exactly 360 is in range and legal, so it is kept, not wrapped to 0 (a different position for
     // anything that interpolates in HSB). Unconditional `rem_euclid(360)` would map it to 0, so this
     // pins the in-range guard that keeps the boundary intact.
-    assert_eq!(hue_of(&build(360.0)), 360.0, "an in-range hue of exactly 360 must be preserved, not wrapped to 0");
+    assert_eq!(
+        hue_of(&build(360.0)),
+        360.0,
+        "an in-range hue of exactly 360 must be preserved, not wrapped to 0"
+    );
     assert_eq!(hue_of(&build(0.0)), 0.0, "a hue of 0 must stay 0");
 }
 
@@ -900,7 +1307,10 @@ fn grd_hue_wraps_rather_than_clamping() {
 /// out-of-bounds read.
 #[test]
 fn empty_and_signature_only_inputs_error() {
-    fn no_panic_then_err<T>(r: Result<Result<T, PsdError>, Box<dyn core::any::Any + Send>>, what: &str) {
+    fn no_panic_then_err<T>(
+        r: Result<Result<T, PsdError>, Box<dyn core::any::Any + Send>>,
+        what: &str,
+    ) {
         match r {
             Ok(Ok(_)) => panic!("{what}: an empty file must be a clean error, not parse"),
             Ok(Err(_)) => {}
@@ -910,8 +1320,14 @@ fn empty_and_signature_only_inputs_error() {
     no_panic_then_err(catch_unwind(|| grd::parse(b"")), "grd");
     no_panic_then_err(catch_unwind(|| ase::parse(b"")), "ase");
     no_panic_then_err(catch_unwind(|| aco::parse(b"")), "aco");
-    assert!(matches!(grd::parse(b"8BGR"), Err(PsdError::UnexpectedEof { .. })));
-    assert!(matches!(grd::parse(b"8BG"), Err(PsdError::UnexpectedEof { .. })));
+    assert!(matches!(
+        grd::parse(b"8BGR"),
+        Err(PsdError::UnexpectedEof { .. })
+    ));
+    assert!(matches!(
+        grd::parse(b"8BG"),
+        Err(PsdError::UnexpectedEof { .. })
+    ));
     assert!(ase::parse(b"ASEF").is_err());
     assert!(aco::parse(b"").is_err());
 }

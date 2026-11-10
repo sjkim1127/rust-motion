@@ -76,7 +76,11 @@ impl Default for TextStyles {
         Self {
             character: Vec::new(),
             paragraph: Vec::new(),
-            basic: ParagraphStyleDef { id: 0, name: BASIC_PARAGRAPH.into(), ..Default::default() },
+            basic: ParagraphStyleDef {
+                id: 0,
+                name: BASIC_PARAGRAPH.into(),
+                ..Default::default()
+            },
             psd_raw: None,
         }
     }
@@ -94,12 +98,18 @@ fn object<T: Serialize>(s: &T) -> StyleAttrs {
 }
 
 /// `base` with `attrs` applied. Fails if an attribute has the wrong type.
-pub fn apply_attrs<T: Serialize + serde::de::DeserializeOwned>(base: &T, attrs: &StyleAttrs) -> Result<T, String> {
+pub fn apply_attrs<T: Serialize + serde::de::DeserializeOwned>(
+    base: &T,
+    attrs: &StyleAttrs,
+) -> Result<T, String> {
     if attrs.is_empty() {
-        return serde_json::from_value(serde_json::to_value(base).map_err(|e| e.to_string())?).map_err(|e| e.to_string());
+        return serde_json::from_value(serde_json::to_value(base).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string());
     }
     let mut v = serde_json::to_value(base).map_err(|e| e.to_string())?;
-    let Value::Object(m) = &mut v else { return Err("style is not an object".into()) };
+    let Value::Object(m) = &mut v else {
+        return Err("style is not an object".into());
+    };
     for (k, x) in attrs {
         if k == REF_KEY {
             continue;
@@ -129,13 +139,18 @@ pub fn para_attrs(s: &ParagraphStyle) -> StyleAttrs {
 }
 
 /// Checks that `attrs` only names fields of `T` with values of the right type.
-pub fn validate<T: Serialize + serde::de::DeserializeOwned + Default>(attrs: &StyleAttrs) -> Result<(), String> {
+pub fn validate<T: Serialize + serde::de::DeserializeOwned + Default>(
+    attrs: &StyleAttrs,
+) -> Result<(), String> {
     apply_attrs(&T::default(), attrs).map(|_| ())
 }
 
 impl TextStyles {
     pub fn is_empty(&self) -> bool {
-        self.character.is_empty() && self.paragraph.is_empty() && self.basic.char_attrs.is_empty() && self.basic.para_attrs.is_empty()
+        self.character.is_empty()
+            && self.paragraph.is_empty()
+            && self.basic.char_attrs.is_empty()
+            && self.basic.para_attrs.is_empty()
     }
 
     pub fn char_style(&self, id: u32) -> Option<&CharacterStyleDef> {
@@ -148,21 +163,39 @@ impl TextStyles {
 
     /// Paragraph style by id (0 = Basic Paragraph).
     pub fn para_style(&self, id: u32) -> Option<&ParagraphStyleDef> {
-        if id == 0 { Some(&self.basic) } else { self.paragraph.iter().find(|s| s.id == id) }
+        if id == 0 {
+            Some(&self.basic)
+        } else {
+            self.paragraph.iter().find(|s| s.id == id)
+        }
     }
 
     pub fn para_style_mut(&mut self, id: u32) -> Option<&mut ParagraphStyleDef> {
-        if id == 0 { Some(&mut self.basic) } else { self.paragraph.iter_mut().find(|s| s.id == id) }
+        if id == 0 {
+            Some(&mut self.basic)
+        } else {
+            self.paragraph.iter_mut().find(|s| s.id == id)
+        }
     }
 
     /// A fresh character style id, or `None` when the stored ids exhaust the `u32` id space.
     pub fn next_char_id(&self) -> Option<u32> {
-        self.character.iter().map(|s| s.id).max().unwrap_or(0).checked_add(1)
+        self.character
+            .iter()
+            .map(|s| s.id)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
     }
 
     /// A fresh paragraph style id, or `None` when the stored ids exhaust the `u32` id space.
     pub fn next_para_id(&self) -> Option<u32> {
-        self.paragraph.iter().map(|s| s.id).max().unwrap_or(0).checked_add(1)
+        self.paragraph
+            .iter()
+            .map(|s| s.id)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
     }
 
     /// "Character Style N" / "Paragraph Style N" with the first unused N.
@@ -174,13 +207,17 @@ impl TextStyles {
                 n == NO_CHARACTER_STYLE || self.character.iter().any(|s| s.name == n)
             }
         };
-        (1..).map(|i| format!("{base} {i}")).find(|n| !taken(n)).unwrap_or_default()
+        (1..)
+            .map(|i| format!("{base} {i}"))
+            .find(|n| !taken(n))
+            .unwrap_or_default()
     }
 
     /// Paragraph attributes from Basic Paragraph and `para` (a missing id falls back to Basic
     /// Paragraph). The result references `para`.
     pub fn resolve_para(&self, para: Option<u32>) -> ParagraphStyle {
-        let mut s = apply_attrs(&ParagraphStyle::default(), &self.basic.para_attrs).unwrap_or_default();
+        let mut s =
+            apply_attrs(&ParagraphStyle::default(), &self.basic.para_attrs).unwrap_or_default();
         if let Some(def) = para.and_then(|id| self.para_style(id)) {
             s = apply_attrs(&s, &def.para_attrs).unwrap_or(s);
         }
@@ -191,10 +228,21 @@ impl TextStyles {
     /// Character attributes a run gets from its styles alone: defaults (with `default_family`
     /// for an unset family) ← Basic Paragraph ← paragraph style ← character style. The result
     /// references `chr`.
-    pub fn resolve_char(&self, para: Option<u32>, chr: Option<u32>, default_family: &str) -> CharStyle {
-        let base = CharStyle { font_family: default_family.to_string(), ..Default::default() };
+    pub fn resolve_char(
+        &self,
+        para: Option<u32>,
+        chr: Option<u32>,
+        default_family: &str,
+    ) -> CharStyle {
+        let base = CharStyle {
+            font_family: default_family.to_string(),
+            ..Default::default()
+        };
         let mut s = apply_attrs(&base, &self.basic.char_attrs).unwrap_or(base);
-        if let Some(def) = para.and_then(|id| self.para_style(id)).filter(|d| d.id != 0) {
+        if let Some(def) = para
+            .and_then(|id| self.para_style(id))
+            .filter(|d| d.id != 0)
+        {
             s = apply_attrs(&s, &def.char_attrs).unwrap_or(s);
         }
         let chr = chr.filter(|id| self.char_style(*id).is_some());
@@ -206,7 +254,12 @@ impl TextStyles {
     }
 
     /// The local overrides of a run (attributes that differ from its styles).
-    pub fn char_overrides(&self, run: &CharStyle, para: Option<u32>, default_family: &str) -> StyleAttrs {
+    pub fn char_overrides(
+        &self,
+        run: &CharStyle,
+        para: Option<u32>,
+        default_family: &str,
+    ) -> StyleAttrs {
         let base = self.resolve_char(para, run.style_sheet, default_family);
         diff_attrs(run, &base)
     }
@@ -233,7 +286,12 @@ impl TextStyles {
     }
 
     /// Re-resolves a paragraph against (possibly changed) styles, keeping its overrides.
-    pub fn restyle_para(&self, old: &TextStyles, p: &ParagraphStyle, new_para: Option<u32>) -> ParagraphStyle {
+    pub fn restyle_para(
+        &self,
+        old: &TextStyles,
+        p: &ParagraphStyle,
+        new_para: Option<u32>,
+    ) -> ParagraphStyle {
         let overrides = old.para_overrides(p);
         let base = self.resolve_para(new_para);
         let mut s = apply_attrs(&base, &overrides).unwrap_or(base);
@@ -254,7 +312,11 @@ mod tests {
 
     fn styles() -> TextStyles {
         let mut s = TextStyles::default();
-        s.character.push(CharacterStyleDef { id: 1, name: "Big".into(), attrs: attrs(json!({"size_pt": 40.0, "underline": true})) });
+        s.character.push(CharacterStyleDef {
+            id: 1,
+            name: "Big".into(),
+            attrs: attrs(json!({"size_pt": 40.0, "underline": true})),
+        });
         s.paragraph.push(ParagraphStyleDef {
             id: 1,
             name: "Head".into(),
@@ -268,11 +330,17 @@ mod tests {
     fn resolution_layers_styles() {
         let s = styles();
         let none = s.resolve_char(None, None, "Inter");
-        assert_eq!((none.font_family.as_str(), none.size_pt, none.style_sheet), ("Inter", 12.0, None));
+        assert_eq!(
+            (none.font_family.as_str(), none.size_pt, none.style_sheet),
+            ("Inter", 12.0, None)
+        );
         let head = s.resolve_char(Some(1), None, "Inter");
         assert_eq!((head.size_pt, head.weight), (20.0, 700));
         let big = s.resolve_char(Some(1), Some(1), "Inter");
-        assert_eq!((big.size_pt, big.weight, big.underline, big.style_sheet), (40.0, 700, true, Some(1)));
+        assert_eq!(
+            (big.size_pt, big.weight, big.underline, big.style_sheet),
+            (40.0, 700, true, Some(1))
+        );
         // Missing ids fall back.
         assert_eq!(s.resolve_char(Some(9), Some(9), "Inter").style_sheet, None);
         let p = s.resolve_para(Some(1));
@@ -290,12 +358,18 @@ mod tests {
         assert_eq!(ov, attrs(json!({"italic": true})));
         // Redefine "Big" to 50 pt: the run follows and keeps its italic override.
         let mut new = old.clone();
-        new.char_style_mut(1).unwrap().attrs.insert("size_pt".into(), json!(50.0));
+        new.char_style_mut(1)
+            .unwrap()
+            .attrs
+            .insert("size_pt".into(), json!(50.0));
         let r = new.restyle_char(&old, &run, None, None, Some(1), "Inter");
         assert_eq!((r.size_pt, r.italic, r.underline), (50.0, true, true));
         // Clearing the character style keeps overrides on the paragraph basis.
         let r = new.restyle_char(&old, &run, None, None, None, "Inter");
-        assert_eq!((r.size_pt, r.italic, r.underline, r.style_sheet), (12.0, true, false, None));
+        assert_eq!(
+            (r.size_pt, r.italic, r.underline, r.style_sheet),
+            (12.0, true, false, None)
+        );
     }
 
     #[test]
@@ -303,8 +377,15 @@ mod tests {
         assert!(validate::<CharStyle>(&attrs(json!({"size_pt": 3.0}))).is_ok());
         assert!(validate::<CharStyle>(&attrs(json!({"size_pt": "big"}))).is_err());
         assert!(validate::<CharStyle>(&attrs(json!({"nope": 1}))).is_err());
-        let a = CharStyle { size_pt: 30.0, style_sheet: Some(3), ..Default::default() };
-        assert_eq!(diff_attrs(&a, &CharStyle::default()), attrs(json!({"size_pt": 30.0})));
+        let a = CharStyle {
+            size_pt: 30.0,
+            style_sheet: Some(3),
+            ..Default::default()
+        };
+        assert_eq!(
+            diff_attrs(&a, &CharStyle::default()),
+            attrs(json!({"size_pt": 30.0}))
+        );
         assert!(!char_attrs(&a).contains_key("style_sheet"));
     }
 
@@ -324,8 +405,14 @@ mod tests {
     #[test]
     fn exhausted_style_ids_survive_serialization() {
         let mut s = TextStyles::default();
-        s.character.push(CharacterStyleDef { id: u32::MAX, ..Default::default() });
-        s.paragraph.push(ParagraphStyleDef { id: u32::MAX, ..Default::default() });
+        s.character.push(CharacterStyleDef {
+            id: u32::MAX,
+            ..Default::default()
+        });
+        s.paragraph.push(ParagraphStyleDef {
+            id: u32::MAX,
+            ..Default::default()
+        });
         let value = serde_json::to_value(&s).unwrap();
         let loaded: TextStyles = serde_json::from_value(value).unwrap();
         assert_eq!(loaded.next_char_id(), None);

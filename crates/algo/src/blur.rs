@@ -3,7 +3,7 @@
 use photocraft_geom::Rect;
 use photocraft_raster::Interrupt;
 
-use crate::image::{Edge, Image, premultiply, unpremultiply};
+use crate::image::{premultiply, unpremultiply, Edge, Image};
 use crate::photo_util::{par_map, par_rows};
 use crate::{Ctx, FilterParams, RadialMethod, RadialQuality};
 
@@ -26,7 +26,9 @@ pub(crate) fn gaussian_kernel(sigma: f32) -> Vec<f32> {
         return vec![1.0];
     }
     let r = (sigma * 3.0).ceil() as i32;
-    let k: Vec<f32> = (-r..=r).map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp()).collect();
+    let k: Vec<f32> = (-r..=r)
+        .map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp())
+        .collect();
     let s: f32 = k.iter().sum();
     k.into_iter().map(|v| v / s).collect()
 }
@@ -127,9 +129,12 @@ fn boxes_for_gauss(sigma: f32, n: usize) -> Vec<usize> {
     }
     let wl = wl.max(1);
     let wu = wl + 2;
-    let m_ideal = (12.0 * sigma * sigma - nf * (wl * wl) as f32 - 4.0 * nf * wl as f32 - 3.0 * nf) / (-4.0 * wl as f32 - 4.0);
+    let m_ideal = (12.0 * sigma * sigma - nf * (wl * wl) as f32 - 4.0 * nf * wl as f32 - 3.0 * nf)
+        / (-4.0 * wl as f32 - 4.0);
     let m = m_ideal.round().clamp(0.0, nf) as usize;
-    (0..n).map(|i| if i < m { wl as usize } else { wu as usize }).collect()
+    (0..n)
+        .map(|i| if i < m { wl as usize } else { wu as usize })
+        .collect()
 }
 
 /// The box widths (odd) a blur runs as running-sum passes along each axis, or `None` when it uses a
@@ -215,7 +220,9 @@ fn box_pass_px<const N: usize>(src: &[f32], dst: &mut [f32], r: usize) {
 /// as `dst` holds plus twice the radii's sum; consumed), ending in `dst`.
 fn line_passes(dst: &mut [f32], w: usize, radii: &[usize], s: &mut Scratch) {
     let Scratch { line, next, acc } = s;
-    let Some(len) = dst.len().checked_div(w) else { return };
+    let Some(len) = dst.len().checked_div(w) else {
+        return;
+    };
     let mut tail: usize = radii.iter().sum();
     for (k, &r) in radii.iter().enumerate() {
         tail -= r;
@@ -260,13 +267,20 @@ pub(crate) fn box_blur(
     let used = src.intersect(&out.inflate(reach));
     if used.is_empty() || n == 0 {
         // Nothing to read: transparent, as `Image::get` reads outside an image.
-        return Some(strips(out).map(|t| (t, vec![0.0; t.width() as usize * oh * n])).collect());
+        return Some(
+            strips(out)
+                .map(|t| (t, vec![0.0; t.width() as usize * oh * n]))
+                .collect(),
+        );
     }
     // Horizontal passes over `used`'s rows only (the repeated rows above and below it would just
     // repeat their results), for the output columns. Each row is extended to the passes' reach by
     // repeating its end pixels.
     let mut h = vec![0.0f32; used.height() as usize * ow * n];
-    let (left, right) = ((used.x0 - out.x0.saturating_sub(reach)) as usize, (out.x1.saturating_add(reach) - used.x1) as usize);
+    let (left, right) = (
+        (used.x0 - out.x0.saturating_sub(reach)) as usize,
+        (out.x1.saturating_add(reach) - used.x1) as usize,
+    );
     par_rows(&mut h, ow * ROWS_PER_TASK, n, |task, chunk| {
         let (mut row, mut s) = (Vec::new(), Scratch::default());
         for (k, dst) in chunk.chunks_exact_mut(ow * n).enumerate() {
@@ -276,7 +290,10 @@ pub(crate) fn box_blur(
             let y = used.y0 + (task * ROWS_PER_TASK + k) as i32;
             read(Rect::new(used.x0, y, used.x1, y + 1), &mut row);
             premultiply(&mut row, n, alpha);
-            let (Some(first), Some(last)) = (row.get(..n), row.get(row.len().saturating_sub(n)..)) else { return };
+            let (Some(first), Some(last)) = (row.get(..n), row.get(row.len().saturating_sub(n)..))
+            else {
+                return;
+            };
             s.line.clear();
             (0..left).for_each(|_| s.line.extend_from_slice(first));
             s.line.extend_from_slice(&row);
@@ -285,7 +302,10 @@ pub(crate) fn box_blur(
         }
     });
     // Vertical passes, strip by strip, the same way down the columns.
-    let (top, bottom) = ((used.y0 - out.y0.saturating_sub(reach)) as usize, (out.y1.saturating_add(reach) - used.y1) as usize);
+    let (top, bottom) = (
+        (used.y0 - out.y0.saturating_sub(reach)) as usize,
+        (out.y1.saturating_add(reach) - used.y1) as usize,
+    );
     let (rows, stride) = (used.height() as usize, ow * n);
     let strips: Vec<Rect> = strips(out).collect();
     let done = par_map(strips.len(), |k| {
@@ -311,7 +331,14 @@ pub(crate) fn box_blur(
 fn strips(out: Rect) -> impl Iterator<Item = Rect> {
     (out.x0.div_euclid(STRIP) * STRIP..out.x1)
         .step_by(STRIP as usize)
-        .map(move |x| Rect::new(x.max(out.x0), out.y0, x.saturating_add(STRIP).min(out.x1), out.y1))
+        .map(move |x| {
+            Rect::new(
+                x.max(out.x0),
+                out.y0,
+                x.saturating_add(STRIP).min(out.x1),
+                out.y1,
+            )
+        })
 }
 const _: () = assert!(photocraft_geom::TILE_SIZE % STRIP == 0);
 
@@ -327,7 +354,9 @@ fn box_passes(src: &Image, out: Rect, alpha: bool, boxes: &[usize]) -> Vec<f32> 
     if res.is_empty() {
         return res;
     }
-    for (t, data) in box_blur(src.rect, &read, out, n, alpha, boxes, &Interrupt::NONE).unwrap_or_default() {
+    for (t, data) in
+        box_blur(src.rect, &read, out, n, alpha, boxes, &Interrupt::NONE).unwrap_or_default()
+    {
         let (x0, w) = ((t.x0 - out.x0) as usize * n, t.width() as usize * n);
         for (dst, s) in res.chunks_exact_mut(ow).zip(data.chunks_exact(w)) {
             dst[x0..x0 + w].copy_from_slice(s);
@@ -347,7 +376,12 @@ pub(crate) fn boxed(src: &Image, out: Rect, ctx: &Ctx, radius: f32) -> Vec<f32> 
     }
 }
 
-fn average_samples(src: &Image, out: Rect, ctx: &Ctx, offsets: impl Fn(f32, f32, &mut Vec<(f32, f32)>) + Sync) -> Vec<f32> {
+fn average_samples(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    offsets: impl Fn(f32, f32, &mut Vec<(f32, f32)>) + Sync,
+) -> Vec<f32> {
     let n = src.ch;
     let (ow, oh) = (out.width() as usize, out.height() as usize);
     let mut res = vec![0.0; ow * oh * n];
@@ -370,7 +404,11 @@ fn average_samples(src: &Image, out: Rect, ctx: &Ctx, offsets: impl Fn(f32, f32,
                 // Accumulate premultiplied.
                 let a = if ctx.alpha { tmp[n - 1] } else { 1.0 };
                 for c in 0..n {
-                    acc[c] += if ctx.alpha && c < n - 1 { tmp[c] * a } else { tmp[c] };
+                    acc[c] += if ctx.alpha && c < n - 1 {
+                        tmp[c] * a
+                    } else {
+                        tmp[c]
+                    };
                 }
             }
             let k = 1.0 / pts.len().max(1) as f32;
@@ -389,11 +427,15 @@ fn average_samples(src: &Image, out: Rect, ctx: &Ctx, offsets: impl Fn(f32, f32,
     #[cfg(not(target_arch = "wasm32"))]
     {
         use rayon::prelude::*;
-        res.par_chunks_mut(ow * n).enumerate().for_each(|(row, data)| process_row(out.y0 + row as i32, data));
+        res.par_chunks_mut(ow * n)
+            .enumerate()
+            .for_each(|(row, data)| process_row(out.y0 + row as i32, data));
     }
     #[cfg(target_arch = "wasm32")]
     {
-        res.chunks_mut(ow * n).enumerate().for_each(|(row, data)| process_row(out.y0 + row as i32, data));
+        res.chunks_mut(ow * n)
+            .enumerate()
+            .for_each(|(row, data)| process_row(out.y0 + row as i32, data));
     }
     res
 }
@@ -428,7 +470,12 @@ pub(crate) fn motion(src: &Image, out: Rect, ctx: &Ctx, angle: f32, distance: f3
         let (x0, y0) = (ox.floor(), oy.floor());
         let (ax, ay) = (ox - x0, oy - y0);
         let (x0, y0) = (x0 as i32, y0 as i32);
-        for (dx, dy, w) in [(0, 0, (1.0 - ax) * (1.0 - ay)), (1, 0, ax * (1.0 - ay)), (0, 1, (1.0 - ax) * ay), (1, 1, ax * ay)] {
+        for (dx, dy, w) in [
+            (0, 0, (1.0 - ax) * (1.0 - ay)),
+            (1, 0, ax * (1.0 - ay)),
+            (0, 1, (1.0 - ax) * ay),
+            (1, 1, ax * ay),
+        ] {
             if w <= 0.0 {
                 continue;
             }
@@ -439,7 +486,11 @@ pub(crate) fn motion(src: &Image, out: Rect, ctx: &Ctx, angle: f32, distance: f3
             taps[i].2 += w * k;
         }
     }
-    let reach = taps.iter().map(|t| t.0.abs().max(t.1.abs())).max().unwrap_or(0);
+    let reach = taps
+        .iter()
+        .map(|t| t.0.abs().max(t.1.abs()))
+        .max()
+        .unwrap_or(0);
     let n = src.ch;
     let win = out.inflate(reach);
     let ww = win.width() as usize;
@@ -460,7 +511,9 @@ pub(crate) fn motion(src: &Image, out: Rect, ctx: &Ctx, angle: f32, distance: f3
     let r = reach as usize;
     for (oy, row) in res.chunks_exact_mut(ow * n).enumerate() {
         for &(dx, dy, w) in &taps {
-            let start = ((oy + r).wrapping_add_signed(dy as isize) * ww + r.wrapping_add_signed(dx as isize)) * n;
+            let start = ((oy + r).wrapping_add_signed(dy as isize) * ww
+                + r.wrapping_add_signed(dx as isize))
+                * n;
             for (o, v) in row.iter_mut().zip(&pw[start..start + ow * n]) {
                 *o += w * v;
             }
@@ -490,9 +543,20 @@ fn radial_intervals(path_length: f32, quality: RadialQuality) -> usize {
     path_length.ceil().clamp(1.0, max as f32) as usize
 }
 
-pub(crate) fn radial(src: &Image, out: Rect, ctx: &Ctx, amount: f32, method: RadialMethod, quality: RadialQuality, center: (f32, f32)) -> Vec<f32> {
+pub(crate) fn radial(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    amount: f32,
+    method: RadialMethod,
+    quality: RadialQuality,
+    center: (f32, f32),
+) -> Vec<f32> {
     let b = ctx.bounds;
-    let (cx, cy) = (b.x0 as f32 + b.width() as f32 * center.0, b.y0 as f32 + b.height() as f32 * center.1);
+    let (cx, cy) = (
+        b.x0 as f32 + b.width() as f32 * center.0,
+        b.y0 as f32 + b.height() as f32 * center.1,
+    );
     let amount = amount.clamp(0.0, 100.0);
     average_samples(src, out, ctx, |x, y, pts| {
         let (dx, dy) = (x - cx, y - cy);
@@ -525,7 +589,14 @@ pub(crate) fn radial(src: &Image, out: Rect, ctx: &Ctx, amount: f32, method: Rad
 /// otherwise): a 256-bin histogram of each channel over the window slides along the row, adding
 /// and removing one column per step, so a pixel costs O(radius + levels) instead of O(radius^2).
 /// Each level is weighted with the same expression as the direct sum.
-fn surface_8bit(src: &Image, out: Rect, ctx: &Ctx, r: i32, t: f32, reach: usize) -> Option<Vec<f32>> {
+fn surface_8bit(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    r: i32,
+    t: f32,
+    reach: usize,
+) -> Option<Vec<f32>> {
     let n = src.ch;
     let cc = if ctx.alpha { n - 1 } else { n };
     let win = out.inflate(r);
@@ -574,7 +645,12 @@ fn surface_8bit(src: &Image, out: Rect, ctx: &Ctx, r: i32, t: f32, reach: usize)
                 let v0 = p[c];
                 let k0 = (v0 * 255.0).round() as usize;
                 let (mut acc, mut wsum) = (0.0f64, 0.0f64);
-                for (k, &cnt) in hist.iter().enumerate().take(256.min(k0 + reach + 1)).skip(k0.saturating_sub(reach)) {
+                for (k, &cnt) in hist
+                    .iter()
+                    .enumerate()
+                    .take(256.min(k0 + reach + 1))
+                    .skip(k0.saturating_sub(reach))
+                {
                     if cnt == 0 {
                         continue;
                     }
@@ -592,7 +668,8 @@ fn surface_8bit(src: &Image, out: Rect, ctx: &Ctx, r: i32, t: f32, reach: usize)
         }
         if ctx.alpha {
             for ox in 0..ow {
-                res[(oy * ow + ox) * n + n - 1] = src.px(out.x0 + ox as i32, out.y0 + oy as i32)[n - 1];
+                res[(oy * ow + ox) * n + n - 1] =
+                    src.px(out.x0 + ox as i32, out.y0 + oy as i32)[n - 1];
             }
         }
     }
@@ -690,7 +767,10 @@ fn surface_ranked(src: &Image, out: Rect, ctx: &Ctx, r: i32, t: f32) -> Option<V
     let mut levels = vals.clone();
     levels.sort_unstable_by(f32::total_cmp);
     levels.dedup();
-    let rank: Vec<usize> = vals.iter().map(|v| levels.partition_point(|l| l < v)).collect();
+    let rank: Vec<usize> = vals
+        .iter()
+        .map(|v| levels.partition_point(|l| l < v))
+        .collect();
     let mut tree = RankSums(vec![[0.0; 3]; levels.len() + 1]);
     let (ow, oh) = (out.width() as usize, out.height() as usize);
     if ow == 0 || oh == 0 {
@@ -722,9 +802,15 @@ fn surface_ranked(src: &Image, out: Rect, ctx: &Ctx, r: i32, t: f32) -> Option<V
                 let hi = levels.partition_point(|&l| l <= v0 || 1.0 - (l - v0).abs() / t > 0.0);
                 let (below, above) = (tree.range(lo, mid), tree.range(mid, hi));
                 let v0d = f64::from(v0);
-                let wsum = ((t64 - v0d) * below[0] + below[1] + (t64 + v0d) * above[0] - above[1]) / t64;
-                let acc = ((t64 - v0d) * below[1] + below[2] + (t64 + v0d) * above[1] - above[2]) / t64;
-                res[(oy * ow + ox) * n + c] = if below[0] + above[0] > 0.0 && wsum > 0.0 { (acc / wsum) as f32 } else { v0 };
+                let wsum =
+                    ((t64 - v0d) * below[0] + below[1] + (t64 + v0d) * above[0] - above[1]) / t64;
+                let acc =
+                    ((t64 - v0d) * below[1] + below[2] + (t64 + v0d) * above[1] - above[2]) / t64;
+                res[(oy * ow + ox) * n + c] = if below[0] + above[0] > 0.0 && wsum > 0.0 {
+                    (acc / wsum) as f32
+                } else {
+                    v0
+                };
                 if ox + 1 < ow {
                     column(&mut tree, ox, -1.0);
                     column(&mut tree, ox + side, 1.0);
@@ -737,7 +823,8 @@ fn surface_ranked(src: &Image, out: Rect, ctx: &Ctx, r: i32, t: f32) -> Option<V
         }
         if ctx.alpha {
             for ox in 0..ow {
-                res[(oy * ow + ox) * n + n - 1] = src.px(out.x0 + ox as i32, out.y0 + oy as i32)[n - 1];
+                res[(oy * ow + ox) * n + n - 1] =
+                    src.px(out.x0 + ox as i32, out.y0 + oy as i32)[n - 1];
             }
         }
     }
@@ -785,7 +872,11 @@ mod tests {
     fn radial_blur_samples_large_arcs_beyond_64_intervals() {
         let bounds = Rect::new(0, 0, 1000, 1000);
         let out = Rect::new(999, 500, 1000, 501);
-        let ctx = Ctx { bounds, mode: photocraft_color::ColorMode::Grayscale, alpha: false };
+        let ctx = Ctx {
+            bounds,
+            mode: photocraft_color::ColorMode::Grayscale,
+            alpha: false,
+        };
         let mut img = Image::new(bounds, 1);
         let (cx, cy) = (500.0f32, 500.0f32);
         let (x, y) = (999.5f32, 500.5f32);
@@ -806,7 +897,8 @@ mod tests {
         let py = (cy + dx * s + dy * c - 0.5).round() as i32;
         for yy in py - 1..=py + 1 {
             for xx in px - 1..=px + 1 {
-                let index = (yy - bounds.y0) as usize * bounds.width() as usize + (xx - bounds.x0) as usize;
+                let index =
+                    (yy - bounds.y0) as usize * bounds.width() as usize + (xx - bounds.x0) as usize;
                 img.data[index] = 1.0;
             }
         }
@@ -819,13 +911,31 @@ mod tests {
                 pts.push((cx + dx * c - dy * s, cy + dx * s + dy * c));
             }
         };
-        let actual = radial(&img, out, &ctx, 100.0, RadialMethod::Spin, RadialQuality::Good, (0.5, 0.5))[0];
-        let expected = average_samples(&img, out, &ctx, |x, y, pts| sample_path(x, y, pts, 8192))[0];
+        let actual = radial(
+            &img,
+            out,
+            &ctx,
+            100.0,
+            RadialMethod::Spin,
+            RadialQuality::Good,
+            (0.5, 0.5),
+        )[0];
+        let expected =
+            average_samples(&img, out, &ctx, |x, y, pts| sample_path(x, y, pts, 8192))[0];
         let coarse = average_samples(&img, out, &ctx, |x, y, pts| sample_path(x, y, pts, 64))[0];
 
-        assert!(actual > 0.001, "dense radial samples should resolve the bright patch, got {actual}");
-        assert!((actual - expected).abs() < 0.0015, "radial result {actual} differs from dense reference {expected}");
-        assert!(coarse < expected * 0.1, "former 64-interval sampling unexpectedly resolved the patch: {coarse} vs {expected}");
+        assert!(
+            actual > 0.001,
+            "dense radial samples should resolve the bright patch, got {actual}"
+        );
+        assert!(
+            (actual - expected).abs() < 0.0015,
+            "radial result {actual} differs from dense reference {expected}"
+        );
+        assert!(
+            coarse < expected * 0.1,
+            "former 64-interval sampling unexpectedly resolved the patch: {coarse} vs {expected}"
+        );
     }
 
     #[test]
@@ -834,7 +944,9 @@ mod tests {
             for width in [1, 7, 256] {
                 for radius in [0.0, 0.5, 3.0, 4.0] {
                     let k = gaussian_kernel(radius);
-                    let src: Vec<f32> = (0..(width + k.len() - 1) * N).map(|i| ((i * 73) % 251) as f32 / 250.0).collect();
+                    let src: Vec<f32> = (0..(width + k.len() - 1) * N)
+                        .map(|i| ((i * 73) % 251) as f32 / 250.0)
+                        .collect();
                     let mut expected = vec![0.0f32; width * N];
                     for x in 0..width {
                         for (i, w) in k.iter().enumerate() {
@@ -845,7 +957,10 @@ mod tests {
                     }
                     let mut actual = vec![0.0f32; width * N];
                     conv_row::<N>(&src, &mut actual, &k);
-                    assert_eq!(actual, expected, "channels={N} width={width} radius={radius}");
+                    assert_eq!(
+                        actual, expected,
+                        "channels={N} width={width} radius={radius}"
+                    );
                 }
             }
         }
@@ -863,7 +978,9 @@ mod tests {
         let mut img = Image::new(src_rect, 2);
         for y in src_rect.y0..src_rect.y1 {
             for x in src_rect.x0..src_rect.x1 {
-                let i = ((y - src_rect.y0) as usize * src_rect.width() as usize + (x - src_rect.x0) as usize) * 2;
+                let i = ((y - src_rect.y0) as usize * src_rect.width() as usize
+                    + (x - src_rect.x0) as usize)
+                    * 2;
                 img.data[i] = if x < 60 { 1.0 } else { 0.0 };
                 img.data[i + 1] = 1.0;
             }
@@ -872,7 +989,11 @@ mod tests {
         let k = gaussian_kernel(12.0);
         let exact = conv_sep(&img, out, &k, &k, true);
         let fast = box_passes(&img, out, true, &boxes_for_gauss(12.0, 3));
-        let err = exact.iter().zip(&fast).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+        let err = exact
+            .iter()
+            .zip(&fast)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
         assert!(err < 0.02, "max error {err}");
         assert_eq!(boxes_for_gauss(10.0, 3).len(), 3);
     }
@@ -894,9 +1015,17 @@ mod tests {
             let out = Rect::new(0, 0, w, h);
             let k = vec![1.0 / (2 * r + 1) as f32; 2 * r + 1];
             let direct = conv_sep(&img, out, &k, &k, true);
-            let ctx = Ctx { bounds: src_rect, mode: crate::ColorMode::Rgb, alpha: true };
+            let ctx = Ctx {
+                bounds: src_rect,
+                mode: crate::ColorMode::Rgb,
+                alpha: true,
+            };
             let fast = boxed(&img, out, &ctx, r as f32);
-            let err = direct.iter().zip(&fast).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+            let err = direct
+                .iter()
+                .zip(&fast)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
             assert!(err < 1e-5, "radius {r}: max error {err}");
         }
     }
@@ -911,7 +1040,11 @@ mod tests {
             left -= (w / 2) as i32;
             let k = vec![1.0 / w as f32; w];
             let rect = out.inflate(left);
-            cur = Image { rect, ch: img.ch, data: conv_sep(&cur, rect, &k, &k, alpha) };
+            cur = Image {
+                rect,
+                ch: img.ch,
+                data: conv_sep(&cur, rect, &k, &k, alpha),
+            };
         }
         cur.data
     }
@@ -927,7 +1060,13 @@ mod tests {
                 st ^= st >> 17;
                 st ^= st << 5;
                 let x = (st % 256) as f32 / 255.0;
-                v.push(if fmt.alpha && c + 1 == fmt.channels() && st.is_multiple_of(5) { 0.0 } else { x });
+                v.push(
+                    if fmt.alpha && c + 1 == fmt.channels() && st.is_multiple_of(5) {
+                        0.0
+                    } else {
+                        x
+                    },
+                );
             }
         }
         s.write_region(r, &v);
@@ -968,15 +1107,34 @@ mod tests {
                 let reach: i32 = boxes.iter().map(|w| (w / 2) as i32).sum();
                 let area = crate::output_area(p, s.content_bounds(), canvas, None);
                 for (got, img, out) in [
-                    (crate::apply_in(&s, p, area, canvas, None, canvas), Image::read_clamped(&s, canvas.inflate(reach), canvas), canvas),
-                    (crate::apply(&s, p, area, canvas, None), Image::read(&s, area.inflate(reach)), area),
+                    (
+                        crate::apply_in(&s, p, area, canvas, None, canvas),
+                        Image::read_clamped(&s, canvas.inflate(reach), canvas),
+                        canvas,
+                    ),
+                    (
+                        crate::apply(&s, p, area, canvas, None),
+                        Image::read(&s, area.inflate(reach)),
+                        area,
+                    ),
                 ] {
                     // Compared alpha-weighted: colour is meaningless where (nearly) transparent.
-                    let (mut got, mut want) = (got.read_region(out), direct_boxes(&img, out, &boxes, fmt.alpha));
+                    let (mut got, mut want) = (
+                        got.read_region(out),
+                        direct_boxes(&img, out, &boxes, fmt.alpha),
+                    );
                     premultiply(&mut got, img.ch, fmt.alpha);
                     premultiply(&mut want, img.ch, fmt.alpha);
-                    let err = got.iter().zip(&want).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
-                    assert!(err <= tol, "{} on {fmt:?} over {out:?}: max error {err}", p.label());
+                    let err = got
+                        .iter()
+                        .zip(&want)
+                        .map(|(a, b)| (a - b).abs())
+                        .fold(0.0f32, f32::max);
+                    assert!(
+                        err <= tol,
+                        "{} on {fmt:?} over {out:?}: max error {err}",
+                        p.label()
+                    );
                 }
             }
         }
@@ -988,13 +1146,19 @@ mod tests {
         let s = noisy(PixelFormat::RGBA32F, canvas, 7);
         let p = FilterParams::GaussianBlur { radius: 12.0 };
         let full = crate::apply_in(&s, &p, canvas, canvas, None, canvas);
-        let half = Surface::with_default(PixelFormat::new(ColorMode::Grayscale, SampleType::F32, false), &[0.5]);
+        let half = Surface::with_default(
+            PixelFormat::new(ColorMode::Grayscale, SampleType::F32, false),
+            &[0.5],
+        );
         let mixed = crate::apply_in(&s, &p, canvas, canvas, Some(&half), canvas);
         for (x, y) in [(0, 0), (18, 11), (36, 22)] {
             let (o, f, m) = (s.pixel(x, y), full.pixel(x, y), mixed.pixel(x, y));
             assert!((m[3] - (o[3] + f[3]) / 2.0).abs() < 1e-5, "({x},{y}) alpha");
             for c in 0..3 {
-                assert!((m[c] * m[3] - (o[c] * o[3] + f[c] * f[3]) / 2.0).abs() < 1e-5, "({x},{y}) premultiplied channel {c}");
+                assert!(
+                    (m[c] * m[3] - (o[c] * o[3] + f[c] * f[3]) / 2.0).abs() < 1e-5,
+                    "({x},{y}) premultiplied channel {c}"
+                );
             }
         }
         let cancel = || true;
@@ -1019,7 +1183,11 @@ mod tests {
                 px[3] = 0.0;
             }
         }
-        let ctx = Ctx { bounds: src_rect, mode: crate::ColorMode::Rgb, alpha: true };
+        let ctx = Ctx {
+            bounds: src_rect,
+            mode: crate::ColorMode::Rgb,
+            alpha: true,
+        };
         // The output reaches the source edge, where samples read as transparent.
         let out = Rect::new(-2, 0, 26, 20);
         for (r, threshold) in [(1, 2.0), (4, 15.0), (12, 60.0), (12, 255.0)] {
@@ -1027,7 +1195,11 @@ mod tests {
             let reach = ((t * 255.0f32).ceil() as usize).min(255);
             let fast = surface_8bit(&img, out, &ctx, r, t, reach).expect("8-bit input");
             let direct = surface_direct(&img, out, &ctx, r, t);
-            let err = direct.iter().zip(&fast).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+            let err = direct
+                .iter()
+                .zip(&fast)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
             assert!(err < 1e-5, "r {r} threshold {threshold}: max error {err}");
         }
         // Not 8-bit: the histogram declines and the direct sum is used.
@@ -1056,13 +1228,34 @@ mod tests {
         }
         let out = Rect::new(-12, -6, 30, 22);
         for alpha in [true, false] {
-            let ctx = Ctx { bounds: src_rect, mode: crate::ColorMode::Rgb, alpha };
-            for (angle, distance) in [(0.0, 1.0), (0.0, 9.0), (30.0, 7.0), (90.0, 12.0), (-45.0, 20.0), (137.0, 33.5), (200.0, 40.0)] {
+            let ctx = Ctx {
+                bounds: src_rect,
+                mode: crate::ColorMode::Rgb,
+                alpha,
+            };
+            for (angle, distance) in [
+                (0.0, 1.0),
+                (0.0, 9.0),
+                (30.0, 7.0),
+                (90.0, 12.0),
+                (-45.0, 20.0),
+                (137.0, 33.5),
+                (200.0, 40.0),
+            ] {
                 let fast = motion(&img, out, &ctx, angle, distance);
                 let offs = motion_offsets(angle, distance);
-                let slow = average_samples(&img, out, &ctx, |x, y, pts| pts.extend(offs.iter().map(|&(dx, dy)| (x + dx, y + dy))));
-                let err = slow.iter().zip(&fast).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
-                assert!(err < 1e-5, "alpha {alpha} angle {angle} distance {distance}: max error {err}");
+                let slow = average_samples(&img, out, &ctx, |x, y, pts| {
+                    pts.extend(offs.iter().map(|&(dx, dy)| (x + dx, y + dy)))
+                });
+                let err = slow
+                    .iter()
+                    .zip(&fast)
+                    .map(|(a, b)| (a - b).abs())
+                    .fold(0.0f32, f32::max);
+                assert!(
+                    err < 1e-5,
+                    "alpha {alpha} angle {angle} distance {distance}: max error {err}"
+                );
             }
         }
     }
@@ -1103,7 +1296,11 @@ mod tests {
     fn surface_blur_ranked_sums_match_the_weighted_window_at_any_depth() {
         // 16-bit levels and arbitrary floats (including negatives and values above 1), with some
         // fully transparent pixels, which the sum skips.
-        for (quant, channels, alpha) in [(Some(65535.0f32), 4, true), (None, 4, true), (None, 1, false)] {
+        for (quant, channels, alpha) in [
+            (Some(65535.0f32), 4, true),
+            (None, 4, true),
+            (None, 1, false),
+        ] {
             let src_rect = Rect::new(-20, -20, 48, 40);
             let mut img = Image::new(src_rect, channels);
             let mut s = 0x1b87_3593u32;
@@ -1119,7 +1316,11 @@ mod tests {
                     px[channels - 1] = 0.0;
                 }
             }
-            let ctx = Ctx { bounds: src_rect, mode: crate::ColorMode::Rgb, alpha };
+            let ctx = Ctx {
+                bounds: src_rect,
+                mode: crate::ColorMode::Rgb,
+                alpha,
+            };
             // The output reaches the source edge, where samples read as 0.
             let out = Rect::new(-6, 0, 30, 22);
             for (r, threshold) in [(1, 2.0), (4, 15.0), (12, 60.0), (16, 255.0)] {
@@ -1127,8 +1328,15 @@ mod tests {
                 let ranked = surface_ranked(&img, out, &ctx, r, t).expect("finite input");
                 let reference = surface_reference(&img, out, &ctx, r, t);
                 assert_eq!(ranked.len(), reference.len());
-                let err = reference.iter().zip(&ranked).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
-                assert!(err < 1e-6, "{quant:?} r {r} threshold {threshold}: max error {err}");
+                let err = reference
+                    .iter()
+                    .zip(&ranked)
+                    .map(|(a, b)| (a - b).abs())
+                    .fold(0.0f32, f32::max);
+                assert!(
+                    err < 1e-6,
+                    "{quant:?} r {r} threshold {threshold}: max error {err}"
+                );
             }
         }
     }
@@ -1138,12 +1346,22 @@ mod tests {
         let src_rect = Rect::new(0, 0, 8, 8);
         let mut img = Image::new(src_rect, 1);
         img.data.fill(0.5);
-        let ctx = Ctx { bounds: src_rect, mode: crate::ColorMode::Grayscale, alpha: false };
-        assert_eq!(surface_ranked(&img, Rect::new(2, 2, 2, 6), &ctx, 2, 0.1), Some(Vec::new()));
+        let ctx = Ctx {
+            bounds: src_rect,
+            mode: crate::ColorMode::Grayscale,
+            alpha: false,
+        };
+        assert_eq!(
+            surface_ranked(&img, Rect::new(2, 2, 2, 6), &ctx, 2, 0.1),
+            Some(Vec::new())
+        );
         img.data[9] = f32::NAN;
         assert!(surface_ranked(&img, Rect::new(0, 0, 8, 8), &ctx, 2, 0.1).is_none());
         // The public entry still answers, through the direct sum.
-        assert_eq!(surface(&img, Rect::new(0, 0, 8, 8), &ctx, 12.0, 15.0).len(), 64);
+        assert_eq!(
+            surface(&img, Rect::new(0, 0, 8, 8), &ctx, 12.0, 15.0).len(),
+            64
+        );
     }
 
     /// Release-mode timings of the direct sum and the ranked path on one 256 px tile of
@@ -1164,10 +1382,15 @@ mod tests {
                     s ^= s << 5;
                     // Smooth gradient plus noise, so the threshold keeps a realistic share.
                     let x = (i / 4) as f32 / len as f32 * 4.0;
-                    let raw = (0.5 + 0.4 * (x * 6.0).sin() + (s % 1000) as f32 / 20000.0).clamp(0.0, 1.0);
+                    let raw =
+                        (0.5 + 0.4 * (x * 6.0).sin() + (s % 1000) as f32 / 20000.0).clamp(0.0, 1.0);
                     *v = quant.map_or(raw, |q| (raw * q).round() / q);
                 }
-                let ctx = Ctx { bounds: src_rect, mode: crate::ColorMode::Rgb, alpha: true };
+                let ctx = Ctx {
+                    bounds: src_rect,
+                    mode: crate::ColorMode::Rgb,
+                    alpha: true,
+                };
                 let t = (15.0 / 255.0) * 2.5;
                 let a = std::time::Instant::now();
                 let direct = surface_direct(&img, out, &ctx, r, t);
@@ -1175,8 +1398,14 @@ mod tests {
                 let a = std::time::Instant::now();
                 let ranked = surface_ranked(&img, out, &ctx, r, t).expect("finite");
                 let tr = a.elapsed();
-                let err = direct.iter().zip(&ranked).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
-                println!("{label} r {r:3}: direct {td:>10.2?}  ranked {tr:>10.2?}  max err {err:.2e}");
+                let err = direct
+                    .iter()
+                    .zip(&ranked)
+                    .map(|(a, b)| (a - b).abs())
+                    .fold(0.0f32, f32::max);
+                println!(
+                    "{label} r {r:3}: direct {td:>10.2?}  ranked {tr:>10.2?}  max err {err:.2e}"
+                );
             }
         }
     }

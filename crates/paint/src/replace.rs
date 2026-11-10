@@ -1,14 +1,14 @@
 //! Color Replacement: recolour pixels similar to a sampled colour using a non-separable blend
 //! (Hue, Saturation, Color or Luminosity) with the foreground colour.
 
-use photocraft_color::BlendMode;
 use photocraft_color::blend::blend_rgb;
+use photocraft_color::BlendMode;
 use photocraft_geom::Rect;
-use photocraft_raster::{Surface, from_rgba_into, to_rgba};
+use photocraft_raster::{from_rgba_into, to_rgba, Surface};
 use serde::{Deserialize, Serialize};
 
+use crate::retouch::{apply_dab_stroke, Footprint, Region};
 use crate::Stroke;
-use crate::retouch::{Footprint, Region, apply_dab_stroke};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,11 +74,20 @@ impl Default for ReplaceSettings {
 }
 
 fn dist(a: &[f32; 4], b: [f32; 3]) -> f32 {
-    (a[0] - b[0]).abs().max((a[1] - b[1]).abs()).max((a[2] - b[2]).abs())
+    (a[0] - b[0])
+        .abs()
+        .max((a[1] - b[1]).abs())
+        .max((a[2] - b[2]).abs())
 }
 
 /// Replace colours along a stroke. Returns the damaged rectangle.
-pub fn apply_color_replacement(target: &mut Surface, stroke: &Stroke, rs: &ReplaceSettings, selection: Option<&Surface>, lock_transparency: bool) -> Rect {
+pub fn apply_color_replacement(
+    target: &mut Surface,
+    stroke: &Stroke,
+    rs: &ReplaceSettings,
+    selection: Option<&Surface>,
+    lock_transparency: bool,
+) -> Rect {
     let effect = color_replacement_effect(target.clone(), rs.clone());
     apply_dab_stroke(target, stroke, selection, lock_transparency, 0, effect)
 }
@@ -86,7 +95,10 @@ pub fn apply_color_replacement(target: &mut Surface, stroke: &Stroke, rs: &Repla
 /// One Color Replacement dab's edit of a working copy, matching against `pre` (the target before
 /// the stroke). Shared by [`apply_color_replacement`] and live previews that run the dabs as they
 /// come, so both recolour the same pixels.
-pub fn color_replacement_effect(pre: Surface, rs: ReplaceSettings) -> impl FnMut(&mut Region, &Footprint) {
+pub fn color_replacement_effect(
+    pre: Surface,
+    rs: ReplaceSettings,
+) -> impl FnMut(&mut Region, &Footprint) {
     let fmt = pre.format();
     let n = fmt.channels();
     let mode = match rs.mode {
@@ -110,7 +122,10 @@ pub fn color_replacement_effect(pre: Surface, rs: ReplaceSettings) -> impl FnMut
         }
     };
     move |work: &mut Region, fp: &Footprint| {
-        let (cx, cy) = (fp.dab.center.x.floor() as i32, fp.dab.center.y.floor() as i32);
+        let (cx, cy) = (
+            fp.dab.center.x.floor() as i32,
+            fp.dab.center.y.floor() as i32,
+        );
         let sampled = match rs.sampling {
             Sampling::Continuous => {
                 let c = pre.rgba(cx, cy);
@@ -189,7 +204,12 @@ pub fn color_replacement_effect(pre: Surface, rs: ReplaceSettings) -> impl FnMut
                 let px = work.px_mut(x, y);
                 let c = to_rgba(&fmt, px);
                 let b = blend_rgb(mode, [c[0], c[1], c[2]], fg);
-                let o = [c[0] + (b[0] - c[0]) * k, c[1] + (b[1] - c[1]) * k, c[2] + (b[2] - c[2]) * k, c[3]];
+                let o = [
+                    c[0] + (b[0] - c[0]) * k,
+                    c[1] + (b[1] - c[1]) * k,
+                    c[2] + (b[2] - c[2]) * k,
+                    c[3],
+                ];
                 from_rgba_into(&fmt, o, &mut enc);
                 px.copy_from_slice(&enc[..n]);
             }
@@ -201,45 +221,84 @@ pub fn color_replacement_effect(pre: Surface, rs: ReplaceSettings) -> impl FnMut
 mod tests {
     use super::*;
     use crate::{BrushSettings, StrokePoint};
-    use photocraft_color::PixelFormat;
     use photocraft_color::blend::lum;
+    use photocraft_color::PixelFormat;
 
     fn setup(fmt: PixelFormat) -> Surface {
         let mut s = Surface::new(fmt);
         // Left: mid green; right: dark blue.
-        s.fill_rect(Rect::new(0, 0, 40, 40), &photocraft_raster::from_rgba(&fmt, [0.2, 0.6, 0.2, 1.0]));
-        s.fill_rect(Rect::new(40, 0, 80, 40), &photocraft_raster::from_rgba(&fmt, [0.1, 0.1, 0.5, 1.0]));
+        s.fill_rect(
+            Rect::new(0, 0, 40, 40),
+            &photocraft_raster::from_rgba(&fmt, [0.2, 0.6, 0.2, 1.0]),
+        );
+        s.fill_rect(
+            Rect::new(40, 0, 80, 40),
+            &photocraft_raster::from_rgba(&fmt, [0.1, 0.1, 0.5, 1.0]),
+        );
         s
     }
 
     fn stroke() -> Stroke {
         Stroke {
-            brush: BrushSettings { size: 30.0, hardness: 1.0, spacing: 0.25, pressure_size: false, ..Default::default() },
-            points: vec![StrokePoint::new(20.0, 20.0, 1.0), StrokePoint::new(60.0, 20.0, 1.0)],
+            brush: BrushSettings {
+                size: 30.0,
+                hardness: 1.0,
+                spacing: 0.25,
+                pressure_size: false,
+                ..Default::default()
+            },
+            points: vec![
+                StrokePoint::new(20.0, 20.0, 1.0),
+                StrokePoint::new(60.0, 20.0, 1.0),
+            ],
         }
     }
 
     #[test]
     fn modes_follow_the_nonseparable_definitions() {
         let fg = [1.0, 0.0, 0.0, 1.0];
-        for mode in [ReplaceMode::Hue, ReplaceMode::Saturation, ReplaceMode::Color, ReplaceMode::Luminosity] {
+        for mode in [
+            ReplaceMode::Hue,
+            ReplaceMode::Saturation,
+            ReplaceMode::Color,
+            ReplaceMode::Luminosity,
+        ] {
             let mut s = setup(PixelFormat::RGBA32F);
-            let rs = ReplaceSettings { mode, sampling: Sampling::Once, limits: Limits::Discontiguous, tolerance: 0.1, color: fg, ..Default::default() };
+            let rs = ReplaceSettings {
+                mode,
+                sampling: Sampling::Once,
+                limits: Limits::Discontiguous,
+                tolerance: 0.1,
+                color: fg,
+                ..Default::default()
+            };
             apply_color_replacement(&mut s, &stroke(), &rs, None, false);
             let c = s.rgba(20, 20);
             let green = [0.2, 0.6, 0.2];
             match mode {
                 // Hue/Color keep the luminosity of the original.
                 ReplaceMode::Hue | ReplaceMode::Color => {
-                    assert!((lum([c[0], c[1], c[2]]) - lum(green)).abs() < 1e-3, "{mode:?} {c:?}");
+                    assert!(
+                        (lum([c[0], c[1], c[2]]) - lum(green)).abs() < 1e-3,
+                        "{mode:?} {c:?}"
+                    );
                     assert!(c[0] > c[1], "{mode:?} turned red-ish {c:?}");
                 }
-                ReplaceMode::Saturation => assert!((lum([c[0], c[1], c[2]]) - lum(green)).abs() < 1e-3 && c[1] > c[0], "{c:?}"),
-                ReplaceMode::Luminosity => assert!((lum([c[0], c[1], c[2]]) - lum([1.0, 0.0, 0.0])).abs() < 1e-3, "{c:?}"),
+                ReplaceMode::Saturation => assert!(
+                    (lum([c[0], c[1], c[2]]) - lum(green)).abs() < 1e-3 && c[1] > c[0],
+                    "{c:?}"
+                ),
+                ReplaceMode::Luminosity => assert!(
+                    (lum([c[0], c[1], c[2]]) - lum([1.0, 0.0, 0.0])).abs() < 1e-3,
+                    "{c:?}"
+                ),
             }
             // Sampling once on green: the blue half is outside the tolerance and untouched.
             let b = s.rgba(60, 20);
-            assert!((b[2] - 0.5).abs() < 1e-3 && (b[0] - 0.1).abs() < 1e-3, "{mode:?} {b:?}");
+            assert!(
+                (b[2] - 0.5).abs() < 1e-3 && (b[0] - 0.1).abs() < 1e-3,
+                "{mode:?} {b:?}"
+            );
         }
     }
 
@@ -255,10 +314,19 @@ mod tests {
             ..Default::default()
         };
         apply_color_replacement(&mut s, &stroke(), &rs, None, false);
-        assert!(s.rgba(20, 20)[0] > 0.3 && s.rgba(70, 20)[0] > s.rgba(70, 20)[1], "both halves recoloured {:?} {:?}", s.rgba(20, 20), s.rgba(70, 20));
+        assert!(
+            s.rgba(20, 20)[0] > 0.3 && s.rgba(70, 20)[0] > s.rgba(70, 20)[1],
+            "both halves recoloured {:?} {:?}",
+            s.rgba(20, 20),
+            s.rgba(70, 20)
+        );
         // Background swatch = white: nothing matches.
         let mut s2 = setup(PixelFormat::RGBA8);
-        let rs2 = ReplaceSettings { sampling: Sampling::BackgroundSwatch, background: [1.0; 4], ..rs };
+        let rs2 = ReplaceSettings {
+            sampling: Sampling::BackgroundSwatch,
+            background: [1.0; 4],
+            ..rs
+        };
         apply_color_replacement(&mut s2, &stroke(), &rs2, None, false);
         assert_eq!(s2.rgba(20, 20), setup(PixelFormat::RGBA8).rgba(20, 20));
     }
@@ -270,8 +338,12 @@ mod tests {
         s.fill_rect(Rect::new(0, 0, 60, 40), &[0.2, 0.6, 0.2, 1.0]);
         // A blue wall column separates a green island at x 34..40.
         s.fill_rect(Rect::new(30, 0, 34, 40), &[0.0, 0.0, 1.0, 1.0]);
-        let st = Stroke { points: vec![StrokePoint::new(20.0, 20.0, 1.0)], ..stroke() };
-        for (limits, island_changed) in [(Limits::Contiguous, false), (Limits::Discontiguous, true)] {
+        let st = Stroke {
+            points: vec![StrokePoint::new(20.0, 20.0, 1.0)],
+            ..stroke()
+        };
+        for (limits, island_changed) in [(Limits::Contiguous, false), (Limits::Discontiguous, true)]
+        {
             let mut t = s.clone();
             let rs = ReplaceSettings {
                 mode: ReplaceMode::Color,

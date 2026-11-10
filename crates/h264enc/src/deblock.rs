@@ -5,7 +5,7 @@
 //! `disable_deblocking_filter_idc = 2` is used).
 
 use crate::mbinfo::{MbInfo, Mv};
-use crate::tables::{ALPHA, BETA, TC0, chroma_qp};
+use crate::tables::{chroma_qp, ALPHA, BETA, TC0};
 
 pub struct DeblockParams {
     pub alpha_offset: i32,
@@ -61,8 +61,16 @@ fn bs_inter(p: &MbInfo, ip: usize, q: &MbInfo, iq: usize, ids: &[i32; 2]) -> u8 
         return 1;
     }
     if np == 1 {
-        let (a, ma) = if pp[0] >= 0 { (pp[0], p.mv[0][ip]) } else { (pp[1], p.mv[1][ip]) };
-        let (b, mb) = if pq[0] >= 0 { (pq[0], q.mv[0][iq]) } else { (pq[1], q.mv[1][iq]) };
+        let (a, ma) = if pp[0] >= 0 {
+            (pp[0], p.mv[0][ip])
+        } else {
+            (pp[1], p.mv[1][ip])
+        };
+        let (b, mb) = if pq[0] >= 0 {
+            (pq[0], q.mv[0][iq])
+        } else {
+            (pq[1], q.mv[1][iq])
+        };
         if a != b {
             return 1;
         }
@@ -79,7 +87,11 @@ fn bs_inter(p: &MbInfo, ip: usize, q: &MbInfo, iq: usize, ids: &[i32; 2]) -> u8 
     }
     if pp[0] != pp[1] {
         // two different pictures: compare mvs referring to the same picture
-        if pp[0] == pq[0] { (mvdiff(mp0, mq0) || mvdiff(mp1, mq1)) as u8 } else { (mvdiff(mp0, mq1) || mvdiff(mp1, mq0)) as u8 }
+        if pp[0] == pq[0] {
+            (mvdiff(mp0, mq0) || mvdiff(mp1, mq1)) as u8
+        } else {
+            (mvdiff(mp0, mq1) || mvdiff(mp1, mq0)) as u8
+        }
     } else {
         ((mvdiff(mp0, mq0) || mvdiff(mp1, mq1)) && (mvdiff(mp0, mq1) || mvdiff(mp1, mq0))) as u8
     }
@@ -112,10 +124,12 @@ fn filter_luma(d: &mut [u8], q0i: usize, step: usize, bs: u8, alpha: i32, beta: 
         d[q0i - step] = (p0 + delta).clamp(0, 255) as u8;
         d[q0i] = (q0 - delta).clamp(0, 255) as u8;
         if ap < beta {
-            d[q0i - 2 * step] = (p1 + ((p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1).clamp(-tc0, tc0)) as u8;
+            d[q0i - 2 * step] =
+                (p1 + ((p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1).clamp(-tc0, tc0)) as u8;
         }
         if aq < beta {
-            d[q0i + step] = (q1 + ((q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1).clamp(-tc0, tc0)) as u8;
+            d[q0i + step] =
+                (q1 + ((q2 + ((p0 + q0 + 1) >> 1) - (q1 << 1)) >> 1).clamp(-tc0, tc0)) as u8;
         }
     } else {
         let p3 = d[q0i - 4 * step] as i32;
@@ -168,11 +182,23 @@ fn edge_q(qp_p: i32, qp_q: i32, dp: &DeblockParams) -> EdgeQ {
     let qav = (qp_p + qp_q + 1) >> 1;
     let ia = (qav + dp.alpha_offset).clamp(0, 51) as usize;
     let ib = (qav + dp.beta_offset).clamp(0, 51) as usize;
-    EdgeQ { alpha: ALPHA[ia] as i32, beta: BETA[ib] as i32, idx_a: ia }
+    EdgeQ {
+        alpha: ALPHA[ia] as i32,
+        beta: BETA[ib] as i32,
+        idx_a: ia,
+    }
 }
 
 /// Deblock `rows` macroblock rows of a band. `mbs` holds the band's MbInfo (row-major, `mbw` wide).
-pub fn deblock_band<'a>(y: &mut BandPlane<'a>, u: &mut BandPlane<'a>, v: &mut BandPlane<'a>, mbs: &[MbInfo], mbw: usize, rows: usize, dp: &DeblockParams) {
+pub fn deblock_band<'a>(
+    y: &mut BandPlane<'a>,
+    u: &mut BandPlane<'a>,
+    v: &mut BandPlane<'a>,
+    mbs: &[MbInfo],
+    mbw: usize,
+    rows: usize,
+    dp: &DeblockParams,
+) {
     let ids = &dp.ref_ids;
     for my in 0..rows {
         for mx in 0..mbw {
@@ -188,7 +214,15 @@ pub fn deblock_band<'a>(y: &mut BandPlane<'a>, u: &mut BandPlane<'a>, v: &mut Ba
                     if e & 1 == 1 && q.t8x8 {
                         continue;
                     }
-                    let p_mb = if e == 0 { if dir == 0 { &mbs[my * mbw + mx - 1] } else { &mbs[(my - 1) * mbw + mx] } } else { q };
+                    let p_mb = if e == 0 {
+                        if dir == 0 {
+                            &mbs[my * mbw + mx - 1]
+                        } else {
+                            &mbs[(my - 1) * mbw + mx]
+                        }
+                    } else {
+                        q
+                    };
                     let mut bs = [0u8; 4];
                     for s in 0..4 {
                         let (iq, ip) = if dir == 0 {
@@ -213,8 +247,16 @@ pub fn deblock_band<'a>(y: &mut BandPlane<'a>, u: &mut BandPlane<'a>, v: &mut Ba
                         if b == 0 {
                             continue;
                         }
-                        let tc0 = if b < 4 { TC0[eq.idx_a][b as usize - 1] as i32 } else { 0 };
-                        let (qi, step) = if dir == 0 { (y.idx(mx * 16 + e * 4, my * 16 + k), 1) } else { (y.idx(mx * 16 + k, my * 16 + e * 4), y.stride) };
+                        let tc0 = if b < 4 {
+                            TC0[eq.idx_a][b as usize - 1] as i32
+                        } else {
+                            0
+                        };
+                        let (qi, step) = if dir == 0 {
+                            (y.idx(mx * 16 + e * 4, my * 16 + k), 1)
+                        } else {
+                            (y.idx(mx * 16 + k, my * 16 + e * 4), y.stride)
+                        };
                         filter_luma(y.data, qi, step, b, eq.alpha, eq.beta, tc0);
                     }
                 }
@@ -227,7 +269,15 @@ pub fn deblock_band<'a>(y: &mut BandPlane<'a>, u: &mut BandPlane<'a>, v: &mut Ba
                     if bs == [0; 4] {
                         continue;
                     }
-                    let p_mb = if e == 0 { if dir == 0 { &mbs[my * mbw + mx - 1] } else { &mbs[(my - 1) * mbw + mx] } } else { q };
+                    let p_mb = if e == 0 {
+                        if dir == 0 {
+                            &mbs[my * mbw + mx - 1]
+                        } else {
+                            &mbs[(my - 1) * mbw + mx]
+                        }
+                    } else {
+                        q
+                    };
                     let eq = edge_q(cqp(p_mb), cqp(q), dp);
                     if eq.alpha == 0 || eq.beta == 0 {
                         continue;
@@ -238,9 +288,16 @@ pub fn deblock_band<'a>(y: &mut BandPlane<'a>, u: &mut BandPlane<'a>, v: &mut Ba
                             if b == 0 {
                                 continue;
                             }
-                            let tc0 = if b < 4 { TC0[eq.idx_a][b as usize - 1] as i32 } else { 0 };
-                            let (qi, step) =
-                                if dir == 0 { (plane.idx(mx * 8 + e * 2, my * 8 + k), 1) } else { (plane.idx(mx * 8 + k, my * 8 + e * 2), plane.stride) };
+                            let tc0 = if b < 4 {
+                                TC0[eq.idx_a][b as usize - 1] as i32
+                            } else {
+                                0
+                            };
+                            let (qi, step) = if dir == 0 {
+                                (plane.idx(mx * 8 + e * 2, my * 8 + k), 1)
+                            } else {
+                                (plane.idx(mx * 8 + k, my * 8 + e * 2), plane.stride)
+                            };
                             filter_chroma(plane.data, qi, step, b, eq.alpha, eq.beta, tc0);
                         }
                     }

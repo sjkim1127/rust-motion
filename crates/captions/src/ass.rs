@@ -32,14 +32,20 @@ pub fn parse_ass_timestamp(s: &str) -> Result<u64, AssError> {
     if parts.len() != 3 {
         return Err(AssError::InvalidTimestamp(s.into()));
     }
-    let h: u64 = parts[0].parse().map_err(|_| AssError::InvalidTimestamp(s.into()))?;
-    let m: u64 = parts[1].parse().map_err(|_| AssError::InvalidTimestamp(s.into()))?;
+    let h: u64 = parts[0]
+        .parse()
+        .map_err(|_| AssError::InvalidTimestamp(s.into()))?;
+    let m: u64 = parts[1]
+        .parse()
+        .map_err(|_| AssError::InvalidTimestamp(s.into()))?;
 
     let sec_parts: Vec<&str> = parts[2].split('.').collect();
     if sec_parts.is_empty() {
         return Err(AssError::InvalidTimestamp(s.into()));
     }
-    let sec: u64 = sec_parts[0].parse().map_err(|_| AssError::InvalidTimestamp(s.into()))?;
+    let sec: u64 = sec_parts[0]
+        .parse()
+        .map_err(|_| AssError::InvalidTimestamp(s.into()))?;
     let cs: u64 = if sec_parts.len() > 1 {
         let frac_str = sec_parts[1];
         if frac_str.len() == 1 {
@@ -94,7 +100,10 @@ pub fn serialize_ass_karaoke(
     let _ = writeln!(out);
 
     let _ = writeln!(out, "[Events]");
-    let _ = writeln!(out, "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text");
+    let _ = writeln!(
+        out,
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+    );
 
     for line_tokens in lines {
         if line_tokens.is_empty() {
@@ -157,7 +166,8 @@ pub fn parse_ass(ass_text: &str) -> Result<Vec<AssDialogue>, AssError> {
                 }
             }
 
-            if let (Some(s), Some(e), Some(st), Some(t)) = (start_idx, end_idx, style_idx, text_idx) {
+            if let (Some(s), Some(e), Some(st), Some(t)) = (start_idx, end_idx, style_idx, text_idx)
+            {
                 format_indices = Some((s, e, st, t));
             }
             continue;
@@ -189,7 +199,9 @@ pub fn parse_ass(ass_text: &str) -> Result<Vec<AssDialogue>, AssError> {
                     let word_dur_ms = cs * 10;
 
                     let word_start = abs_start + tag_end + 1;
-                    let next_tag = raw_text[word_start..].find(r"{\k").unwrap_or(raw_text.len() - word_start);
+                    let next_tag = raw_text[word_start..]
+                        .find(r"{\k")
+                        .unwrap_or(raw_text.len() - word_start);
                     let word_text = raw_text[word_start..word_start + next_tag].trim();
 
                     if !word_text.is_empty() {
@@ -235,13 +247,11 @@ mod tests {
 
     #[test]
     fn test_ass_karaoke_roundtrip() {
-        let tokens = vec![
-            vec![
-                CaptionToken::new("Make", 1000, 1500),
-                CaptionToken::new("motion", 1500, 2200),
-                CaptionToken::new("magic", 2200, 3000),
-            ]
-        ];
+        let tokens = vec![vec![
+            CaptionToken::new("Make", 1000, 1500),
+            CaptionToken::new("motion", 1500, 2200),
+            CaptionToken::new("magic", 2200, 3000),
+        ]];
 
         let ass = serialize_ass_karaoke(&tokens, "Demo", "Arial", 64, "&H00FFFFFF", "&H0000FFFF");
         assert!(ass.contains("[Script Info]"));

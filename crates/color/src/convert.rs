@@ -42,12 +42,17 @@ impl CmykSpace {
             }
         }
         let space = Self::build(bytes);
-        cache.lock().unwrap_or_else(|e| e.into_inner()).push((Arc::downgrade(bytes), space.clone()));
+        cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((Arc::downgrade(bytes), space.clone()));
         space
     }
 
     fn build(bytes: &[u8]) -> Option<Arc<CmykSpace>> {
-        let p = Profile::parse(bytes).ok().filter(|p| p.color_space == ColorSpace::Cmyk)?;
+        let p = Profile::parse(bytes)
+            .ok()
+            .filter(|p| p.color_space == ColorSpace::Cmyk)?;
         let coated = Builtin::CoatedCmyk.profile();
         if p.content_hash() == coated.content_hash() {
             return None;
@@ -55,7 +60,11 @@ impl CmykSpace {
         let srgb = Builtin::Srgb.profile();
         let to_srgb = Transform::new(&p, srgb, Intent::RelativeColorimetric, true).ok()?;
         let from_srgb = Transform::new(srgb, &p, Intent::RelativeColorimetric, true).ok()?;
-        Some(Arc::new(CmykSpace { to_srgb, from_srgb, id: p.content_hash() }))
+        Some(Arc::new(CmykSpace {
+            to_srgb,
+            from_srgb,
+            id: p.content_hash(),
+        }))
     }
 }
 
@@ -93,12 +102,30 @@ pub fn active_cmyk_space() -> Option<Arc<CmykSpace>> {
 // against a cms regression, and then the conversions fall back to the naive formulas.
 fn cmyk_to_srgb_transform() -> Option<&'static Transform> {
     static T: OnceLock<Option<Transform>> = OnceLock::new();
-    T.get_or_init(|| Transform::new(Builtin::CoatedCmyk.profile(), Builtin::Srgb.profile(), Intent::RelativeColorimetric, true).ok()).as_ref()
+    T.get_or_init(|| {
+        Transform::new(
+            Builtin::CoatedCmyk.profile(),
+            Builtin::Srgb.profile(),
+            Intent::RelativeColorimetric,
+            true,
+        )
+        .ok()
+    })
+    .as_ref()
 }
 
 fn srgb_to_cmyk_transform() -> Option<&'static Transform> {
     static T: OnceLock<Option<Transform>> = OnceLock::new();
-    T.get_or_init(|| Transform::new(Builtin::Srgb.profile(), Builtin::CoatedCmyk.profile(), Intent::RelativeColorimetric, true).ok()).as_ref()
+    T.get_or_init(|| {
+        Transform::new(
+            Builtin::Srgb.profile(),
+            Builtin::CoatedCmyk.profile(),
+            Intent::RelativeColorimetric,
+            true,
+        )
+        .ok()
+    })
+    .as_ref()
 }
 
 /// Colour-managed CMYK → sRGB (the active document CMYK profile, else the built-in coated
@@ -127,7 +154,11 @@ pub fn cmyk_to_rgb(c: [f32; 4]) -> [f32; 3] {
 /// CMYK; relative colorimetric + BPC).
 #[inline]
 pub fn rgb_to_cmyk(rgb: [f32; 3]) -> [f32; 4] {
-    let v = [rgb[0].clamp(0.0, 1.0), rgb[1].clamp(0.0, 1.0), rgb[2].clamp(0.0, 1.0)];
+    let v = [
+        rgb[0].clamp(0.0, 1.0),
+        rgb[1].clamp(0.0, 1.0),
+        rgb[2].clamp(0.0, 1.0),
+    ];
     let mut o = [0.0f32; 4];
     let active = ACTIVE_CMYK.with(|a| match &*a.borrow() {
         Some(s) => {
@@ -148,13 +179,21 @@ pub fn rgb_to_cmyk(rgb: [f32; 3]) -> [f32; 4] {
 /// sRGB transfer function: encoded → linear.
 #[inline]
 pub fn srgb_to_linear(v: f32) -> f32 {
-    if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+    if v <= 0.04045 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
 }
 
 /// sRGB transfer function: linear → encoded.
 #[inline]
 pub fn linear_to_srgb(v: f32) -> f32 {
-    if v <= 0.003_130_8 { v * 12.92 } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 }
+    if v <= 0.003_130_8 {
+        v * 12.92
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    }
 }
 
 /// Naive CMYK → RGB (no profile): `(1 − c)(1 − k)`. Kept for reference and tests.
@@ -170,17 +209,30 @@ pub fn rgb_to_cmyk_naive(rgb: [f32; 3]) -> [f32; 4] {
         return [0.0, 0.0, 0.0, 1.0];
     }
     let d = 1.0 - k;
-    [(1.0 - rgb[0] - k) / d, (1.0 - rgb[1] - k) / d, (1.0 - rgb[2] - k) / d, k]
+    [
+        (1.0 - rgb[0] - k) / d,
+        (1.0 - rgb[1] - k) / d,
+        (1.0 - rgb[2] - k) / d,
+        k,
+    ]
 }
 
 /// The D50 white point (ICC PCS).
 pub const D50: [f32; 3] = [0.964_22, 1.0, 0.825_21];
 
 /// Linear sRGB → D50 XYZ (Bradford-adapted, as in the ICC sRGB profile). Rows sum to [`D50`].
-pub const SRGB_TO_XYZ_D50: [[f32; 3]; 3] = [[0.436_074, 0.385_064, 0.143_080], [0.222_504, 0.716_878, 0.060_618], [0.013_932, 0.097_104, 0.714_173]];
+pub const SRGB_TO_XYZ_D50: [[f32; 3]; 3] = [
+    [0.436_074, 0.385_064, 0.143_080],
+    [0.222_504, 0.716_878, 0.060_618],
+    [0.013_932, 0.097_104, 0.714_173],
+];
 
 /// D50 XYZ → linear sRGB (the inverse of [`SRGB_TO_XYZ_D50`]).
-pub const XYZ_D50_TO_SRGB: [[f32; 3]; 3] = [[3.133_856, -1.616_867, -0.490_615], [-0.978_768, 1.916_142, 0.033_454], [0.071_945, -0.228_991, 1.405_243]];
+pub const XYZ_D50_TO_SRGB: [[f32; 3]; 3] = [
+    [3.133_856, -1.616_867, -0.490_615],
+    [-0.978_768, 1.916_142, 0.033_454],
+    [0.071_945, -0.228_991, 1.405_243],
+];
 
 /// `m · v` for a row-major 3 × 3 matrix.
 #[inline]
@@ -194,7 +246,13 @@ pub fn lab_to_srgb(lab: [f32; 3]) -> [f32; 3] {
     let fy = (l + 16.0) / 116.0;
     let fx = fy + a / 500.0;
     let fz = fy - b / 200.0;
-    let finv = |t: f32| if t > 6.0 / 29.0 { t * t * t } else { 3.0 * (6.0f32 / 29.0).powi(2) * (t - 4.0 / 29.0) };
+    let finv = |t: f32| {
+        if t > 6.0 / 29.0 {
+            t * t * t
+        } else {
+            3.0 * (6.0f32 / 29.0).powi(2) * (t - 4.0 / 29.0)
+        }
+    };
     let xyz = [finv(fx) * D50[0], finv(fy) * D50[1], finv(fz) * D50[2]];
     mat3_mul(&XYZ_D50_TO_SRGB, xyz).map(|lin| linear_to_srgb(lin.clamp(0.0, 1.0)))
 }
@@ -203,7 +261,13 @@ pub fn lab_to_srgb(lab: [f32; 3]) -> [f32; 3] {
 pub fn srgb_to_lab(rgb: [f32; 3]) -> [f32; 3] {
     let lin = rgb.map(srgb_to_linear);
     let xyz = mat3_mul(&SRGB_TO_XYZ_D50, lin);
-    let f = |t: f32| if t > (6.0f32 / 29.0).powi(3) { t.cbrt() } else { t / (3.0 * (6.0f32 / 29.0).powi(2)) + 4.0 / 29.0 };
+    let f = |t: f32| {
+        if t > (6.0f32 / 29.0).powi(3) {
+            t.cbrt()
+        } else {
+            t / (3.0 * (6.0f32 / 29.0).powi(2)) + 4.0 / 29.0
+        }
+    };
     let (fx, fy, fz) = (f(xyz[0] / D50[0]), f(xyz[1] / D50[1]), f(xyz[2] / D50[2]));
     [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
 }
@@ -227,7 +291,12 @@ mod tests {
 
     #[test]
     fn cmyk_roundtrip() {
-        for rgb in [[1.0, 0.0, 0.0], [0.2, 0.4, 0.6], [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]] {
+        for rgb in [
+            [1.0, 0.0, 0.0],
+            [0.2, 0.4, 0.6],
+            [0.0, 0.0, 0.0],
+            [1.0, 1.0, 1.0],
+        ] {
             let back = cmyk_to_rgb_naive(rgb_to_cmyk_naive(rgb));
             for i in 0..3 {
                 assert!((back[i] - rgb[i]).abs() < 1e-5, "{rgb:?} -> {back:?}");
@@ -263,9 +332,13 @@ mod tests {
         };
         let p = photocraft_cms::synth::cmyk_profile(&params);
         let bytes = p.to_bytes();
-        let space = CmykSpace::for_profile(Some(&bytes)).expect("a CMYK profile other than the default");
+        let space =
+            CmykSpace::for_profile(Some(&bytes)).expect("a CMYK profile other than the default");
         // Cached by allocation.
-        assert!(Arc::ptr_eq(&space, &CmykSpace::for_profile(Some(&bytes)).unwrap()));
+        assert!(Arc::ptr_eq(
+            &space,
+            &CmykSpace::for_profile(Some(&bytes)).unwrap()
+        ));
         // The built-in profile, absent or non-CMYK bytes keep the default path.
         assert!(CmykSpace::for_profile(Some(&Builtin::CoatedCmyk.profile().to_bytes())).is_none());
         assert!(CmykSpace::for_profile(Some(&Builtin::Srgb.profile().to_bytes())).is_none());
@@ -274,15 +347,28 @@ mod tests {
         let ink = [0.0, 0.5, 0.5, 0.0];
         let default = cmyk_to_rgb(ink);
         let mut expect = [0.0f32; 3];
-        Transform::new(&p, Builtin::Srgb.profile(), Intent::RelativeColorimetric, true).unwrap().eval(&ink, &mut expect);
+        Transform::new(
+            &p,
+            Builtin::Srgb.profile(),
+            Intent::RelativeColorimetric,
+            true,
+        )
+        .unwrap()
+        .eval(&ink, &mut expect);
         let inside = with_cmyk_space(Some(&space), || {
             assert!(active_cmyk_space().is_some());
             cmyk_to_rgb(ink)
         });
         for i in 0..3 {
-            assert!((inside[i] - expect[i]).abs() < 0.01, "{inside:?} vs {expect:?}");
+            assert!(
+                (inside[i] - expect[i]).abs() < 0.01,
+                "{inside:?} vs {expect:?}"
+            );
         }
-        assert!((0..3).any(|i| (inside[i] - default[i]).abs() > 0.02), "the document profile changes the colour: {inside:?} {default:?}");
+        assert!(
+            (0..3).any(|i| (inside[i] - default[i]).abs() > 0.02),
+            "the document profile changes the colour: {inside:?} {default:?}"
+        );
         // Restored afterwards (and nested scopes restore the outer one).
         assert!(active_cmyk_space().is_none());
         assert_eq!(cmyk_to_rgb(ink), default);
@@ -290,14 +376,20 @@ mod tests {
             with_cmyk_space(None, || assert!(active_cmyk_space().is_none()));
             assert!(active_cmyk_space().is_some());
             let back = cmyk_to_rgb(rgb_to_cmyk([0.6, 0.4, 0.3]));
-            assert!((back[0] - 0.6).abs() < 0.04 && (back[2] - 0.3).abs() < 0.04, "{back:?}");
+            assert!(
+                (back[0] - 0.6).abs() < 0.04 && (back[2] - 0.3).abs() < 0.04,
+                "{back:?}"
+            );
         });
     }
 
     #[test]
     fn lab_roundtrip_and_anchors() {
         let white = srgb_to_lab([1.0, 1.0, 1.0]);
-        assert!((white[0] - 100.0).abs() < 0.1 && white[1].abs() < 0.5 && white[2].abs() < 0.5, "{white:?}");
+        assert!(
+            (white[0] - 100.0).abs() < 0.1 && white[1].abs() < 0.5 && white[2].abs() < 0.5,
+            "{white:?}"
+        );
         let black = srgb_to_lab([0.0, 0.0, 0.0]);
         assert!(black[0].abs() < 0.1);
         for rgb in [[0.8, 0.3, 0.1], [0.1, 0.5, 0.9], [0.5, 0.5, 0.5]] {

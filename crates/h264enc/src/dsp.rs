@@ -6,7 +6,11 @@ pub fn sad(a: &[u8], sa: usize, b: &[u8], sb: usize, w: usize, h: usize) -> u32 
     for r in 0..h {
         let ra = &a[r * sa..r * sa + w];
         let rb = &b[r * sb..r * sb + w];
-        s += ra.iter().zip(rb).map(|(&x, &y)| x.abs_diff(y) as u32).sum::<u32>();
+        s += ra
+            .iter()
+            .zip(rb)
+            .map(|(&x, &y)| x.abs_diff(y) as u32)
+            .sum::<u32>();
     }
     s
 }
@@ -16,7 +20,10 @@ pub fn sad(a: &[u8], sa: usize, b: &[u8], sb: usize, w: usize, h: usize) -> u32 
 pub fn sad16(a: &[u8], sa: usize, b: &[u8], sb: usize, h: usize) -> u32 {
     let mut s = 0u32;
     for r in 0..h {
-        let (Some(ra), Some(rb)) = (a.get(r * sa..).and_then(|x| x.first_chunk::<16>()), b.get(r * sb..).and_then(|x| x.first_chunk::<16>())) else {
+        let (Some(ra), Some(rb)) = (
+            a.get(r * sa..).and_then(|x| x.first_chunk::<16>()),
+            b.get(r * sb..).and_then(|x| x.first_chunk::<16>()),
+        ) else {
             break;
         };
         let mut acc = 0u16;
@@ -47,7 +54,10 @@ fn hadamard4x4_sum(d: &[i32; 16]) -> u32 {
         let a1 = t[i] - t[4 + i];
         let a2 = t[8 + i] + t[12 + i];
         let a3 = t[8 + i] - t[12 + i];
-        s += (a0 + a2).unsigned_abs() + (a1 + a3).unsigned_abs() + (a0 - a2).unsigned_abs() + (a1 - a3).unsigned_abs();
+        s += (a0 + a2).unsigned_abs()
+            + (a1 + a3).unsigned_abs()
+            + (a0 - a2).unsigned_abs()
+            + (a1 - a3).unsigned_abs();
     }
     s
 }
@@ -115,7 +125,11 @@ pub fn ssd(a: &[u8], sa: usize, b: &[u8], sb: usize, w: usize, h: usize) -> u64 
     for r in 0..h {
         let ra = &a[r * sa..r * sa + w];
         let rb = &b[r * sb..r * sb + w];
-        s += ra.iter().zip(rb).map(|(&x, &y)| (x as i32 - y as i32).pow(2) as u32).sum::<u32>() as u64;
+        s += ra
+            .iter()
+            .zip(rb)
+            .map(|(&x, &y)| (x as i32 - y as i32).pow(2) as u32)
+            .sum::<u32>() as u64;
     }
     s
 }
@@ -161,7 +175,8 @@ mod tests {
                     let mut d = [0i32; 16];
                     for r in 0..4 {
                         for c in 0..4 {
-                            d[r * 4 + c] = a[(by + r) * 16 + bx + c] as i32 - b[(by + r) * 16 + bx + c] as i32;
+                            d[r * 4 + c] =
+                                a[(by + r) * 16 + bx + c] as i32 - b[(by + r) * 16 + bx + c] as i32;
                         }
                     }
                     want += hadamard4x4_sum(&d);

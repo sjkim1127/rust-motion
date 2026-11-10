@@ -111,7 +111,10 @@ impl Graph {
     }
 
     fn arcs(&self, i: usize) -> ArcIter<'_> {
-        ArcIter { g: self, a: self.first[i] }
+        ArcIter {
+            g: self,
+            a: self.first[i],
+        }
     }
 
     /// Computes the maximum flow (= minimum cut capacity).
@@ -180,7 +183,11 @@ impl Graph {
             while a != NONE {
                 let au = a as usize;
                 let j = self.head[au] as usize;
-                let cap = if sink { self.r_cap[au ^ 1] } else { self.r_cap[au] };
+                let cap = if sink {
+                    self.r_cap[au ^ 1]
+                } else {
+                    self.r_cap[au]
+                };
                 if cap > EPS {
                     if self.parent[j] == NONE {
                         self.is_sink[j] = sink;
@@ -295,14 +302,24 @@ impl Graph {
         self.flow += b as f64;
     }
 
-    fn adopt(&mut self, i: usize, time: u32, queue: &mut VecDeque<u32>, orphans: &mut VecDeque<u32>) {
+    fn adopt(
+        &mut self,
+        i: usize,
+        time: u32,
+        queue: &mut VecDeque<u32>,
+        orphans: &mut VecDeque<u32>,
+    ) {
         let sink = self.is_sink[i];
         let mut best = NONE;
         let mut d_min = INF_DIST;
         let mut a = self.first[i];
         while a != NONE {
             let au = a as usize;
-            let cap = if sink { self.r_cap[au] } else { self.r_cap[au ^ 1] };
+            let cap = if sink {
+                self.r_cap[au]
+            } else {
+                self.r_cap[au ^ 1]
+            };
             let j = self.head[au] as usize;
             if cap > EPS && self.is_sink[j] == sink && self.parent[j] != NONE {
                 // Does j's path lead to a terminal?
@@ -358,7 +375,11 @@ impl Graph {
             let j = self.head[au] as usize;
             let pj = self.parent[j];
             if self.is_sink[j] == sink && pj != NONE {
-                let cap = if sink { self.r_cap[au] } else { self.r_cap[au ^ 1] };
+                let cap = if sink {
+                    self.r_cap[au]
+                } else {
+                    self.r_cap[au ^ 1]
+                };
                 if cap > EPS && !self.active[j] {
                     self.active[j] = true;
                     queue.push_back(j as u32);
@@ -387,7 +408,11 @@ impl Iterator for ArcIter<'_> {
         }
         let a = self.a as usize;
         self.a = self.g.next[a];
-        Some((self.g.head[a] as usize, self.g.r_cap[a], self.g.r_cap[a ^ 1]))
+        Some((
+            self.g.head[a] as usize,
+            self.g.r_cap[a],
+            self.g.r_cap[a ^ 1],
+        ))
     }
 }
 

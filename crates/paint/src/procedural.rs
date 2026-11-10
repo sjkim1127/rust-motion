@@ -25,7 +25,12 @@ fn value_noise(x: f32, y: f32, period: i32, salt: u64) -> f32 {
 fn fbm(x: f32, y: f32, size: f32, cells: i32, octaves: u32, salt: u64) -> f32 {
     let (mut sum, mut amp, mut norm, mut c) = (0.0, 1.0, 0.0, cells);
     for o in 0..octaves {
-        sum += value_noise(x / size * c as f32, y / size * c as f32, c, salt.wrapping_add(o as u64 * 7919)) * amp;
+        sum += value_noise(
+            x / size * c as f32,
+            y / size * c as f32,
+            c,
+            salt.wrapping_add(o as u64 * 7919),
+        ) * amp;
         norm += amp;
         amp *= 0.5;
         c *= 2;
@@ -57,7 +62,8 @@ pub fn pattern(style: PatternStyle, size: u32, seed: u32) -> PatternImage {
                     let warp = (std::f32::consts::PI * u).sin();
                     let weft = (std::f32::consts::PI * v).sin();
                     let top = if (cx + cy) % 2 == 0 { warp } else { weft };
-                    (0.25 + 0.65 * top + (hash2(x as i32, y as i32, salt) - 0.5) * 0.15).clamp(0.0, 1.0)
+                    (0.25 + 0.65 * top + (hash2(x as i32, y as i32, salt) - 0.5) * 0.15)
+                        .clamp(0.0, 1.0)
                 }
                 PatternStyle::Dots => {
                     let period = 8.0;
@@ -69,7 +75,11 @@ pub fn pattern(style: PatternStyle, size: u32, seed: u32) -> PatternImage {
             data[y * n + x] = v;
         }
     }
-    PatternImage { width: n, height: n, data }
+    PatternImage {
+        width: n,
+        height: n,
+        data,
+    }
 }
 
 /// A chalk/charcoal tip: a disc with a ragged edge and grainy interior.
@@ -154,8 +164,14 @@ pub fn leaf_tip(n: u32) -> GrayTile {
         let half = 0.42 * (std::f32::consts::PI * t).sin() * (1.0 - 0.25 * t);
         let inside = ((half - v.abs()) * c).clamp(0.0, 1.0);
         let rib = 1.0 - 0.45 * (1.0 - (v.abs() * c / 1.2).clamp(0.0, 1.0));
-        let veins = 1.0 - 0.2 * (1.0 - ((((u * 7.0 - v.abs() * 5.0).fract()) - 0.5).abs() * 8.0).clamp(0.0, 1.0));
-        let stem = if u < -0.75 && v.abs() * c < 0.9 { 1.0 } else { 0.0 };
+        let veins = 1.0
+            - 0.2
+                * (1.0 - ((((u * 7.0 - v.abs() * 5.0).fract()) - 0.5).abs() * 8.0).clamp(0.0, 1.0));
+        let stem = if u < -0.75 && v.abs() * c < 0.9 {
+            1.0
+        } else {
+            0.0
+        };
         (inside * rib * veins).max(stem)
     })
 }
@@ -195,7 +211,8 @@ pub fn sponge_tip(n: u32, seed: u32) -> GrayTile {
     GrayTile::from_fn(n, n, |x, y| {
         let (dx, dy) = (x as f32 + 0.5 - c, y as f32 + 0.5 - c);
         let r = (dx * dx + dy * dy).sqrt() / c;
-        let edge = 0.78 + 0.2 * value_noise((dy.atan2(dx) + std::f32::consts::PI) * 2.5, 0.5, 16, salt);
+        let edge =
+            0.78 + 0.2 * value_noise((dy.atan2(dx) + std::f32::consts::PI) * 2.5, 0.5, 16, salt);
         let disc = ((edge - r) * 6.0).clamp(0.0, 1.0);
         let pores = fbm(x as f32, y as f32, n as f32, 6, 3, salt);
         disc * ((pores - 0.42) * 6.0).clamp(0.0, 1.0)
@@ -206,8 +223,13 @@ pub fn sponge_tip(n: u32, seed: u32) -> GrayTile {
 pub fn star_tip(n: u32) -> GrayTile {
     let c = n as f32 / 2.0;
     GrayTile::from_fn(n, n, |x, y| {
-        let (u, v) = (((x as f32 + 0.5 - c) / c).abs(), ((y as f32 + 0.5 - c) / c).abs());
-        let ray = |a: f32, b: f32| ((1.0 - a) * (1.0 - (b / (0.08 * (1.0 - a) + 0.005)).min(1.0))).max(0.0);
+        let (u, v) = (
+            ((x as f32 + 0.5 - c) / c).abs(),
+            ((y as f32 + 0.5 - c) / c).abs(),
+        );
+        let ray = |a: f32, b: f32| {
+            ((1.0 - a) * (1.0 - (b / (0.08 * (1.0 - a) + 0.005)).min(1.0))).max(0.0)
+        };
         let glow = (1.0 - (u * u + v * v).sqrt() * 2.5).max(0.0).powi(2);
         ray(u, v).max(ray(v, u)).max(glow).min(1.0)
     })
@@ -241,7 +263,12 @@ mod tests {
 
     #[test]
     fn patterns_are_seamless_and_in_range() {
-        for st in [PatternStyle::Noise, PatternStyle::Paper, PatternStyle::Canvas, PatternStyle::Dots] {
+        for st in [
+            PatternStyle::Noise,
+            PatternStyle::Paper,
+            PatternStyle::Canvas,
+            PatternStyle::Dots,
+        ] {
             let p = pattern(st, 64, 3);
             assert!(p.data.iter().all(|v| (0.0..=1.0).contains(v)), "{st:?}");
             let var = p.data.iter().map(|v| (v - 0.5).abs()).sum::<f32>() / p.data.len() as f32;
@@ -251,7 +278,10 @@ mod tests {
         }
         // Noise tiles: left and right columns are neighbours.
         let p = pattern(PatternStyle::Noise, 64, 1);
-        let seam: f32 = (0..64).map(|y| (p.data[y * 64] - p.data[y * 64 + 63]).abs()).sum::<f32>() / 64.0;
+        let seam: f32 = (0..64)
+            .map(|y| (p.data[y * 64] - p.data[y * 64 + 63]).abs())
+            .sum::<f32>()
+            / 64.0;
         assert!(seam < 0.08, "{seam}");
     }
 

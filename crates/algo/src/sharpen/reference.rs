@@ -1,13 +1,15 @@
 //! Frozen exact Unsharp Mask from a28d7866, independent of production helpers.
+use crate::image::{premultiply, unpremultiply, Image};
 use crate::Ctx;
-use crate::image::{Image, premultiply, unpremultiply};
 use photocraft_geom::Rect;
 pub(crate) fn gaussian_kernel(sigma: f32) -> Vec<f32> {
     if sigma < 0.05 {
         return vec![1.0];
     }
     let r = (sigma * 3.0).ceil() as i32;
-    let k: Vec<f32> = (-r..=r).map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp()).collect();
+    let k: Vec<f32> = (-r..=r)
+        .map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp())
+        .collect();
     let s: f32 = k.iter().sum();
     k.into_iter().map(|v| v / s).collect()
 }
@@ -86,7 +88,13 @@ fn conv_row<const N: usize>(src: &[f32], dst: &mut [f32], kernel: &[f32]) {
     }
 }
 
-fn with_blur(src: &Image, out: Rect, ctx: &Ctx, radius: f32, mut f: impl FnMut(f32, f32) -> f32) -> Vec<f32> {
+fn with_blur(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    radius: f32,
+    mut f: impl FnMut(f32, f32) -> f32,
+) -> Vec<f32> {
     let k = gaussian_kernel(radius);
     let blurred = conv_sep(src, out, &k, &k, ctx.alpha);
     let mut res = src.crop(out);
@@ -103,11 +111,22 @@ fn with_blur(src: &Image, out: Rect, ctx: &Ctx, radius: f32, mut f: impl FnMut(f
     res
 }
 
-pub(crate) fn unsharp(src: &Image, out: Rect, ctx: &Ctx, amount: f32, radius: f32, threshold: f32) -> Vec<f32> {
+pub(crate) fn unsharp(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    amount: f32,
+    radius: f32,
+    threshold: f32,
+) -> Vec<f32> {
     let k = amount / 100.0;
     let t = threshold / 255.0;
     with_blur(src, out, ctx, radius, |o, b| {
         let d = o - b;
-        if d.abs() + 1e-6 >= t { o + k * d } else { o }
+        if d.abs() + 1e-6 >= t {
+            o + k * d
+        } else {
+            o
+        }
     })
 }

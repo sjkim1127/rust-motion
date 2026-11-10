@@ -25,10 +25,18 @@ pub struct GamutCheck {
 impl GamutCheck {
     pub fn new(src: &Profile, proof: &Profile, threshold: f32) -> Result<GamutCheck, CmsError> {
         let lab = crate::Builtin::LabD50.profile();
-        let direct = Pipeline::new(src.channels(), link_stages(src, lab, Intent::RelativeColorimetric, false)?);
+        let direct = Pipeline::new(
+            src.channels(),
+            link_stages(src, lab, Intent::RelativeColorimetric, false)?,
+        );
         let mut via = link_stages(src, proof, Intent::RelativeColorimetric, false)?;
         via.push(Stage::Clamp01);
-        via.extend(link_stages(proof, lab, Intent::RelativeColorimetric, false)?);
+        via.extend(link_stages(
+            proof,
+            lab,
+            Intent::RelativeColorimetric,
+            false,
+        )?);
         let via = Pipeline::new(src.channels(), via);
         let de = |p: &[f32], o: &mut [f32]| {
             let (mut a, mut b) = ([0.0f32; 16], [0.0f32; 16]);
@@ -44,7 +52,12 @@ impl GamutCheck {
             4 => Some(Clut::sample(vec![17; 4], 1, de)),
             _ => None,
         };
-        Ok(GamutCheck { inputs: n, grid, exact: (direct, via), threshold })
+        Ok(GamutCheck {
+            inputs: n,
+            grid,
+            exact: (direct, via),
+            threshold,
+        })
     }
 
     pub fn inputs(&self) -> usize {
@@ -66,7 +79,9 @@ impl GamutCheck {
                 let (mut a, mut b) = ([0.0f32; 16], [0.0f32; 16]);
                 self.exact.0.eval(px, &mut a);
                 self.exact.1.eval(px, &mut b);
-                o[0] = ((a[0] - b[0]) * 100.0).hypot((a[1] - b[1]) * 255.0).hypot((a[2] - b[2]) * 255.0);
+                o[0] = ((a[0] - b[0]) * 100.0)
+                    .hypot((a[1] - b[1]) * 255.0)
+                    .hypot((a[2] - b[2]) * 255.0);
             }
         }
         o[0]

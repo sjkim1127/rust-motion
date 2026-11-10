@@ -5,7 +5,8 @@
 /// pivoting. `None` when singular.
 pub(crate) fn solve_dense(n: usize, mut a: Vec<f64>, mut b: Vec<f64>) -> Option<Vec<f64>> {
     for col in 0..n {
-        let piv = (col..n).max_by(|&i, &j| a[i * n + col].abs().total_cmp(&a[j * n + col].abs()))?;
+        let piv =
+            (col..n).max_by(|&i, &j| a[i * n + col].abs().total_cmp(&a[j * n + col].abs()))?;
         if a[piv * n + col].abs() < 1e-14 {
             return None;
         }
@@ -45,7 +46,11 @@ pub(crate) struct Normal {
 
 impl Normal {
     pub fn new(n: usize) -> Self {
-        Normal { n, ata: vec![0.0; n * n], atb: vec![0.0; n] }
+        Normal {
+            n,
+            ata: vec![0.0; n * n],
+            atb: vec![0.0; n],
+        }
     }
     /// Adds the sparse row `Σ coef·x[idx] = rhs` with weight `w` (applied squared).
     pub fn add(&mut self, row: &[(usize, f64)], rhs: f64, w: f64) {
@@ -72,16 +77,25 @@ pub(crate) struct SparseLs {
 
 impl SparseLs {
     pub fn new(n: usize) -> Self {
-        SparseLs { n, rows: Vec::new() }
+        SparseLs {
+            n,
+            rows: Vec::new(),
+        }
     }
     pub fn add(&mut self, row: Vec<(usize, f64)>, rhs: f64, w: f64) {
-        self.rows.push((row.into_iter().map(|(i, c)| (i, c * w)).collect(), rhs * w));
+        self.rows
+            .push((row.into_iter().map(|(i, c)| (i, c * w)).collect(), rhs * w));
     }
     /// CGLS from `x0`; at most `iters` iterations.
     pub fn solve(&self, x0: &[f64], iters: usize) -> Vec<f64> {
         let n = self.n;
         let mut x = x0.to_vec();
-        let ax = |x: &[f64]| -> Vec<f64> { self.rows.iter().map(|(r, _)| r.iter().map(|&(i, c)| c * x[i]).sum()).collect() };
+        let ax = |x: &[f64]| -> Vec<f64> {
+            self.rows
+                .iter()
+                .map(|(r, _)| r.iter().map(|&(i, c)| c * x[i]).sum())
+                .collect()
+        };
         let atv = |v: &[f64]| -> Vec<f64> {
             let mut out = vec![0.0; n];
             for ((r, _), vi) in self.rows.iter().zip(v) {
@@ -91,7 +105,12 @@ impl SparseLs {
             }
             out
         };
-        let mut r: Vec<f64> = self.rows.iter().zip(ax(&x)).map(|((_, b), a)| b - a).collect();
+        let mut r: Vec<f64> = self
+            .rows
+            .iter()
+            .zip(ax(&x))
+            .map(|((_, b), a)| b - a)
+            .collect();
         let mut s = atv(&r);
         let mut p = s.clone();
         let mut gamma: f64 = s.iter().map(|v| v * v).sum();
@@ -125,27 +144,47 @@ impl SparseLs {
 }
 
 /// Runs `f(y, row)` for every row of a `w × h × ch` buffer, in parallel on native targets.
-pub(crate) fn par_rows<T: Send + Sync>(buf: &mut [T], w: usize, ch: usize, f: impl Fn(usize, &mut [T]) + Sync + Send) {
+pub(crate) fn par_rows<T: Send + Sync>(
+    buf: &mut [T],
+    w: usize,
+    ch: usize,
+    f: impl Fn(usize, &mut [T]) + Sync + Send,
+) {
     let stride = (w * ch).max(1);
     #[cfg(not(target_arch = "wasm32"))]
     {
         use rayon::prelude::*;
-        buf.par_chunks_mut(stride).enumerate().for_each(|(y, row)| f(y, row));
+        buf.par_chunks_mut(stride)
+            .enumerate()
+            .for_each(|(y, row)| f(y, row));
     }
     #[cfg(target_arch = "wasm32")]
-    buf.chunks_mut(stride).enumerate().for_each(|(y, row)| f(y, row));
+    buf.chunks_mut(stride)
+        .enumerate()
+        .for_each(|(y, row)| f(y, row));
 }
 
 /// Like [`par_rows`] but over two row-aligned buffers in lockstep (e.g. index + pixels).
-pub(crate) fn par_rows2<A: Send, B: Send>(a: &mut [A], b: &mut [B], w: usize, f: impl Fn(usize, &mut [A], &mut [B]) + Sync + Send) {
+pub(crate) fn par_rows2<A: Send, B: Send>(
+    a: &mut [A],
+    b: &mut [B],
+    w: usize,
+    f: impl Fn(usize, &mut [A], &mut [B]) + Sync + Send,
+) {
     let s = w.max(1);
     #[cfg(not(target_arch = "wasm32"))]
     {
         use rayon::prelude::*;
-        a.par_chunks_mut(s).zip(b.par_chunks_mut(s)).enumerate().for_each(|(y, (ar, br))| f(y, ar, br));
+        a.par_chunks_mut(s)
+            .zip(b.par_chunks_mut(s))
+            .enumerate()
+            .for_each(|(y, (ar, br))| f(y, ar, br));
     }
     #[cfg(target_arch = "wasm32")]
-    a.chunks_mut(s).zip(b.chunks_mut(s)).enumerate().for_each(|(y, (ar, br))| f(y, ar, br));
+    a.chunks_mut(s)
+        .zip(b.chunks_mut(s))
+        .enumerate()
+        .for_each(|(y, (ar, br))| f(y, ar, br));
 }
 
 /// Maps `f` over `0..n` (in parallel on native targets), keeping order.
@@ -176,7 +215,9 @@ impl Rng {
 
 /// Integer hash → `0..1` (position-keyed noise, independent of tiling).
 pub(crate) fn hash01(x: i64, y: i64, seed: u64) -> f32 {
-    let mut z = (x as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (y as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F) ^ seed.wrapping_mul(0x1656_67B1_9E37_79F9);
+    let mut z = (x as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (y as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
+        ^ seed.wrapping_mul(0x1656_67B1_9E37_79F9);
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
     z ^= z >> 31;
@@ -185,16 +226,32 @@ pub(crate) fn hash01(x: i64, y: i64, seed: u64) -> f32 {
 
 /// sRGB transfer function, decode (extended linearly below 0 and as a power above 1).
 pub(crate) fn srgb_to_linear(v: f32) -> f32 {
-    if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+    if v <= 0.04045 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
 }
 
 /// sRGB transfer function, encode.
 pub(crate) fn linear_to_srgb(v: f32) -> f32 {
-    if v <= 0.003_130_8 { v * 12.92 } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 }
+    if v <= 0.003_130_8 {
+        v * 12.92
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    }
 }
 
 /// Bilinear sample of channel `c` of a `w × h × ch` buffer, clamped to the edges.
-pub(crate) fn bilinear(buf: &[f32], w: usize, h: usize, ch: usize, c: usize, x: f32, y: f32) -> f32 {
+pub(crate) fn bilinear(
+    buf: &[f32],
+    w: usize,
+    h: usize,
+    ch: usize,
+    c: usize,
+    x: f32,
+    y: f32,
+) -> f32 {
     let x = x.clamp(0.0, (w - 1) as f32);
     let y = y.clamp(0.0, (h - 1) as f32);
     let (x0, y0) = (x.floor() as usize, y.floor() as usize);
@@ -210,7 +267,12 @@ pub(crate) fn bilinear(buf: &[f32], w: usize, h: usize, ch: usize, c: usize, x: 
 pub(crate) fn catmull_rom(t: f32) -> [f32; 4] {
     let t2 = t * t;
     let t3 = t2 * t;
-    [-0.5 * t3 + t2 - 0.5 * t, 1.5 * t3 - 2.5 * t2 + 1.0, -1.5 * t3 + 2.0 * t2 + 0.5 * t, 0.5 * t3 - 0.5 * t2]
+    [
+        -0.5 * t3 + t2 - 0.5 * t,
+        1.5 * t3 - 2.5 * t2 + 1.0,
+        -1.5 * t3 + 2.0 * t2 + 0.5 * t,
+        0.5 * t3 - 0.5 * t2,
+    ]
 }
 
 #[cfg(test)]
@@ -230,7 +292,10 @@ mod tests {
         let a = ne.solve().unwrap();
         let b = sp.solve(&[0.0, 0.0], 50);
         assert!((a[0] - 2.0).abs() < 1e-9 && (a[1] - 1.0).abs() < 1e-9);
-        assert!((b[0] - 2.0).abs() < 1e-6 && (b[1] - 1.0).abs() < 1e-6, "{b:?}");
+        assert!(
+            (b[0] - 2.0).abs() < 1e-6 && (b[1] - 1.0).abs() < 1e-6,
+            "{b:?}"
+        );
         assert!(solve_dense(2, vec![1.0, 2.0, 2.0, 4.0], vec![1.0, 2.0]).is_none());
     }
 

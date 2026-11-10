@@ -7,7 +7,13 @@ use crate::{Ctx, Preserve, UndefinedAreas};
 
 /// Minimum or Maximum with the dialog's Preserve option: a square (`min_max`) or a disc
 /// (`min_max_round`).
-pub(crate) fn min_max_preserve(src: &Image, out: Rect, radius: f32, max: bool, preserve: Preserve) -> Vec<f32> {
+pub(crate) fn min_max_preserve(
+    src: &Image,
+    out: Rect,
+    radius: f32,
+    max: bool,
+    preserve: Preserve,
+) -> Vec<f32> {
     match preserve {
         Preserve::Squareness => min_max(src, out, radius, max),
         Preserve::Roundness => min_max_round(src, out, radius, max),
@@ -126,7 +132,14 @@ pub(crate) fn edge_of(u: UndefinedAreas) -> Edge {
 }
 
 /// Shifts the bounds' content by whole pixels.
-pub(crate) fn offset(src: &Image, out: Rect, ctx: &Ctx, dx: i32, dy: i32, undefined: UndefinedAreas) -> Vec<f32> {
+pub(crate) fn offset(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    dx: i32,
+    dy: i32,
+    undefined: UndefinedAreas,
+) -> Vec<f32> {
     let n = src.ch;
     // Subtraction can leave i32 even for valid command parameters. Apply the edge
     // policy before narrowing: saturating first would change the wrapped pixel.
@@ -200,7 +213,11 @@ mod tests {
             for r in [1, 2, 3, 7, 20] {
                 for max in [false, true] {
                     let fast = min_max(&img, out, r as f32, max);
-                    assert_eq!(fast, min_max_direct(&img, out, r, max), "r {r} max {max} out {out:?}");
+                    assert_eq!(
+                        fast,
+                        min_max_direct(&img, out, r, max),
+                        "r {r} max {max} out {out:?}"
+                    );
                 }
             }
         }
@@ -219,8 +236,16 @@ mod offset_overflow_tests {
             for (i, sample) in src.data.iter_mut().enumerate() {
                 *sample = i as f32 * 0.125 - 2.0;
             }
-            let ctx = Ctx { bounds, mode: photocraft_color::ColorMode::Rgb, alpha: true };
-            for policy in [UndefinedAreas::Wrap, UndefinedAreas::Repeat, UndefinedAreas::Transparent] {
+            let ctx = Ctx {
+                bounds,
+                mode: photocraft_color::ColorMode::Rgb,
+                alpha: true,
+            };
+            for policy in [
+                UndefinedAreas::Wrap,
+                UndefinedAreas::Repeat,
+                UndefinedAreas::Transparent,
+            ] {
                 for dx in [i32::MIN, i32::MAX, -8, 0, 7] {
                     for dy in [i32::MIN, i32::MAX, -9, 0, 6] {
                         let reduce = |d: i32, size: i32| match policy {
@@ -232,11 +257,21 @@ mod offset_overflow_tests {
                         for y in bounds.y0..bounds.y1 {
                             for x in bounds.x0..bounds.x1 {
                                 for c in 0..4 {
-                                    expected.push(src.get_edge(x - rx, y - ry, c, edge_of(policy), bounds));
+                                    expected.push(src.get_edge(
+                                        x - rx,
+                                        y - ry,
+                                        c,
+                                        edge_of(policy),
+                                        bounds,
+                                    ));
                                 }
                             }
                         }
-                        assert_eq!(offset(&src, bounds, &ctx, dx, dy, policy), expected, "{bounds:?} {policy:?} {dx} {dy}");
+                        assert_eq!(
+                            offset(&src, bounds, &ctx, dx, dy, policy),
+                            expected,
+                            "{bounds:?} {policy:?} {dx} {dy}"
+                        );
                     }
                 }
             }
@@ -249,8 +284,15 @@ mod offset_overflow_tests {
             let bounds = Rect::new(start, start, start + 3, start + 3);
             let mut src = Image::new(bounds, 1);
             src.data = (0..9).map(|i| i as f32).collect();
-            let ctx = Ctx { bounds, mode: photocraft_color::ColorMode::Grayscale, alpha: false };
-            assert_eq!(offset(&src, bounds, &ctx, i32::MIN, i32::MIN, UndefinedAreas::Wrap), vec![8.0, 6.0, 7.0, 2.0, 0.0, 1.0, 5.0, 3.0, 4.0]);
+            let ctx = Ctx {
+                bounds,
+                mode: photocraft_color::ColorMode::Grayscale,
+                alpha: false,
+            };
+            assert_eq!(
+                offset(&src, bounds, &ctx, i32::MIN, i32::MIN, UndefinedAreas::Wrap),
+                vec![8.0, 6.0, 7.0, 2.0, 0.0, 1.0, 5.0, 3.0, 4.0]
+            );
         }
     }
 
@@ -259,7 +301,11 @@ mod offset_overflow_tests {
         let bounds = Rect::new(0, 0, 3, 1);
         let mut src = Image::new(bounds, 1);
         src.data = vec![0.1, 0.5, 0.9];
-        let ctx = Ctx { bounds, mode: photocraft_color::ColorMode::Grayscale, alpha: false };
+        let ctx = Ctx {
+            bounds,
+            mode: photocraft_color::ColorMode::Grayscale,
+            alpha: false,
+        };
         let got = offset(&src, bounds, &ctx, i32::MIN, 0, UndefinedAreas::Wrap);
         assert_eq!(got, vec![0.9, 0.1, 0.5]);
     }

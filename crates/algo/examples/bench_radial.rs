@@ -5,7 +5,9 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use photocraft_algo::{Ctx, FilterParams, Image, RadialMethod, RadialQuality, TILE, apply_in, kernel};
+    use photocraft_algo::{
+        apply_in, kernel, Ctx, FilterParams, Image, RadialMethod, RadialQuality, TILE,
+    };
     use photocraft_color::PixelFormat;
     use photocraft_geom::Rect;
     use photocraft_raster::Surface;
@@ -20,12 +22,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut output = source.clone();
         let image = Image::read(source, rect);
         let format = source.format();
-        let ctx = Ctx { bounds: rect, mode: format.mode, alpha: format.alpha };
-        let tiles: Vec<Rect> = rect.tiles().map(|tile| tile.rect().intersect(&rect)).collect();
+        let ctx = Ctx {
+            bounds: rect,
+            mode: format.mode,
+            alpha: format.alpha,
+        };
+        let tiles: Vec<Rect> = rect
+            .tiles()
+            .map(|tile| tile.rect().intersect(&rect))
+            .collect();
         let per_tile = TILE as usize * TILE as usize * format.channels() * size_of::<f32>();
         let group = ((256 << 20) / per_tile).max(rayon::current_num_threads());
         for chunk in tiles.chunks(group) {
-            let results: Vec<_> = chunk.par_iter().map(|tile| (*tile, kernel(params, &image, *tile, &ctx))).collect();
+            let results: Vec<_> = chunk
+                .par_iter()
+                .map(|tile| (*tile, kernel(params, &image, *tile, &ctx)))
+                .collect();
             for (tile, samples) in results {
                 output.write_region(tile, &samples);
             }
@@ -45,7 +57,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let height = parse(1, 4000)?;
     let amount = parse(2, 100)?;
     let repeats = parse(3, 3)?;
-    if !(1..=10000).contains(&width) || !(1..=10000).contains(&height) || !(0..=100).contains(&amount) || !(1..=7).contains(&repeats) {
+    if !(1..=10000).contains(&width)
+        || !(1..=10000).contains(&height)
+        || !(0..=100).contains(&amount)
+        || !(1..=7).contains(&repeats)
+    {
         return Err("expected dimensions 1..10000, amount 0..100, repeats 1..7".into());
     }
     let pool = rayon::ThreadPoolBuilder::new().num_threads(12).build()?;
@@ -57,10 +73,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         values.try_reserve_exact(area.width() as usize * area.height() as usize * 4)?;
         for y in area.y0..area.y1 {
             for x in area.x0..area.x1 {
-                let seed = (x as u32).wrapping_mul(0x9e37_79b9) ^ (y as u32).wrapping_mul(0x85eb_ca6b);
+                let seed =
+                    (x as u32).wrapping_mul(0x9e37_79b9) ^ (y as u32).wrapping_mul(0x85eb_ca6b);
                 for channel in 0..4 {
                     let level = seed.rotate_left(channel * 7).wrapping_add(channel * 71) % 256;
-                    values.push(if channel == 3 && seed.is_multiple_of(5) { 0.0 } else { level as f32 / 255.0 });
+                    values.push(if channel == 3 && seed.is_multiple_of(5) {
+                        0.0
+                    } else {
+                        level as f32 / 255.0
+                    });
                 }
             }
         }

@@ -1,7 +1,7 @@
 //! Parameter sets: VPS (7.3.2.1), SPS (7.3.2.2), PPS (7.3.2.3), profile/tier/level, scaling lists
 //! (7.3.4), short-term reference picture sets (7.3.7) and VUI (E.2.1).
 
-use crate::error::{Result, ensure, unsupported};
+use crate::error::{ensure, unsupported, Result};
 use crate::spec_tables::{DEFAULT_SCALING_INTER, DEFAULT_SCALING_INTRA};
 use crate::tables::scan_diag;
 use filmcraft_bitstream::BitReader;
@@ -18,7 +18,11 @@ pub struct ProfileTierLevel {
     pub level_idc: u8,
 }
 
-pub fn parse_ptl(r: &mut BitReader, profile_present: bool, max_sub_layers_minus1: u32) -> Result<ProfileTierLevel> {
+pub fn parse_ptl(
+    r: &mut BitReader,
+    profile_present: bool,
+    max_sub_layers_minus1: u32,
+) -> Result<ProfileTierLevel> {
     let mut p = ProfileTierLevel::default();
     if profile_present {
         p.profile_space = r.read_bits(2)? as u8;
@@ -126,7 +130,11 @@ impl Vps {
         let max_sub_layers_minus1 = r.read_bits(3)?;
         r.skip(1 + 16)?;
         let ptl = parse_ptl(&mut r, true, max_sub_layers_minus1)?;
-        Ok(Vps { id, max_sub_layers_minus1, ptl })
+        Ok(Vps {
+            id,
+            max_sub_layers_minus1,
+            ptl,
+        })
     }
 }
 
@@ -144,7 +152,15 @@ pub struct Vui {
 
 impl Default for Vui {
     fn default() -> Self {
-        Vui { sar: (0, 0), full_range: false, colour_primaries: 2, transfer_characteristics: 2, matrix_coefficients: 2, field_seq: false, timing: None }
+        Vui {
+            sar: (0, 0),
+            full_range: false,
+            colour_primaries: 2,
+            transfer_characteristics: 2,
+            matrix_coefficients: 2,
+            field_seq: false,
+            timing: None,
+        }
     }
 }
 
@@ -237,10 +253,17 @@ impl ScalingList {
         let mut lists = [[[16u8; 64]; 6]; 4];
         for size in 1..4 {
             for m in 0..6 {
-                lists[size][m] = if m < 3 { DEFAULT_SCALING_INTRA } else { DEFAULT_SCALING_INTER };
+                lists[size][m] = if m < 3 {
+                    DEFAULT_SCALING_INTRA
+                } else {
+                    DEFAULT_SCALING_INTER
+                };
             }
         }
-        ScalingList { lists, dc: [[16; 6]; 2] }
+        ScalingList {
+            lists,
+            dc: [[16; 6]; 2],
+        }
     }
 
     pub fn parse(r: &mut BitReader) -> Result<Self> {
@@ -271,13 +294,19 @@ impl ScalingList {
                     let mut next: i32 = 8;
                     if size > 1 {
                         let dc = r.read_se()?;
-                        ensure!((-7..=247).contains(&dc), "scaling_list_dc_coef_minus8 out of range");
+                        ensure!(
+                            (-7..=247).contains(&dc),
+                            "scaling_list_dc_coef_minus8 out of range"
+                        );
                         next = dc + 8;
                         sl.dc[size - 2][m] = next as u8;
                     }
                     for i in 0..coef_num {
                         let d = r.read_se()?;
-                        ensure!((-128..=127).contains(&d), "scaling_list_delta_coef out of range");
+                        ensure!(
+                            (-128..=127).contains(&d),
+                            "scaling_list_delta_coef out of range"
+                        );
                         next = (next + d + 256).rem_euclid(256);
                         sl.lists[size][m][i] = next as u8;
                     }
@@ -341,7 +370,11 @@ impl StRps {
     pub fn parse(r: &mut BitReader, idx: usize, sets: &[StRps], num_sets: usize) -> Result<StRps> {
         let inter = if idx != 0 { r.read_flag()? } else { false };
         if inter {
-            let delta_idx = if idx == num_sets { r.read_ue()? as usize + 1 } else { 1 };
+            let delta_idx = if idx == num_sets {
+                r.read_ue()? as usize + 1
+            } else {
+                1
+            };
             ensure!(delta_idx <= idx, "delta_idx_minus1 out of range");
             let rf = &sets[idx - delta_idx];
             let sign = r.read_flag()?;
@@ -394,7 +427,10 @@ impl StRps {
         } else {
             let nneg = r.read_ue()? as usize;
             let npos = r.read_ue()? as usize;
-            ensure!(nneg <= 16 && npos <= 16 && nneg + npos <= 16, "too many pictures in RPS");
+            ensure!(
+                nneg <= 16 && npos <= 16 && nneg + npos <= 16,
+                "too many pictures in RPS"
+            );
             let mut out = StRps::default();
             let mut poc = 0i32;
             for _ in 0..nneg {
@@ -468,62 +504,111 @@ impl Sps {
         let mut r = BitReader::new(rbsp);
         let vps_id = r.read_bits(4)? as u8;
         let max_sub_layers_minus1 = r.read_bits(3)?;
-        ensure!(max_sub_layers_minus1 <= 6, "sps_max_sub_layers_minus1 out of range");
+        ensure!(
+            max_sub_layers_minus1 <= 6,
+            "sps_max_sub_layers_minus1 out of range"
+        );
         r.skip(1)?;
         let ptl = parse_ptl(&mut r, true, max_sub_layers_minus1)?;
         let id = r.read_ue()?;
         ensure!(id < 16, "sps_seq_parameter_set_id out of range");
         let chroma_format_idc = r.read_ue()?;
         ensure!(chroma_format_idc <= 3, "chroma_format_idc out of range");
-        let separate_colour_plane = if chroma_format_idc == 3 { r.read_flag()? } else { false };
+        let separate_colour_plane = if chroma_format_idc == 3 {
+            r.read_flag()?
+        } else {
+            false
+        };
         let width = r.read_ue()?;
         let height = r.read_ue()?;
-        ensure!(width > 0 && height > 0 && width <= 16888 && height <= 16888, "picture size {width}x{height} out of range");
+        ensure!(
+            width > 0 && height > 0 && width <= 16888 && height <= 16888,
+            "picture size {width}x{height} out of range"
+        );
         let mut conf_win = (0, 0, 0, 0);
         if r.read_flag()? {
             conf_win = (r.read_ue()?, r.read_ue()?, r.read_ue()?, r.read_ue()?);
         }
         let bit_depth_luma = r.read_ue()? + 8;
         let bit_depth_chroma = r.read_ue()? + 8;
-        ensure!(bit_depth_luma <= 16 && bit_depth_chroma <= 16, "bit depth out of range");
+        ensure!(
+            bit_depth_luma <= 16 && bit_depth_chroma <= 16,
+            "bit depth out of range"
+        );
         let log2_max_poc_lsb = r.read_ue()? + 4;
-        ensure!(log2_max_poc_lsb <= 16, "log2_max_pic_order_cnt_lsb_minus4 out of range");
+        ensure!(
+            log2_max_poc_lsb <= 16,
+            "log2_max_pic_order_cnt_lsb_minus4 out of range"
+        );
         let ordering_all = r.read_flag()?;
         let (mut dpb, mut reorder, mut latency) = (1, 0, 0);
-        let start = if ordering_all { 0 } else { max_sub_layers_minus1 };
+        let start = if ordering_all {
+            0
+        } else {
+            max_sub_layers_minus1
+        };
         for _ in start..=max_sub_layers_minus1 {
             // the values of the highest sub-layer are used
             dpb = r.read_ue()? + 1;
             reorder = r.read_ue()?;
             latency = r.read_ue()?;
         }
-        ensure!(dpb <= 16 && reorder <= 16, "sps_max_dec_pic_buffering out of range");
+        ensure!(
+            dpb <= 16 && reorder <= 16,
+            "sps_max_dec_pic_buffering out of range"
+        );
         let log2_min_cb = r.read_ue()? + 3;
         let log2_ctb = log2_min_cb + r.read_ue()?;
         let log2_min_tb = r.read_ue()? + 2;
         let log2_max_tb = log2_min_tb + r.read_ue()?;
-        ensure!((4..=6).contains(&log2_ctb) && log2_min_cb <= log2_ctb, "CTB size out of range");
-        ensure!(log2_min_tb < log2_min_cb && log2_max_tb <= log2_ctb.min(5), "transform block sizes out of range");
-        ensure!(width % (1 << log2_min_cb) == 0 && height % (1 << log2_min_cb) == 0, "picture size not a multiple of MinCbSizeY");
+        ensure!(
+            (4..=6).contains(&log2_ctb) && log2_min_cb <= log2_ctb,
+            "CTB size out of range"
+        );
+        ensure!(
+            log2_min_tb < log2_min_cb && log2_max_tb <= log2_ctb.min(5),
+            "transform block sizes out of range"
+        );
+        ensure!(
+            width % (1 << log2_min_cb) == 0 && height % (1 << log2_min_cb) == 0,
+            "picture size not a multiple of MinCbSizeY"
+        );
         let max_th_depth_inter = r.read_ue()?;
         let max_th_depth_intra = r.read_ue()?;
-        ensure!(max_th_depth_inter <= log2_ctb - log2_min_tb && max_th_depth_intra <= log2_ctb - log2_min_tb, "transform hierarchy depth out of range");
+        ensure!(
+            max_th_depth_inter <= log2_ctb - log2_min_tb
+                && max_th_depth_intra <= log2_ctb - log2_min_tb,
+            "transform hierarchy depth out of range"
+        );
         let scaling_list_enabled = r.read_flag()?;
         let mut scaling_list = None;
         if scaling_list_enabled {
-            scaling_list = Some(if r.read_flag()? { ScalingList::parse(&mut r)? } else { ScalingList::default_lists() });
+            scaling_list = Some(if r.read_flag()? {
+                ScalingList::parse(&mut r)?
+            } else {
+                ScalingList::default_lists()
+            });
         }
         let amp = r.read_flag()?;
         let sao = r.read_flag()?;
         let pcm = r.read_flag()?;
-        let (mut pcm_bit_depth_luma, mut pcm_bit_depth_chroma, mut log2_min_pcm, mut log2_max_pcm, mut pcm_loop_filter_disabled) = (8, 8, 0, 0, false);
+        let (
+            mut pcm_bit_depth_luma,
+            mut pcm_bit_depth_chroma,
+            mut log2_min_pcm,
+            mut log2_max_pcm,
+            mut pcm_loop_filter_disabled,
+        ) = (8, 8, 0, 0, false);
         if pcm {
             pcm_bit_depth_luma = r.read_bits(4)? + 1;
             pcm_bit_depth_chroma = r.read_bits(4)? + 1;
             log2_min_pcm = r.read_ue()? + 3;
             log2_max_pcm = log2_min_pcm + r.read_ue()?;
             pcm_loop_filter_disabled = r.read_flag()?;
-            ensure!(pcm_bit_depth_luma <= bit_depth_luma && pcm_bit_depth_chroma <= bit_depth_chroma, "PCM bit depth out of range");
+            ensure!(
+                pcm_bit_depth_luma <= bit_depth_luma && pcm_bit_depth_chroma <= bit_depth_chroma,
+                "PCM bit depth out of range"
+            );
             ensure!(log2_max_pcm <= log2_ctb.min(5), "PCM size out of range");
         }
         let num_st = r.read_ue()? as usize;
@@ -544,7 +629,11 @@ impl Sps {
         }
         let temporal_mvp = r.read_flag()?;
         let strong_intra_smoothing = r.read_flag()?;
-        let vui = if r.read_flag()? { Some(parse_vui(&mut r, max_sub_layers_minus1)?) } else { None };
+        let vui = if r.read_flag()? {
+            Some(parse_vui(&mut r, max_sub_layers_minus1)?)
+        } else {
+            None
+        };
         let mut range_extension = false;
         let mut extension_flags = 0;
         if r.read_flag()? {
@@ -600,13 +689,25 @@ impl Sps {
 
     /// ChromaArrayType.
     pub fn chroma_array_type(&self) -> u32 {
-        if self.separate_colour_plane { 0 } else { self.chroma_format_idc }
+        if self.separate_colour_plane {
+            0
+        } else {
+            self.chroma_format_idc
+        }
     }
     pub fn sub_width_c(&self) -> u32 {
-        if self.chroma_format_idc == 1 || self.chroma_format_idc == 2 { 2 } else { 1 }
+        if self.chroma_format_idc == 1 || self.chroma_format_idc == 2 {
+            2
+        } else {
+            1
+        }
     }
     pub fn sub_height_c(&self) -> u32 {
-        if self.chroma_format_idc == 1 { 2 } else { 1 }
+        if self.chroma_format_idc == 1 {
+            2
+        } else {
+            1
+        }
     }
     pub fn ctb_size(&self) -> u32 {
         1 << self.log2_ctb
@@ -635,10 +736,16 @@ impl Sps {
     /// Features this decoder does not handle yet.
     pub fn check_supported(&self) -> Result<()> {
         if self.chroma_format_idc != 1 {
-            return unsupported(format!("chroma_format_idc {} (only 4:2:0)", self.chroma_format_idc));
+            return unsupported(format!(
+                "chroma_format_idc {} (only 4:2:0)",
+                self.chroma_format_idc
+            ));
         }
         if self.bit_depth_luma > 12 || self.bit_depth_chroma > 12 {
-            return unsupported(format!("bit depth {}/{}", self.bit_depth_luma, self.bit_depth_chroma));
+            return unsupported(format!(
+                "bit depth {}/{}",
+                self.bit_depth_luma, self.bit_depth_chroma
+            ));
         }
         if self.range_extension {
             return unsupported("SPS range extension tools");
@@ -710,16 +817,25 @@ impl Pps {
         let cabac_init_present = r.read_flag()?;
         let num_ref_idx_l0_default = r.read_ue()? + 1;
         let num_ref_idx_l1_default = r.read_ue()? + 1;
-        ensure!(num_ref_idx_l0_default <= 15 && num_ref_idx_l1_default <= 15, "num_ref_idx_default_active out of range");
+        ensure!(
+            num_ref_idx_l0_default <= 15 && num_ref_idx_l1_default <= 15,
+            "num_ref_idx_default_active out of range"
+        );
         let init_qp = 26 + r.read_se()?;
         let constrained_intra_pred = r.read_flag()?;
         let transform_skip = r.read_flag()?;
         let cu_qp_delta_enabled = r.read_flag()?;
         let diff_cu_qp_delta_depth = if cu_qp_delta_enabled { r.read_ue()? } else { 0 };
-        ensure!(diff_cu_qp_delta_depth <= 3, "diff_cu_qp_delta_depth out of range");
+        ensure!(
+            diff_cu_qp_delta_depth <= 3,
+            "diff_cu_qp_delta_depth out of range"
+        );
         let cb_qp_offset = r.read_se()?;
         let cr_qp_offset = r.read_se()?;
-        ensure!((-12..=12).contains(&cb_qp_offset) && (-12..=12).contains(&cr_qp_offset), "chroma QP offset out of range");
+        ensure!(
+            (-12..=12).contains(&cb_qp_offset) && (-12..=12).contains(&cr_qp_offset),
+            "chroma QP offset out of range"
+        );
         let slice_chroma_qp_offsets_present = r.read_flag()?;
         let weighted_pred = r.read_flag()?;
         let weighted_bipred = r.read_flag()?;
@@ -732,7 +848,10 @@ impl Pps {
         if tiles_enabled {
             num_tile_columns = r.read_ue()? + 1;
             num_tile_rows = r.read_ue()? + 1;
-            ensure!(num_tile_columns <= 64 && num_tile_rows <= 64, "too many tiles");
+            ensure!(
+                num_tile_columns <= 64 && num_tile_rows <= 64,
+                "too many tiles"
+            );
             uniform_spacing = r.read_flag()?;
             if !uniform_spacing {
                 for _ in 0..num_tile_columns - 1 {
@@ -746,20 +865,35 @@ impl Pps {
         }
         let loop_filter_across_slices = r.read_flag()?;
         let deblocking_control_present = r.read_flag()?;
-        let (mut deblocking_override_enabled, mut deblocking_disabled, mut beta_offset_div2, mut tc_offset_div2) = (false, false, 0, 0);
+        let (
+            mut deblocking_override_enabled,
+            mut deblocking_disabled,
+            mut beta_offset_div2,
+            mut tc_offset_div2,
+        ) = (false, false, 0, 0);
         if deblocking_control_present {
             deblocking_override_enabled = r.read_flag()?;
             deblocking_disabled = r.read_flag()?;
             if !deblocking_disabled {
                 beta_offset_div2 = r.read_se()?;
                 tc_offset_div2 = r.read_se()?;
-                ensure!((-6..=6).contains(&beta_offset_div2) && (-6..=6).contains(&tc_offset_div2), "deblocking offsets out of range");
+                ensure!(
+                    (-6..=6).contains(&beta_offset_div2) && (-6..=6).contains(&tc_offset_div2),
+                    "deblocking offsets out of range"
+                );
             }
         }
-        let scaling_list = if r.read_flag()? { Some(ScalingList::parse(&mut r)?) } else { None };
+        let scaling_list = if r.read_flag()? {
+            Some(ScalingList::parse(&mut r)?)
+        } else {
+            None
+        };
         let lists_modification_present = r.read_flag()?;
         let log2_parallel_merge_level = r.read_ue()? + 2;
-        ensure!(log2_parallel_merge_level <= 6, "log2_parallel_merge_level out of range");
+        ensure!(
+            log2_parallel_merge_level <= 6,
+            "log2_parallel_merge_level out of range"
+        );
         let slice_header_extension_present = r.read_flag()?;
         let mut range_extension = false;
         let mut extension_flags = 0;
@@ -862,7 +996,10 @@ impl Layout {
         } else {
             let sw: u64 = pps.column_widths.iter().map(|&v| v as u64).sum();
             let sh: u64 = pps.row_heights.iter().map(|&v| v as u64).sum();
-            ensure!(sw < w as u64 && sh < h as u64, "tile sizes exceed the picture");
+            ensure!(
+                sw < w as u64 && sh < h as u64,
+                "tile sizes exceed the picture"
+            );
             colw.extend_from_slice(&pps.column_widths);
             colw.push(w - sw as u32);
             rowh.extend_from_slice(&pps.row_heights);
@@ -884,8 +1021,14 @@ impl Layout {
         let mut rs_to_ts = vec![0u32; n];
         for rs in 0..w * h {
             let (tbx, tby) = (rs % w, rs / w);
-            let tile_x = (0..nc as usize).rev().find(|&i| tbx >= col_bd[i]).unwrap_or(0);
-            let tile_y = (0..nr as usize).rev().find(|&j| tby >= row_bd[j]).unwrap_or(0);
+            let tile_x = (0..nc as usize)
+                .rev()
+                .find(|&i| tbx >= col_bd[i])
+                .unwrap_or(0);
+            let tile_y = (0..nr as usize)
+                .rev()
+                .find(|&j| tby >= row_bd[j])
+                .unwrap_or(0);
             let mut v = 0;
             for i in 0..tile_x {
                 v += rowh[tile_y] * colw[i];
@@ -912,7 +1055,15 @@ impl Layout {
                 tid += 1;
             }
         }
-        Ok(Layout { width_ctbs: w, height_ctbs: h, col_bd, row_bd, rs_to_ts, ts_to_rs, tile_id })
+        Ok(Layout {
+            width_ctbs: w,
+            height_ctbs: h,
+            col_bd,
+            row_bd,
+            rs_to_ts,
+            ts_to_rs,
+            tile_id,
+        })
     }
 
     /// Tile id of the CTB at raster address `rs`.

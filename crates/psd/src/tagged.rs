@@ -18,7 +18,8 @@ use crate::io::{Reader, WriteExt};
 /// readers such as psd-tools). Reading one of these with a 4-byte length
 /// misaligns every block after it (#200).
 pub const PSB_LONG_KEYS: [&[u8; 4]; 21] = [
-    b"LMsk", b"Lr16", b"Lr32", b"Layr", b"Mt16", b"Mt32", b"Mtrn", b"Alph", b"FMsk", b"lnk2", b"FEid", b"FXid", b"PxSD", // spec
+    b"LMsk", b"Lr16", b"Lr32", b"Layr", b"Mt16", b"Mt32", b"Mtrn", b"Alph", b"FMsk", b"lnk2",
+    b"FEid", b"FXid", b"PxSD", // spec
     b"lnk3", b"lnkE", b"pths", b"extd", b"extn", b"FELS", b"cinf", b"artd", // observed
 ];
 
@@ -138,7 +139,12 @@ pub enum BlockData<'a> {
 impl TaggedBlock {
     /// A new `8BIM` block with default padding.
     pub fn new(key: [u8; 4], data: Vec<u8>) -> Self {
-        TaggedBlock { signature: *b"8BIM", key, data, padding: None }
+        TaggedBlock {
+            signature: *b"8BIM",
+            key,
+            data,
+            padding: None,
+        }
     }
 
     /// `true` for `MIB8` / `46B8`: the signatures [`crate::tiff`] gives a block whose data was
@@ -170,7 +176,9 @@ impl TaggedBlock {
         let d = &self.data[..];
         let mut r = Reader::new(d);
         Some(match &self.key {
-            b"luni" => UnicodeString::read(&mut r).map(|s| BlockData::UnicodeName(s.to_string_lossy())),
+            b"luni" => {
+                UnicodeString::read(&mut r).map(|s| BlockData::UnicodeName(s.to_string_lossy()))
+            }
             b"lsct" | b"lsdk" => parse_section(d).map(BlockData::SectionDivider),
             b"lyid" => r.u32().map(BlockData::LayerId),
             b"lnsr" => r.array().map(BlockData::NameSource),
@@ -199,7 +207,11 @@ impl TaggedBlock {
     }
 
     /// `lsct` block with all fields.
-    pub fn section_divider(kind: SectionType, blend_mode: Option<BlendMode>, sub_type: Option<u32>) -> Self {
+    pub fn section_divider(
+        kind: SectionType,
+        blend_mode: Option<BlendMode>,
+        sub_type: Option<u32>,
+    ) -> Self {
         let mut d = Vec::new();
         d.put_u32(kind.as_u32());
         if let Some(b) = blend_mode {
@@ -290,7 +302,8 @@ impl TaggedBlock {
                 expect_kind(&mut r, b"soLD")?;
                 let _version = r.u32()?;
                 let d = crate::descriptor::VersionedDescriptor::read(&mut r)?;
-                check_placed_descriptor(&d.descriptor).map_err(|e| PsdError::invalid(format!("{}: {e}", self.key_str())))?;
+                check_placed_descriptor(&d.descriptor)
+                    .map_err(|e| PsdError::invalid(format!("{}: {e}", self.key_str())))?;
             }
             b"lfx2" => {
                 let _effects_version = r.u32()?;
@@ -301,10 +314,15 @@ impl TaggedBlock {
                     let len = r.u64()?;
                     let item = r.bytes_u64(len)?;
                     if !matches!(item.get(..4), Some(b"liFD" | b"liFE" | b"liFA")) {
-                        return Err(PsdError::invalid(format!("{}: linked item of unknown type", self.key_str())));
+                        return Err(PsdError::invalid(format!(
+                            "{}: linked item of unknown type",
+                            self.key_str()
+                        )));
                     }
                     if item.get(..4) == Some(b"liFD") {
-                        check_embedded_item(item).map_err(|e| PsdError::invalid(format!("{}: embedded file: {e}", self.key_str())))?;
+                        check_embedded_item(item).map_err(|e| {
+                            PsdError::invalid(format!("{}: embedded file: {e}", self.key_str()))
+                        })?;
                     }
                     // Items are padded to a multiple of 4.
                     let pad = ((4 - len % 4) % 4).min(r.remaining() as u64);
@@ -312,20 +330,38 @@ impl TaggedBlock {
                 }
             }
             b"FEid" | b"FXid" => {
-                crate::filter_effects::FilterEffects::parse(d).map_err(|e| PsdError::invalid(format!("{}: {e}", self.key_str())))?;
+                crate::filter_effects::FilterEffects::parse(d)
+                    .map_err(|e| PsdError::invalid(format!("{}: {e}", self.key_str())))?;
                 return Ok(());
             }
             _ => return Ok(()),
         }
         let rest = r.peek_rest();
         if rest.len() > 3 || rest.iter().any(|&b| b != 0) {
-            return Err(PsdError::invalid(format!("{}: {} unexpected bytes after the block structure", self.key_str(), rest.len())));
+            return Err(PsdError::invalid(format!(
+                "{}: {} unexpected bytes after the block structure",
+                self.key_str(),
+                rest.len()
+            )));
         }
         Ok(())
     }
 
-    pub(crate) fn write(&self, out: &mut Vec<u8>, version: Version, alignment: usize) -> Result<()> {
-        Self::write_parts(out, self.signature, self.key, &self.data, self.padding.as_deref(), version, alignment)
+    pub(crate) fn write(
+        &self,
+        out: &mut Vec<u8>,
+        version: Version,
+        alignment: usize,
+    ) -> Result<()> {
+        Self::write_parts(
+            out,
+            self.signature,
+            self.key,
+            &self.data,
+            self.padding.as_deref(),
+            version,
+            alignment,
+        )
     }
 
     /// Writes a block from its parts (no owned [`TaggedBlock`] needed). `padding: None` writes
@@ -345,15 +381,25 @@ impl TaggedBlock {
         out.put(data);
         match padding {
             Some(p) => out.put(p),
-            None => out.extend(std::iter::repeat_n(0u8, Self::default_padding(data.len(), alignment))),
+            None => out.extend(std::iter::repeat_n(
+                0u8,
+                Self::default_padding(data.len(), alignment),
+            )),
         }
         Ok(())
     }
 
     /// Serialized size in bytes as a layer block (two-byte alignment).
     pub fn encoded_len(&self, version: Version) -> usize {
-        let l = if uses_long_length(version, &self.key) { 8 } else { 4 };
-        let p = self.padding.as_ref().map_or(Self::default_padding(self.data.len(), 2), Vec::len);
+        let l = if uses_long_length(version, &self.key) {
+            8
+        } else {
+            4
+        };
+        let p = self
+            .padding
+            .as_ref()
+            .map_or(Self::default_padding(self.data.len(), 2), Vec::len);
         8 + l + self.data.len() + p
     }
 }
@@ -367,21 +413,33 @@ fn check_placed_descriptor(d: &crate::descriptor::Descriptor) -> Result<()> {
         return Err(PsdError::invalid("no Idnt (unique id)"));
     }
     match d.get("Trnf") {
-        Some(Value::List(l)) if l.len() == 8 && l.iter().all(|v| matches!(v, Value::Double(_))) => {}
+        Some(Value::List(l)) if l.len() == 8 && l.iter().all(|v| matches!(v, Value::Double(_))) => {
+        }
         _ => return Err(PsdError::invalid("Trnf is not eight doubles")),
     }
-    let Some(fx) = d.get("filterFX") else { return Ok(()) };
-    let Value::Descriptor(fx) = fx else { return Err(PsdError::invalid("filterFX is not an object")) };
-    let Some(Value::List(list)) = fx.get("filterFXList") else { return Err(PsdError::invalid("filterFX has no filterFXList")) };
+    let Some(fx) = d.get("filterFX") else {
+        return Ok(());
+    };
+    let Value::Descriptor(fx) = fx else {
+        return Err(PsdError::invalid("filterFX is not an object"));
+    };
+    let Some(Value::List(list)) = fx.get("filterFXList") else {
+        return Err(PsdError::invalid("filterFX has no filterFXList"));
+    };
     for (i, item) in list.iter().enumerate() {
-        let Value::Descriptor(f) = item else { return Err(PsdError::invalid(format!("filter {i} is not an object"))) };
+        let Value::Descriptor(f) = item else {
+            return Err(PsdError::invalid(format!("filter {i} is not an object")));
+        };
         let ok = matches!(f.get("Nm  "), Some(Value::Text(_)))
             && matches!(f.get("blendOptions"), Some(Value::Descriptor(_)))
             && matches!(f.get("enab"), Some(Value::Boolean(_)))
             && matches!(f.get("filterID"), Some(Value::Integer(_)))
-            && f.get("Fltr").is_none_or(|v| matches!(v, Value::Descriptor(_)));
+            && f.get("Fltr")
+                .is_none_or(|v| matches!(v, Value::Descriptor(_)));
         if !ok {
-            return Err(PsdError::invalid(format!("filter {i} lacks Nm/blendOptions/enab/filterID")));
+            return Err(PsdError::invalid(format!(
+                "filter {i} lacks Nm/blendOptions/enab/filterID"
+            )));
         }
     }
     Ok(())
@@ -411,7 +469,11 @@ fn check_embedded_item(item: &[u8]) -> Result<()> {
 fn expect_kind(r: &mut Reader<'_>, kind: &'static [u8; 4]) -> Result<()> {
     let found = r.array::<4>()?;
     if &found != kind {
-        return Err(PsdError::invalid(format!("expected {} structure, found {:?}", String::from_utf8_lossy(kind), String::from_utf8_lossy(&found))));
+        return Err(PsdError::invalid(format!(
+            "expected {} structure, found {:?}",
+            String::from_utf8_lossy(kind),
+            String::from_utf8_lossy(&found)
+        )));
     }
     Ok(())
 }
@@ -424,14 +486,21 @@ fn parse_section(d: &[u8]) -> Result<SectionDivider> {
     if r.remaining() >= 8 {
         let sig = r.array::<4>()?;
         if &sig != b"8BIM" {
-            return Err(PsdError::InvalidSignature { expected: "8BIM", found: sig });
+            return Err(PsdError::InvalidSignature {
+                expected: "8BIM",
+                found: sig,
+            });
         }
         blend_mode = Some(BlendMode::from_key(r.array()?));
         if r.remaining() >= 4 {
             sub_type = Some(r.u32()?);
         }
     }
-    Ok(SectionDivider { kind, blend_mode, sub_type })
+    Ok(SectionDivider {
+        kind,
+        blend_mode,
+        sub_type,
+    })
 }
 
 /// `8BIM` / `8B64`, or the markers `MIB8` / `46B8` that [`crate::tiff`] gives a block kept
@@ -443,7 +512,10 @@ fn is_sig(b: &[u8]) -> bool {
 /// Reads tagged blocks until the reader is exhausted. Bytes that do not form
 /// a block (fewer than 12 bytes or no valid signature) are returned as
 /// trailing data.
-pub(crate) fn read_blocks(r: &mut Reader<'_>, version: Version) -> Result<(Vec<TaggedBlock>, Vec<u8>)> {
+pub(crate) fn read_blocks(
+    r: &mut Reader<'_>,
+    version: Version,
+) -> Result<(Vec<TaggedBlock>, Vec<u8>)> {
     read_blocks_with(r, version, 2, |_, _, _, _, _| false)
 }
 
@@ -478,17 +550,41 @@ pub(crate) fn read_blocks_with(
         }
         // Opaque trailing bytes can follow canonical zero padding without another signature.
         let default = TaggedBlock::default_padding(data.len(), alignment);
-        let pad = pad.unwrap_or_else(|| if rest.get(..default).is_some_and(|p| p.iter().all(|&b| b == 0)) { default } else { 0 });
+        let pad = pad.unwrap_or_else(|| {
+            if rest
+                .get(..default)
+                .is_some_and(|p| p.iter().all(|&b| b == 0))
+            {
+                default
+            } else {
+                0
+            }
+        });
         let pad_bytes = r.bytes(pad)?.to_vec();
-        let padding =
-            if pad_bytes.len() == TaggedBlock::default_padding(data.len(), alignment) && pad_bytes.iter().all(|&b| b == 0) { None } else { Some(pad_bytes) };
+        let padding = if pad_bytes.len() == TaggedBlock::default_padding(data.len(), alignment)
+            && pad_bytes.iter().all(|&b| b == 0)
+        {
+            None
+        } else {
+            Some(pad_bytes)
+        };
         if !consume(blocks.len(), signature, key, data, &padding) {
-            blocks.push(TaggedBlock { signature, key, data: data.to_vec(), padding });
+            blocks.push(TaggedBlock {
+                signature,
+                key,
+                data: data.to_vec(),
+                padding,
+            });
         }
     }
 }
 
-pub(crate) fn write_blocks(out: &mut Vec<u8>, blocks: &[TaggedBlock], version: Version, alignment: usize) -> Result<()> {
+pub(crate) fn write_blocks(
+    out: &mut Vec<u8>,
+    blocks: &[TaggedBlock],
+    version: Version,
+    alignment: usize,
+) -> Result<()> {
     for b in blocks {
         b.write(out, version, alignment)?;
     }
@@ -512,7 +608,10 @@ mod tests {
     fn unicode_name_typed() {
         let b = TaggedBlock::unicode_name("Ebene \u{e4}\u{1F600}");
         assert_eq!(b.data.len() % 4, 0);
-        assert_eq!(b.parsed(), Some(Ok(BlockData::UnicodeName("Ebene \u{e4}\u{1F600}".into()))));
+        assert_eq!(
+            b.parsed(),
+            Some(Ok(BlockData::UnicodeName("Ebene \u{e4}\u{1F600}".into())))
+        );
         rt(&[b], Version::Psd);
     }
 
@@ -520,8 +619,18 @@ mod tests {
     fn section_divider_variants() {
         for (kind, bm, st, len) in [
             (SectionType::OpenFolder, None, None, 4),
-            (SectionType::ClosedFolder, Some(BlendMode::PassThrough), None, 12),
-            (SectionType::BoundingDivider, Some(BlendMode::Multiply), Some(1), 16),
+            (
+                SectionType::ClosedFolder,
+                Some(BlendMode::PassThrough),
+                None,
+                12,
+            ),
+            (
+                SectionType::BoundingDivider,
+                Some(BlendMode::Multiply),
+                Some(1),
+                16,
+            ),
         ] {
             let b = TaggedBlock::section_divider(kind, bm, st);
             assert_eq!(b.data.len(), len);
@@ -534,12 +643,16 @@ mod tests {
                 other => panic!("{other:?}"),
             }
         }
-        let mut b = TaggedBlock::section_divider(SectionType::OpenFolder, Some(BlendMode::Normal), None);
+        let mut b =
+            TaggedBlock::section_divider(SectionType::OpenFolder, Some(BlendMode::Normal), None);
         b.data[4] = b'X';
         assert!(matches!(b.parsed(), Some(Err(_))));
         let mut lsdk = TaggedBlock::section_divider(SectionType::OpenFolder, None, None);
         lsdk.key = *b"lsdk";
-        assert!(matches!(lsdk.parsed(), Some(Ok(BlockData::SectionDivider(_)))));
+        assert!(matches!(
+            lsdk.parsed(),
+            Some(Ok(BlockData::SectionDivider(_)))
+        ));
     }
 
     #[test]
@@ -553,23 +666,68 @@ mod tests {
 
     #[test]
     fn simple_typed_blocks() {
-        assert_eq!(TaggedBlock::layer_id(7).parsed(), Some(Ok(BlockData::LayerId(7))));
-        assert_eq!(TaggedBlock::name_source(*b"cont").parsed(), Some(Ok(BlockData::NameSource(*b"cont"))));
-        assert_eq!(TaggedBlock::blend_clipped_as_group(true).parsed(), Some(Ok(BlockData::BlendClippedAsGroup(true))));
-        assert_eq!(TaggedBlock::blend_interior_elements(false).parsed(), Some(Ok(BlockData::BlendInteriorElements(false))));
-        assert_eq!(TaggedBlock::knockout(2).parsed(), Some(Ok(BlockData::Knockout(2))));
-        assert_eq!(TaggedBlock::transparency_shapes(false).parsed(), Some(Ok(BlockData::TransparencyShapes(false))));
-        assert_eq!(TaggedBlock::layer_mask_hides_effects(true).parsed(), Some(Ok(BlockData::LayerMaskHidesEffects(true))));
-        assert_eq!(TaggedBlock::vector_mask_hides_effects(true).parsed(), Some(Ok(BlockData::VectorMaskHidesEffects(true))));
-        assert_eq!(TaggedBlock::vector_mask_hides_effects(true).data, vec![1, 0, 0, 0]);
-        assert!(matches!(TaggedBlock::new(*b"tsly", vec![]).parsed(), Some(Err(_))), "truncated flag is an error, not a panic");
-        assert_eq!(TaggedBlock::protection(0x8000_0000).parsed(), Some(Ok(BlockData::Protection(0x8000_0000))));
-        assert_eq!(TaggedBlock::sheet_color(3).parsed(), Some(Ok(BlockData::SheetColor(3))));
-        assert_eq!(TaggedBlock::fill_opacity(128).parsed(), Some(Ok(BlockData::FillOpacity(128))));
+        assert_eq!(
+            TaggedBlock::layer_id(7).parsed(),
+            Some(Ok(BlockData::LayerId(7)))
+        );
+        assert_eq!(
+            TaggedBlock::name_source(*b"cont").parsed(),
+            Some(Ok(BlockData::NameSource(*b"cont")))
+        );
+        assert_eq!(
+            TaggedBlock::blend_clipped_as_group(true).parsed(),
+            Some(Ok(BlockData::BlendClippedAsGroup(true)))
+        );
+        assert_eq!(
+            TaggedBlock::blend_interior_elements(false).parsed(),
+            Some(Ok(BlockData::BlendInteriorElements(false)))
+        );
+        assert_eq!(
+            TaggedBlock::knockout(2).parsed(),
+            Some(Ok(BlockData::Knockout(2)))
+        );
+        assert_eq!(
+            TaggedBlock::transparency_shapes(false).parsed(),
+            Some(Ok(BlockData::TransparencyShapes(false)))
+        );
+        assert_eq!(
+            TaggedBlock::layer_mask_hides_effects(true).parsed(),
+            Some(Ok(BlockData::LayerMaskHidesEffects(true)))
+        );
+        assert_eq!(
+            TaggedBlock::vector_mask_hides_effects(true).parsed(),
+            Some(Ok(BlockData::VectorMaskHidesEffects(true)))
+        );
+        assert_eq!(
+            TaggedBlock::vector_mask_hides_effects(true).data,
+            vec![1, 0, 0, 0]
+        );
+        assert!(
+            matches!(TaggedBlock::new(*b"tsly", vec![]).parsed(), Some(Err(_))),
+            "truncated flag is an error, not a panic"
+        );
+        assert_eq!(
+            TaggedBlock::protection(0x8000_0000).parsed(),
+            Some(Ok(BlockData::Protection(0x8000_0000)))
+        );
+        assert_eq!(
+            TaggedBlock::sheet_color(3).parsed(),
+            Some(Ok(BlockData::SheetColor(3)))
+        );
+        assert_eq!(
+            TaggedBlock::fill_opacity(128).parsed(),
+            Some(Ok(BlockData::FillOpacity(128)))
+        );
         let shmd = TaggedBlock::new(*b"shmd", vec![0, 0, 0, 0]);
-        assert_eq!(shmd.parsed(), Some(Ok(BlockData::MetadataSetting(&[0, 0, 0, 0]))));
+        assert_eq!(
+            shmd.parsed(),
+            Some(Ok(BlockData::MetadataSetting(&[0, 0, 0, 0])))
+        );
         assert_eq!(TaggedBlock::new(*b"lfx2", vec![]).parsed(), None);
-        assert!(matches!(TaggedBlock::new(*b"lyid", vec![1]).parsed(), Some(Err(_))));
+        assert!(matches!(
+            TaggedBlock::new(*b"lyid", vec![1]).parsed(),
+            Some(Err(_))
+        ));
     }
 
     #[test]

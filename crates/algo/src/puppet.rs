@@ -113,7 +113,9 @@ pub struct PuppetWarp {
 
 impl PuppetWarp {
     pub fn is_identity(&self) -> bool {
-        self.pins.iter().all(|p| p.src == p.dst && p.rotate.is_none_or(|r| r.rem_euclid(360.0) == 0.0))
+        self.pins
+            .iter()
+            .all(|p| p.src == p.dst && p.rotate.is_none_or(|r| r.rem_euclid(360.0) == 0.0))
     }
 }
 
@@ -168,7 +170,13 @@ impl Field {
         } else {
             // One block row per task (rows are independent).
             let scan = |by: usize, out: &mut [bool]| {
-                let r = Rect::new(area.x0, area.y0 + by as i32 * g, area.x0 + bw as i32 * g, area.y0 + (by as i32 + 1) * g).intersect(&bounds);
+                let r = Rect::new(
+                    area.x0,
+                    area.y0 + by as i32 * g,
+                    area.x0 + bw as i32 * g,
+                    area.y0 + (by as i32 + 1) * g,
+                )
+                .intersect(&bounds);
                 if r.is_empty() || !src.has_tiles_in(r) {
                     return;
                 }
@@ -186,10 +194,14 @@ impl Field {
             #[cfg(not(target_arch = "wasm32"))]
             {
                 use rayon::prelude::*;
-                cov.par_chunks_mut(bw).enumerate().for_each(|(by, out)| scan(by, out));
+                cov.par_chunks_mut(bw)
+                    .enumerate()
+                    .for_each(|(by, out)| scan(by, out));
             }
             #[cfg(target_arch = "wasm32")]
-            cov.chunks_mut(bw).enumerate().for_each(|(by, out)| scan(by, out));
+            cov.chunks_mut(bw)
+                .enumerate()
+                .for_each(|(by, out)| scan(by, out));
         }
         let outside = edt(&cov, true, bw, bh);
         let inside = edt(&cov, false, bw, bh);
@@ -197,14 +209,30 @@ impl Field {
         let sd = cov
             .iter()
             .zip(outside.iter().zip(&inside))
-            .map(|(&c, (&o, &i))| if c { (-(i.sqrt() - 0.5) * gf) as f32 } else { ((o.sqrt() - 0.5) * gf) as f32 })
+            .map(|(&c, (&o, &i))| {
+                if c {
+                    (-(i.sqrt() - 0.5) * gf) as f32
+                } else {
+                    ((o.sqrt() - 0.5) * gf) as f32
+                }
+            })
             .collect();
-        Field { x0: f64::from(area.x0), y0: f64::from(area.y0), g: gf, bw, bh, sd, expansion }
+        Field {
+            x0: f64::from(area.x0),
+            y0: f64::from(area.y0),
+            g: gf,
+            bw,
+            bh,
+            sd,
+            expansion,
+        }
     }
 
     /// The field at a block centre (exact, no interpolation).
     fn at(&self, bx: usize, by: usize) -> f64 {
-        self.sd.get(by * self.bw + bx).map_or(f64::MAX, |&d| f64::from(d) - self.expansion)
+        self.sd
+            .get(by * self.bw + bx)
+            .map_or(f64::MAX, |&d| f64::from(d) - self.expansion)
     }
 
     /// The field at `p` (bilinear between block centres; clamped to the grid, which ends
@@ -234,11 +262,22 @@ impl Field {
         let point = |id: usize| {
             let b = id / 2;
             let (x, y) = (b % bw, b / bw);
-            let (x2, y2) = if id.is_multiple_of(2) { (x + 1, y) } else { (x, y + 1) };
+            let (x2, y2) = if id.is_multiple_of(2) {
+                (x + 1, y)
+            } else {
+                (x, y + 1)
+            };
             let (fa, fb) = (self.at(x, y), self.at(x2, y2));
-            let t = if (fa - fb).abs() > 1e-12 { (fa / (fa - fb)).clamp(0.0, 1.0) } else { 0.5 };
+            let t = if (fa - fb).abs() > 1e-12 {
+                (fa / (fa - fb)).clamp(0.0, 1.0)
+            } else {
+                0.5
+            };
             let (dx, dy) = ((x2 - x) as f64, (y2 - y) as f64);
-            [self.x0 + (x as f64 + 0.5 + dx * t) * self.g, self.y0 + (y as f64 + 0.5 + dy * t) * self.g]
+            [
+                self.x0 + (x as f64 + 0.5 + dx * t) * self.g,
+                self.y0 + (y as f64 + 0.5 + dy * t) * self.g,
+            ]
         };
         let mut links: HashMap<usize, [usize; 2]> = HashMap::new();
         let mut link = |a: usize, b: usize| {
@@ -253,19 +292,33 @@ impl Field {
         };
         for y in 0..bh - 1 {
             for x in 0..bw - 1 {
-                let c = [inside(x, y), inside(x + 1, y), inside(x + 1, y + 1), inside(x, y + 1)];
+                let c = [
+                    inside(x, y),
+                    inside(x + 1, y),
+                    inside(x + 1, y + 1),
+                    inside(x, y + 1),
+                ];
                 if c.iter().all(|&v| v == c[0]) {
                     continue;
                 }
                 // Top, right, bottom, left.
-                let edges = [id(x, y, false), id(x + 1, y, true), id(x, y + 1, false), id(x, y, true)];
+                let edges = [
+                    id(x, y, false),
+                    id(x + 1, y, true),
+                    id(x, y + 1, false),
+                    id(x, y, true),
+                ];
                 let cross = [c[0] != c[1], c[1] != c[2], c[3] != c[2], c[0] != c[3]];
                 let ks: Vec<usize> = (0..4).filter(|&k| cross[k]).collect();
                 if let [a, b] = ks[..] {
                     link(edges[a], edges[b]);
                 } else if ks.len() == 4 {
                     // A saddle: the centre decides which diagonal pair is joined.
-                    let centre = self.at(x, y) + self.at(x + 1, y) + self.at(x + 1, y + 1) + self.at(x, y + 1) < 0.0;
+                    let centre = self.at(x, y)
+                        + self.at(x + 1, y)
+                        + self.at(x + 1, y + 1)
+                        + self.at(x, y + 1)
+                        < 0.0;
                     if c[0] == centre {
                         link(edges[0], edges[1]);
                         link(edges[2], edges[3]);
@@ -289,7 +342,9 @@ impl Field {
             loop {
                 seen.insert(cur);
                 lp.push(point(cur));
-                let Some(&[a, b]) = links.get(&cur) else { break };
+                let Some(&[a, b]) = links.get(&cur) else {
+                    break;
+                };
                 let next = if a != prev { a } else { b };
                 if next == usize::MAX || seen.contains(&next) {
                     break;
@@ -309,7 +364,10 @@ impl Field {
 /// 1e20 when there is none.
 fn edt(mask: &[bool], site: bool, w: usize, h: usize) -> Vec<f64> {
     const FAR: f64 = 1e20;
-    let mut d: Vec<f64> = mask.iter().map(|&m| if m == site { 0.0 } else { FAR }).collect();
+    let mut d: Vec<f64> = mask
+        .iter()
+        .map(|&m| if m == site { 0.0 } else { FAR })
+        .collect();
     let mut f = vec![0.0; w.max(h)];
     let mut out = vec![0.0; w.max(h)];
     let mut v = vec![0usize; w.max(h)];
@@ -370,7 +428,11 @@ fn edt_1d(f: &[f64], out: &mut [f64], v: &mut [usize], z: &mut [f64]) {
 fn seg_dist(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
     let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
     let l2 = dx * dx + dy * dy;
-    let t = if l2 > 0.0 { (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 };
+    let t = if l2 > 0.0 {
+        (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     dist2(p, [a[0] + dx * t, a[1] + dy * t]).sqrt()
 }
 
@@ -380,7 +442,9 @@ fn simplify(lp: &[[f64; 2]], tol: f64) -> Vec<[f64; 2]> {
     if n < 4 {
         return lp.to_vec();
     }
-    let far = (1..n).max_by(|&a, &b| dist2(lp[0], lp[a]).total_cmp(&dist2(lp[0], lp[b]))).unwrap_or(n / 2);
+    let far = (1..n)
+        .max_by(|&a, &b| dist2(lp[0], lp[a]).total_cmp(&dist2(lp[0], lp[b])))
+        .unwrap_or(n / 2);
     let mut keep = vec![false; n];
     keep[0] = true;
     keep[far] = true;
@@ -435,7 +499,8 @@ fn in_circle(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> f64 {
     let (ax, ay) = (a[0] - d[0], a[1] - d[1]);
     let (bx, by) = (b[0] - d[0], b[1] - d[1]);
     let (cx, cy) = (c[0] - d[0], c[1] - d[1]);
-    (ax * ax + ay * ay) * (bx * cy - cx * by) - (bx * bx + by * by) * (ax * cy - cx * ay) + (cx * cx + cy * cy) * (ax * by - bx * ay)
+    (ax * ax + ay * ay) * (bx * cy - cx * by) - (bx * bx + by * by) * (ax * cy - cx * ay)
+        + (cx * cx + cy * cy) * (ax * by - bx * ay)
 }
 
 const NONE: usize = usize::MAX;
@@ -463,32 +528,69 @@ impl Delaunay {
     fn new(lo: [f64; 2], hi: [f64; 2]) -> Delaunay {
         let (cx, cy) = (0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1]));
         let d = (hi[0] - lo[0]).max(hi[1] - lo[1]).max(1.0) * 4.0;
-        let mut pts = vec![[cx - 2.0 * d, cy - d], [cx + 2.0 * d, cy - d], [cx, cy + 2.0 * d]];
+        let mut pts = vec![
+            [cx - 2.0 * d, cy - d],
+            [cx + 2.0 * d, cy - d],
+            [cx, cy + 2.0 * d],
+        ];
         if orient(pts[0], pts[1], pts[2]) < 0.0 {
             pts.swap(1, 2);
         }
-        Delaunay { pts, tris: vec![DTri { v: [0, 1, 2], n: [NONE; 3], alive: true }], stamp: vec![0], pass: 0, last: 0 }
+        Delaunay {
+            pts,
+            tris: vec![DTri {
+                v: [0, 1, 2],
+                n: [NONE; 3],
+                alive: true,
+            }],
+            stamp: vec![0],
+            pass: 0,
+            last: 0,
+        }
     }
 
     /// The triangle holding `p`: a visibility walk from the last one made.
     fn locate(&self, p: [f64; 2]) -> Option<usize> {
-        let mut t = if self.tris.get(self.last).is_some_and(|t| t.alive) { self.last } else { self.tris.iter().position(|t| t.alive)? };
+        let mut t = if self.tris.get(self.last).is_some_and(|t| t.alive) {
+            self.last
+        } else {
+            self.tris.iter().position(|t| t.alive)?
+        };
         for _ in 0..self.tris.len() + 3 {
             let tri = self.tris.get(t)?;
-            let step = (0..3).find(|&k| orient(self.pts[tri.v[(k + 1) % 3]], self.pts[tri.v[(k + 2) % 3]], p) < 0.0);
+            let step = (0..3).find(|&k| {
+                orient(
+                    self.pts[tri.v[(k + 1) % 3]],
+                    self.pts[tri.v[(k + 2) % 3]],
+                    p,
+                ) < 0.0
+            });
             match step {
                 None => return Some(t),
                 Some(k) if tri.n[k] != NONE => t = tri.n[k],
                 Some(_) => return None,
             }
         }
-        self.tris.iter().position(|tri| tri.alive && (0..3).all(|k| orient(self.pts[tri.v[(k + 1) % 3]], self.pts[tri.v[(k + 2) % 3]], p) >= 0.0))
+        self.tris.iter().position(|tri| {
+            tri.alive
+                && (0..3).all(|k| {
+                    orient(
+                        self.pts[tri.v[(k + 1) % 3]],
+                        self.pts[tri.v[(k + 2) % 3]],
+                        p,
+                    ) >= 0.0
+                })
+        })
     }
 
     /// Inserts `p`; returns its vertex index (an existing vertex's when `p` coincides with it).
     fn insert(&mut self, p: [f64; 2]) -> Option<usize> {
         let t0 = self.locate(p)?;
-        if let Some(&v) = self.tris[t0].v.iter().find(|&&v| dist2(self.pts[v], p) < 1e-12) {
+        if let Some(&v) = self.tris[t0]
+            .v
+            .iter()
+            .find(|&&v| dist2(self.pts[v], p) < 1e-12)
+        {
             return Some(v);
         }
         self.pass = self.pass.wrapping_add(1);
@@ -526,7 +628,11 @@ impl Delaunay {
         self.pts.push(p);
         let base = self.tris.len();
         for (i, &(a, b, o)) in rim.iter().enumerate() {
-            self.tris.push(DTri { v: [a, b, pi], n: [NONE, NONE, o], alive: true });
+            self.tris.push(DTri {
+                v: [a, b, pi],
+                n: [NONE, NONE, o],
+                alive: true,
+            });
             self.stamp.push(0);
             if let Some(ot) = self.tris.get_mut(o) {
                 for k in 0..3 {
@@ -570,29 +676,55 @@ struct Inside<'a> {
 
 impl<'a> Inside<'a> {
     fn new(pts: &'a [[f64; 2]], segs: &'a [(usize, usize)], row: f64) -> Self {
-        let y0 = segs.iter().flat_map(|&(a, b)| [pts[a][1], pts[b][1]]).fold(f64::MAX, f64::min);
-        let y1 = segs.iter().flat_map(|&(a, b)| [pts[a][1], pts[b][1]]).fold(f64::MIN, f64::max);
-        let n = if y1 >= y0 { ((y1 - y0) / row).floor().clamp(0.0, 1e5) as usize + 1 } else { 0 };
+        let y0 = segs
+            .iter()
+            .flat_map(|&(a, b)| [pts[a][1], pts[b][1]])
+            .fold(f64::MAX, f64::min);
+        let y1 = segs
+            .iter()
+            .flat_map(|&(a, b)| [pts[a][1], pts[b][1]])
+            .fold(f64::MIN, f64::max);
+        let n = if y1 >= y0 {
+            ((y1 - y0) / row).floor().clamp(0.0, 1e5) as usize + 1
+        } else {
+            0
+        };
         let mut rows = vec![Vec::new(); n];
         for (i, &(a, b)) in segs.iter().enumerate() {
             let (lo, hi) = (pts[a][1].min(pts[b][1]), pts[a][1].max(pts[b][1]));
-            let (r0, r1) = (((lo - y0) / row).floor() as usize, ((hi - y0) / row).floor() as usize);
+            let (r0, r1) = (
+                ((lo - y0) / row).floor() as usize,
+                ((hi - y0) / row).floor() as usize,
+            );
             for r in rows.iter_mut().take(r1 + 1).skip(r0) {
                 r.push(i);
             }
         }
-        Inside { pts, segs, y0, row, rows }
+        Inside {
+            pts,
+            segs,
+            y0,
+            row,
+            rows,
+        }
     }
 
     fn contains(&self, p: [f64; 2]) -> bool {
         if p[1] < self.y0 {
             return false;
         }
-        let Some(row) = self.rows.get(((p[1] - self.y0) / self.row).floor() as usize) else { return false };
+        let Some(row) = self
+            .rows
+            .get(((p[1] - self.y0) / self.row).floor() as usize)
+        else {
+            return false;
+        };
         let mut odd = false;
         for &i in row {
             let (a, b) = (self.pts[self.segs[i].0], self.pts[self.segs[i].1]);
-            if (a[1] > p[1]) != (b[1] > p[1]) && p[0] < a[0] + (p[1] - a[1]) / (b[1] - a[1]) * (b[0] - a[0]) {
+            if (a[1] > p[1]) != (b[1] > p[1])
+                && p[0] < a[0] + (p[1] - a[1]) / (b[1] - a[1]) * (b[0] - a[0])
+            {
                 odd = !odd;
             }
         }
@@ -610,29 +742,50 @@ const MAX_OUTLINE_POINTS: usize = 20_000;
 /// spacing fills the inside, at least half a step from the outline. The mesh is the
 /// Delaunay triangulation of those points with the outline's sides recovered (split until
 /// each is an edge), minus the triangles outside the outline.
-pub fn build_mesh(src: &Surface, bounds: Rect, density: PuppetDensity, expansion: f64) -> PuppetMesh {
+pub fn build_mesh(
+    src: &Surface,
+    bounds: Rect,
+    density: PuppetDensity,
+    expansion: f64,
+) -> PuppetMesh {
     if bounds.is_empty() {
         return PuppetMesh::default();
     }
-    let e = if expansion.is_finite() { expansion.clamp(-200.0, 200.0) } else { 0.0 };
+    let e = if expansion.is_finite() {
+        expansion.clamp(-200.0, 200.0)
+    } else {
+        0.0
+    };
     // The density counts steps across the region the mesh covers (grown by the expansion).
     let long = f64::from(bounds.width().max(bounds.height())) + 2.0 * e.max(0.0);
     let spacing = (long / density.cells()).max(2.0);
     let field = Field::new(src, bounds, e);
     let loops = field.outline();
-    let empty = PuppetMesh { spacing, ..Default::default() };
+    let empty = PuppetMesh {
+        spacing,
+        ..Default::default()
+    };
     if loops.is_empty() {
         return empty;
     }
     let mut tol = (0.5 * field.g).max(0.5);
     let rings = loop {
-        let rings: Vec<Vec<[f64; 2]>> = loops.iter().map(|l| densify(&simplify(l, tol), spacing)).collect();
+        let rings: Vec<Vec<[f64; 2]>> = loops
+            .iter()
+            .map(|l| densify(&simplify(l, tol), spacing))
+            .collect();
         if rings.iter().map(Vec::len).sum::<usize>() <= MAX_OUTLINE_POINTS || tol > spacing {
             break rings;
         }
         tol *= 2.0;
     };
-    let (lo, hi) = ([field.x0, field.y0], [field.x0 + field.bw as f64 * field.g, field.y0 + field.bh as f64 * field.g]);
+    let (lo, hi) = (
+        [field.x0, field.y0],
+        [
+            field.x0 + field.bw as f64 * field.g,
+            field.y0 + field.bh as f64 * field.g,
+        ],
+    );
     let mut dl = Delaunay::new(lo, hi);
     let mut segs: Vec<(usize, usize)> = Vec::new();
     for ring in &rings {
@@ -650,7 +803,10 @@ pub fn build_mesh(src: &Surface, bounds: Rect, density: PuppetDensity, expansion
     let cols = ((hi[0] - lo[0]) / spacing).ceil() as usize;
     for j in 0..=rows {
         for i in 0..=cols {
-            let p = [lo[0] + (i as f64 + 0.5 * (j % 2) as f64) * spacing, lo[1] + j as f64 * rise];
+            let p = [
+                lo[0] + (i as f64 + 0.5 * (j % 2) as f64) * spacing,
+                lo[1] + j as f64 * rise,
+            ];
             if field.value(p) < -0.5 * spacing {
                 dl.insert(p);
             }
@@ -684,9 +840,15 @@ pub fn build_mesh(src: &Surface, bounds: Rect, density: PuppetDensity, expansion
     }
     let inside = Inside::new(&dl.pts, &segs, spacing);
     let mut tris: Vec<[usize; 3]> = Vec::new();
-    for t in dl.tris.iter().filter(|t| t.alive && t.v.iter().all(|&v| v >= 3)) {
+    for t in dl
+        .tris
+        .iter()
+        .filter(|t| t.alive && t.v.iter().all(|&v| v >= 3))
+    {
         let [a, b, c] = t.v.map(|v| dl.pts[v]);
-        if orient(a, b, c) > 1e-9 && inside.contains([(a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0]) {
+        if orient(a, b, c) > 1e-9
+            && inside.contains([(a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0])
+        {
             tris.push(t.v);
         }
     }
@@ -700,7 +862,11 @@ pub fn build_mesh(src: &Surface, bounds: Rect, density: PuppetDensity, expansion
     for (new, &old) in order.iter().enumerate() {
         remap[old] = new;
     }
-    PuppetMesh { verts: order.iter().map(|&i| pos[i]).collect(), tris: tris.iter().map(|t| t.map(|i| remap[i])).collect(), spacing }
+    PuppetMesh {
+        verts: order.iter().map(|&i| pos[i]).collect(),
+        tris: tris.iter().map(|t| t.map(|i| remap[i])).collect(),
+        spacing,
+    }
 }
 
 /// The vertices `tris` use, in reverse Cuthill–McKee order (breadth first from the topmost
@@ -719,7 +885,11 @@ fn band_order(pos: &[[f64; 2]], tris: &[[usize; 3]]) -> Vec<usize> {
         a.dedup();
     }
     let mut starts: Vec<usize> = (0..pos.len()).filter(|&i| !adj[i].is_empty()).collect();
-    starts.sort_by(|&a, &b| pos[a][1].total_cmp(&pos[b][1]).then(pos[a][0].total_cmp(&pos[b][0])));
+    starts.sort_by(|&a, &b| {
+        pos[a][1]
+            .total_cmp(&pos[b][1])
+            .then(pos[a][0].total_cmp(&pos[b][0]))
+    });
     let mut seen = vec![false; pos.len()];
     let mut order = Vec::with_capacity(starts.len());
     for s in starts {
@@ -780,7 +950,12 @@ impl Csr {
                 }
             }
         }
-        Csr { rows, cols, vals, diag }
+        Csr {
+            rows,
+            cols,
+            vals,
+            diag,
+        }
     }
 
     fn mul(&self, x: &[f64], out: &mut [f64]) {
@@ -934,7 +1109,11 @@ fn cot(a: [f64; 2], b: [f64; 2], c: [f64; 2]) -> f64 {
     // Cotangent of the angle at `a`.
     let (u, v) = ([b[0] - a[0], b[1] - a[1]], [c[0] - a[0], c[1] - a[1]]);
     let cross = (u[0] * v[1] - u[1] * v[0]).abs();
-    if cross < 1e-12 { 0.0 } else { (u[0] * v[0] + u[1] * v[1]) / cross }
+    if cross < 1e-12 {
+        0.0
+    } else {
+        (u[0] * v[0] + u[1] * v[1]) / cross
+    }
 }
 
 fn locate(mesh: &PuppetMesh, p: [f64; 2]) -> Bound {
@@ -948,12 +1127,20 @@ fn locate(mesh: &PuppetMesh, p: [f64; 2]) -> Bound {
         let l2 = ((b[0] - a[0]) * (p[1] - a[1]) - (p[0] - a[0]) * (b[1] - a[1])) / det;
         let l0 = 1.0 - l1 - l2;
         if l0 >= -1e-9 && l1 >= -1e-9 && l2 >= -1e-9 {
-            return Bound { verts: *t, bary: [l0, l1, l2] };
+            return Bound {
+                verts: *t,
+                bary: [l0, l1, l2],
+            };
         }
     }
     // Outside the mesh: the nearest vertex.
-    let i = (0..mesh.verts.len()).min_by(|&a, &b| dist2(mesh.verts[a], p).total_cmp(&dist2(mesh.verts[b], p))).unwrap_or(0);
-    Bound { verts: [i, i, i], bary: [1.0, 0.0, 0.0] }
+    let i = (0..mesh.verts.len())
+        .min_by(|&a, &b| dist2(mesh.verts[a], p).total_cmp(&dist2(mesh.verts[b], p)))
+        .unwrap_or(0);
+    Bound {
+        verts: [i, i, i],
+        bary: [1.0, 0.0, 0.0],
+    }
 }
 
 fn dist2(a: [f64; 2], b: [f64; 2]) -> f64 {
@@ -975,7 +1162,11 @@ impl PuppetSolver {
             .collect();
         // Without vertices there is nothing to bind a pin to (`locate` would fall back to a vertex 0
         // that doesn't exist, #951); every pin loop zips `bound`, so the pins are then ignored.
-        let bound: Vec<Bound> = if nv == 0 { Vec::new() } else { pin_src.iter().map(|p| locate(&mesh, *p)).collect() };
+        let bound: Vec<Bound> = if nv == 0 {
+            Vec::new()
+        } else {
+            pin_src.iter().map(|p| locate(&mesh, *p)).collect()
+        };
         // Connected components (union-find over triangle edges).
         let mut parent: Vec<usize> = (0..nv).collect();
         fn find(p: &mut [usize], mut i: usize) -> usize {
@@ -1000,7 +1191,9 @@ impl PuppetSolver {
                 pinned_root[r] = true;
             }
         }
-        let anchored: Vec<bool> = (0..nv).map(|v| !pinned_root[find(&mut parent, v)]).collect();
+        let anchored: Vec<bool> = (0..nv)
+            .map(|v| !pinned_root[find(&mut parent, v)])
+            .collect();
         // Rotation-fixed pins: the triangles around the pin's nearest vertex.
         let pin_tris: Vec<Vec<usize>> = bound
             .iter()
@@ -1010,8 +1203,19 @@ impl PuppetSolver {
                 if !fixed_rotation.get(k).copied().unwrap_or(false) {
                     return Vec::new();
                 }
-                let v = *b.verts.iter().min_by(|&&a, &&c| dist2(mesh.verts[a], *p).total_cmp(&dist2(mesh.verts[c], *p))).unwrap_or(&0);
-                mesh.tris.iter().enumerate().filter(|(_, t)| t.contains(&v)).map(|(i, _)| i).collect()
+                let v = *b
+                    .verts
+                    .iter()
+                    .min_by(|&&a, &&c| {
+                        dist2(mesh.verts[a], *p).total_cmp(&dist2(mesh.verts[c], *p))
+                    })
+                    .unwrap_or(&0);
+                mesh.tris
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, t)| t.contains(&v))
+                    .map(|(i, _)| i)
+                    .collect()
             })
             .collect();
         let mut trip: Vec<(usize, usize, f64)> = Vec::with_capacity(mesh.tris.len() * 12 + nv);
@@ -1042,7 +1246,16 @@ impl PuppetSolver {
         }
         let matrix = Csr::from_triplets(nv, trip);
         let chol = BandChol::new(&matrix);
-        PuppetSolver { mesh, w, bound, pin_tris, anchored, matrix, chol, pin_weight }
+        PuppetSolver {
+            mesh,
+            w,
+            bound,
+            pin_tris,
+            anchored,
+            matrix,
+            chol,
+            pin_weight,
+        }
     }
 
     /// The ARAP energy of `v` for the given per-triangle linear maps (plus the pin terms).
@@ -1059,7 +1272,12 @@ impl PuppetSolver {
             }
         }
         for (b, d) in self.bound.iter().zip(pin_dst) {
-            let p = (0..3).fold([0.0, 0.0], |a, k| [a[0] + b.bary[k] * v[b.verts[k]][0], a[1] + b.bary[k] * v[b.verts[k]][1]]);
+            let p = (0..3).fold([0.0, 0.0], |a, k| {
+                [
+                    a[0] + b.bary[k] * v[b.verts[k]][0],
+                    a[1] + b.bary[k] * v[b.verts[k]][1],
+                ]
+            });
             e += self.pin_weight * dist2(p, *d);
         }
         e
@@ -1092,7 +1310,11 @@ impl PuppetSolver {
                     PuppetMode::Normal => (c.hypot(sn) / norm.max(1e-12)).sqrt(),
                     PuppetMode::Distort => c.hypot(sn) / norm.max(1e-12),
                 };
-                let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+                let scale = if scale.is_finite() && scale > 0.0 {
+                    scale
+                } else {
+                    1.0
+                };
                 let (sth, cth) = th.sin_cos();
                 [scale * cth, -scale * sth, scale * sth, scale * cth]
             })
@@ -1183,7 +1405,10 @@ impl PuppetSolver {
                     r.map(|deg| {
                         (
                             (0..3).fold([0.0, 0.0], |a, k| {
-                                [a[0] + b.bary[k] * self.mesh.verts[b.verts[k]][0], a[1] + b.bary[k] * self.mesh.verts[b.verts[k]][1]]
+                                [
+                                    a[0] + b.bary[k] * self.mesh.verts[b.verts[k]][0],
+                                    a[1] + b.bary[k] * self.mesh.verts[b.verts[k]][1],
+                                ]
                             }),
                             deg.to_radians(),
                         )
@@ -1198,7 +1423,12 @@ impl PuppetSolver {
                     if rotated.is_empty() {
                         return [1.0, 0.0, 0.0, 1.0];
                     }
-                    let c = t.iter().fold([0.0, 0.0], |a, &i| [a[0] + self.mesh.verts[i][0] / 3.0, a[1] + self.mesh.verts[i][1] / 3.0]);
+                    let c = t.iter().fold([0.0, 0.0], |a, &i| {
+                        [
+                            a[0] + self.mesh.verts[i][0] / 3.0,
+                            a[1] + self.mesh.verts[i][1] / 3.0,
+                        ]
+                    });
                     let (mut sw, mut sa) = (0.0, 0.0);
                     for (p, a) in &rotated {
                         let w = 1.0 / (dist2(*p, c) + 1.0);
@@ -1234,8 +1464,15 @@ impl PuppetSolver {
             return order;
         }
         let depth_of = |t: usize| {
-            let c = self.mesh.tris[t].iter().fold([0.0, 0.0], |a, &i| [a[0] + self.mesh.verts[i][0] / 3.0, a[1] + self.mesh.verts[i][1] / 3.0]);
-            let k = (0..pin_src.len()).min_by(|&a, &b| dist2(pin_src[a], c).total_cmp(&dist2(pin_src[b], c))).unwrap_or(0);
+            let c = self.mesh.tris[t].iter().fold([0.0, 0.0], |a, &i| {
+                [
+                    a[0] + self.mesh.verts[i][0] / 3.0,
+                    a[1] + self.mesh.verts[i][1] / 3.0,
+                ]
+            });
+            let k = (0..pin_src.len())
+                .min_by(|&a, &b| dist2(pin_src[a], c).total_cmp(&dist2(pin_src[b], c)))
+                .unwrap_or(0);
             depths.get(k).copied().unwrap_or(0)
         };
         let d: Vec<i32> = order.iter().map(|&t| depth_of(t)).collect();
@@ -1248,7 +1485,12 @@ impl PuppetSolver {
 pub const ITERATIONS: usize = 40;
 
 /// The deformed mesh of a puppet warp: (solver, deformed vertices, draw order).
-pub fn deform(src: &Surface, bounds: Rect, w: &PuppetWarp, iterations: usize) -> (PuppetSolver, Vec<[f64; 2]>, Vec<usize>) {
+pub fn deform(
+    src: &Surface,
+    bounds: Rect,
+    w: &PuppetWarp,
+    iterations: usize,
+) -> (PuppetSolver, Vec<[f64; 2]>, Vec<usize>) {
     let mesh = build_mesh(src, bounds, w.density, w.expansion);
     let pin_src: Vec<[f64; 2]> = w.pins.iter().map(|p| p.src).collect();
     let fixed: Vec<bool> = w.pins.iter().map(|p| p.rotate.is_some()).collect();
@@ -1263,8 +1505,19 @@ pub fn deform(src: &Surface, bounds: Rect, w: &PuppetWarp, iterations: usize) ->
 
 /// Rasterizes the mesh deformation of `src` (inside `bounds`): the deformed triangles only, so
 /// pixels outside the mesh are dropped.
-pub fn render(src: &Surface, bounds: Rect, mesh: &PuppetMesh, deformed: &[[f64; 2]], order: &[usize], interp: Interp) -> Surface {
-    let verts: Vec<([f64; 2], [f64; 2])> = deformed.iter().zip(&mesh.verts).map(|(d, s)| (*d, *s)).collect();
+pub fn render(
+    src: &Surface,
+    bounds: Rect,
+    mesh: &PuppetMesh,
+    deformed: &[[f64; 2]],
+    order: &[usize],
+    interp: Interp,
+) -> Surface {
+    let verts: Vec<([f64; 2], [f64; 2])> = deformed
+        .iter()
+        .zip(&mesh.verts)
+        .map(|(d, s)| (*d, *s))
+        .collect();
     let tris: Vec<[usize; 3]> = order.iter().map(|&t| mesh.tris[t]).collect();
     crate::warp::warp_triangles(src, bounds, &verts, &tris, interp)
 }
@@ -1283,7 +1536,13 @@ pub fn puppet_warp(src: &Surface, bounds: Rect, w: &PuppetWarp, interp: Interp) 
 /// [`puppet_warp`], also moving `mask` (a one-channel layer mask linked to `src`) with the same
 /// mesh, as Photoshop moves a linked mask with its layer (#4910). The mask is `None` in the
 /// result when none was given.
-pub fn puppet_warp_with_mask(src: &Surface, bounds: Rect, w: &PuppetWarp, interp: Interp, mask: Option<&Surface>) -> Option<(Surface, Option<Surface>)> {
+pub fn puppet_warp_with_mask(
+    src: &Surface,
+    bounds: Rect,
+    w: &PuppetWarp,
+    interp: Interp,
+    mask: Option<&Surface>,
+) -> Option<(Surface, Option<Surface>)> {
     let (solver, v, order) = deform(src, bounds, w, ITERATIONS);
     // No triangles (an expansion that shrinks every pixel away): nothing to warp. Rendering the
     // empty mesh would drop every pixel of the layer.
@@ -1299,14 +1558,23 @@ pub fn puppet_warp_with_mask(src: &Surface, bounds: Rect, w: &PuppetWarp, interp
         return None;
     }
     let out = render(src, bounds, &solver.mesh, &v, &order, interp);
-    Some((out, mask.map(|m| render_mask(m, &solver.mesh, &v, &order, interp))))
+    Some((
+        out,
+        mask.map(|m| render_mask(m, &solver.mesh, &v, &order, interp)),
+    ))
 }
 
 /// Moves a one-channel layer mask with a deformed mesh: the mask under the mesh is lifted,
 /// deformed like the layer's pixels and laid over the rest. The area the mesh leaves takes the
 /// mask's default value (as [`crate::warp::warp_mesh_gray`] leaves it); outside the mesh the
 /// mask keeps its values.
-pub fn render_mask(mask: &Surface, mesh: &PuppetMesh, deformed: &[[f64; 2]], order: &[usize], interp: Interp) -> Surface {
+pub fn render_mask(
+    mask: &Surface,
+    mesh: &PuppetMesh,
+    deformed: &[[f64; 2]],
+    order: &[usize],
+    interp: Interp,
+) -> Surface {
     let mut out = mask.clone();
     if mesh.tris.is_empty() || deformed.len() != mesh.verts.len() || mask.format().channels() != 1 {
         return out;
@@ -1320,31 +1588,66 @@ pub fn render_mask(mask: &Surface, mesh: &PuppetMesh, deformed: &[[f64; 2]], ord
     }
     // The mesh's source area, a pixel wider so its edge samples stay inside.
     let lim = f64::from(1 << 20);
-    let src = Rect::new(x0.max(-lim).floor() as i32 - 1, y0.max(-lim).floor() as i32 - 1, x1.min(lim).ceil() as i32 + 1, y1.min(lim).ceil() as i32 + 1);
+    let src = Rect::new(
+        x0.max(-lim).floor() as i32 - 1,
+        y0.max(-lim).floor() as i32 - 1,
+        x1.min(lim).ceil() as i32 + 1,
+        y1.min(lim).ceil() as i32 + 1,
+    );
     if src.is_empty() {
         return out;
     }
     let default = mask.default_pixel().first().copied().unwrap_or(0.0);
     let fmt = mask.format();
-    let mut tmp = Surface::new(photocraft_color::PixelFormat::new(fmt.mode, fmt.sample, true));
-    tmp.write_region(src, &mask.read_region(src).iter().flat_map(|g| [*g, 1.0]).collect::<Vec<f32>>());
-    let tris: Vec<[usize; 3]> = order.iter().filter_map(|&t| mesh.tris.get(t).copied()).collect();
+    let mut tmp = Surface::new(photocraft_color::PixelFormat::new(
+        fmt.mode, fmt.sample, true,
+    ));
+    tmp.write_region(
+        src,
+        &mask
+            .read_region(src)
+            .iter()
+            .flat_map(|g| [*g, 1.0])
+            .collect::<Vec<f32>>(),
+    );
+    let tris: Vec<[usize; 3]> = order
+        .iter()
+        .filter_map(|&t| mesh.tris.get(t).copied())
+        .collect();
     // Lift: where the undeformed mesh covers the mask, the mask takes its default value.
     let still: Vec<([f64; 2], [f64; 2])> = mesh.verts.iter().map(|s| (*s, *s)).collect();
     let lifted = crate::warp::warp_triangles(&tmp, src, &still, &tris, Interp::Nearest);
     let b = lifted.content_bounds();
     if !b.is_empty() {
         let under = out.read_region(b);
-        let flat: Vec<f32> = lifted.read_region(b).as_chunks::<2>().0.iter().zip(&under).map(|(p, u)| default * p[1] + u * (1.0 - p[1])).collect();
+        let flat: Vec<f32> = lifted
+            .read_region(b)
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .zip(&under)
+            .map(|(p, u)| default * p[1] + u * (1.0 - p[1]))
+            .collect();
         out.write_region(b, &flat);
     }
     // Lay the deformed mask over what is left.
-    let moved: Vec<([f64; 2], [f64; 2])> = deformed.iter().zip(&mesh.verts).map(|(d, s)| (*d, *s)).collect();
+    let moved: Vec<([f64; 2], [f64; 2])> = deformed
+        .iter()
+        .zip(&mesh.verts)
+        .map(|(d, s)| (*d, *s))
+        .collect();
     let warped = crate::warp::warp_triangles(&tmp, src, &moved, &tris, interp);
     let b = warped.content_bounds();
     if !b.is_empty() {
         let under = out.read_region(b);
-        let flat: Vec<f32> = warped.read_region(b).as_chunks::<2>().0.iter().zip(&under).map(|(p, u)| p[0] * p[1] + u * (1.0 - p[1])).collect();
+        let flat: Vec<f32> = warped
+            .read_region(b)
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .zip(&under)
+            .map(|(p, u)| p[0] * p[1] + u * (1.0 - p[1]))
+            .collect();
         out.write_region(b, &flat);
     }
     out.prune();
@@ -1361,7 +1664,11 @@ mod tests {
         // An L shape: a vertical bar and a foot.
         for y in 10..70 {
             for x in 20..36 {
-                s.write_pixel(x, y, &[((x + y) % 7) as f32 / 6.0, 0.5, (y as f32) / 80.0, 1.0]);
+                s.write_pixel(
+                    x,
+                    y,
+                    &[((x + y) % 7) as f32 / 6.0, 0.5, (y as f32) / 80.0, 1.0],
+                );
             }
         }
         for y in 56..70 {
@@ -1381,13 +1688,22 @@ mod tests {
         let inside = |p: [f64; 2]| {
             m.tris.iter().any(|t| {
                 let xs = t.map(|i| m.verts[i]);
-                let (x0, x1) = (xs.iter().map(|v| v[0]).fold(f64::MAX, f64::min), xs.iter().map(|v| v[0]).fold(f64::MIN, f64::max));
-                let (y0, y1) = (xs.iter().map(|v| v[1]).fold(f64::MAX, f64::min), xs.iter().map(|v| v[1]).fold(f64::MIN, f64::max));
+                let (x0, x1) = (
+                    xs.iter().map(|v| v[0]).fold(f64::MAX, f64::min),
+                    xs.iter().map(|v| v[0]).fold(f64::MIN, f64::max),
+                );
+                let (y0, y1) = (
+                    xs.iter().map(|v| v[1]).fold(f64::MAX, f64::min),
+                    xs.iter().map(|v| v[1]).fold(f64::MIN, f64::max),
+                );
                 p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1
             })
         };
         assert!(inside([28.0, 30.0]) && inside([60.0, 62.0]));
-        assert!(!inside([60.0, 20.0]), "the empty corner of the L has no mesh");
+        assert!(
+            !inside([60.0, 20.0]),
+            "the empty corner of the L has no mesh"
+        );
         let more = build_mesh(&s, b, PuppetDensity::More, 2.0);
         let fewer = build_mesh(&s, b, PuppetDensity::Fewer, 2.0);
         assert!(more.tris.len() > m.tris.len() && m.tris.len() > fewer.tris.len());
@@ -1415,17 +1731,33 @@ mod tests {
         }
         let m = build_mesh(&s, s.content_bounds(), PuppetDensity::Normal, 2.0);
         let r = |v: &[f64; 2]| (v[0] - 100.0).hypot(v[1] - 100.0);
-        assert!(m.verts.iter().all(|v| r(v) <= 63.0), "a vertex outside the grown disc");
-        assert!(m.verts.iter().filter(|v| r(v) > 61.0).count() >= 40, "the outline carries vertices");
-        let area: f64 = m.tris.iter().map(|t| orient(m.verts[t[0]], m.verts[t[1]], m.verts[t[2]]).abs() / 2.0).sum();
+        assert!(
+            m.verts.iter().all(|v| r(v) <= 63.0),
+            "a vertex outside the grown disc"
+        );
+        assert!(
+            m.verts.iter().filter(|v| r(v) > 61.0).count() >= 40,
+            "the outline carries vertices"
+        );
+        let area: f64 = m
+            .tris
+            .iter()
+            .map(|t| orient(m.verts[t[0]], m.verts[t[1]], m.verts[t[2]]).abs() / 2.0)
+            .sum();
         let disc = std::f64::consts::PI * 62.0 * 62.0;
         assert!((area / disc - 1.0).abs() < 0.03, "{area} vs {disc}");
         // Sharp corners and a concave corner: every opaque pixel is still inside the mesh, even
         // without an expansion, and the empty corner of the L is not.
         let l = blob(SampleType::U8);
         let m = build_mesh(&l, l.content_bounds(), PuppetDensity::Fewer, 0.0);
-        for (x, y) in (20..36).flat_map(|x| (10..70).map(move |y| (x, y))).chain((36..70).flat_map(|x| (56..70).map(move |y| (x, y)))) {
-            assert!(in_mesh(&m, [f64::from(x) + 0.5, f64::from(y) + 0.5]), "({x}, {y}) is outside the mesh");
+        for (x, y) in (20..36)
+            .flat_map(|x| (10..70).map(move |y| (x, y)))
+            .chain((36..70).flat_map(|x| (56..70).map(move |y| (x, y))))
+        {
+            assert!(
+                in_mesh(&m, [f64::from(x) + 0.5, f64::from(y) + 0.5]),
+                "({x}, {y}) is outside the mesh"
+            );
         }
         assert!(!in_mesh(&m, [40.0, 50.0]) && !in_mesh(&m, [60.0, 20.0]));
     }
@@ -1438,13 +1770,33 @@ mod tests {
             for pins in [
                 vec![],
                 vec![
-                    PuppetPin { src: [28.0, 20.0], dst: [28.0, 20.0], rotate: None, depth: 0 },
-                    PuppetPin { src: [60.0, 62.0], dst: [60.0, 62.0], rotate: None, depth: 0 },
+                    PuppetPin {
+                        src: [28.0, 20.0],
+                        dst: [28.0, 20.0],
+                        rotate: None,
+                        depth: 0,
+                    },
+                    PuppetPin {
+                        src: [60.0, 62.0],
+                        dst: [60.0, 62.0],
+                        rotate: None,
+                        depth: 0,
+                    },
                 ],
             ] {
-                let w = PuppetWarp { pins, mode: PuppetMode::Normal, density: PuppetDensity::Normal, expansion: 2.0 };
+                let w = PuppetWarp {
+                    pins,
+                    mode: PuppetMode::Normal,
+                    density: PuppetDensity::Normal,
+                    expansion: 2.0,
+                };
                 let out = puppet_warp(&s, b, &w, Interp::Bicubic).unwrap();
-                let worst = s.read_region(b).iter().zip(out.read_region(b)).map(|(a, c)| (a - c).abs()).fold(0.0f32, f32::max);
+                let worst = s
+                    .read_region(b)
+                    .iter()
+                    .zip(out.read_region(b))
+                    .map(|(a, c)| (a - c).abs())
+                    .fold(0.0f32, f32::max);
                 assert!(worst <= 1.0 / 255.0 + 1e-6, "{st:?}: {worst}");
             }
         }
@@ -1459,7 +1811,12 @@ mod tests {
         let s = blob(SampleType::U8);
         let b = s.content_bounds();
         let w = PuppetWarp {
-            pins: vec![PuppetPin { src: [28.0, 30.0], dst: [38.0, 25.0], rotate: None, depth: 0 }],
+            pins: vec![PuppetPin {
+                src: [28.0, 30.0],
+                dst: [38.0, 25.0],
+                rotate: None,
+                depth: 0,
+            }],
             mode: PuppetMode::Normal,
             density: PuppetDensity::Normal,
             expansion: -200.0,
@@ -1478,8 +1835,18 @@ mod tests {
         let b = s.content_bounds();
         let pin = |dst: [f64; 2]| PuppetWarp {
             pins: vec![
-                PuppetPin { src: [28.0, 20.0], dst: [28.0, 20.0], rotate: None, depth: 0 },
-                PuppetPin { src: [60.0, 62.0], dst, rotate: None, depth: 0 },
+                PuppetPin {
+                    src: [28.0, 20.0],
+                    dst: [28.0, 20.0],
+                    rotate: None,
+                    depth: 0,
+                },
+                PuppetPin {
+                    src: [60.0, 62.0],
+                    dst,
+                    rotate: None,
+                    depth: 0,
+                },
             ],
             mode: PuppetMode::Normal,
             density: PuppetDensity::Normal,
@@ -1487,7 +1854,8 @@ mod tests {
         };
         assert!(puppet_warp(&s, b, &pin([1048576.0, 1048576.0]), Interp::Bilinear).is_none());
         assert!(puppet_warp(&s, b, &pin([-1e7, 62.0]), Interp::Bilinear).is_none());
-        let near = puppet_warp(&s, b, &pin([70.0, 66.0]), Interp::Bilinear).expect("a near pin warps");
+        let near =
+            puppet_warp(&s, b, &pin([70.0, 66.0]), Interp::Bilinear).expect("a near pin warps");
         assert!(!near.content_bounds().is_empty());
     }
 
@@ -1499,22 +1867,40 @@ mod tests {
         let s = blob(SampleType::U8);
         let b = s.content_bounds();
         for sample in [SampleType::U8, SampleType::U16, SampleType::F32] {
-            let mut mask = Surface::with_default(PixelFormat::new(ColorMode::Grayscale, sample, false), &[0.0]);
+            let mut mask = Surface::with_default(
+                PixelFormat::new(ColorMode::Grayscale, sample, false),
+                &[0.0],
+            );
             mask.fill_rect(Rect::new(20, 10, 36, 30), &[1.0]);
             mask.fill_rect(Rect::new(90, 90, 94, 94), &[0.5]);
             let w = PuppetWarp {
-                pins: vec![PuppetPin { src: [28.0, 30.0], dst: [28.0, 38.0], rotate: None, depth: 0 }],
+                pins: vec![PuppetPin {
+                    src: [28.0, 30.0],
+                    dst: [28.0, 38.0],
+                    rotate: None,
+                    depth: 0,
+                }],
                 mode: PuppetMode::Rigid,
                 density: PuppetDensity::Normal,
                 expansion: 2.0,
             };
-            let (_, moved) = puppet_warp_with_mask(&s, b, &w, Interp::Bilinear, Some(&mask)).expect("warps");
+            let (_, moved) =
+                puppet_warp_with_mask(&s, b, &w, Interp::Bilinear, Some(&mask)).expect("warps");
             let m = moved.expect("a mask in, a mask out");
             let at = |x, y| m.sample_channel(x, y, 0);
-            assert!(at(28, 20) > 0.99 && at(28, 36) > 0.99, "{sample:?}: the revealed patch moved down");
+            assert!(
+                at(28, 20) > 0.99 && at(28, 36) > 0.99,
+                "{sample:?}: the revealed patch moved down"
+            );
             assert!(at(28, 15) < 0.01, "{sample:?}: its old top is hidden again");
-            assert!((at(91, 91) - 0.5).abs() <= 1.0 / 255.0, "{sample:?}: away from the mesh nothing changes");
-            assert!(puppet_warp_with_mask(&s, b, &w, Interp::Bilinear, None).expect("warps").1.is_none());
+            assert!(
+                (at(91, 91) - 0.5).abs() <= 1.0 / 255.0,
+                "{sample:?}: away from the mesh nothing changes"
+            );
+            assert!(puppet_warp_with_mask(&s, b, &w, Interp::Bilinear, None)
+                .expect("warps")
+                .1
+                .is_none());
         }
     }
 
@@ -1523,26 +1909,47 @@ mod tests {
         let s = blob(SampleType::U8);
         let b = s.content_bounds();
         let w = PuppetWarp {
-            pins: vec![PuppetPin { src: [28.0, 30.0], dst: [38.0, 25.0], rotate: None, depth: 0 }],
+            pins: vec![PuppetPin {
+                src: [28.0, 30.0],
+                dst: [38.0, 25.0],
+                rotate: None,
+                depth: 0,
+            }],
             mode: PuppetMode::Rigid,
             density: PuppetDensity::Normal,
             expansion: 2.0,
         };
         let (solver, v, _) = deform(&s, b, &w, ITERATIONS);
         for (d, x) in v.iter().zip(&solver.mesh.verts) {
-            assert!((d[0] - x[0] - 10.0).abs() < 1e-3 && (d[1] - x[1] + 5.0).abs() < 1e-3, "{d:?} {x:?}");
+            assert!(
+                (d[0] - x[0] - 10.0).abs() < 1e-3 && (d[1] - x[1] + 5.0).abs() < 1e-3,
+                "{d:?} {x:?}"
+            );
         }
         let out = puppet_warp(&s, b, &w, Interp::Bilinear).unwrap();
         assert_eq!(out.content_bounds(), b.translate(10, -5));
         assert_eq!(out.pixel(30, 20), s.pixel(20, 25));
         // A fixed rotation turns the whole mesh about the pin.
-        let w = PuppetWarp { pins: vec![PuppetPin { src: [28.0, 30.0], dst: [28.0, 30.0], rotate: Some(90.0), depth: 0 }], ..w };
+        let w = PuppetWarp {
+            pins: vec![PuppetPin {
+                src: [28.0, 30.0],
+                dst: [28.0, 30.0],
+                rotate: Some(90.0),
+                depth: 0,
+            }],
+            ..w
+        };
         let (solver, v, _) = deform(&s, b, &w, ITERATIONS);
-        let i = (0..v.len()).max_by(|&a, &c| solver.mesh.verts[a][0].total_cmp(&solver.mesh.verts[c][0])).unwrap();
+        let i = (0..v.len())
+            .max_by(|&a, &c| solver.mesh.verts[a][0].total_cmp(&solver.mesh.verts[c][0]))
+            .unwrap();
         let (x, d) = (solver.mesh.verts[i], v[i]);
         // (dx, dy) → (−dy, dx) for +90° with y down.
         let (dx, dy) = (x[0] - 28.0, x[1] - 30.0);
-        assert!((d[0] - (28.0 - dy)).abs() < 1.0 && (d[1] - (30.0 + dx)).abs() < 1.0, "{x:?} → {d:?}");
+        assert!(
+            (d[0] - (28.0 - dy)).abs() < 1.0 && (d[1] - (30.0 + dx)).abs() < 1.0,
+            "{x:?} → {d:?}"
+        );
     }
 
     #[test]
@@ -1556,7 +1963,11 @@ mod tests {
         let rot = [None; 3];
         let (v, e) = solver.solve(&dst, &rot, PuppetMode::Rigid, 30, None);
         assert!(e.len() == 30);
-        let start = solver.energy(&solver.solve(&dst, &rot, PuppetMode::Rigid, 0, None).0, &dst, &rot);
+        let start = solver.energy(
+            &solver.solve(&dst, &rot, PuppetMode::Rigid, 0, None).0,
+            &dst,
+            &rot,
+        );
         assert!(e[0] <= start * (1.0 + 1e-9), "{} vs {start}", e[0]);
         for w in e.windows(2) {
             assert!(w[1] <= w[0] * (1.0 + 1e-6) + 1e-9, "{w:?}");
@@ -1564,7 +1975,12 @@ mod tests {
         assert!(e[29] < start);
         // Pins are honoured closely.
         for (b, d) in solver.bound.iter().zip(&dst) {
-            let p = (0..3).fold([0.0, 0.0], |a, k| [a[0] + b.bary[k] * v[b.verts[k]][0], a[1] + b.bary[k] * v[b.verts[k]][1]]);
+            let p = (0..3).fold([0.0, 0.0], |a, k| {
+                [
+                    a[0] + b.bary[k] * v[b.verts[k]][0],
+                    a[1] + b.bary[k] * v[b.verts[k]][1],
+                ]
+            });
             assert!(dist2(p, *d) < 0.25, "{p:?} vs {d:?}");
         }
         let (vd, _) = solver.solve(&dst, &rot, PuppetMode::Distort, 30, None);
@@ -1580,7 +1996,12 @@ mod tests {
         let solver = PuppetSolver::new(mesh, &pins, &[false; 2]);
         let order = solver.draw_order(&[1, 0], &pins);
         let near0 = |t: usize| {
-            let c = solver.mesh.tris[t].iter().fold([0.0, 0.0], |a, &i| [a[0] + solver.mesh.verts[i][0] / 3.0, a[1] + solver.mesh.verts[i][1] / 3.0]);
+            let c = solver.mesh.tris[t].iter().fold([0.0, 0.0], |a, &i| {
+                [
+                    a[0] + solver.mesh.verts[i][0] / 3.0,
+                    a[1] + solver.mesh.verts[i][1] / 3.0,
+                ]
+            });
             dist2(c, pins[0]) < dist2(c, pins[1])
         };
         // Triangles nearest the raised pin come last, all others first.

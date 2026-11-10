@@ -1,6 +1,8 @@
 //! Time-based effects: feedback delay and an algorithmic (FDN) reverb.
 
-use crate::{AudioEffect, ParamSpec, ParamValues, Smoothed, Unit, block_len, flush32, param_plumbing};
+use crate::{
+    block_len, flush32, param_plumbing, AudioEffect, ParamSpec, ParamValues, Smoothed, Unit,
+};
 
 /// Fractional read from a circular buffer: `delay` samples behind write position `w`.
 #[inline]
@@ -16,20 +18,38 @@ fn prepare_delay(len: usize, delay: f32) -> (usize, f32) {
     // The delay is bounded by this ring's length, so wrapping needs no integer division.
     // Keep the fallback for very large rings whose f32 length rounds upward.
     let distance = di as usize;
-    let distance = if distance <= len { distance } else { distance % len };
+    let distance = if distance <= len {
+        distance
+    } else {
+        distance % len
+    };
     (distance, frac)
 }
 
 #[inline]
 fn read_prepared(buf: &[f32], w: usize, (distance, frac): (usize, f32)) -> f32 {
     let len = buf.len();
-    let i0 = if w >= distance { w - distance } else { len - (distance - w) };
+    let i0 = if w >= distance {
+        w - distance
+    } else {
+        len - (distance - w)
+    };
     let i1 = if i0 == 0 { len - 1 } else { i0 - 1 };
     buf[i0] + (buf[i1] - buf[i0]) * frac
 }
 
 /// Note divisions for tempo-synced delay, in quarter notes.
-const DIVISIONS: &[&str] = &["1/1", "1/2", "1/4", "1/8", "1/16", "1/4 dotted", "1/8 dotted", "1/4 triplet", "1/8 triplet"];
+const DIVISIONS: &[&str] = &[
+    "1/1",
+    "1/2",
+    "1/4",
+    "1/8",
+    "1/16",
+    "1/4 dotted",
+    "1/8 dotted",
+    "1/4 triplet",
+    "1/8 triplet",
+];
 const DIVISION_QUARTERS: [f32; 9] = [4.0, 2.0, 1.0, 0.5, 0.25, 1.5, 0.75, 2.0 / 3.0, 1.0 / 3.0];
 
 /// Delay time in ms for a tempo and division index.
@@ -77,7 +97,11 @@ impl Delay {
 
     /// Effective delay time (ms) at the current settings.
     pub fn delay_ms(&self) -> f32 {
-        let ms = if self.pv.idx("mode") == 1 { tempo_delay_ms(self.pv.v("bpm"), self.pv.idx("division")) } else { self.pv.v("time") };
+        let ms = if self.pv.idx("mode") == 1 {
+            tempo_delay_ms(self.pv.v("bpm"), self.pv.idx("division"))
+        } else {
+            self.pv.v("time")
+        };
         ms.min(Self::MAX_MS)
     }
 
@@ -96,7 +120,9 @@ impl Delay {
 impl AudioEffect for Delay {
     param_plumbing!("delay");
     fn reset(&mut self) {
-        self.bufs.iter_mut().for_each(|b| b.iter_mut().for_each(|v| *v = 0.0));
+        self.bufs
+            .iter_mut()
+            .for_each(|b| b.iter_mut().for_each(|v| *v = 0.0));
         self.w = 0;
         self.time.snap();
         self.feedback.snap();
@@ -158,7 +184,14 @@ pub struct Reverb {
 
 impl Reverb {
     pub const PARAMS: &'static [ParamSpec] = &[
-        ParamSpec::new("predelay", "Pre-delay", 0.0, 200.0, 20.0, Unit::Milliseconds),
+        ParamSpec::new(
+            "predelay",
+            "Pre-delay",
+            0.0,
+            200.0,
+            20.0,
+            Unit::Milliseconds,
+        ),
         ParamSpec::log("decay", "Decay (RT60)", 0.1, 20.0, 2.0, Unit::Seconds),
         ParamSpec::new("damping", "HF Damping", 0.0, 100.0, 40.0, Unit::Percent),
         ParamSpec::new("size", "Room Size", 0.0, 100.0, 50.0, Unit::Percent),
@@ -195,7 +228,8 @@ impl Reverb {
         for (k, l) in self.len.iter_mut().enumerate() {
             l.set(BASE_MS[k] * scale * 0.001 * self.sr);
         }
-        self.pre_len.set((self.pv.v("predelay") * 0.001 * self.sr).max(1.0));
+        self.pre_len
+            .set((self.pv.v("predelay") * 0.001 * self.sr).max(1.0));
         self.damp.set(self.pv.v("damping") / 100.0 * 0.85);
         self.rt60.set(self.pv.v("decay"));
         self.mix.set(self.pv.v("mix") / 100.0);
@@ -226,7 +260,9 @@ impl Reverb {
 impl AudioEffect for Reverb {
     param_plumbing!("reverb");
     fn reset(&mut self) {
-        self.lines.iter_mut().for_each(|l| l.iter_mut().for_each(|v| *v = 0.0));
+        self.lines
+            .iter_mut()
+            .for_each(|l| l.iter_mut().for_each(|v| *v = 0.0));
         self.pre.iter_mut().for_each(|v| *v = 0.0);
         self.lp = [0.0; FDN];
         self.w = 0;
@@ -247,7 +283,8 @@ impl AudioEffect for Reverb {
         // while smoothing, and preserve the 32-sample gain update grid in both cases.
         let fixed = self.len.iter().all(|l| !l.is_smoothing());
         let delays = self.len.map(|l| prepare_delay(line_len, l.value()));
-        let predelay = (!self.pre_len.is_smoothing()).then(|| prepare_delay(pre_len, self.pre_len.value()));
+        let predelay =
+            (!self.pre_len.is_smoothing()).then(|| prepare_delay(pre_len, self.pre_len.value()));
         for i in 0..n {
             if self.counter == 0 {
                 self.update_gains();
@@ -273,12 +310,20 @@ impl AudioEffect for Reverb {
                 Some(delay) => read_prepared(&self.pre, self.pre_w, delay),
                 None => read_frac(&self.pre, self.pre_w, pd),
             };
-            self.pre_w = if self.pre_w + 1 == pre_len { 0 } else { self.pre_w + 1 };
+            self.pre_w = if self.pre_w + 1 == pre_len {
+                0
+            } else {
+                self.pre_w + 1
+            };
 
             let mut v = [0.0f32; FDN];
             let mut sum = 0.0;
             for k in 0..FDN {
-                let d = if fixed { read_prepared(&self.lines[k], self.w, delays[k]) } else { read_frac(&self.lines[k], self.w, self.len[k].value()) };
+                let d = if fixed {
+                    read_prepared(&self.lines[k], self.w, delays[k])
+                } else {
+                    read_frac(&self.lines[k], self.w, self.len[k].value())
+                };
                 self.lp[k] = flush32(d + (self.lp[k] - d) * damp);
                 v[k] = self.lp[k] * self.gains[k];
                 sum += v[k];
@@ -290,7 +335,11 @@ impl AudioEffect for Reverb {
                 wl += SIGN_L[k] * v[k];
                 wr += SIGN_R[k] * v[k];
             }
-            self.w = if self.w + 1 == line_len { 0 } else { self.w + 1 };
+            self.w = if self.w + 1 == line_len {
+                0
+            } else {
+                self.w + 1
+            };
             let (wl, wr) = (wl * 0.35, wr * 0.35);
             for (c, ch) in channels.iter_mut().enumerate() {
                 let x = ch[i];
@@ -491,8 +540,20 @@ mod throughput_tests {
         for len in [3, 4, 17, 257, 14078] {
             let buf: Vec<f32> = (0..len).map(|i| (i as f32 * 0.17).sin()).collect();
             for w in 0..len {
-                for delay in [-10.0, 0.0, 1.0, 1.25, 2.75, len as f32 - 2.0, len as f32, f32::INFINITY] {
-                    assert_eq!(read_frac(&buf, w, delay).to_bits(), read_frac_reference(&buf, w, delay).to_bits());
+                for delay in [
+                    -10.0,
+                    0.0,
+                    1.0,
+                    1.25,
+                    2.75,
+                    len as f32 - 2.0,
+                    len as f32,
+                    f32::INFINITY,
+                ] {
+                    assert_eq!(
+                        read_frac(&buf, w, delay).to_bits(),
+                        read_frac_reference(&buf, w, delay).to_bits()
+                    );
                 }
             }
         }
@@ -514,7 +575,15 @@ mod throughput_tests {
                 reference.reset();
             }
             let n = [0, 1, 17, 64, 513][block % 5];
-            let input: Vec<f32> = (0..n).map(|i| if block > 450 { 0.0 } else { ((i + block * 13) as f32 * 0.17).sin() * 0.3 }).collect();
+            let input: Vec<f32> = (0..n)
+                .map(|i| {
+                    if block > 450 {
+                        0.0
+                    } else {
+                        ((i + block * 13) as f32 * 0.17).sin() * 0.3
+                    }
+                })
+                .collect();
             let mut a = [input.clone(), input];
             let mut b = a.clone();
             let [al, ar] = &mut a;

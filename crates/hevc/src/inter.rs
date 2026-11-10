@@ -14,7 +14,10 @@ pub struct McScratch {
 
 impl Default for McScratch {
     fn default() -> Self {
-        McScratch { win: vec![0; WIN * WIN], tmp: vec![0; WIN * WIN] }
+        McScratch {
+            win: vec![0; WIN * WIN],
+            tmp: vec![0; WIN * WIN],
+        }
     }
 }
 
@@ -52,7 +55,12 @@ impl<S: Sample> Px for S {
 /// the samples under filter tap k: the row shifted by k (horizontal) or the k-th row (vertical);
 /// a function rather than an array of slices so nothing goes through the stack.
 #[inline(always)]
-fn filt_w<'a, P: Px + 'a, const T: usize, const W: usize>(tap: impl Fn(usize) -> Option<&'a [P]>, f: &[i8; T], shift: u32, out: &mut [i16]) {
+fn filt_w<'a, P: Px + 'a, const T: usize, const W: usize>(
+    tap: impl Fn(usize) -> Option<&'a [P]>,
+    f: &[i8; T],
+    shift: u32,
+    out: &mut [i16],
+) {
     let mut acc = [0i32; W];
     for k in 0..T {
         let c = f[k] as i32;
@@ -76,7 +84,11 @@ fn filt_w<'a, P: Px + 'a, const T: usize, const W: usize>(tap: impl Fn(usize) ->
 /// luma or chroma filter, 8.5.3.3.3.1 / 8.5.3.3.3.2), so it fits in an `i16`, and wrapping sums
 /// are exact whenever the final value fits. Twice the lanes of [`filt_w`] per vector.
 #[inline(always)]
-fn filt16_w<'a, P: Px + 'a, const T: usize, const W: usize>(tap: impl Fn(usize) -> Option<&'a [P]>, f: &[i8; T], out: &mut [i16]) {
+fn filt16_w<'a, P: Px + 'a, const T: usize, const W: usize>(
+    tap: impl Fn(usize) -> Option<&'a [P]>,
+    f: &[i8; T],
+    out: &mut [i16],
+) {
     let mut acc = [0i16; W];
     for k in 0..T {
         let c = f[k] as i16;
@@ -95,7 +107,14 @@ fn filt16_w<'a, P: Px + 'a, const T: usize, const W: usize>(tap: impl Fn(usize) 
 /// [`filt_w`] for a run of `w` outputs (prediction block widths are fixed sizes); in 16-bit lanes
 /// ([`filt16_w`]) when `narrow` (a first pass over 8-bit samples).
 #[inline(always)]
-fn filt<'a, P: Px + 'a, const T: usize>(tap: impl Fn(usize) -> Option<&'a [P]> + Copy, f: &[i8; T], shift: u32, out: &mut [i16], w: usize, narrow: bool) {
+fn filt<'a, P: Px + 'a, const T: usize>(
+    tap: impl Fn(usize) -> Option<&'a [P]> + Copy,
+    f: &[i8; T],
+    shift: u32,
+    out: &mut [i16],
+    w: usize,
+    narrow: bool,
+) {
     if narrow {
         match w {
             4 => return filt16_w::<P, T, 4>(tap, f, out),
@@ -122,7 +141,9 @@ fn filt<'a, P: Px + 'a, const T: usize>(tap: impl Fn(usize) -> Option<&'a [P]> +
         64 => filt_w::<P, T, 64>(tap, f, shift, out),
         _ => {
             for (j, o) in out.iter_mut().take(w).enumerate() {
-                let s: i32 = (0..T).map(|k| f[k] as i32 * tap(k).and_then(|s| s.get(j)).map_or(0, |p| p.w32())).sum();
+                let s: i32 = (0..T)
+                    .map(|k| f[k] as i32 * tap(k).and_then(|s| s.get(j)).map_or(0, |p| p.w32()))
+                    .sum();
                 *o = (s >> shift) as i16;
             }
         }
@@ -137,7 +158,11 @@ fn h_taps<'a, P>(row: &'a [P]) -> impl Fn(usize) -> Option<&'a [P]> + Copy {
 
 /// The taps of a vertical filter: row `r + k` from sample `x` on.
 #[inline(always)]
-fn v_taps<'a, P>(rows: &'a [&'a [P]], r: usize, x: usize) -> impl Fn(usize) -> Option<&'a [P]> + Copy {
+fn v_taps<'a, P>(
+    rows: &'a [&'a [P]],
+    r: usize,
+    x: usize,
+) -> impl Fn(usize) -> Option<&'a [P]> + Copy {
     move |k| rows.get(r + k).and_then(|row| row.get(x..))
 }
 
@@ -165,7 +190,9 @@ fn interpolate<P: Px, const T: usize>(
     let out_rows = out.chunks_mut(w).take(h);
     if fx == 0 && fy == 0 {
         for (r, o) in out_rows.enumerate() {
-            let Some(src) = rows.get(r + m).and_then(|row| row.get(m..)) else { return };
+            let Some(src) = rows.get(r + m).and_then(|row| row.get(m..)) else {
+                return;
+            };
             for (o, &s) in o.iter_mut().zip(src) {
                 *o = s.w16() << shift3;
             }
@@ -213,7 +240,9 @@ fn predict_block<S: Sample, const T: usize>(
     let mut rows: [&[S]; WIN] = [&[]; WIN];
     if let Some(rows) = rows.get_mut(..wh) {
         if f.window_rows(c, x0, y0, ww, rows) {
-            interpolate::<S, T>(rows, tmp, fx, fy, filters.0, filters.1, w, h, shift1, shift3, out);
+            interpolate::<S, T>(
+                rows, tmp, fx, fy, filters.0, filters.1, w, h, shift1, shift3, out,
+            );
             return;
         }
     }
@@ -226,33 +255,84 @@ fn predict_block<S: Sample, const T: usize>(
     for (r, row) in wrows.iter_mut().zip(win.chunks(WIN)).take(wh) {
         *r = row;
     }
-    interpolate::<i16, T>(&wrows[..wh.min(WIN)], tmp, fx, fy, filters.0, filters.1, w, h, shift1, shift3, out);
+    interpolate::<i16, T>(
+        &wrows[..wh.min(WIN)],
+        tmp,
+        fx,
+        fy,
+        filters.0,
+        filters.1,
+        w,
+        h,
+        shift1,
+        shift3,
+        out,
+    );
 }
 
 /// Luma prediction samples (14-bit intermediate precision) of a w x h block at (x, y) displaced by the
 /// quarter-sample motion vector `mv`, into `out` (stride w).
 #[allow(clippy::too_many_arguments)]
-pub fn mc_luma<S: Sample>(f: &Frame, x: i32, y: i32, mv: [i16; 2], w: usize, h: usize, out: &mut [i16], sc: &mut McScratch) {
+pub fn mc_luma<S: Sample>(
+    f: &Frame,
+    x: i32,
+    y: i32,
+    mv: [i16; 2],
+    w: usize,
+    h: usize,
+    out: &mut [i16],
+    sc: &mut McScratch,
+) {
     let bd = f.bit_depth;
     let (fx, fy) = ((mv[0] & 3) as usize, (mv[1] & 3) as usize);
     let xi = x + (mv[0] as i32 >> 2);
     let yi = y + (mv[1] as i32 >> 2);
     let shift1 = bd.min(12) - 8;
     let shift3 = 14 - bd;
-    predict_block::<S, 8>(f, 0, (xi - 3, yi - 3), (fx, fy), (&LUMA_FILTER[fx], &LUMA_FILTER[fy]), (w, h), (shift1, shift3), out, sc);
+    predict_block::<S, 8>(
+        f,
+        0,
+        (xi - 3, yi - 3),
+        (fx, fy),
+        (&LUMA_FILTER[fx], &LUMA_FILTER[fy]),
+        (w, h),
+        (shift1, shift3),
+        out,
+        sc,
+    );
 }
 
 /// Chroma prediction samples of a w x h chroma block at chroma position (x, y) with a 1/8-sample
 /// vector (4:2:0).
 #[allow(clippy::too_many_arguments)]
-pub fn mc_chroma<S: Sample>(f: &Frame, c: usize, x: i32, y: i32, mv: [i16; 2], w: usize, h: usize, out: &mut [i16], sc: &mut McScratch) {
+pub fn mc_chroma<S: Sample>(
+    f: &Frame,
+    c: usize,
+    x: i32,
+    y: i32,
+    mv: [i16; 2],
+    w: usize,
+    h: usize,
+    out: &mut [i16],
+    sc: &mut McScratch,
+) {
     let bd = f.bit_depth_c;
     let (fx, fy) = ((mv[0] & 7) as usize, (mv[1] & 7) as usize);
     let xi = x + (mv[0] as i32 >> 3);
     let yi = y + (mv[1] as i32 >> 3);
     let shift1 = bd.min(12) - 8;
     let shift3 = 14 - bd;
-    predict_block::<S, 4>(f, c + 1, (xi - 1, yi - 1), (fx, fy), (&CHROMA_FILTER[fx], &CHROMA_FILTER[fy]), (w, h), (shift1, shift3), out, sc);
+    predict_block::<S, 4>(
+        f,
+        c + 1,
+        (xi - 1, yi - 1),
+        (fx, fy),
+        (&CHROMA_FILTER[fx], &CHROMA_FILTER[fy]),
+        (w, h),
+        (shift1, shift3),
+        out,
+        sc,
+    );
 }
 
 /// Calls `$f::<_, W>(args)` with `W` the prediction block width `$w` as a constant (block widths are
@@ -288,7 +368,14 @@ pub fn put_uni<S: Sample>(p: &[i16], w: usize, h: usize, bd: u32, dst: &mut [S],
 /// in an `i16` and the sums are exact. SSE2 clips 16-bit lanes in one instruction each, 32-bit lanes
 /// in four.
 #[inline(always)]
-fn put_uni_w<S: Sample, const W: usize>(p: &[i16], w: usize, h: usize, bd: u32, dst: &mut [S], ds: usize) {
+fn put_uni_w<S: Sample, const W: usize>(
+    p: &[i16],
+    w: usize,
+    h: usize,
+    bd: u32,
+    dst: &mut [S],
+    ds: usize,
+) {
     let w = if W > 0 { W } else { w };
     let shift = 14 - bd;
     let off: i16 = if shift > 0 { 1 << (shift - 1) } else { 0 };
@@ -302,7 +389,15 @@ fn put_uni_w<S: Sample, const W: usize>(p: &[i16], w: usize, h: usize, bd: u32, 
 }
 
 /// Default weighted prediction, bi-prediction (8-263).
-pub fn put_bi<S: Sample>(p0: &[i16], p1: &[i16], w: usize, h: usize, bd: u32, dst: &mut [S], ds: usize) {
+pub fn put_bi<S: Sample>(
+    p0: &[i16],
+    p1: &[i16],
+    w: usize,
+    h: usize,
+    bd: u32,
+    dst: &mut [S],
+    ds: usize,
+) {
     by_width!(w, put_bi_w(p0, p1, w, h, bd, dst, ds))
 }
 
@@ -312,26 +407,56 @@ pub fn put_bi<S: Sample>(p0: &[i16], p1: &[i16], w: usize, h: usize, bd: u32, ds
 /// `((a >> 1) + (b >> 1) + (a & b & 1) + off / 2) >> (shift - 1)` (the two dropped low bits only
 /// carry when both are set), and `(a >> 1) + (b >> 1)` fits in an `i16` (see [`put_uni_w`]).
 #[inline(always)]
-fn put_bi_w<S: Sample, const W: usize>(p0: &[i16], p1: &[i16], w: usize, h: usize, bd: u32, dst: &mut [S], ds: usize) {
+fn put_bi_w<S: Sample, const W: usize>(
+    p0: &[i16],
+    p1: &[i16],
+    w: usize,
+    h: usize,
+    bd: u32,
+    dst: &mut [S],
+    ds: usize,
+) {
     let w = if W > 0 { W } else { w };
     let shift = 15 - bd; // >= 3 (bd <= 12)
     let half_off: i16 = 1 << (shift - 2);
     let max = ((1i32 << bd) - 1) as i16;
-    for ((d, a), b) in dst.chunks_mut(ds).zip(p0[..w * h].chunks(w)).zip(p1[..w * h].chunks(w)) {
+    for ((d, a), b) in dst
+        .chunks_mut(ds)
+        .zip(p0[..w * h].chunks(w))
+        .zip(p1[..w * h].chunks(w))
+    {
         for ((d, &a), &b) in d[..w].iter_mut().zip(a).zip(b) {
-            let v = (a >> 1).wrapping_add(b >> 1).wrapping_add(a & b & 1).wrapping_add(half_off) >> (shift - 1);
+            let v = (a >> 1)
+                .wrapping_add(b >> 1)
+                .wrapping_add(a & b & 1)
+                .wrapping_add(half_off)
+                >> (shift - 1);
             *d = S::from_i32(v.max(0).min(max) as i32);
         }
     }
 }
 
 /// Explicit weighted prediction, one list (8-265). `o` is the offset already scaled to the bit depth.
-pub fn put_weighted_uni<S: Sample>(p: &[i16], w: usize, h: usize, bd: u32, log2wd: u32, wt: i32, o: i32, dst: &mut [S], ds: usize) {
+pub fn put_weighted_uni<S: Sample>(
+    p: &[i16],
+    w: usize,
+    h: usize,
+    bd: u32,
+    log2wd: u32,
+    wt: i32,
+    o: i32,
+    dst: &mut [S],
+    ds: usize,
+) {
     let max = (1i32 << bd) - 1;
     for r in 0..h {
         for c in 0..w {
             let v = p[r * w + c] as i32 * wt;
-            let v = if log2wd >= 1 { ((v + (1 << (log2wd - 1))) >> log2wd) + o } else { v + o };
+            let v = if log2wd >= 1 {
+                ((v + (1 << (log2wd - 1))) >> log2wd) + o
+            } else {
+                v + o
+            };
             dst[r * ds + c] = S::from_i32(v.max(0).min(max));
         }
     }
@@ -356,7 +481,8 @@ pub fn put_weighted_bi<S: Sample>(
     for r in 0..h {
         for c in 0..w {
             let i = r * w + c;
-            let v = (p0[i] as i32 * w0 + p1[i] as i32 * w1 + ((o0 + o1 + 1) << log2wd)) >> (log2wd + 1);
+            let v =
+                (p0[i] as i32 * w0 + p1[i] as i32 * w1 + ((o0 + o1 + 1) << log2wd)) >> (log2wd + 1);
             dst[r * ds + c] = S::from_i32(v.max(0).min(max));
         }
     }
@@ -409,9 +535,17 @@ mod tests {
                         let (a, b) = (p0[r * w + c] as i32, p1[r * w + c] as i32);
                         let s1 = 14 - bd;
                         let o1 = if s1 > 0 { 1 << (s1 - 1) } else { 0 };
-                        assert_eq!(uni[r * ds + c] as i32, ((a + o1) >> s1).clamp(0, max), "uni bd {bd} w {w} a {a}");
+                        assert_eq!(
+                            uni[r * ds + c] as i32,
+                            ((a + o1) >> s1).clamp(0, max),
+                            "uni bd {bd} w {w} a {a}"
+                        );
                         let s2 = 15 - bd;
-                        assert_eq!(bi[r * ds + c] as i32, ((a + b + (1 << (s2 - 1))) >> s2).clamp(0, max), "bi bd {bd} w {w} a {a} b {b}");
+                        assert_eq!(
+                            bi[r * ds + c] as i32,
+                            ((a + b + (1 << (s2 - 1))) >> s2).clamp(0, max),
+                            "bi bd {bd} w {w} a {a} b {b}"
+                        );
                     }
                 }
             }
@@ -429,12 +563,19 @@ mod tests {
             for &w in &WIDTHS {
                 for _ in 0..40 {
                     let h = 2;
-                    let p0: Vec<i16> = (0..w * h).map(|_| rng.range(-10_240, 26_624) as i16).collect();
-                    let p1: Vec<i16> = (0..w * h).map(|_| rng.range(-10_240, 26_624) as i16).collect();
+                    let p0: Vec<i16> = (0..w * h)
+                        .map(|_| rng.range(-10_240, 26_624) as i16)
+                        .collect();
+                    let p1: Vec<i16> = (0..w * h)
+                        .map(|_| rng.range(-10_240, 26_624) as i16)
+                        .collect();
                     let log2wd = rng.range(0, 7) as u32 + 14 - bd;
-                    let wt = |rng: &mut Rng| [-128, 255, rng.range(-128, 255)][rng.range(0, 2) as usize];
+                    let wt =
+                        |rng: &mut Rng| [-128, 255, rng.range(-128, 255)][rng.range(0, 2) as usize];
                     let (w0, w1) = (wt(&mut rng), wt(&mut rng));
-                    let off = |rng: &mut Rng| [-128, 127, rng.range(-128, 127)][rng.range(0, 2) as usize] << (bd - 8);
+                    let off = |rng: &mut Rng| {
+                        [-128, 127, rng.range(-128, 127)][rng.range(0, 2) as usize] << (bd - 8)
+                    };
                     let (o0, o1) = (off(&mut rng), off(&mut rng));
                     let ds = w + 3;
                     let (mut uni, mut bi) = (vec![0u16; ds * h], vec![0u16; ds * h]);
@@ -443,16 +584,41 @@ mod tests {
                     let denom = log2wd - (14 - bd);
                     let (mut duni, mut dbi) = (vec![0u16; ds * h], vec![0u16; ds * h]);
                     put_weighted_uni(&p0, w, h, bd, log2wd, 1 << denom, 0, &mut duni, ds);
-                    put_weighted_bi(&p0, &p1, w, h, bd, log2wd, 1 << denom, 1 << denom, 0, 0, &mut dbi, ds);
+                    put_weighted_bi(
+                        &p0,
+                        &p1,
+                        w,
+                        h,
+                        bd,
+                        log2wd,
+                        1 << denom,
+                        1 << denom,
+                        0,
+                        0,
+                        &mut dbi,
+                        ds,
+                    );
                     let (mut uni0, mut bi0) = (vec![0u16; ds * h], vec![0u16; ds * h]);
                     put_uni(&p0, w, h, bd, &mut uni0, ds);
                     put_bi(&p0, &p1, w, h, bd, &mut bi0, ds);
-                    assert_eq!((duni, dbi), (uni0, bi0), "default weights bd {bd} w {w} denom {denom}");
+                    assert_eq!(
+                        (duni, dbi),
+                        (uni0, bi0),
+                        "default weights bd {bd} w {w} denom {denom}"
+                    );
                     for r in 0..h {
                         for c in 0..w {
                             let (a, b) = (p0[r * w + c] as i32, p1[r * w + c] as i32);
-                            let v = if log2wd >= 1 { ((a * w0 + (1 << (log2wd - 1))) >> log2wd) + o0 } else { a * w0 + o0 };
-                            assert_eq!(uni[r * ds + c] as i32, v.clamp(0, max), "uni bd {bd} w {w}");
+                            let v = if log2wd >= 1 {
+                                ((a * w0 + (1 << (log2wd - 1))) >> log2wd) + o0
+                            } else {
+                                a * w0 + o0
+                            };
+                            assert_eq!(
+                                uni[r * ds + c] as i32,
+                                v.clamp(0, max),
+                                "uni bd {bd} w {w}"
+                            );
                             let v = (a * w0 + b * w1 + ((o0 + o1 + 1) << log2wd)) >> (log2wd + 1);
                             assert_eq!(bi[r * ds + c] as i32, v.clamp(0, max), "bi bd {bd} w {w}");
                         }
@@ -477,7 +643,9 @@ mod tests {
         for &w in &WIDTHS {
             for step in [1usize, WIN] {
                 let len = w + 7 * step + 8;
-                let mut patterns: Vec<Vec<i16>> = (0..20).map(|_| (0..len).map(|_| rng.range(0, 255) as i16).collect()).collect();
+                let mut patterns: Vec<Vec<i16>> = (0..20)
+                    .map(|_| (0..len).map(|_| rng.range(0, 255) as i16).collect())
+                    .collect();
                 patterns.push(vec![255; len]);
                 patterns.push(vec![0; len]);
                 for f in LUMA_FILTER.iter() {
@@ -525,7 +693,10 @@ mod tests {
             let (mut in_place, mut copied) = (0, 0);
             for _ in 0..2000 {
                 let c = rng.range(0, 2) as usize;
-                let (w, h) = ([4usize, 8, 12, 16, 24, 32][rng.range(0, 5) as usize], [4usize, 8, 16, 32][rng.range(0, 3) as usize]);
+                let (w, h) = (
+                    [4usize, 8, 12, 16, 24, 32][rng.range(0, 5) as usize],
+                    [4usize, 8, 16, 32][rng.range(0, 3) as usize],
+                );
                 let (w, h) = if c == 0 { (w, h) } else { (w / 2, h / 2) };
                 let (x, y) = (rng.range(-12, 100), rng.range(-12, 70));
                 let mv = [rng.range(-64, 64) as i16, rng.range(-64, 64) as i16];
@@ -533,7 +704,10 @@ mod tests {
                 let mut b = vec![0i16; w * h];
                 let (t, frac, unit) = if c == 0 { (8usize, 3, 2) } else { (4, 7, 3) };
                 let (fx, fy) = ((mv[0] & frac) as usize, (mv[1] & frac) as usize);
-                let (x0, y0) = (x + (mv[0] as i32 >> unit) - (t as i32 / 2 - 1), y + (mv[1] as i32 >> unit) - (t as i32 / 2 - 1));
+                let (x0, y0) = (
+                    x + (mv[0] as i32 >> unit) - (t as i32 / 2 - 1),
+                    y + (mv[1] as i32 >> unit) - (t as i32 / 2 - 1),
+                );
                 let (shift1, shift3) = (bd - 8, 14 - bd);
                 let mut rows: Vec<&[S]> = vec![&[]; h + t - 1];
                 if f.window_rows(c, x0, y0, w + t - 1, &mut rows) {
@@ -552,14 +726,41 @@ mod tests {
                 let wrows: Vec<&[i16]> = win.chunks(WIN).take(h + t - 1).collect();
                 if c == 0 {
                     mc_luma::<S>(&f, x, y, mv, w, h, &mut a, &mut sc);
-                    interpolate::<i16, 8>(&wrows, &mut tmp, fx, fy, &LUMA_FILTER[fx], &LUMA_FILTER[fy], w, h, shift1, shift3, &mut b);
+                    interpolate::<i16, 8>(
+                        &wrows,
+                        &mut tmp,
+                        fx,
+                        fy,
+                        &LUMA_FILTER[fx],
+                        &LUMA_FILTER[fy],
+                        w,
+                        h,
+                        shift1,
+                        shift3,
+                        &mut b,
+                    );
                 } else {
                     mc_chroma::<S>(&f, c - 1, x, y, mv, w, h, &mut a, &mut sc);
-                    interpolate::<i16, 4>(&wrows, &mut tmp, fx, fy, &CHROMA_FILTER[fx], &CHROMA_FILTER[fy], w, h, shift1, shift3, &mut b);
+                    interpolate::<i16, 4>(
+                        &wrows,
+                        &mut tmp,
+                        fx,
+                        fy,
+                        &CHROMA_FILTER[fx],
+                        &CHROMA_FILTER[fy],
+                        w,
+                        h,
+                        shift1,
+                        shift3,
+                        &mut b,
+                    );
                 }
                 assert_eq!(a, b, "plane {c} bd {bd} at ({x}, {y}) mv {mv:?} {w}x{h}");
             }
-            assert!(in_place > 500 && copied > 100, "{in_place} in place, {copied} copied");
+            assert!(
+                in_place > 500 && copied > 100,
+                "{in_place} in place, {copied} copied"
+            );
         }
         let mut rng = Rng(0x5851_f42d_4c95_7f2d);
         check::<u8>(&mut rng, 8);
@@ -575,11 +776,23 @@ mod tests {
             let mut sc = McScratch::default();
             let f = frame(rng, 48, 40, bd);
             for _ in 0..300 {
-                let (w, h) = ([4usize, 8, 12, 16, 24, 32][rng.range(0, 5) as usize], [4usize, 8, 16][rng.range(0, 2) as usize]);
+                let (w, h) = (
+                    [4usize, 8, 12, 16, 24, 32][rng.range(0, 5) as usize],
+                    [4usize, 8, 16][rng.range(0, 2) as usize],
+                );
                 let (x, y) = (rng.range(-40, 80), rng.range(-40, 70));
                 let mut pred = vec![0i16; w * h];
                 let (mut a, mut b) = (vec![S::default(); w * h], vec![S::default(); w * h]);
-                mc_luma::<S>(&f, 0, 0, [(x * 4) as i16, (y * 4) as i16], w, h, &mut pred, &mut sc);
+                mc_luma::<S>(
+                    &f,
+                    0,
+                    0,
+                    [(x * 4) as i16, (y * 4) as i16],
+                    w,
+                    h,
+                    &mut pred,
+                    &mut sc,
+                );
                 put_uni(&pred, w, h, bd, &mut a, w);
                 f.copy_block(0, x, y, w, h, &mut b, w);
                 assert_eq!(a, b, "luma bd {bd} at ({x}, {y}) {w}x{h}");
@@ -587,7 +800,17 @@ mod tests {
                 assert!(a.iter().any(|&v| v != S::default()) || w * h < 8);
                 for c in 1..3 {
                     let (cw, ch) = (w / 2, h / 2);
-                    mc_chroma::<S>(&f, c - 1, 0, 0, [(x * 8) as i16, (y * 8) as i16], cw, ch, &mut pred, &mut sc);
+                    mc_chroma::<S>(
+                        &f,
+                        c - 1,
+                        0,
+                        0,
+                        [(x * 8) as i16, (y * 8) as i16],
+                        cw,
+                        ch,
+                        &mut pred,
+                        &mut sc,
+                    );
                     let (mut a, mut b) = (vec![S::default(); cw * ch], vec![S::default(); cw * ch]);
                     put_uni(&pred, cw, ch, bd, &mut a, cw);
                     f.copy_block(c, x, y, cw, ch, &mut b, cw);

@@ -142,7 +142,12 @@ impl Slices {
     /// A fresh slice id (Photoshop counts from 1; auto slices use ids too, so leave room).
     /// Returns `None` when the stored ids have exhausted the `u32` id space.
     pub fn next_id(&self) -> Option<u32> {
-        self.list.iter().map(|s| s.id).max().unwrap_or(0).checked_add(1)
+        self.list
+            .iter()
+            .map(|s| s.id)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
     }
     pub fn get(&self, id: u32) -> Option<&Slice> {
         self.list.iter().find(|s| s.id == id)
@@ -171,7 +176,12 @@ pub struct ResolvedSlice {
 /// clipped to the canvas.
 fn clipped(doc: &Document) -> Vec<(u32, Rect)> {
     let canvas = doc.bounds();
-    doc.slices.list.iter().map(|s| (s.id, s.rect.intersect(&canvas))).filter(|(_, r)| !r.is_empty()).collect()
+    doc.slices
+        .list
+        .iter()
+        .map(|s| (s.id, s.rect.intersect(&canvas)))
+        .filter(|(_, r)| !r.is_empty())
+        .collect()
 }
 
 /// Rectangles that tile `canvas` minus `taken`. The canvas is cut into a grid along every slice
@@ -195,7 +205,11 @@ pub fn auto_slices(canvas: Rect, taken: &[Rect]) -> Vec<Rect> {
     xs.dedup();
     ys.sort_unstable();
     ys.dedup();
-    let covered = |x0: i32, y0: i32| taken.iter().any(|r| x0 >= r.x0 && x0 < r.x1 && y0 >= r.y0 && y0 < r.y1);
+    let covered = |x0: i32, y0: i32| {
+        taken
+            .iter()
+            .any(|r| x0 >= r.x0 && x0 < r.x1 && y0 >= r.y0 && y0 < r.y1)
+    };
     // Horizontal runs per row band.
     let mut runs: Vec<Rect> = Vec::new();
     for yw in ys.windows(2) {
@@ -218,7 +232,10 @@ pub fn auto_slices(canvas: Rect, taken: &[Rect]) -> Vec<Rect> {
     // Merge vertically adjacent runs with the same columns.
     let mut out: Vec<Rect> = Vec::new();
     for r in runs {
-        if let Some(prev) = out.iter_mut().find(|p| p.x0 == r.x0 && p.x1 == r.x1 && p.y1 == r.y0) {
+        if let Some(prev) = out
+            .iter_mut()
+            .find(|p| p.x0 == r.x0 && p.x1 == r.x1 && p.y1 == r.y0)
+        {
             prev.y1 = r.y1;
         } else {
             out.push(r);
@@ -235,7 +252,11 @@ pub fn resolve(doc: &Document) -> Vec<ResolvedSlice> {
     let stored = clipped(doc);
     let rects: Vec<Rect> = stored.iter().map(|(_, r)| *r).collect();
     let mut all: Vec<(Option<u32>, Rect)> = stored.iter().map(|(id, r)| (Some(*id), *r)).collect();
-    all.extend(auto_slices(doc.bounds(), &rects).into_iter().map(|r| (None, r)));
+    all.extend(
+        auto_slices(doc.bounds(), &rects)
+            .into_iter()
+            .map(|r| (None, r)),
+    );
     all.sort_by_key(|(_, r)| (r.y0, r.x0));
     let single = all.len() == 1;
     all.into_iter()
@@ -248,16 +269,39 @@ pub fn resolve(doc: &Document) -> Vec<ResolvedSlice> {
                 None if single => base.clone(),
                 None => format!("{base}_{number:02}"),
             };
-            ResolvedSlice { number, id, origin: s.map_or(SliceOrigin::Auto, |s| s.origin), rect, name, kind: s.map_or(SliceKind::Image, |s| s.kind) }
+            ResolvedSlice {
+                number,
+                id,
+                origin: s.map_or(SliceOrigin::Auto, |s| s.origin),
+                rect,
+                name,
+                kind: s.map_or(SliceKind::Image, |s| s.kind),
+            }
         })
         .collect()
 }
 
 /// The base of generated slice names: the document name without extension, file-name safe.
 pub fn base_name(doc: &Document) -> String {
-    let n = doc.name.rsplit_once('.').map_or(doc.name.as_str(), |(a, _)| a);
-    let s: String = n.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
-    if s.is_empty() { "Untitled".into() } else { s }
+    let n = doc
+        .name
+        .rsplit_once('.')
+        .map_or(doc.name.as_str(), |(a, _)| a);
+    let s: String = n
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if s.is_empty() {
+        "Untitled".into()
+    } else {
+        s
+    }
 }
 
 #[cfg(test)]
@@ -266,7 +310,9 @@ mod tests {
     use crate::{ColorMode, SampleType, Size};
 
     fn area(rs: &[Rect]) -> i64 {
-        rs.iter().map(|r| i64::from(r.width()) * i64::from(r.height())).sum()
+        rs.iter()
+            .map(|r| i64::from(r.width()) * i64::from(r.height()))
+            .sum()
     }
 
     #[test]
@@ -289,10 +335,19 @@ mod tests {
 
     #[test]
     fn resolve_numbers_top_to_bottom() {
-        let mut d = Document::new("site.psd", Size::new(100, 80), ColorMode::Rgb, SampleType::U8);
+        let mut d = Document::new(
+            "site.psd",
+            Size::new(100, 80),
+            ColorMode::Rgb,
+            SampleType::U8,
+        );
         assert_eq!(resolve(&d).len(), 1);
         assert_eq!(resolve(&d)[0].name, "site");
-        d.slices.list.push(Slice { id: 1, rect: Rect::new(20, 10, 60, 30), ..Default::default() });
+        d.slices.list.push(Slice {
+            id: 1,
+            rect: Rect::new(20, 10, 60, 30),
+            ..Default::default()
+        });
         let r = resolve(&d);
         assert_eq!(r.len(), 5);
         assert_eq!(r[0].name, "site_01");
@@ -305,7 +360,13 @@ mod tests {
 
     #[test]
     fn exhausted_slice_id_survives_serialization() {
-        let slices = Slices { list: vec![Slice { id: u32::MAX, ..Default::default() }], ..Default::default() };
+        let slices = Slices {
+            list: vec![Slice {
+                id: u32::MAX,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
         let value = serde_json::to_value(&slices).unwrap();
         let loaded: Slices = serde_json::from_value(value).unwrap();
         assert_eq!(loaded.next_id(), None);

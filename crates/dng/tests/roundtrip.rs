@@ -2,10 +2,10 @@
 //! every depth, lossless JPEG with every predictor), the processing maths against hand-computed
 //! values, CinemaDNG metadata, and hostile files.
 
-use rust_motion_dng::color::{D50, D65, bradford, inverse, mul, rec709_to_xyz, xy_to_xyz};
+use rust_motion_dng::color::{bradford, inverse, mul, rec709_to_xyz, xy_to_xyz, D50, D65};
 use rust_motion_dng::tiff::tags;
-use rust_motion_dng::writer::{Compression, Layout, Options, Value, lj92, write};
-use rust_motion_dng::{Dng, Error, Timecode, decode, ljpeg, probe, sniff};
+use rust_motion_dng::writer::{lj92, write, Compression, Layout, Options, Value};
+use rust_motion_dng::{decode, ljpeg, probe, sniff, Dng, Error, Timecode};
 
 /// A deterministic pseudo-random sequence.
 fn noise(n: usize, bits: u32, seed: u32) -> Vec<u16> {
@@ -38,12 +38,28 @@ fn sniff_and_container() {
     let px = picture(16, 8, 1, 12, 1);
     for be in [false, true] {
         for preview in [false, true] {
-            let o = Options { width: 16, height: 8, bits: 12, big_endian: be, preview, ..Default::default() };
+            let o = Options {
+                width: 16,
+                height: 8,
+                bits: 12,
+                big_endian: be,
+                preview,
+                ..Default::default()
+            };
             let f = write(&px, &o);
             assert!(sniff(&f), "be {be} preview {preview}");
             let d = Dng::parse(&f).unwrap();
             let info = d.info().unwrap();
-            assert_eq!((info.raw_width, info.raw_height, info.width, info.height, info.bits), (16, 8, 16, 8, 12));
+            assert_eq!(
+                (
+                    info.raw_width,
+                    info.raw_height,
+                    info.width,
+                    info.height,
+                    info.bits
+                ),
+                (16, 8, 16, 8, 12)
+            );
             assert!(info.cfa);
             assert_eq!(info.dng_version, [1, 4, 0, 0]);
             assert_eq!(info.camera.as_deref(), Some("FilmCraft Synthetic"));
@@ -65,14 +81,23 @@ fn sniff_and_container() {
 fn find_tag(f: &[u8], tag: u16) -> Option<usize> {
     let ifd = u32::from_le_bytes(f[4..8].try_into().unwrap()) as usize;
     let n = u16::from_le_bytes(f[ifd..ifd + 2].try_into().unwrap()) as usize;
-    (0..n).map(|i| ifd + 2 + 12 * i).find(|&e| u16::from_le_bytes(f[e..e + 2].try_into().unwrap()) == tag)
+    (0..n)
+        .map(|i| ifd + 2 + 12 * i)
+        .find(|&e| u16::from_le_bytes(f[e..e + 2].try_into().unwrap()) == tag)
 }
 
 #[test]
 fn uncompressed_every_depth_strips_and_tiles() {
     for bits in [8, 9, 10, 12, 14, 16] {
         for (spp, cfa) in [(1, true), (3, false)] {
-            for layout in [Layout::Strips { rows: 3 }, Layout::Strips { rows: 100 }, Layout::Tiles { width: 16, height: 8 }] {
+            for layout in [
+                Layout::Strips { rows: 3 },
+                Layout::Strips { rows: 100 },
+                Layout::Tiles {
+                    width: 16,
+                    height: 8,
+                },
+            ] {
                 for be in [false, true] {
                     let (w, h) = (21, 13);
                     let px = picture(w, h, spp, bits, bits + spp as u32);
@@ -99,9 +124,23 @@ fn uncompressed_every_depth_strips_and_tiles() {
 fn lossless_jpeg_every_predictor_bit_exact() {
     for predictor in 1..=7u8 {
         for bits in [8u32, 12, 14, 16] {
-            for (components, layout) in
-                [(1, Layout::Strips { rows: 5 }), (2, Layout::Tiles { width: 16, height: 16 }), (4, Layout::Tiles { width: 8, height: 4 })]
-            {
+            for (components, layout) in [
+                (1, Layout::Strips { rows: 5 }),
+                (
+                    2,
+                    Layout::Tiles {
+                        width: 16,
+                        height: 16,
+                    },
+                ),
+                (
+                    4,
+                    Layout::Tiles {
+                        width: 8,
+                        height: 4,
+                    },
+                ),
+            ] {
                 let (w, h) = (36, 22);
                 let px = picture(w, h, 1, bits, u32::from(predictor) * 7 + bits);
                 let o = Options {
@@ -109,13 +148,21 @@ fn lossless_jpeg_every_predictor_bit_exact() {
                     height: h,
                     bits,
                     layout,
-                    compression: Compression::LosslessJpeg { predictor, components, restart_lines: 0, pt: 0 },
+                    compression: Compression::LosslessJpeg {
+                        predictor,
+                        components,
+                        restart_lines: 0,
+                        pt: 0,
+                    },
                     ..Default::default()
                 };
                 let f = write(&px, &o);
                 assert_eq!(probe(&f).unwrap().compression, "lossless JPEG");
                 let raw = Dng::parse(&f).unwrap().raw().unwrap();
-                assert_eq!(raw.data, px, "predictor {predictor} bits {bits} components {components}");
+                assert_eq!(
+                    raw.data, px,
+                    "predictor {predictor} bits {bits} components {components}"
+                );
             }
         }
     }
@@ -131,13 +178,20 @@ fn lossless_jpeg_extremes_restarts_and_point_transform() {
     for predictor in 1..=7 {
         let j = lj92(&px, w, h, 2, 16, predictor, 0, 0);
         let d = ljpeg::decode(&j, 1 << 20).unwrap();
-        assert_eq!((d.width, d.height, d.components, d.precision, d.predictor), (w, h, 2, 16, predictor));
+        assert_eq!(
+            (d.width, d.height, d.components, d.precision, d.predictor),
+            (w, h, 2, 16, predictor)
+        );
         assert_eq!(d.samples, px, "predictor {predictor}");
         // restart markers every 2 and every 3 lines
         for r in [2, 3] {
             let j = lj92(&px, w, h, 2, 16, predictor, r, 0);
             assert!(j.windows(2).any(|b| b == [0xFF, 0xD0]), "has RST0");
-            assert_eq!(ljpeg::decode(&j, 1 << 20).unwrap().samples, px, "predictor {predictor} restart {r}");
+            assert_eq!(
+                ljpeg::decode(&j, 1 << 20).unwrap().samples,
+                px,
+                "predictor {predictor} restart {r}"
+            );
         }
     }
     // point transform: the low bits are dropped and the rest shifted back
@@ -146,13 +200,19 @@ fn lossless_jpeg_extremes_restarts_and_point_transform() {
     let want: Vec<u16> = px.iter().map(|v| v >> 2 << 2).collect();
     assert_eq!(ljpeg::decode(&j, 1 << 20).unwrap().samples, want);
     // the sample cap
-    assert_eq!(ljpeg::decode(&lj92(&px, 12, 6, 1, 14, 1, 0, 0), 71).err(), Some(Error::TooLarge));
+    assert_eq!(
+        ljpeg::decode(&lj92(&px, 12, 6, 1, 14, 1, 0, 0), 71).err(),
+        Some(Error::TooLarge)
+    );
 }
 
 /// The colour tags of a camera whose white-balanced values are Rec. 709 already.
 fn rec709_camera_tags(neutral: [f64; 3]) -> Vec<(u16, Value)> {
     let cm = inverse(&rec709_to_xyz().unwrap()).unwrap();
-    let fm = mul(&bradford(&xy_to_xyz(D65), &xy_to_xyz(D50)).unwrap(), &rec709_to_xyz().unwrap());
+    let fm = mul(
+        &bradford(&xy_to_xyz(D65), &xy_to_xyz(D50)).unwrap(),
+        &rec709_to_xyz().unwrap(),
+    );
     let flat = |m: [[f64; 3]; 3]| m.iter().flatten().copied().collect::<Vec<f64>>();
     vec![
         (tags::COLOR_MATRIX_1, Value::srationals(&flat(cm))),
@@ -188,21 +248,47 @@ fn develop_matches_hand_computed_values() {
         .collect();
     let mut main = rec709_camera_tags(neutral);
     main.push((tags::BASELINE_EXPOSURE, Value::SRational(vec![(0, 1)])));
-    let raw_tags = vec![(tags::BLACK_LEVEL, Value::Short(vec![64])), (tags::WHITE_LEVEL, Value::Short(vec![4064]))];
-    for compression in [Compression::None, Compression::LosslessJpeg { predictor: 6, components: 2, restart_lines: 0, pt: 0 }] {
-        let o = Options { width: w, height: h, bits: 12, compression, main_tags: main.clone(), raw_tags: raw_tags.clone(), ..Default::default() };
+    let raw_tags = vec![
+        (tags::BLACK_LEVEL, Value::Short(vec![64])),
+        (tags::WHITE_LEVEL, Value::Short(vec![4064])),
+    ];
+    for compression in [
+        Compression::None,
+        Compression::LosslessJpeg {
+            predictor: 6,
+            components: 2,
+            restart_lines: 0,
+            pt: 0,
+        },
+    ] {
+        let o = Options {
+            width: w,
+            height: h,
+            bits: 12,
+            compression,
+            main_tags: main.clone(),
+            raw_tags: raw_tags.clone(),
+            ..Default::default()
+        };
         let img = decode(&write(&px, &o)).unwrap();
         assert_eq!((img.width, img.height), (w, h));
         for y in 0..h {
             for x in 0..w {
                 // away from the quadrant edges (the demosaic reaches two pixels)
-                if (x as isize - w as isize / 2).abs() < 3 || (y as isize - h as isize / 2).abs() < 3 {
+                if (x as isize - w as isize / 2).abs() < 3
+                    || (y as isize - h as isize / 2).abs() < 3
+                {
                     continue;
                 }
                 let got = &img.rgba[(y * w + x) * 4..][..4];
                 let want = quad(x, y);
                 for k in 0..3 {
-                    assert!((got[k] - want[k] as f32).abs() < 2e-3, "({x},{y}) ch {k}: {} vs {}", got[k], want[k]);
+                    assert!(
+                        (got[k] - want[k] as f32).abs() < 2e-3,
+                        "({x},{y}) ch {k}: {} vs {}",
+                        got[k],
+                        want[k]
+                    );
                 }
                 assert_eq!(got[3], 1.0);
             }
@@ -211,9 +297,20 @@ fn develop_matches_hand_computed_values() {
     // BaselineExposure +1: twice as bright
     let mut main1 = rec709_camera_tags(neutral);
     main1.push((tags::BASELINE_EXPOSURE, Value::SRational(vec![(1, 1)])));
-    let o = Options { width: w, height: h, bits: 12, main_tags: main1, raw_tags, ..Default::default() };
+    let o = Options {
+        width: w,
+        height: h,
+        bits: 12,
+        main_tags: main1,
+        raw_tags,
+        ..Default::default()
+    };
     let img = decode(&write(&px, &o)).unwrap();
-    assert!((img.rgba[(4 * w + 4) * 4] - 1.0).abs() < 4e-3, "{}", img.rgba[(4 * w + 4) * 4]);
+    assert!(
+        (img.rgba[(4 * w + 4) * 4] - 1.0).abs() < 4e-3,
+        "{}",
+        img.rgba[(4 * w + 4) * 4]
+    );
 }
 
 #[test]
@@ -230,14 +327,20 @@ fn active_area_default_crop_and_linear_raw() {
         raw_tags: vec![
             (tags::ACTIVE_AREA, Value::Long(vec![1, 1, 5, 9])),
             (tags::DEFAULT_CROP_ORIGIN, Value::Long(vec![2, 1])),
-            (tags::DEFAULT_CROP_SIZE, Value::Rational(vec![(8, 2), (2, 1)])),
+            (
+                tags::DEFAULT_CROP_SIZE,
+                Value::Rational(vec![(8, 2), (2, 1)]),
+            ),
             (tags::WHITE_LEVEL, Value::Long(vec![65_535])),
         ],
         ..Default::default()
     };
     let f = write(&px, &o);
     let info = probe(&f).unwrap();
-    assert_eq!((info.width, info.height, info.cfa, info.samples_per_pixel), (4, 2, false, 3));
+    assert_eq!(
+        (info.width, info.height, info.cfa, info.samples_per_pixel),
+        (4, 2, false, 3)
+    );
     let img = decode(&f).unwrap();
     assert_eq!((img.width, img.height), (4, 2));
     // output (0, 0) is raw (1 + 2, 1 + 1) = sample 23
@@ -255,19 +358,37 @@ fn cinemadng_frame_rate_time_code_and_reel() {
         main_tags: vec![
             (tags::FRAME_RATE, Value::SRational(vec![(24_000, 1001)])),
             // 01:02:03:04, drop frame
-            (tags::TIME_CODES, Value::Byte(vec![0x44, 0x03, 0x02, 0x01, 0, 0, 0, 0])),
+            (
+                tags::TIME_CODES,
+                Value::Byte(vec![0x44, 0x03, 0x02, 0x01, 0, 0, 0, 0]),
+            ),
             (tags::REEL_NAME, Value::Ascii("A001".into())),
         ],
         ..Default::default()
     };
     let info = probe(&write(&px, &o)).unwrap();
     assert_eq!(info.frame_rate, Some((24_000, 1001)));
-    assert_eq!(info.timecode, Some(Timecode { hours: 1, minutes: 2, seconds: 3, frames: 4, drop_frame: true }));
+    assert_eq!(
+        info.timecode,
+        Some(Timecode {
+            hours: 1,
+            minutes: 2,
+            seconds: 3,
+            frames: 4,
+            drop_frame: true
+        })
+    );
     assert_eq!(info.reel.as_deref(), Some("A001"));
     // nonsense rates and time codes are ignored
     let o = Options {
         bits: 12,
-        main_tags: vec![(tags::FRAME_RATE, Value::SRational(vec![(-25, 1)])), (tags::TIME_CODES, Value::Byte(vec![0x0A, 0x99, 0, 0, 0, 0, 0, 0]))],
+        main_tags: vec![
+            (tags::FRAME_RATE, Value::SRational(vec![(-25, 1)])),
+            (
+                tags::TIME_CODES,
+                Value::Byte(vec![0x0A, 0x99, 0, 0, 0, 0, 0, 0]),
+            ),
+        ],
         ..Default::default()
     };
     let info = probe(&write(&px, &o)).unwrap();
@@ -287,13 +408,33 @@ fn survives(f: &[u8]) -> bool {
 fn hostile_files_are_errors_not_panics() {
     let px = picture(24, 16, 1, 12, 5);
     let files: Vec<Vec<u8>> = [
-        Options { width: 24, height: 16, bits: 12, ..Default::default() },
-        Options { width: 24, height: 16, bits: 12, preview: true, layout: Layout::Tiles { width: 16, height: 16 }, ..Default::default() },
         Options {
             width: 24,
             height: 16,
             bits: 12,
-            compression: Compression::LosslessJpeg { predictor: 4, components: 2, restart_lines: 2, pt: 0 },
+            ..Default::default()
+        },
+        Options {
+            width: 24,
+            height: 16,
+            bits: 12,
+            preview: true,
+            layout: Layout::Tiles {
+                width: 16,
+                height: 16,
+            },
+            ..Default::default()
+        },
+        Options {
+            width: 24,
+            height: 16,
+            bits: 12,
+            compression: Compression::LosslessJpeg {
+                predictor: 4,
+                components: 2,
+                restart_lines: 2,
+                pt: 0,
+            },
             main_tags: rec709_camera_tags([0.5, 1.0, 0.7]),
             ..Default::default()
         },
@@ -319,7 +460,11 @@ fn hostile_files_are_errors_not_panics() {
                 s ^= s >> 17;
                 s ^= s << 5;
                 let at = s as usize % g.len();
-                g[at] = if i % 3 == 0 { 0xFF } else { g[at] ^ (1 << (s >> 29)) };
+                g[at] = if i % 3 == 0 {
+                    0xFF
+                } else {
+                    g[at] ^ (1 << (s >> 29))
+                };
             }
             assert!(survives(&g), "mutation {i}");
         }
@@ -329,7 +474,13 @@ fn hostile_files_are_errors_not_panics() {
 #[test]
 fn cyclic_ifds_huge_sizes_and_bad_offsets() {
     let px = picture(8, 8, 1, 16, 4);
-    let f = write(&px, &Options { preview: true, ..Default::default() });
+    let f = write(
+        &px,
+        &Options {
+            preview: true,
+            ..Default::default()
+        },
+    );
     let ifd0 = u32::from_le_bytes(f[4..8].try_into().unwrap()) as usize;
     let n = u16::from_le_bytes(f[ifd0..ifd0 + 2].try_into().unwrap()) as usize;
     // IFD 0's next pointer to itself
@@ -340,9 +491,17 @@ fn cyclic_ifds_huge_sizes_and_bad_offsets() {
     let mut g = f.clone();
     let sub = find_tag(&g, tags::SUB_IFDS).unwrap();
     g[sub + 8..sub + 12].copy_from_slice(&(ifd0 as u32).to_le_bytes());
-    assert!(matches!(decode(&g), Err(Error::Unsupported(_))), "no raw image left");
+    assert!(
+        matches!(decode(&g), Err(Error::Unsupported(_))),
+        "no raw image left"
+    );
     // huge dimensions with a tiny file
-    for (wtag, v) in [(tags::IMAGE_WIDTH, 65_535u32), (tags::IMAGE_LENGTH, 65_535), (tags::IMAGE_WIDTH, 0), (tags::IMAGE_WIDTH, u32::MAX)] {
+    for (wtag, v) in [
+        (tags::IMAGE_WIDTH, 65_535u32),
+        (tags::IMAGE_LENGTH, 65_535),
+        (tags::IMAGE_WIDTH, 0),
+        (tags::IMAGE_WIDTH, u32::MAX),
+    ] {
         let mut g = write(&px, &Options::default());
         let e = find_tag(&g, wtag).unwrap();
         g[e + 8..e + 12].copy_from_slice(&v.to_le_bytes());
@@ -358,9 +517,21 @@ fn cyclic_ifds_huge_sizes_and_bad_offsets() {
     g[4..8].copy_from_slice(&0x7FFF_FFFFu32.to_le_bytes());
     assert!(decode(&g).is_err());
     // a rational with a zero denominator in a raw tag
-    let o = Options { raw_tags: vec![(tags::DEFAULT_CROP_SIZE, Value::Rational(vec![(8, 0), (8, 1)]))], ..Default::default() };
+    let o = Options {
+        raw_tags: vec![(
+            tags::DEFAULT_CROP_SIZE,
+            Value::Rational(vec![(8, 0), (8, 1)]),
+        )],
+        ..Default::default()
+    };
     assert!(matches!(decode(&write(&px, &o)), Err(Error::Malformed(_))));
     // unsupported compressions and depths are named
-    let o = Options { raw_tags: vec![(tags::COMPRESSION, Value::Short(vec![34892]))], ..Default::default() };
-    assert_eq!(decode(&write(&px, &o)).err(), Some(Error::Unsupported("lossy JPEG DNG".into())));
+    let o = Options {
+        raw_tags: vec![(tags::COMPRESSION, Value::Short(vec![34892]))],
+        ..Default::default()
+    };
+    assert_eq!(
+        decode(&write(&px, &o)).err(),
+        Some(Error::Unsupported("lossy JPEG DNG".into()))
+    );
 }

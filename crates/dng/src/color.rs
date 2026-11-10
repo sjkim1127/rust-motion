@@ -27,7 +27,11 @@ pub const D50: (f64, f64) = (0.3457, 0.3585);
 pub const D65: (f64, f64) = (0.3127, 0.3290);
 
 /// Linear Bradford cone response matrix.
-const BRADFORD: M3 = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]];
+const BRADFORD: M3 = [
+    [0.8951, 0.2664, -0.1614],
+    [-0.7502, 1.7135, 0.0367],
+    [0.0389, -0.0685, 1.0296],
+];
 
 pub fn mul(a: &M3, b: &M3) -> M3 {
     let mut m = [[0.0; 3]; 3];
@@ -63,7 +67,10 @@ fn blend(a: &M3, b: &M3, w: f64) -> M3 {
 
 /// The inverse of `a`, or `None` when it is (nearly) singular.
 pub fn inverse(a: &M3) -> Option<M3> {
-    let c = |r: usize, s: usize| a[(r + 1) % 3][(s + 1) % 3] * a[(r + 2) % 3][(s + 2) % 3] - a[(r + 1) % 3][(s + 2) % 3] * a[(r + 2) % 3][(s + 1) % 3];
+    let c = |r: usize, s: usize| {
+        a[(r + 1) % 3][(s + 1) % 3] * a[(r + 2) % 3][(s + 2) % 3]
+            - a[(r + 1) % 3][(s + 2) % 3] * a[(r + 2) % 3][(s + 1) % 3]
+    };
     let det = a[0][0] * c(0, 0) + a[0][1] * c(0, 1) + a[0][2] * c(0, 2);
     let norm: f64 = a.iter().flatten().map(|v| v.abs()).fold(0.0, f64::max);
     if !det.is_finite() || det.abs() <= 1e-12 * norm.powi(3).max(1e-300) {
@@ -98,7 +105,11 @@ pub fn cct((x, y): (f64, f64)) -> f64 {
     }
     let n = (x - 0.3320) / d;
     let t = 449.0 * n.powi(3) + 3525.0 * n.powi(2) + 6823.3 * n + 5520.33;
-    if t.is_finite() { t.clamp(1_000.0, 50_000.0) } else { 50_000.0 }
+    if t.is_finite() {
+        t.clamp(1_000.0, 50_000.0)
+    } else {
+        50_000.0
+    }
 }
 
 /// Colour temperature of an EXIF LightSource code used as a DNG CalibrationIlluminant.
@@ -139,7 +150,11 @@ pub fn bradford(src: &V3, dst: &V3) -> Option<M3> {
 /// Linear RGB (Rec. 709 / sRGB primaries, D65 white) → XYZ.
 pub fn rec709_to_xyz() -> Option<M3> {
     let p = [(0.64, 0.33), (0.30, 0.60), (0.15, 0.06)].map(xy_to_xyz);
-    let pm: M3 = [[p[0][0], p[1][0], p[2][0]], [p[0][1], p[1][1], p[2][1]], [p[0][2], p[1][2], p[2][2]]];
+    let pm: M3 = [
+        [p[0][0], p[1][0], p[2][0]],
+        [p[0][1], p[1][1], p[2][1]],
+        [p[0][2], p[1][2], p[2][2]],
+    ];
     let s = mulv(&inverse(&pm)?, &xy_to_xyz(D65));
     Some(mul(&pm, &diag(&s)))
 }
@@ -180,15 +195,24 @@ pub struct Solved {
 impl Calibration {
     /// Weight of calibration 1 for a white of temperature `t` (1 when only one is usable).
     fn weight(&self, t: f64) -> f64 {
-        let (Some(_), Some(_)) = (self.color_matrix[0], self.color_matrix[1]) else { return 1.0 };
-        let (Some(t1), Some(t2)) = (self.illuminant[0].and_then(illuminant_kelvin), self.illuminant[1].and_then(illuminant_kelvin)) else {
+        let (Some(_), Some(_)) = (self.color_matrix[0], self.color_matrix[1]) else {
+            return 1.0;
+        };
+        let (Some(t1), Some(t2)) = (
+            self.illuminant[0].and_then(illuminant_kelvin),
+            self.illuminant[1].and_then(illuminant_kelvin),
+        ) else {
             return 1.0;
         };
         if (t1 - t2).abs() < 1.0 {
             return 1.0;
         }
         // the formula needs t1 < t2; swap the roles otherwise
-        let (lo, hi, lo_is_1) = if t1 < t2 { (t1, t2, true) } else { (t2, t1, false) };
+        let (lo, hi, lo_is_1) = if t1 < t2 {
+            (t1, t2, true)
+        } else {
+            (t2, t1, false)
+        };
         let w_lo = if t <= lo {
             1.0
         } else if t >= hi {
@@ -196,7 +220,11 @@ impl Calibration {
         } else {
             (1.0 / t - 1.0 / hi) / (1.0 / lo - 1.0 / hi)
         };
-        if lo_is_1 { w_lo } else { 1.0 - w_lo }
+        if lo_is_1 {
+            w_lo
+        } else {
+            1.0 - w_lo
+        }
     }
 
     fn pick(&self, m: &[Option<M3>; 2], w: f64, default: M3) -> M3 {
@@ -229,7 +257,11 @@ impl Calibration {
             if neutral.iter().any(|v| !v.is_finite() || *v <= 1e-9) {
                 return Err(Error::Malformed("camera neutral must be positive"));
             }
-            return Ok(Solved { neutral, matrix: scale(&IDENTITY, exposure), white_xy: D65 });
+            return Ok(Solved {
+                neutral,
+                matrix: scale(&IDENTITY, exposure),
+                white_xy: D65,
+            });
         }
         let bad = || Error::Malformed("singular colour matrix");
         // the white point and the camera neutral
@@ -238,7 +270,8 @@ impl Calibration {
             for _ in 0..50 {
                 let w = self.weight(cct(xy));
                 let to_xyz = inverse(&self.xyz_to_camera(w).ok_or_else(bad)?).ok_or_else(bad)?;
-                let next = xyz_to_xy(&mulv(&to_xyz, &n)).ok_or(Error::Malformed("AsShotNeutral is not a colour"))?;
+                let next = xyz_to_xy(&mulv(&to_xyz, &n))
+                    .ok_or(Error::Malformed("AsShotNeutral is not a colour"))?;
                 let done = (next.0 - xy.0).abs() + (next.1 - xy.1).abs() < 1e-9;
                 xy = next;
                 if done {
@@ -256,7 +289,10 @@ impl Calibration {
             return Err(Error::Malformed("camera neutral must be positive"));
         }
         let w = self.weight(cct(white_xy));
-        let ab_cc = mul(&diag(&self.analog_balance.unwrap_or([1.0; 3])), &self.pick(&self.camera_calibration, w, IDENTITY));
+        let ab_cc = mul(
+            &diag(&self.analog_balance.unwrap_or([1.0; 3])),
+            &self.pick(&self.camera_calibration, w, IDENTITY),
+        );
         let camera_to_xyz_d50 = if self.forward_matrix.iter().any(Option::is_some) {
             let fm = self.pick(&self.forward_matrix, w, IDENTITY);
             let inv_ab_cc = inverse(&ab_cc).ok_or_else(bad)?;
@@ -280,7 +316,11 @@ impl Calibration {
         if matrix.iter().flatten().any(|v| !v.is_finite()) {
             return Err(bad());
         }
-        Ok(Solved { neutral, matrix, white_xy })
+        Ok(Solved {
+            neutral,
+            matrix,
+            white_xy,
+        })
     }
 }
 
@@ -289,14 +329,21 @@ mod tests {
     use super::*;
 
     fn close(a: &M3, b: &M3, tol: f64) -> bool {
-        a.iter().flatten().zip(b.iter().flatten()).all(|(x, y)| (x - y).abs() <= tol)
+        a.iter()
+            .flatten()
+            .zip(b.iter().flatten())
+            .all(|(x, y)| (x - y).abs() <= tol)
     }
 
     #[test]
     fn rec709_matrix_matches_the_published_one() {
         // IEC 61966-2-1 (sRGB) linear RGB → XYZ, four decimals
         let m = rec709_to_xyz().unwrap();
-        let want = [[0.4124, 0.3576, 0.1805], [0.2126, 0.7152, 0.0722], [0.0193, 0.1192, 0.9505]];
+        let want = [
+            [0.4124, 0.3576, 0.1805],
+            [0.2126, 0.7152, 0.0722],
+            [0.0193, 0.1192, 0.9505],
+        ];
         assert!(close(&m, &want, 1e-3), "{m:?}");
     }
 
@@ -312,23 +359,36 @@ mod tests {
     fn mccamy_temperatures() {
         assert!((cct(D65) - 6504.0).abs() < 15.0, "{}", cct(D65));
         assert!((cct(D50) - 5003.0).abs() < 15.0, "{}", cct(D50));
-        assert!((cct((0.44757, 0.40745)) - 2856.0).abs() < 15.0, "illuminant A");
+        assert!(
+            (cct((0.44757, 0.40745)) - 2856.0).abs() < 15.0,
+            "illuminant A"
+        );
         assert_eq!(cct((0.3320, 0.1858)), 50_000.0, "no division by zero");
     }
 
     #[test]
     fn interpolation_weight_follows_inverse_temperature() {
-        let c = Calibration { color_matrix: [Some(IDENTITY), Some(IDENTITY)], illuminant: [Some(17), Some(21)], ..Default::default() };
+        let c = Calibration {
+            color_matrix: [Some(IDENTITY), Some(IDENTITY)],
+            illuminant: [Some(17), Some(21)],
+            ..Default::default()
+        };
         assert_eq!(c.weight(2000.0), 1.0);
         assert_eq!(c.weight(9000.0), 0.0);
         let mid = c.weight(4000.0);
         let want = (1.0 / 4000.0 - 1.0 / 6504.0) / (1.0 / 2856.0 - 1.0 / 6504.0);
         assert!((mid - want).abs() < 1e-12);
         // swapped order: weight of calibration 1 (now D65)
-        let s = Calibration { illuminant: [Some(21), Some(17)], ..c.clone() };
+        let s = Calibration {
+            illuminant: [Some(21), Some(17)],
+            ..c.clone()
+        };
         assert!((s.weight(4000.0) - (1.0 - want)).abs() < 1e-12);
         // unknown illuminant: calibration 1 only
-        let u = Calibration { illuminant: [Some(0), Some(21)], ..c };
+        let u = Calibration {
+            illuminant: [Some(0), Some(21)],
+            ..c
+        };
         assert_eq!(u.weight(4000.0), 1.0);
     }
 
@@ -336,19 +396,36 @@ mod tests {
     fn an_srgb_camera_maps_to_itself() {
         // ColorMatrix = XYZ → linear sRGB, white D65: the camera is Rec. 709 already
         let cm = inverse(&rec709_to_xyz().unwrap()).unwrap();
-        let c = Calibration { color_matrix: [Some(cm), None], illuminant: [Some(21), None], as_shot_neutral: Some([1.0; 3]), ..Default::default() };
+        let c = Calibration {
+            color_matrix: [Some(cm), None],
+            illuminant: [Some(21), None],
+            as_shot_neutral: Some([1.0; 3]),
+            ..Default::default()
+        };
         let s = c.solve().unwrap();
         assert!(close(&s.matrix, &IDENTITY, 1e-6), "{:?}", s.matrix);
-        assert!((s.white_xy.0 - D65.0).abs() < 1e-4 && (s.white_xy.1 - D65.1).abs() < 1e-4, "{:?}", s.white_xy);
+        assert!(
+            (s.white_xy.0 - D65.0).abs() < 1e-4 && (s.white_xy.1 - D65.1).abs() < 1e-4,
+            "{:?}",
+            s.white_xy
+        );
         // a baseline exposure of +1 doubles everything
-        let e = Calibration { baseline_exposure: 1.0, ..c }.solve().unwrap();
+        let e = Calibration {
+            baseline_exposure: 1.0,
+            ..c
+        }
+        .solve()
+        .unwrap();
         assert!(close(&e.matrix, &scale(&IDENTITY, 2.0), 1e-6));
     }
 
     #[test]
     fn forward_matrix_white_balances_by_the_neutral() {
         // FM = linear Rec. 709 → XYZ D50: the white-balanced camera values come out unchanged
-        let fm = mul(&bradford(&xy_to_xyz(D65), &xy_to_xyz(D50)).unwrap(), &rec709_to_xyz().unwrap());
+        let fm = mul(
+            &bradford(&xy_to_xyz(D65), &xy_to_xyz(D50)).unwrap(),
+            &rec709_to_xyz().unwrap(),
+        );
         let cm = inverse(&rec709_to_xyz().unwrap()).unwrap();
         let c = Calibration {
             color_matrix: [Some(cm), None],
@@ -365,21 +442,43 @@ mod tests {
     #[test]
     fn white_xy_gives_the_neutral() {
         let cm = inverse(&rec709_to_xyz().unwrap()).unwrap();
-        let c = Calibration { color_matrix: [Some(cm), None], illuminant: [Some(21), None], as_shot_white_xy: Some(D65), ..Default::default() };
+        let c = Calibration {
+            color_matrix: [Some(cm), None],
+            illuminant: [Some(21), None],
+            as_shot_white_xy: Some(D65),
+            ..Default::default()
+        };
         let s = c.solve().unwrap();
         for v in s.neutral {
-            assert!((v - s.neutral[1]).abs() < 1e-3, "D65 is neutral for an sRGB camera: {:?}", s.neutral);
+            assert!(
+                (v - s.neutral[1]).abs() < 1e-3,
+                "D65 is neutral for an sRGB camera: {:?}",
+                s.neutral
+            );
         }
     }
 
     #[test]
     fn hostile_calibrations_are_errors() {
-        let zero = Calibration { color_matrix: [Some([[0.0; 3]; 3]), None], as_shot_neutral: Some([1.0; 3]), ..Default::default() };
+        let zero = Calibration {
+            color_matrix: [Some([[0.0; 3]; 3]), None],
+            as_shot_neutral: Some([1.0; 3]),
+            ..Default::default()
+        };
         assert!(zero.solve().is_err());
         let cm = inverse(&rec709_to_xyz().unwrap()).unwrap();
-        let neg = Calibration { color_matrix: [Some(cm), None], as_shot_neutral: Some([-1.0, 1.0, 1.0]), ..Default::default() };
+        let neg = Calibration {
+            color_matrix: [Some(cm), None],
+            as_shot_neutral: Some([-1.0, 1.0, 1.0]),
+            ..Default::default()
+        };
         assert!(neg.solve().is_err());
-        let none = Calibration { as_shot_neutral: Some([0.5, 1.0, 0.5]), ..Default::default() }.solve().unwrap();
+        let none = Calibration {
+            as_shot_neutral: Some([0.5, 1.0, 0.5]),
+            ..Default::default()
+        }
+        .solve()
+        .unwrap();
         assert_eq!(none.matrix, IDENTITY);
     }
 }

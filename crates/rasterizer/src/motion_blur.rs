@@ -63,7 +63,12 @@ impl Default for ShutterConfig {
 
 impl ShutterConfig {
     /// Creates a new camera shutter configuration.
-    pub fn new(shutter_angle: f32, shutter_phase: f32, samples: u32, kernel: TemporalFilterKernel) -> Self {
+    pub fn new(
+        shutter_angle: f32,
+        shutter_phase: f32,
+        samples: u32,
+        kernel: TemporalFilterKernel,
+    ) -> Self {
         Self {
             shutter_angle: shutter_angle.clamp(0.0, 360.0),
             shutter_phase,
@@ -86,16 +91,13 @@ impl ShutterConfig {
 /// Generates discrete `(sample_time_sec, weight)` pairs for a frame according to shutter physics.
 ///
 /// Weights are normalized so that $\sum w_i = 1.0$.
-pub fn subframe_time_samples(
-    frame: f64,
-    fps: f64,
-    config: &ShutterConfig,
-) -> Vec<(f64, f32)> {
+pub fn subframe_time_samples(frame: f64, fps: f64, config: &ShutterConfig) -> Vec<(f64, f32)> {
     let n = config.samples.max(1) as usize;
     let valid_fps = if fps > 0.0 { fps } else { 30.0 };
     let frame_duration = 1.0 / valid_fps;
 
-    let exposure_duration = (config.shutter_angle.clamp(0.0, 360.0) as f64 / 360.0) * frame_duration;
+    let exposure_duration =
+        (config.shutter_angle.clamp(0.0, 360.0) as f64 / 360.0) * frame_duration;
     let phase_offset = (config.shutter_phase as f64 / 360.0) * frame_duration;
 
     let base_time = (frame / valid_fps) + phase_offset;
@@ -129,7 +131,11 @@ pub fn subframe_time_samples(
     }
 
     let sum_w: f32 = raw_weights.iter().sum();
-    let norm_factor = if sum_w > 0.0 { 1.0 / sum_w } else { 1.0 / n as f32 };
+    let norm_factor = if sum_w > 0.0 {
+        1.0 / sum_w
+    } else {
+        1.0 / n as f32
+    };
 
     times
         .into_iter()
@@ -141,7 +147,9 @@ pub fn subframe_time_samples(
 /// Accumulates multiple subframe pixmaps with individual weights into a final composited pixmap.
 pub fn accumulate_subframes(subframes: &[(Pixmap, f32)]) -> Result<Pixmap, RasterError> {
     if subframes.is_empty() {
-        return Err(RasterError::Scene("no subframes provided for accumulation".into()));
+        return Err(RasterError::Scene(
+            "no subframes provided for accumulation".into(),
+        ));
     }
 
     let (first_pixmap, _) = &subframes[0];
@@ -150,7 +158,9 @@ pub fn accumulate_subframes(subframes: &[(Pixmap, f32)]) -> Result<Pixmap, Raste
 
     for (p, _) in subframes.iter() {
         if p.width() != w || p.height() != h {
-            return Err(RasterError::Scene("subframe dimension mismatch in motion blur accumulation".into()));
+            return Err(RasterError::Scene(
+                "subframe dimension mismatch in motion blur accumulation".into(),
+            ));
         }
     }
 
@@ -198,7 +208,9 @@ pub fn apply_directional_motion_blur(
     kernel: TemporalFilterKernel,
 ) -> Result<(), RasterError> {
     if !angle_deg.is_finite() || !length.is_finite() {
-        return Err(RasterError::Scene("motion blur parameters must be finite".into()));
+        return Err(RasterError::Scene(
+            "motion blur parameters must be finite".into(),
+        ));
     }
 
     let length = length.max(0.0);
@@ -219,7 +231,7 @@ pub fn apply_directional_motion_blur(
     let mut raw_weights = Vec::with_capacity(n);
     for i in 0..n {
         let u = i as f32 / (n - 1) as f32; // [0.0, 1.0]
-        let centered = (u - 0.5) * 2.0;    // [-1.0, 1.0]
+        let centered = (u - 0.5) * 2.0; // [-1.0, 1.0]
         let w = match kernel {
             TemporalFilterKernel::Box => 1.0f32,
             TemporalFilterKernel::Triangle => (1.0 - centered.abs()).max(0.001),
@@ -328,14 +340,8 @@ mod tests {
         );
 
         // Apply horizontal blur (angle 0°, length 16px)
-        apply_directional_motion_blur(
-            &mut pixmap,
-            0.0,
-            16.0,
-            16,
-            TemporalFilterKernel::Gaussian,
-        )
-        .expect("blur should succeed");
+        apply_directional_motion_blur(&mut pixmap, 0.0, 16.0, 16, TemporalFilterKernel::Gaussian)
+            .expect("blur should succeed");
 
         // The center should still be bright
         let center = pixmap.pixel(32, 32).unwrap();
@@ -347,7 +353,11 @@ mod tests {
 
         // But vertically outside y=28..36 it should still be empty
         let top_outside = pixmap.pixel(32, 10).unwrap();
-        assert_eq!(top_outside.alpha(), 0, "no vertical spread on horizontal blur");
+        assert_eq!(
+            top_outside.alpha(),
+            0,
+            "no vertical spread on horizontal blur"
+        );
     }
 
     #[test]

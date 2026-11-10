@@ -23,7 +23,11 @@ fn cropped_counts_match_full_image_for_clipped_and_disjoint_windows() {
             for x1 in [-2, 0, 3, 13, 16, 37, 50] {
                 for y0 in [-30, -1, 0, 8, 13, 28, 35] {
                     for y1 in [-1, 0, 10, 14, 29, 40] {
-                        assert_eq!(cropped.count(x0, y0, x1, y1), window_count(&full, w, h, x0, y0, x1, y1), "kind {kind}: {x0},{y0}..{x1},{y1}");
+                        assert_eq!(
+                            cropped.count(x0, y0, x1, y1),
+                            window_count(&full, w, h, x0, y0, x1, y1),
+                            "kind {kind}: {x0},{y0}..{x1},{y1}"
+                        );
                     }
                 }
             }
@@ -34,7 +38,9 @@ fn cropped_counts_match_full_image_for_clipped_and_disjoint_windows() {
 #[test]
 fn table_size_depends_on_the_hole_bounds() {
     let (w, h) = (1000, 700);
-    let hole: Vec<_> = (0..w * h).map(|i| (503..514).contains(&(i % w)) && (307..320).contains(&(i / w))).collect();
+    let hole: Vec<_> = (0..w * h)
+        .map(|i| (503..514).contains(&(i % w)) && (307..320).contains(&(i / w)))
+        .collect();
     let table = HoleIntegral::new(w, &hole, hole_bbox(w, h, &hole).unwrap()).unwrap();
     assert_eq!((table.w, table.h, table.data.len()), (11, 13, 12 * 14));
     assert_eq!(table.count(0, 0, 1000, 700), 143);
@@ -87,13 +93,21 @@ fn proximity_offsets_match_full_tables_at_several_depths_and_channels() {
 #[test]
 fn ties_nonfinite_samples_and_full_holes_keep_the_previous_result() {
     let (w, h, ch) = (40, 35, 3);
-    let hole: Vec<_> = (0..w * h).map(|i| (18..22).contains(&(i % w)) && (16..20).contains(&(i / w))).collect();
+    let hole: Vec<_> = (0..w * h)
+        .map(|i| (18..22).contains(&(i % w)) && (16..20).contains(&(i / w)))
+        .collect();
     for value in [0.5, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
         let img = vec![value; w * h * ch];
-        assert_eq!(best_offset(w, h, ch, &img, &hole, 3, 20), old_best_offset(w, h, ch, &img, &hole, 3, 20));
+        assert_eq!(
+            best_offset(w, h, ch, &img, &hole, 3, 20),
+            old_best_offset(w, h, ch, &img, &hole, 3, 20)
+        );
     }
     let full = vec![true; w * h];
-    assert_eq!(best_offset(w, h, ch, &vec![0.5; w * h * ch], &full, 3, 20), None);
+    assert_eq!(
+        best_offset(w, h, ch, &vec![0.5; w * h * ch], &full, 3, 20),
+        None
+    );
 }
 
 #[test]
@@ -128,16 +142,35 @@ fn proximity_integral_release_comparison() {
             let bbox = hole_bbox(w, h, &hole).unwrap();
             let cropped = HoleIntegral::new(w, &hole, bbox).unwrap();
             let old = old_best_offset(w, h, ch, &img, &hole, (diameter / 8).clamp(3, 16), radius);
-            assert_eq!(best_offset(w, h, ch, &img, &hole, (diameter / 8).clamp(3, 16), radius), old);
+            assert_eq!(
+                best_offset(w, h, ch, &img, &hole, (diameter / 8).clamp(3, 16), radius),
+                old
+            );
             let mut old_ms = Vec::new();
             let mut new_ms = Vec::new();
             for run in 0..5 {
                 let mut measure = |fast: bool| {
                     let start = Instant::now();
                     let result = if fast {
-                        best_offset(w, h, ch, black_box(&img), &hole, (diameter / 8).clamp(3, 16), radius)
+                        best_offset(
+                            w,
+                            h,
+                            ch,
+                            black_box(&img),
+                            &hole,
+                            (diameter / 8).clamp(3, 16),
+                            radius,
+                        )
                     } else {
-                        old_best_offset(w, h, ch, black_box(&img), &hole, (diameter / 8).clamp(3, 16), radius)
+                        old_best_offset(
+                            w,
+                            h,
+                            ch,
+                            black_box(&img),
+                            &hole,
+                            (diameter / 8).clamp(3, 16),
+                            radius,
+                        )
                     };
                     let ms = start.elapsed().as_secs_f64() * 1000.0;
                     assert_eq!(result, old);
@@ -161,7 +194,15 @@ fn proximity_integral_release_comparison() {
         }
     }
 }
-fn old_best_offset(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], ring: usize, max_radius: i32) -> Option<(i32, i32)> {
+fn old_best_offset(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    hole: &[bool],
+    ring: usize,
+    max_radius: i32,
+) -> Option<(i32, i32)> {
     let (bx0, by0, bx1, by1) = hole_bbox(w, h, hole)?;
     // No valid translation can move farther than the source image's extent.
     // Bound arbitrary public API inputs before constructing i32 search ranges:
@@ -197,14 +238,20 @@ fn old_best_offset(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], ri
         }
         let mut e = 0.0f32;
         for &(x, y) in &pts {
-            let (a, b) = ((y as usize * w + x as usize) * ch, ((y + dy) as usize * w + (x + dx) as usize) * ch);
+            let (a, b) = (
+                (y as usize * w + x as usize) * ch,
+                ((y + dy) as usize * w + (x + dx) as usize) * ch,
+            );
             for c in 0..ch {
                 let d = img[a + c] - img[b + c];
                 e += d * d;
             }
         }
         // Mild preference for nearer sources on ties.
-        Some(e / pts.len().max(1) as f32 * (1.0 + 1e-3 * ((dx as f32).hypot(dy as f32) / max_radius as f32)))
+        Some(
+            e / pts.len().max(1) as f32
+                * (1.0 + 1e-3 * ((dx as f32).hypot(dy as f32) / max_radius as f32)),
+        )
     };
     // Coarse grid over the search window, then a full-resolution refinement around the winner.
     let step = (max_radius / 24).max(1);

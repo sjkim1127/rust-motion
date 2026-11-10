@@ -500,12 +500,13 @@ fn render_node(
                         );
 
                         if let (Some(px0), Some(px1)) = (p0, p1) {
-                            let interpolated = crate::time_remap::OpticalFlowEngine::interpolate_frames(
-                                &px0,
-                                &px1,
-                                alpha,
-                                *interpolation,
-                            );
+                            let interpolated =
+                                crate::time_remap::OpticalFlowEngine::interpolate_frames(
+                                    &px0,
+                                    &px1,
+                                    alpha,
+                                    *interpolation,
+                                );
                             let rgba = image::RgbaImage::from_raw(
                                 interpolated.width(),
                                 interpolated.height(),
@@ -835,7 +836,8 @@ fn render_node(
                             for pixel in mask_pixmap.pixels_mut() {
                                 let a = pixel.alpha();
                                 if a == 0 {
-                                    *pixel = PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap();
+                                    *pixel = PremultipliedColorU8::from_rgba(255, 255, 255, 255)
+                                        .unwrap();
                                 } else {
                                     let r = 255 - pixel.red();
                                     let g = 255 - pixel.green();
@@ -1093,17 +1095,25 @@ fn render_node(
             }
         }
 
-        SceneNode::TrackMatte { target, matte, mode } => {
+        SceneNode::TrackMatte {
+            target,
+            matte,
+            mode,
+        } => {
             if opacity <= 0.0 {
                 return Ok(());
             }
 
-            let mut target_pixmap = Pixmap::new(pixmap.width(), pixmap.height())
-                .ok_or_else(|| RasterError::Scene("failed to allocate track matte target surface".into()))?;
+            let mut target_pixmap =
+                Pixmap::new(pixmap.width(), pixmap.height()).ok_or_else(|| {
+                    RasterError::Scene("failed to allocate track matte target surface".into())
+                })?;
             render_node(&mut target_pixmap, target, transform, opacity, resources)?;
 
-            let mut matte_pixmap = Pixmap::new(pixmap.width(), pixmap.height())
-                .ok_or_else(|| RasterError::Scene("failed to allocate track matte surface".into()))?;
+            let mut matte_pixmap =
+                Pixmap::new(pixmap.width(), pixmap.height()).ok_or_else(|| {
+                    RasterError::Scene("failed to allocate track matte surface".into())
+                })?;
             render_node(&mut matte_pixmap, matte, transform, 1.0, resources)?;
 
             let (mask_type, invert) = match mode {
@@ -1126,7 +1136,8 @@ fn render_node(
                         for pixel in matte_pixmap.pixels_mut() {
                             let a = pixel.alpha();
                             if a == 0 {
-                                *pixel = PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap();
+                                *pixel =
+                                    PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap();
                             } else {
                                 let r = 255 - pixel.red();
                                 let g = 255 - pixel.green();
@@ -1148,7 +1159,14 @@ fn render_node(
                 blend_mode: tiny_skia::BlendMode::SourceOver,
                 ..Default::default()
             };
-            pixmap.draw_pixmap(0, 0, target_pixmap.as_ref(), &composite_paint, Transform::identity(), None);
+            pixmap.draw_pixmap(
+                0,
+                0,
+                target_pixmap.as_ref(),
+                &composite_paint,
+                Transform::identity(),
+                None,
+            );
         }
 
         SceneNode::FractalNoise {
@@ -1228,12 +1246,14 @@ fn render_node(
             }
 
             let mut surface = photocraft_raster::Surface::new(photocraft_color::PixelFormat::RGBA8);
-            let damage = photocraft_paint::render_stroke(&mut surface, &brush, &pts, None, false, 1.0);
+            let damage =
+                photocraft_paint::render_stroke(&mut surface, &brush, &pts, None, false, 1.0);
             if damage.is_empty() {
                 return Ok(());
             }
 
-            let canvas_rect = photocraft_geom::Rect::from_xywh(0, 0, pixmap.width(), pixmap.height());
+            let canvas_rect =
+                photocraft_geom::Rect::from_xywh(0, 0, pixmap.width(), pixmap.height());
             let r = damage.intersect(&canvas_rect);
             if r.is_empty() {
                 return Ok(());
@@ -1276,12 +1296,24 @@ fn render_node(
 
             let shape = photocraft_doc::ShapeLayer {
                 path: path.clone(),
-                fill: fill.map(|c| photocraft_doc::Fill::Solid(photocraft_color::Color::rgba(c.r as f32 / 255.0, c.g as f32 / 255.0, c.b as f32 / 255.0, c.a as f32 / 255.0))),
+                fill: fill.map(|c| {
+                    photocraft_doc::Fill::Solid(photocraft_color::Color::rgba(
+                        c.r as f32 / 255.0,
+                        c.g as f32 / 255.0,
+                        c.b as f32 / 255.0,
+                        c.a as f32 / 255.0,
+                    ))
+                }),
                 stroke: if let Some(sc) = stroke_color {
                     if *stroke_width > 0.0 {
                         Some(photocraft_doc::ShapeStroke {
                             width: *stroke_width,
-                            paint: photocraft_doc::Fill::Solid(photocraft_color::Color::rgba(sc.r as f32 / 255.0, sc.g as f32 / 255.0, sc.b as f32 / 255.0, sc.a as f32 / 255.0)),
+                            paint: photocraft_doc::Fill::Solid(photocraft_color::Color::rgba(
+                                sc.r as f32 / 255.0,
+                                sc.g as f32 / 255.0,
+                                sc.b as f32 / 255.0,
+                                sc.a as f32 / 255.0,
+                            )),
                             ..Default::default()
                         })
                     } else {
@@ -1295,12 +1327,18 @@ fn render_node(
                 psd_raw: None,
             };
 
-            let canvas_rect = photocraft_geom::Rect::from_xywh(0, 0, pixmap.width(), pixmap.height());
-            let compiled = photocraft_vector::CompiledShape::new(&shape, photocraft_vector::DEFAULT_TOLERANCE, canvas_rect);
+            let canvas_rect =
+                photocraft_geom::Rect::from_xywh(0, 0, pixmap.width(), pixmap.height());
+            let compiled = photocraft_vector::CompiledShape::new(
+                &shape,
+                photocraft_vector::DEFAULT_TOLERANCE,
+                canvas_rect,
+            );
             if let Some(bounds) = compiled.bounds() {
                 let r = bounds.intersect(&canvas_rect);
                 if !r.is_empty() {
-                    let surface = compiled.render(photocraft_color::PixelFormat::RGBA8, canvas_rect);
+                    let surface =
+                        compiled.render(photocraft_color::PixelFormat::RGBA8, canvas_rect);
                     let mut buf = vec![[0u8; 4]; r.width() as usize * r.height() as usize];
                     surface.read_rgba8_into(r, &mut buf);
 
@@ -1388,7 +1426,6 @@ fn interpolate_stroke_progress(
 
     points.to_vec()
 }
-
 
 // --- Helpers ---
 
@@ -2064,11 +2101,7 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             let length = (w * 0.2 * exposure).max(4.0);
 
             crate::motion_blur::apply_directional_motion_blur(
-                pixmap,
-                angle,
-                length,
-                samples,
-                kernel,
+                pixmap, angle, length, samples, kernel,
             )?;
         }
         SceneFilter::DirectionalMotionBlur {
@@ -2078,11 +2111,7 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             kernel,
         } => {
             crate::motion_blur::apply_directional_motion_blur(
-                pixmap,
-                angle_deg,
-                length,
-                samples,
-                kernel,
+                pixmap, angle_deg, length, samples, kernel,
             )?;
         }
         SceneFilter::OpticalGlow {
@@ -2149,18 +2178,22 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
                 evolution,
                 seed,
             };
-            let noise_pixmap = crate::vfx::generate_fractal_noise_pixmap(
-                pixmap.width(),
-                pixmap.height(),
-                &config,
-            );
+            let noise_pixmap =
+                crate::vfx::generate_fractal_noise_pixmap(pixmap.width(), pixmap.height(), &config);
             if let Some(sk_mode) = tiny_skia_blend_mode(blend_mode) {
                 let paint = PixmapPaint {
                     opacity: opacity.clamp(0.0, 1.0),
                     blend_mode: sk_mode,
                     ..Default::default()
                 };
-                pixmap.draw_pixmap(0, 0, noise_pixmap.as_ref(), &paint, Transform::identity(), None);
+                pixmap.draw_pixmap(
+                    0,
+                    0,
+                    noise_pixmap.as_ref(),
+                    &paint,
+                    Transform::identity(),
+                    None,
+                );
             } else {
                 composite_custom_psd_blend(
                     pixmap,
@@ -2246,7 +2279,9 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
         }
         SceneFilter::BoxBlur { radius } => {
             if !radius.is_finite() || radius < 0.0 {
-                return Err(RasterError::Scene("box blur radius must be non-negative finite".into()));
+                return Err(RasterError::Scene(
+                    "box blur radius must be non-negative finite".into(),
+                ));
             }
             let params = photocraft_algo::FilterParams::BoxBlur { radius };
             apply_photo_filter(pixmap, &params)?;
@@ -2258,7 +2293,9 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             center_y,
         } => {
             if !amount.is_finite() || amount < 0.0 {
-                return Err(RasterError::Scene("radial blur amount must be non-negative finite".into()));
+                return Err(RasterError::Scene(
+                    "radial blur amount must be non-negative finite".into(),
+                ));
             }
             let method = if spin {
                 photocraft_algo::RadialMethod::Spin
@@ -2276,12 +2313,11 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
         }
         SceneFilter::SurfaceBlur { radius, threshold } => {
             if !radius.is_finite() || radius < 0.0 || !threshold.is_finite() || threshold < 0.0 {
-                return Err(RasterError::Scene("surface blur parameters must be non-negative finite".into()));
+                return Err(RasterError::Scene(
+                    "surface blur parameters must be non-negative finite".into(),
+                ));
             }
-            let params = photocraft_algo::FilterParams::SurfaceBlur {
-                radius,
-                threshold,
-            };
+            let params = photocraft_algo::FilterParams::SurfaceBlur { radius, threshold };
             apply_photo_filter(pixmap, &params)?;
         }
         SceneFilter::UnsharpMask {
@@ -2290,7 +2326,9 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             threshold,
         } => {
             if !amount.is_finite() || !radius.is_finite() || !threshold.is_finite() {
-                return Err(RasterError::Scene("unsharp mask parameters must be finite".into()));
+                return Err(RasterError::Scene(
+                    "unsharp mask parameters must be finite".into(),
+                ));
             }
             let params = photocraft_algo::FilterParams::UnsharpMask {
                 amount,
@@ -2305,7 +2343,9 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             reduce_noise,
         } => {
             if !amount.is_finite() || !radius.is_finite() {
-                return Err(RasterError::Scene("smart sharpen parameters must be finite".into()));
+                return Err(RasterError::Scene(
+                    "smart sharpen parameters must be finite".into(),
+                ));
             }
             let params = photocraft_algo::FilterParams::SmartSharpen {
                 amount,
@@ -2316,7 +2356,9 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
         }
         SceneFilter::HighPass { radius } => {
             if !radius.is_finite() || radius <= 0.0 {
-                return Err(RasterError::Scene("high pass radius must be positive finite".into()));
+                return Err(RasterError::Scene(
+                    "high pass radius must be positive finite".into(),
+                ));
             }
             let params = photocraft_algo::FilterParams::HighPass { radius };
             apply_photo_filter(pixmap, &params)?;
@@ -2382,16 +2424,19 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
                     ))
                 })?
             };
-            let plugin = photocraft_plugins::Plugin::load(&bytes, photocraft_plugins::Limits::default())
-                .map_err(|e| RasterError::Scene(format!("wasm plugin validation error: {e}")))?;
+            let plugin =
+                photocraft_plugins::Plugin::load(&bytes, photocraft_plugins::Limits::default())
+                    .map_err(|e| {
+                        RasterError::Scene(format!("wasm plugin validation error: {e}"))
+                    })?;
             let w = pixmap.width();
             let h = pixmap.height();
             if w > 0 && h > 0 {
                 let rect = photocraft_geom::Rect::new(0, 0, w as i32, h as i32);
                 let surf = pixmap_to_surface(pixmap);
-                let out_surf = plugin
-                    .apply(&surf, rect, None, &params)
-                    .map_err(|e| RasterError::Scene(format!("wasm plugin execution failed: {e}")))?;
+                let out_surf = plugin.apply(&surf, rect, None, &params).map_err(|e| {
+                    RasterError::Scene(format!("wasm plugin execution failed: {e}"))
+                })?;
                 let new_pixmap = surface_to_pixmap(&out_surf, w, h)?;
                 pixmap.data_mut().copy_from_slice(new_pixmap.data());
             }
@@ -2419,11 +2464,7 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             center,
         } => {
             crate::lens_correction::apply_lens_correction(
-                pixmap,
-                distortion,
-                vignette,
-                tca,
-                center,
+                pixmap, distortion, vignette, tca, center,
             );
         }
         SceneFilter::FilmEmulation {
@@ -3724,8 +3765,14 @@ mod tests {
 
         // Inside transformed child (translated by (20, 10)):
         let child_px = img.get_pixel(25, 15);
-        assert!((child_px[0] as i32 - 128).abs() <= 2, "premultiplied red should be ~128");
-        assert!((child_px[3] as i32 - 128).abs() <= 2, "alpha should be ~128 due to opacity 0.5");
+        assert!(
+            (child_px[0] as i32 - 128).abs() <= 2,
+            "premultiplied red should be ~128"
+        );
+        assert!(
+            (child_px[3] as i32 - 128).abs() <= 2,
+            "alpha should be ~128 due to opacity 0.5"
+        );
     }
 
     #[test]

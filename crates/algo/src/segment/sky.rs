@@ -14,7 +14,7 @@
 use photocraft_geom::Rect;
 
 use super::gmm::Gmm;
-use super::{Region, RgbImage, Sampler, clean_mask, scale_for, subsample, trim_region};
+use super::{clean_mask, scale_for, subsample, trim_region, Region, RgbImage, Sampler};
 use crate::matting::{box_mean, guided_filter_gray};
 
 /// Working-resolution budget (pixels).
@@ -31,7 +31,10 @@ pub struct SkyParams {
 
 impl Default for SkyParams {
     fn default() -> Self {
-        Self { threshold: 50.0, softness: 50.0 }
+        Self {
+            threshold: 50.0,
+            softness: 50.0,
+        }
     }
 }
 
@@ -58,7 +61,10 @@ pub fn colour_prior(p: [f32; 3]) -> f32 {
     // Overcast / clouds / haze: bright and nearly neutral.
     let white = smooth(0.5, 0.75, y) * (1.0 - smooth(0.12, 0.3, sat));
     // Sunset glow: bright and warm, kept weaker (warm walls are common too).
-    let warm = 0.6 * smooth(0.55, 0.8, y) * smooth(0.0, 0.1, r - b) * (1.0 - smooth(0.05, 0.25, g - b - 0.2));
+    let warm = 0.6
+        * smooth(0.55, 0.8, y)
+        * smooth(0.0, 0.1, r - b)
+        * (1.0 - smooth(0.05, 0.25, g - b - 0.2));
     blue.max(white).max(warm)
 }
 
@@ -66,17 +72,25 @@ pub fn colour_prior(p: [f32; 3]) -> f32 {
 pub fn likelihood(img: &RgbImage) -> Vec<f32> {
     let (w, h) = (img.w, img.h);
     let y: Vec<f32> = img.px.iter().map(|p| luma(*p)).collect();
-    let at = |x: isize, yy: isize| y[(yy.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize];
+    let at = |x: isize, yy: isize| {
+        y[(yy.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize]
+    };
     let mut grad = vec![0.0f32; w * h];
     for yy in 0..h as isize {
         for x in 0..w as isize {
-            let gx = (at(x + 1, yy - 1) + 2.0 * at(x + 1, yy) + at(x + 1, yy + 1)) - (at(x - 1, yy - 1) + 2.0 * at(x - 1, yy) + at(x - 1, yy + 1));
-            let gy = (at(x - 1, yy + 1) + 2.0 * at(x, yy + 1) + at(x + 1, yy + 1)) - (at(x - 1, yy - 1) + 2.0 * at(x, yy - 1) + at(x + 1, yy - 1));
+            let gx = (at(x + 1, yy - 1) + 2.0 * at(x + 1, yy) + at(x + 1, yy + 1))
+                - (at(x - 1, yy - 1) + 2.0 * at(x - 1, yy) + at(x - 1, yy + 1));
+            let gy = (at(x - 1, yy + 1) + 2.0 * at(x, yy + 1) + at(x + 1, yy + 1))
+                - (at(x - 1, yy - 1) + 2.0 * at(x, yy - 1) + at(x + 1, yy - 1));
             grad[yy as usize * w + x as usize] = (gx * gx + gy * gy).sqrt() / 8.0;
         }
     }
     let tex = box_mean(&grad, w, h, 2);
-    img.px.iter().zip(&tex).map(|(p, t)| colour_prior(*p) * (1.0 - smooth(0.015, 0.07, *t))).collect()
+    img.px
+        .iter()
+        .zip(&tex)
+        .map(|(p, t)| colour_prior(*p) * (1.0 - smooth(0.015, 0.07, *t)))
+        .collect()
 }
 
 /// Binary sky mask at working resolution (`None` when no sky touches the top of the image).
@@ -104,7 +118,12 @@ pub fn sky_mask_low(img: &RgbImage, threshold: f32) -> Option<Vec<bool>> {
     let max_step = 0.12f32;
     while let Some(i) = stack.pop() {
         let (x, y) = (i % w, i / w);
-        let n = [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)];
+        let n = [
+            (x > 0).then(|| i - 1),
+            (x + 1 < w).then(|| i + 1),
+            (y > 0).then(|| i - w),
+            (y + 1 < h).then(|| i + w),
+        ];
         for j in n.into_iter().flatten() {
             if mask[j] || like[j] <= t {
                 continue;
@@ -118,10 +137,19 @@ pub fn sky_mask_low(img: &RgbImage, threshold: f32) -> Option<Vec<bool>> {
         }
     }
     // Sky seen through gaps: likely-sky pixels that fit the grown sky's colours.
-    let samples: Vec<[f32; 3]> = img.px.iter().zip(&mask).filter(|(_, m)| **m).map(|(p, _)| *p).collect();
+    let samples: Vec<[f32; 3]> = img
+        .px
+        .iter()
+        .zip(&mask)
+        .filter(|(_, m)| **m)
+        .map(|(p, _)| *p)
+        .collect();
     if samples.len() >= 16 {
         if let Some(g) = Gmm::fit(&subsample(&samples, 4000), 3, 1e-4) {
-            let mut nl: Vec<f32> = subsample(&samples, 2000).iter().map(|p| g.neg_log(*p)).collect();
+            let mut nl: Vec<f32> = subsample(&samples, 2000)
+                .iter()
+                .map(|p| g.neg_log(*p))
+                .collect();
             nl.sort_by(f32::total_cmp);
             let cut = nl[(nl.len() * 95 / 100).min(nl.len() - 1)];
             for (i, m) in mask.iter_mut().enumerate() {
@@ -143,7 +171,9 @@ pub fn sky_mask_low(img: &RgbImage, threshold: f32) -> Option<Vec<bool>> {
 fn is_backdrop(img: &RgbImage, mask: &[bool], rows: usize) -> bool {
     let (w, h) = (img.w, img.h);
     let bottom = (h - rows.min(h)) * w..h * w;
-    let Some(bottom_rows) = mask.get(bottom) else { return false };
+    let Some(bottom_rows) = mask.get(bottom) else {
+        return false;
+    };
     let covered = bottom_rows.iter().filter(|m| **m).count();
     if covered * 10 < bottom_rows.len() * 6 {
         return false;
@@ -179,7 +209,10 @@ pub fn select_sky(sampler: &dyn Sampler, canvas: Rect, p: SkyParams) -> Option<R
         let fy = ((y - canvas.y0) as f32 + 0.5) / step as f32 - 0.5;
         let (x0, y0) = (fx.floor(), fy.floor());
         let (ax, ay) = (fx - x0, fy - y0);
-        let g = |xx: f32, yy: f32| lowf[(yy.clamp(0.0, lh as f32 - 1.0) as usize) * lw + xx.clamp(0.0, lw as f32 - 1.0) as usize];
+        let g = |xx: f32, yy: f32| {
+            lowf[(yy.clamp(0.0, lh as f32 - 1.0) as usize) * lw
+                + xx.clamp(0.0, lw as f32 - 1.0) as usize]
+        };
         let top = g(x0, y0) * (1.0 - ax) + g(x0 + 1.0, y0) * ax;
         let bot = g(x0, y0 + 1.0) * (1.0 - ax) + g(x0 + 1.0, y0 + 1.0) * ax;
         top * (1.0 - ay) + bot * ay
@@ -190,7 +223,12 @@ pub fn select_sky(sampler: &dyn Sampler, canvas: Rect, p: SkyParams) -> Option<R
     while ty < canvas.y1 {
         let mut tx = canvas.x0;
         while tx < canvas.x1 {
-            tiles.push(Rect::new(tx, ty, (tx + T).min(canvas.x1), (ty + T).min(canvas.y1)));
+            tiles.push(Rect::new(
+                tx,
+                ty,
+                (tx + T).min(canvas.x1),
+                (ty + T).min(canvas.y1),
+            ));
             tx += T;
         }
         ty += T;
@@ -199,7 +237,9 @@ pub fn select_sky(sampler: &dyn Sampler, canvas: Rect, p: SkyParams) -> Option<R
     let run = |t: &Rect| -> (Rect, Vec<u8>) {
         let win = t.inflate(ri).intersect(&canvas);
         let (ww, wh) = (win.width() as usize, win.height() as usize);
-        let pm: Vec<f32> = (0..ww * wh).map(|i| coarse(win.x0 + (i % ww) as i32, win.y0 + (i / ww) as i32)).collect();
+        let pm: Vec<f32> = (0..ww * wh)
+            .map(|i| coarse(win.x0 + (i % ww) as i32, win.y0 + (i / ww) as i32))
+            .collect();
         let lo = pm.iter().copied().fold(f32::MAX, f32::min);
         let hi = pm.iter().copied().fold(f32::MIN, f32::max);
         let crop = |v: &[f32]| -> Vec<u8> {
@@ -213,7 +253,10 @@ pub fn select_sky(sampler: &dyn Sampler, canvas: Rect, p: SkyParams) -> Option<R
             o
         };
         if hi <= 0.0 || lo >= 1.0 {
-            return (*t, vec![if lo >= 1.0 { 255 } else { 0 }; t.width() as usize * t.height() as usize]);
+            return (
+                *t,
+                vec![if lo >= 1.0 { 255 } else { 0 }; t.width() as usize * t.height() as usize],
+            );
         }
         let guide: Vec<f32> = sampler.rgb(win).px.iter().map(|q| luma(*q)).collect();
         let q = guided_filter_gray(&guide, &pm, ww, wh, r, eps);
@@ -267,7 +310,15 @@ mod tests {
     #[test]
     fn finds_sky_and_not_ground_or_tree() {
         let img = landscape(160, 100);
-        let r = select_sky(&ImageSampler { img: &img, origin: (0, 0) }, Rect::new(0, 0, 160, 100), SkyParams::default()).expect("sky");
+        let r = select_sky(
+            &ImageSampler {
+                img: &img,
+                origin: (0, 0),
+            },
+            Rect::new(0, 0, 160, 100),
+            SkyParams::default(),
+        )
+        .expect("sky");
         assert!(r.at(10, 5) > 0.9, "top-left sky");
         assert!(r.at(80, 50) > 0.9, "sky near the horizon");
         assert!(r.at(10, 80) < 0.1, "ground");
@@ -281,13 +332,35 @@ mod tests {
             let n = (((x * 7919 + y * 104_729) % 97) as f32 / 97.0 - 0.5) * 0.3;
             [0.35 + n, 0.3 + n, 0.12]
         });
-        assert!(select_sky(&ImageSampler { img: &img, origin: (0, 0) }, Rect::new(0, 0, 64, 64), SkyParams::default()).is_none());
+        assert!(select_sky(
+            &ImageSampler {
+                img: &img,
+                origin: (0, 0)
+            },
+            Rect::new(0, 0, 64, 64),
+            SkyParams::default()
+        )
+        .is_none());
     }
 
     #[test]
     fn overcast_sky_is_found() {
-        let img = RgbImage::from_fn(64, 64, |_, y| if y < 30 { [0.85, 0.86, 0.88] } else { [0.2, 0.3, 0.1] });
-        let r = select_sky(&ImageSampler { img: &img, origin: (0, 0) }, Rect::new(0, 0, 64, 64), SkyParams::default()).expect("sky");
+        let img = RgbImage::from_fn(64, 64, |_, y| {
+            if y < 30 {
+                [0.85, 0.86, 0.88]
+            } else {
+                [0.2, 0.3, 0.1]
+            }
+        });
+        let r = select_sky(
+            &ImageSampler {
+                img: &img,
+                origin: (0, 0),
+            },
+            Rect::new(0, 0, 64, 64),
+            SkyParams::default(),
+        )
+        .expect("sky");
         assert!(r.at(30, 10) > 0.9 && r.at(30, 50) < 0.1);
     }
 
@@ -295,11 +368,41 @@ mod tests {
     /// reaching the bottom (a photo taken upward) still is.
     #[test]
     fn a_white_backdrop_is_not_sky_but_a_blue_sky_down_to_the_bottom_is() {
-        let disc = |x: usize, y: usize| ((x as f32 - 75.0).powi(2) + (y as f32 - 50.0).powi(2)).sqrt() < 30.0;
-        let img = RgbImage::from_fn(150, 100, |x, y| if disc(x, y) { [0.12, 0.12, 0.12] } else { [0.95, 0.95, 0.94] });
-        assert!(select_sky(&ImageSampler { img: &img, origin: (0, 0) }, Rect::new(0, 0, 150, 100), SkyParams::default()).is_none());
-        let img = RgbImage::from_fn(150, 100, |x, y| if disc(x, y) { [0.12, 0.3, 0.1] } else { [0.35, 0.6, 0.95] });
-        let r = select_sky(&ImageSampler { img: &img, origin: (0, 0) }, Rect::new(0, 0, 150, 100), SkyParams::default()).expect("blue sky");
+        let disc = |x: usize, y: usize| {
+            ((x as f32 - 75.0).powi(2) + (y as f32 - 50.0).powi(2)).sqrt() < 30.0
+        };
+        let img = RgbImage::from_fn(150, 100, |x, y| {
+            if disc(x, y) {
+                [0.12, 0.12, 0.12]
+            } else {
+                [0.95, 0.95, 0.94]
+            }
+        });
+        assert!(select_sky(
+            &ImageSampler {
+                img: &img,
+                origin: (0, 0)
+            },
+            Rect::new(0, 0, 150, 100),
+            SkyParams::default()
+        )
+        .is_none());
+        let img = RgbImage::from_fn(150, 100, |x, y| {
+            if disc(x, y) {
+                [0.12, 0.3, 0.1]
+            } else {
+                [0.35, 0.6, 0.95]
+            }
+        });
+        let r = select_sky(
+            &ImageSampler {
+                img: &img,
+                origin: (0, 0),
+            },
+            Rect::new(0, 0, 150, 100),
+            SkyParams::default(),
+        )
+        .expect("blue sky");
         assert!(r.at(5, 95) > 0.9 && r.at(75, 50) < 0.1);
     }
 

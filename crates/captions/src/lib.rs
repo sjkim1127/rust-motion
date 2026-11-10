@@ -19,7 +19,10 @@ pub mod tts;
 pub mod types;
 pub mod whisper_parser;
 
-pub use ass::{format_ass_timestamp, parse_ass, parse_ass_timestamp, serialize_ass_karaoke, AssDialogue, AssError};
+pub use ass::{
+    format_ass_timestamp, parse_ass, parse_ass_timestamp, serialize_ass_karaoke, AssDialogue,
+    AssError,
+};
 pub use layout::{wrap_caption_tokens_to_lines, CaptionLineLayout};
 pub use line_wrapper::ensure_max_characters_per_line;
 pub use scene::SceneCaptions;

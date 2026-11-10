@@ -22,7 +22,9 @@ fn main() {
         std::process::exit(1);
     }
     if window_px >= doc_px {
-        eprintln!("window {window_px} px is not smaller than the {doc_px} px document (full-image scan)");
+        eprintln!(
+            "window {window_px} px is not smaller than the {doc_px} px document (full-image scan)"
+        );
         std::process::exit(1);
     }
 
@@ -38,7 +40,10 @@ fn main() {
             if gx >= doc_w || gy >= doc_h {
                 continue;
             }
-            let i = gy.saturating_mul(doc_w).saturating_add(gx).saturating_mul(4);
+            let i = gy
+                .saturating_mul(doc_w)
+                .saturating_add(gx)
+                .saturating_mul(4);
             let rgb = if d <= 1.5 {
                 [255u8, 255, 255]
             } else if d <= 18.0 {
@@ -69,7 +74,10 @@ fn main() {
                 *slot = [0.38, 0.28, 0.16, 1.0];
                 continue;
             }
-            let i = gy.saturating_mul(doc_w).saturating_add(gx).saturating_mul(4);
+            let i = gy
+                .saturating_mul(doc_w)
+                .saturating_add(gx)
+                .saturating_mul(4);
             let r = doc.get(i).copied().unwrap_or(0) as f32 / 255.0;
             let g = doc.get(i + 1).copied().unwrap_or(0) as f32 / 255.0;
             let b = doc.get(i + 2).copied().unwrap_or(0) as f32 / 255.0;

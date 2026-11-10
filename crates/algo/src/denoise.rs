@@ -8,9 +8,9 @@
 use photocraft_color::ColorMode;
 use photocraft_geom::Rect;
 
-use crate::Ctx;
-use crate::fxutil::{MAXC, box_blur_n, gauss_blur_n, rgba, set_rgba};
+use crate::fxutil::{box_blur_n, gauss_blur_n, rgba, set_rgba, MAXC};
 use crate::image::Image;
+use crate::Ctx;
 
 pub(crate) struct DenoiseSpec {
     pub strength: f32,
@@ -94,7 +94,11 @@ pub(crate) fn reduce_noise(src: &Image, out: Rect, ctx: &Ctx, spec: &DenoiseSpec
                 c2[i] = px[2];
             }
             Model::Ycc | Model::ViaRgb => {
-                let c = if model == Model::Ycc { [px[0], px[1], px[2], 1.0] } else { rgba(ctx, &px[..n]) };
+                let c = if model == Model::Ycc {
+                    [px[0], px[1], px[2], 1.0]
+                } else {
+                    rgba(ctx, &px[..n])
+                };
                 let l = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
                 *yy = l;
                 c1[i] = c[2] - l;
@@ -107,7 +111,10 @@ pub(crate) fn reduce_noise(src: &Image, out: Rect, ctx: &Ctx, spec: &DenoiseSpec
         let orig = yv.clone();
         for yy in 1..wh.saturating_sub(1) {
             for xx in 1..ww - 1 {
-                let (dx, dy) = ((win.x0 + xx as i32).rem_euclid(8), (win.y0 + yy as i32).rem_euclid(8));
+                let (dx, dy) = (
+                    (win.x0 + xx as i32).rem_euclid(8),
+                    (win.y0 + yy as i32).rem_euclid(8),
+                );
                 if dx == 0 || dx == 7 || dy == 0 || dy == 7 {
                     let mut a = 0.0;
                     for j in 0..3 {

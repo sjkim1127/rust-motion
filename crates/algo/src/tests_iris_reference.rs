@@ -7,7 +7,13 @@ fn sigma_of(blur: f32) -> f32 {
 const LEVELS: usize = 6;
 
 /// Blurs `src` over `out` with a per-pixel σ (`sigma(x, y)`, ≤ `smax`).
-fn variable_blur(src: &Image, out: Rect, ctx: &Ctx, smax: f32, sigma: impl Fn(f32, f32) -> f32) -> Vec<f32> {
+fn variable_blur(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    smax: f32,
+    sigma: impl Fn(f32, f32) -> f32,
+) -> Vec<f32> {
     let n = src.ch;
     if smax < 0.3 {
         return src.crop(out);
@@ -16,7 +22,9 @@ fn variable_blur(src: &Image, out: Rect, ctx: &Ctx, smax: f32, sigma: impl Fn(f3
     let (ww, wh) = (win.width() as usize, win.height() as usize);
     let (ow, oh) = (out.width() as usize, out.height() as usize);
     // Level σs: 0, then smax / 2^(LEVELS-1) … smax.
-    let lv: Vec<f32> = std::iter::once(0.0).chain((0..LEVELS).map(|k| smax / 2f32.powi((LEVELS - 1 - k) as i32))).collect();
+    let lv: Vec<f32> = std::iter::once(0.0)
+        .chain((0..LEVELS).map(|k| smax / 2f32.powi((LEVELS - 1 - k) as i32)))
+        .collect();
     let sig: Vec<f32> = (0..ow * oh)
         .map(|i| {
             let (x, y) = xy(out, i);
@@ -75,16 +83,37 @@ fn short_side(b: Rect) -> f32 {
 
 /// Normalized (super)elliptical distance of a point from an iris/spin pin.
 #[allow(clippy::too_many_arguments)]
-fn pin_distance(x: f32, y: f32, b: Rect, px: f32, py: f32, rx: f32, ry: f32, angle: f32, m: f32) -> (f32, f32, f32) {
+fn pin_distance(
+    x: f32,
+    y: f32,
+    b: Rect,
+    px: f32,
+    py: f32,
+    rx: f32,
+    ry: f32,
+    angle: f32,
+    m: f32,
+) -> (f32, f32, f32) {
     let ss = short_side(b);
-    let (cx, cy) = (b.x0 as f32 + px * b.width() as f32, b.y0 as f32 + py * b.height() as f32);
+    let (cx, cy) = (
+        b.x0 as f32 + px * b.width() as f32,
+        b.y0 as f32 + py * b.height() as f32,
+    );
     let angle_deg = if angle.is_finite() { angle } else { 0.0 };
     let (s, c) = angle_deg.to_radians().sin_cos();
     let (dx, dy) = (x - cx, y - cy);
     let (u, v) = (dx * c + dy * s, -dx * s + dy * c);
     let (u, v) = (u / (rx.max(1e-3) * ss), v / (ry.max(1e-3) * ss));
-    let e = if (m - 2.0).abs() < 1e-3 { (u * u + v * v).sqrt() } else { (u.abs().powf(m) + v.abs().powf(m)).powf(1.0 / m) };
-    if !e.is_finite() { (f32::INFINITY, 0.0, 0.0) } else { (e, u, v) }
+    let e = if (m - 2.0).abs() < 1e-3 {
+        (u * u + v * v).sqrt()
+    } else {
+        (u.abs().powf(m) + v.abs().powf(m)).powf(1.0 / m)
+    };
+    if !e.is_finite() {
+        (f32::INFINITY, 0.0, 0.0)
+    } else {
+        (e, u, v)
+    }
 }
 
 /// Iris Blur: everything outside each pin's ellipse is blurred; the sharp

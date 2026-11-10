@@ -39,10 +39,18 @@ pub fn smpte_to_frames(tc: &str, fps: f64) -> Result<u32, InterchangeError> {
     if parts.len() != 4 {
         return Err(InterchangeError::InvalidTimecode(tc.into()));
     }
-    let h: u32 = parts[0].parse().map_err(|_| InterchangeError::InvalidTimecode(tc.into()))?;
-    let m: u32 = parts[1].parse().map_err(|_| InterchangeError::InvalidTimecode(tc.into()))?;
-    let s: u32 = parts[2].parse().map_err(|_| InterchangeError::InvalidTimecode(tc.into()))?;
-    let f: u32 = parts[3].parse().map_err(|_| InterchangeError::InvalidTimecode(tc.into()))?;
+    let h: u32 = parts[0]
+        .parse()
+        .map_err(|_| InterchangeError::InvalidTimecode(tc.into()))?;
+    let m: u32 = parts[1]
+        .parse()
+        .map_err(|_| InterchangeError::InvalidTimecode(tc.into()))?;
+    let s: u32 = parts[2]
+        .parse()
+        .map_err(|_| InterchangeError::InvalidTimecode(tc.into()))?;
+    let f: u32 = parts[3]
+        .parse()
+        .map_err(|_| InterchangeError::InvalidTimecode(tc.into()))?;
 
     let base = fps.round() as u32;
     let base = if base == 0 { 24 } else { base };
@@ -155,7 +163,13 @@ pub fn parse_cmx3600_edl(edl_text: &str, fps: f64) -> Result<NleTimeline, Interc
                 std::mem::take(&mut current_clip_name)
             };
 
-            let mut clip = NleClip::new(format!("clip_{}", parts[0]), name, rec_in, rec_out.saturating_sub(rec_in), src_in);
+            let mut clip = NleClip::new(
+                format!("clip_{}", parts[0]),
+                name,
+                rec_in,
+                rec_out.saturating_sub(rec_in),
+                src_in,
+            );
             clip.source_out = src_out;
             clip.asset_id = current_source_file.take();
 
@@ -200,20 +214,21 @@ pub fn export_fcpxml(timeline: &NleTimeline) -> String {
     let _ = writeln!(
         out,
         r#"        <format id="r1" name="FFVideoFormat{}p{}" frameDuration="{}" width="{}" height="{}"/>"#,
-        timeline.height, timeline.fps.round() as u32, frame_dur, timeline.width, timeline.height
+        timeline.height,
+        timeline.fps.round() as u32,
+        frame_dur,
+        timeline.width,
+        timeline.height
     );
     let _ = writeln!(out, r#"    </resources>"#);
     let _ = writeln!(out, r#"    <library>"#);
     let _ = writeln!(out, r#"        <event name="Rust Motion Event">"#);
-    let _ = writeln!(
-        out,
-        r#"            <project name="{}">"#,
-        timeline.title
-    );
+    let _ = writeln!(out, r#"            <project name="{}">"#, timeline.title);
     let _ = writeln!(
         out,
         r#"                <sequence format="r1" duration="{}/{}s">"#,
-        timeline.duration_frames, timeline.fps.round() as u32
+        timeline.duration_frames,
+        timeline.fps.round() as u32
     );
     let _ = writeln!(out, r#"                    <spine>"#);
 
@@ -248,7 +263,9 @@ pub fn export_fcpxml(timeline: &NleTimeline) -> String {
 /// Parse FCPXML into an `NleTimeline`.
 pub fn parse_fcpxml(xml_text: &str) -> Result<NleTimeline, InterchangeError> {
     if !xml_text.contains("<fcpxml") {
-        return Err(InterchangeError::InvalidFormat("Missing <fcpxml root tag".into()));
+        return Err(InterchangeError::InvalidFormat(
+            "Missing <fcpxml root tag".into(),
+        ));
     }
 
     let mut title = "FCPXML Sequence".to_string();
@@ -266,7 +283,9 @@ pub fn parse_fcpxml(xml_text: &str) -> Result<NleTimeline, InterchangeError> {
     while let Some(tag_pos) = xml_text[cursor..].find("<asset-clip") {
         let abs_pos = cursor + tag_pos;
         let rest = &xml_text[abs_pos..];
-        let tag_end = rest.find('>').ok_or_else(|| InterchangeError::XmlParseError("Unclosed <asset-clip>".into()))?;
+        let tag_end = rest
+            .find('>')
+            .ok_or_else(|| InterchangeError::XmlParseError("Unclosed <asset-clip>".into()))?;
         let tag_str = &rest[..tag_end];
 
         let name = extract_attr(tag_str, "name").unwrap_or_else(|| "Untitled".to_string());
@@ -279,7 +298,13 @@ pub fn parse_fcpxml(xml_text: &str) -> Result<NleTimeline, InterchangeError> {
         let dur_frames = (duration * fps).round() as u32;
         let src_in = (start * fps).round() as u32;
 
-        let clip = NleClip::new(format!("clip_{}", track.clips.len() + 1), name, track_in, dur_frames, src_in);
+        let clip = NleClip::new(
+            format!("clip_{}", track.clips.len() + 1),
+            name,
+            track_in,
+            dur_frames,
+            src_in,
+        );
         track.clips.push(clip);
         cursor = abs_pos + tag_end + 1;
     }
@@ -343,8 +368,16 @@ pub struct AafMetadata {
 
 /// Generate AAF metadata descriptor for a timeline.
 pub fn export_aaf_metadata(timeline: &NleTimeline) -> AafMetadata {
-    let video_tracks_count = timeline.tracks.iter().filter(|t| t.kind == TrackKind::Video).count();
-    let audio_tracks_count = timeline.tracks.iter().filter(|t| t.kind == TrackKind::Audio).count();
+    let video_tracks_count = timeline
+        .tracks
+        .iter()
+        .filter(|t| t.kind == TrackKind::Video)
+        .count();
+    let audio_tracks_count = timeline
+        .tracks
+        .iter()
+        .filter(|t| t.kind == TrackKind::Audio)
+        .count();
     let total_clips = timeline.tracks.iter().map(|t| t.clips.len()).sum();
 
     AafMetadata {
@@ -358,25 +391,36 @@ pub fn export_aaf_metadata(timeline: &NleTimeline) -> AafMetadata {
 }
 
 /// Export an NLE timeline into an MS-CFB Compound File Binary AAF container.
-pub fn export_aaf_cfb(timeline: &NleTimeline, small_sectors: bool) -> Result<Vec<u8>, InterchangeError> {
-    let ver = if small_sectors { Version::V3 } else { Version::V4 };
+pub fn export_aaf_cfb(
+    timeline: &NleTimeline,
+    small_sectors: bool,
+) -> Result<Vec<u8>, InterchangeError> {
+    let ver = if small_sectors {
+        Version::V3
+    } else {
+        Version::V4
+    };
     let mut writer = Writer::new(ver);
     writer.set_clsid(Writer::ROOT, AAF_ROOT_CLASS_ID);
 
     // Create AAF Header storage
-    let header_id = writer.storage(Writer::ROOT, "Header", AAF_HEADER_CLASS_ID)
+    let header_id = writer
+        .storage(Writer::ROOT, "Header", AAF_HEADER_CLASS_ID)
         .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
 
     // Create Identification storage
-    let _ident_id = writer.storage(header_id, "Identification", [0; 16])
+    let _ident_id = writer
+        .storage(header_id, "Identification", [0; 16])
         .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
 
     // Create Content storage
-    let content_id = writer.storage(header_id, "Content", [0; 16])
+    let content_id = writer
+        .storage(header_id, "Content", [0; 16])
         .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
 
     // Create CompositionMob storage
-    let comp_id = writer.storage(content_id, "CompositionMob", AAF_COMPOSITION_MOB_CLASS_ID)
+    let comp_id = writer
+        .storage(content_id, "CompositionMob", AAF_COMPOSITION_MOB_CLASS_ID)
         .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
 
     // Write properties stream for Header: little-endian 0x4C, format 0x20
@@ -384,25 +428,28 @@ pub fn export_aaf_cfb(timeline: &NleTimeline, small_sectors: bool) -> Result<Vec
     header_props.push(0x4C); // Little-endian
     header_props.push(0x20); // Format version
     header_props.extend_from_slice(&1u16.to_le_bytes()); // Entry count = 1
-    // PID 0x0002 (ByteOrder), SF_DATA = 0x82, length = 2
+                                                         // PID 0x0002 (ByteOrder), SF_DATA = 0x82, length = 2
     header_props.extend_from_slice(&0x0002u16.to_le_bytes());
     header_props.extend_from_slice(&0x0082u16.to_le_bytes());
     header_props.extend_from_slice(&2u16.to_le_bytes());
     header_props.extend_from_slice(&0x4949u16.to_le_bytes()); // 'II'
 
-    writer.stream(header_id, "properties", header_props)
+    writer
+        .stream(header_id, "properties", header_props)
         .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
 
     // Serialize NLE Timeline metadata & structure into AAF streams
     let metadata = export_aaf_metadata(timeline);
     let meta_json = serde_json::to_vec_pretty(&metadata)
         .map_err(|e| InterchangeError::InvalidFormat(e.to_string()))?;
-    writer.stream(comp_id, "RustMotionAafMeta", meta_json)
+    writer
+        .stream(comp_id, "RustMotionAafMeta", meta_json)
         .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
 
     let timeline_json = serde_json::to_vec_pretty(timeline)
         .map_err(|e| InterchangeError::InvalidFormat(e.to_string()))?;
-    writer.stream(comp_id, "NleTimelineData", timeline_json)
+    writer
+        .stream(comp_id, "NleTimelineData", timeline_json)
         .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
 
     // Also write a standard AAF mob summary stream
@@ -411,7 +458,8 @@ pub fn export_aaf_cfb(timeline: &NleTimeline, small_sectors: bool) -> Result<Vec
     mob_summary.extend_from_slice(&(timeline.fps as f32).to_le_bytes());
     mob_summary.extend_from_slice(&(timeline.width).to_le_bytes());
     mob_summary.extend_from_slice(&(timeline.height).to_le_bytes());
-    writer.stream(comp_id, "MobSummary", mob_summary)
+    writer
+        .stream(comp_id, "MobSummary", mob_summary)
         .map_err(|e| InterchangeError::InvalidFormat(format!("{e:?}")))?;
 
     Ok(writer.finish())
@@ -419,12 +467,14 @@ pub fn export_aaf_cfb(timeline: &NleTimeline, small_sectors: bool) -> Result<Vec
 
 /// Import an NLE timeline from an MS-CFB Compound File Binary AAF container.
 pub fn import_aaf_cfb(data: &[u8]) -> Result<NleTimeline, InterchangeError> {
-    let cfb = CompoundFile::open(data)
-        .map_err(|e| InterchangeError::InvalidFormat(format!("Failed to parse CFB container: {e:?}")))?;
+    let cfb = CompoundFile::open(data).map_err(|e| {
+        InterchangeError::InvalidFormat(format!("Failed to parse CFB container: {e:?}"))
+    })?;
 
     // Verify AAF Header storage exists
-    let _header_entry = cfb.find("/Header")
-        .map_err(|_| InterchangeError::InvalidFormat("AAF /Header storage not found in CFB".into()))?;
+    let _header_entry = cfb.find("/Header").map_err(|_| {
+        InterchangeError::InvalidFormat("AAF /Header storage not found in CFB".into())
+    })?;
 
     // Try reading embedded NleTimelineData if available
     if let Ok(timeline_data) = cfb.read_path("/Header/Content/CompositionMob/NleTimelineData") {
@@ -458,8 +508,12 @@ pub fn import_aaf_cfb(data: &[u8]) -> Result<NleTimeline, InterchangeError> {
     }
 
     let mut timeline = NleTimeline::new(title, fps, width, height);
-    timeline.tracks.push(NleTrack::new("v1", "Video Track", TrackKind::Video));
-    timeline.tracks.push(NleTrack::new("a1", "Audio Track", TrackKind::Audio));
+    timeline
+        .tracks
+        .push(NleTrack::new("v1", "Video Track", TrackKind::Video));
+    timeline
+        .tracks
+        .push(NleTrack::new("a1", "Audio Track", TrackKind::Audio));
     timeline.update_duration();
     Ok(timeline)
 }
@@ -482,7 +536,9 @@ mod tests {
         let mut timeline = NleTimeline::new("My Film", 24.0, 1920, 1080);
         let mut v_track = NleTrack::new("v1", "Video", TrackKind::Video);
         v_track.clips.push(NleClip::new("c1", "Scene1", 0, 72, 0));
-        v_track.clips.push(NleClip::new("c2", "Scene2", 72, 48, 100));
+        v_track
+            .clips
+            .push(NleClip::new("c2", "Scene2", 72, 48, 100));
         timeline.tracks.push(v_track);
         timeline.update_duration();
 
@@ -545,7 +601,9 @@ mod tests {
         let mut timeline = NleTimeline::new("Avid / Premiere Film", 24.0, 1920, 1080);
         let mut v_track = NleTrack::new("v1", "Main Video", TrackKind::Video);
         v_track.clips.push(NleClip::new("c1", "Scene 1", 0, 120, 0));
-        v_track.clips.push(NleClip::new("c2", "Scene 2", 120, 240, 50));
+        v_track
+            .clips
+            .push(NleClip::new("c2", "Scene 2", 120, 240, 50));
         let mut a_track = NleTrack::new("a1", "Dialogue", TrackKind::Audio);
         a_track.clips.push(NleClip::new("c3", "Audio 1", 0, 360, 0));
         timeline.tracks.push(v_track);

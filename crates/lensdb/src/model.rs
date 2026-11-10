@@ -36,7 +36,14 @@ pub enum Tca {
     /// `r_ch = r_g · k`.
     Linear { kr: f64, kb: f64 },
     /// `r_ch = r_g · (b·r_g² + c·r_g + v)`, per channel.
-    Poly3 { vr: f64, vb: f64, cr: f64, cb: f64, br: f64, bb: f64 },
+    Poly3 {
+        vr: f64,
+        vb: f64,
+        cr: f64,
+        cb: f64,
+        br: f64,
+        bb: f64,
+    },
 }
 
 impl Tca {
@@ -121,9 +128,14 @@ pub fn fit_even4(ratio: impl Fn(f64) -> f64) -> Option<([f64; 4], f64)> {
         let r2 = r * r;
         k[0] + r2 * (k[1] + r2 * (k[2] + r2 * k[3]))
     };
-    let err = pts.iter().map(|&r| (r * (eval(r) - ratio(r))).abs()).fold(0.0, f64::max);
+    let err = pts
+        .iter()
+        .map(|&r| (r * (eval(r) - ratio(r))).abs())
+        .fold(0.0, f64::max);
     // the warp must stay monotonic (no folding): r·fit(r) increasing
-    let mono = pts.windows(2).all(|w| w[1] * eval(w[1]) > w[0] * eval(w[0]));
+    let mono = pts
+        .windows(2)
+        .all(|w| w[1] * eval(w[1]) > w[0] * eval(w[0]));
     (err.is_finite() && mono).then_some((k, err))
 }
 
@@ -135,7 +147,10 @@ pub fn fit_gain5(gain: impl Fn(f64) -> f64) -> Option<([f64; 5], f64)> {
         .iter()
         .map(|&r| {
             let r2 = r * r;
-            ([r2, r2 * r2, r2.powi(3), r2.powi(4), r2.powi(5)], gain(r) - 1.0)
+            (
+                [r2, r2 * r2, r2.powi(3), r2.powi(4), r2.powi(5)],
+                gain(r) - 1.0,
+            )
         })
         .collect();
     let k = least_squares(&samples)?;
@@ -143,7 +158,10 @@ pub fn fit_gain5(gain: impl Fn(f64) -> f64) -> Option<([f64; 5], f64)> {
         let r2 = r * r;
         1.0 + r2 * (k[0] + r2 * (k[1] + r2 * (k[2] + r2 * (k[3] + r2 * k[4]))))
     };
-    let err = pts.iter().map(|&r| ((eval(r) - gain(r)) / gain(r).abs().max(1e-9)).abs()).fold(0.0, f64::max);
+    let err = pts
+        .iter()
+        .map(|&r| ((eval(r) - gain(r)) / gain(r).abs().max(1e-9)).abs())
+        .fold(0.0, f64::max);
     err.is_finite().then_some((k, err))
 }
 
@@ -155,20 +173,80 @@ mod tests {
 
     #[test]
     fn models_are_identity_at_centre_and_documented_at_one() {
-        assert_eq!(Distortion::Poly3 { k1: 0.1 }.ratio(1.0), 1.0, "poly3 keeps r = 1");
+        assert_eq!(
+            Distortion::Poly3 { k1: 0.1 }.ratio(1.0),
+            1.0,
+            "poly3 keeps r = 1"
+        );
         assert!((Distortion::Poly5 { k1: 0.1, k2: 0.01 }.ratio(1.0) - 1.11).abs() < 1e-12);
-        assert!((Distortion::PtLens { a: 0.01, b: -0.02, c: 0.03 }.ratio(1.0) - 1.0).abs() < 1e-12, "ptlens keeps r = 1");
-        assert_eq!(Tca::Linear { kr: 1.001, kb: 0.999 }.ratio(0, 0.5), 1.001);
-        assert_eq!(Tca::Poly3 { vr: 1.0, vb: 1.0, cr: 0.0, cb: 0.0, br: 0.001, bb: 0.0 }.ratio(1, 0.7), 1.0);
-        assert!((Vignetting { k1: -0.3, k2: 0.0, k3: 0.0 }.attenuation(1.0) - 0.7).abs() < 1e-12);
+        assert!(
+            (Distortion::PtLens {
+                a: 0.01,
+                b: -0.02,
+                c: 0.03
+            }
+            .ratio(1.0)
+                - 1.0)
+                .abs()
+                < 1e-12,
+            "ptlens keeps r = 1"
+        );
+        assert_eq!(
+            Tca::Linear {
+                kr: 1.001,
+                kb: 0.999
+            }
+            .ratio(0, 0.5),
+            1.001
+        );
+        assert_eq!(
+            Tca::Poly3 {
+                vr: 1.0,
+                vb: 1.0,
+                cr: 0.0,
+                cb: 0.0,
+                br: 0.001,
+                bb: 0.0
+            }
+            .ratio(1, 0.7),
+            1.0
+        );
+        assert!(
+            (Vignetting {
+                k1: -0.3,
+                k2: 0.0,
+                k3: 0.0
+            }
+            .attenuation(1.0)
+                - 0.7)
+                .abs()
+                < 1e-12
+        );
     }
 
     #[test]
     fn even_fit_is_exact_for_even_models_and_close_for_ptlens() {
-        let (k, err) = fit_even4(|r| Distortion::Poly5 { k1: -0.05, k2: 0.01 }.ratio(r)).unwrap();
+        let (k, err) = fit_even4(|r| {
+            Distortion::Poly5 {
+                k1: -0.05,
+                k2: 0.01,
+            }
+            .ratio(r)
+        })
+        .unwrap();
         assert!(err < 1e-9, "{err}");
-        assert!((k[0] - 1.0).abs() < 1e-9 && (k[1] + 0.05).abs() < 1e-9 && (k[2] - 0.01).abs() < 1e-9);
-        let (_, err) = fit_even4(|r| Distortion::PtLens { a: 0.01, b: -0.03, c: 0.0 }.ratio(r)).unwrap();
+        assert!(
+            (k[0] - 1.0).abs() < 1e-9 && (k[1] + 0.05).abs() < 1e-9 && (k[2] - 0.01).abs() < 1e-9
+        );
+        let (_, err) = fit_even4(|r| {
+            Distortion::PtLens {
+                a: 0.01,
+                b: -0.03,
+                c: 0.0,
+            }
+            .ratio(r)
+        })
+        .unwrap();
         assert!(err < 2e-4, "{err}");
     }
 
@@ -179,7 +257,11 @@ mod tests {
 
     #[test]
     fn gain_fit_matches_inverse_attenuation() {
-        let v = Vignetting { k1: -0.4, k2: 0.1, k3: -0.02 };
+        let v = Vignetting {
+            k1: -0.4,
+            k2: 0.1,
+            k3: -0.02,
+        };
         let (_, err) = fit_gain5(|r| 1.0 / v.attenuation(r)).unwrap();
         assert!(err < 1e-3, "{err}");
     }

@@ -10,7 +10,7 @@
 //! Buffers are interleaved `w × h × ch` normalised floats (any model/depth) with `w × h` masks;
 //! deterministic.
 
-use crate::nonlocal::{Params, complete_with};
+use crate::nonlocal::{complete_with, Params};
 use crate::poisson::membrane_fill_with;
 use photocraft_raster::{Cancelled, Interrupt};
 
@@ -62,7 +62,13 @@ pub fn dilate(w: usize, h: usize, mask: &[bool], r: usize) -> Vec<bool> {
     // A pass sets each cell when any cell within `r` along one axis is set (a running count).
     let pass = |src: &[bool], horizontal: bool| -> Vec<bool> {
         let (lines, len) = if horizontal { (h, w) } else { (w, h) };
-        let at = |line: usize, k: usize| if horizontal { line * w + k } else { k * w + line };
+        let at = |line: usize, k: usize| {
+            if horizontal {
+                line * w + k
+            } else {
+                k * w + line
+            }
+        };
         let mut out = vec![false; src.len()];
         for line in 0..lines {
             let mut count = 0usize;
@@ -132,7 +138,12 @@ pub fn hole_radius(w: usize, h: usize, hole: &[bool]) -> u32 {
             }
         }
     }
-    d.iter().zip(hole).filter(|(_, m)| **m).map(|(v, _)| *v).max().unwrap_or(0)
+    d.iter()
+        .zip(hole)
+        .filter(|(_, m)| **m)
+        .map(|(v, _)| *v)
+        .max()
+        .unwrap_or(0)
 }
 
 /// Holes covering less than this share of their bounding box (a long stroke, scattered marks) are
@@ -148,7 +159,15 @@ const MIN_TILE: usize = 256;
 /// A sparse hole is filled in tiles eight times its thickness (at least [`MIN_TILE`] pixels), row
 /// by row, each with a margin of six times its thickness (at least 48 pixels): each tile sees the
 /// ones before it as filled, so the fill runs on across tile edges.
-pub fn remove_with(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], seed: u64, ctl: &Interrupt) -> Result<Vec<f32>, Cancelled> {
+pub fn remove_with(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    hole: &[bool],
+    seed: u64,
+    ctl: &Interrupt,
+) -> Result<Vec<f32>, Cancelled> {
     let n = w.saturating_mul(h);
     if ch == 0 || hole.len() != n || img.len() != n.saturating_mul(ch) {
         return Ok(img.to_vec());
@@ -156,7 +175,13 @@ pub fn remove_with(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], se
     let (mut bx0, mut by0, mut bx1, mut by1, mut count) = (w, h, 0, 0, 0usize);
     for (i, _) in hole.iter().enumerate().filter(|(_, m)| **m) {
         let (x, y) = (i % w, i / w);
-        (bx0, by0, bx1, by1, count) = (bx0.min(x), by0.min(y), bx1.max(x + 1), by1.max(y + 1), count + 1);
+        (bx0, by0, bx1, by1, count) = (
+            bx0.min(x),
+            by0.min(y),
+            bx1.max(x + 1),
+            by1.max(y + 1),
+            count + 1,
+        );
     }
     if count == 0 {
         return Ok(img.to_vec());
@@ -170,20 +195,40 @@ pub fn remove_with(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], se
     let margin = (6 * thickness).max(48);
     let mut out = img.to_vec();
     let mut left = hole.to_vec();
-    let origins: Vec<(usize, usize)> = (by0..by1).step_by(tile).flat_map(|y| (bx0..bx1).step_by(tile).map(move |x| (x, y))).collect();
+    let origins: Vec<(usize, usize)> = (by0..by1)
+        .step_by(tile)
+        .flat_map(|y| (bx0..bx1).step_by(tile).map(move |x| (x, y)))
+        .collect();
     for (k, &(tx0, ty0)) in origins.iter().enumerate() {
         ctl.check()?;
         let (tx1, ty1) = ((tx0 + tile).min(bx1), (ty0 + tile).min(by1));
         if !(ty0..ty1).any(|y| left[y * w + tx0..y * w + tx1].iter().any(|m| *m)) {
             continue;
         }
-        let (x0, y0, x1, y1) = (tx0.saturating_sub(margin), ty0.saturating_sub(margin), (tx1 + margin).min(w), (ty1 + margin).min(h));
+        let (x0, y0, x1, y1) = (
+            tx0.saturating_sub(margin),
+            ty0.saturating_sub(margin),
+            (tx1 + margin).min(w),
+            (ty1 + margin).min(h),
+        );
         let ww = x1 - x0;
-        let sub_img: Vec<f32> = (y0..y1).flat_map(|y| out[(y * w + x0) * ch..(y * w + x1) * ch].iter().copied()).collect();
-        let sub_hole: Vec<bool> = (y0..y1).flat_map(|y| left[y * w + x0..y * w + x1].iter().copied()).collect();
+        let sub_img: Vec<f32> = (y0..y1)
+            .flat_map(|y| out[(y * w + x0) * ch..(y * w + x1) * ch].iter().copied())
+            .collect();
+        let sub_hole: Vec<bool> = (y0..y1)
+            .flat_map(|y| left[y * w + x0..y * w + x1].iter().copied())
+            .collect();
         let cancel = || ctl.cancelled();
         let progress = |f: f32| ctl.progress((k as f32 + f) / origins.len() as f32);
-        let filled = fill(ww, y1 - y0, ch, &sub_img, &sub_hole, seed.wrapping_add(k as u64), &Interrupt::new(&cancel, &progress))?;
+        let filled = fill(
+            ww,
+            y1 - y0,
+            ch,
+            &sub_img,
+            &sub_hole,
+            seed.wrapping_add(k as u64),
+            &Interrupt::new(&cancel, &progress),
+        )?;
         for y in ty0..ty1 {
             for x in tx0..tx1 {
                 let i = y * w + x;
@@ -199,8 +244,27 @@ pub fn remove_with(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], se
 }
 
 /// Complete one hole, or diffuse it when there is no fully-known patch to copy from.
-fn fill(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], seed: u64, ctl: &Interrupt) -> Result<Vec<f32>, Cancelled> {
-    match complete_with(w, h, ch, img, hole, &Params { seed, ..Params::default() }, ctl)? {
+fn fill(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    hole: &[bool],
+    seed: u64,
+    ctl: &Interrupt,
+) -> Result<Vec<f32>, Cancelled> {
+    match complete_with(
+        w,
+        h,
+        ch,
+        img,
+        hole,
+        &Params {
+            seed,
+            ..Params::default()
+        },
+        ctl,
+    )? {
         Some(out) => Ok(out),
         None => membrane_fill_with(w, h, ch, img, hole, ctl),
     }
@@ -225,13 +289,21 @@ mod tests {
         assert!(closed[20 * w + 20], "the centre is enclosed");
         assert!(!closed[2 * w + 2], "the outside stays outside");
         let line = grid(w, h, |x, y| y == 20 && (5..35).contains(&x));
-        assert_eq!(close_loops(w, h, &line), line, "an open stroke encloses nothing");
+        assert_eq!(
+            close_loops(w, h, &line),
+            line,
+            "an open stroke encloses nothing"
+        );
     }
 
     #[test]
     fn a_loop_open_at_one_pixel_encloses_nothing() {
         let (w, h) = (20, 20);
-        let mut sq = grid(w, h, |x, y| (x == 5 || x == 14 || y == 5 || y == 14) && (5..=14).contains(&x) && (5..=14).contains(&y));
+        let mut sq = grid(w, h, |x, y| {
+            (x == 5 || x == 14 || y == 5 || y == 14)
+                && (5..=14).contains(&x)
+                && (5..=14).contains(&y)
+        });
         sq[5 * w + 9] = false;
         assert!(!close_loops(w, h, &sq)[10 * w + 10]);
     }
@@ -261,8 +333,13 @@ mod tests {
     #[test]
     fn removes_thin_and_wide_holes_from_a_gradient() {
         let (w, h, ch) = (64, 48, 2);
-        let truth: Vec<f32> = (0..w * h).flat_map(|i| [(i % w) as f32 / w as f32, 1.0]).collect();
-        for hole in [grid(w, h, |x, y| y == 24 && (10..54).contains(&x)), grid(w, h, |x, y| (24..40).contains(&x) && (16..32).contains(&y))] {
+        let truth: Vec<f32> = (0..w * h)
+            .flat_map(|i| [(i % w) as f32 / w as f32, 1.0])
+            .collect();
+        for hole in [
+            grid(w, h, |x, y| y == 24 && (10..54).contains(&x)),
+            grid(w, h, |x, y| (24..40).contains(&x) && (16..32).contains(&y)),
+        ] {
             let mut img = truth.clone();
             for (i, m) in hole.iter().enumerate() {
                 if *m {
@@ -272,9 +349,18 @@ mod tests {
             let out = remove_with(w, h, ch, &img, &hole, 7, &Interrupt::NONE).unwrap();
             for (i, m) in hole.iter().enumerate() {
                 if *m {
-                    assert!((out[i * ch] - truth[i * ch]).abs() < 0.12, "pixel {i}: {} vs {}", out[i * ch], truth[i * ch]);
+                    assert!(
+                        (out[i * ch] - truth[i * ch]).abs() < 0.12,
+                        "pixel {i}: {} vs {}",
+                        out[i * ch],
+                        truth[i * ch]
+                    );
                 } else {
-                    assert_eq!(out[i * ch..(i + 1) * ch], img[i * ch..(i + 1) * ch], "outside the hole is untouched");
+                    assert_eq!(
+                        out[i * ch..(i + 1) * ch],
+                        img[i * ch..(i + 1) * ch],
+                        "outside the hole is untouched"
+                    );
                 }
             }
         }
@@ -284,14 +370,25 @@ mod tests {
     #[test]
     fn a_long_thin_hole_is_filled_in_tiles() {
         let (w, h, ch) = (900, 700, 1);
-        let img: Vec<f32> = (0..w * h).map(|i| 0.3 + 0.4 * (((i % w) / 7 + (i / w) / 5) % 2) as f32).collect();
-        let hole = grid(w, h, |x, y| (x as f32 - y as f32 * 1.2 - 20.0).abs() < 3.0 && (40..680).contains(&y));
+        let img: Vec<f32> = (0..w * h)
+            .map(|i| 0.3 + 0.4 * (((i % w) / 7 + (i / w) / 5) % 2) as f32)
+            .collect();
+        let hole = grid(w, h, |x, y| {
+            (x as f32 - y as f32 * 1.2 - 20.0).abs() < 3.0 && (40..680).contains(&y)
+        });
         let mut holed = img.clone();
-        hole.iter().enumerate().filter(|(_, m)| **m).for_each(|(i, _)| holed[i] = 1.0);
+        hole.iter()
+            .enumerate()
+            .filter(|(_, m)| **m)
+            .for_each(|(i, _)| holed[i] = 1.0);
         let out = remove_with(w, h, ch, &holed, &hole, 3, &Interrupt::NONE).unwrap();
         for (i, m) in hole.iter().enumerate() {
             if *m {
-                assert!((0.29..=0.71).contains(&out[i]), "cell {i} not filled from the stripes: {}", out[i]);
+                assert!(
+                    (0.29..=0.71).contains(&out[i]),
+                    "cell {i} not filled from the stripes: {}",
+                    out[i]
+                );
             } else {
                 assert_eq!(out[i], holed[i]);
             }
@@ -301,9 +398,18 @@ mod tests {
     #[test]
     fn hostile_sizes_return_the_input() {
         let img = vec![0.5f32; 12];
-        assert_eq!(remove_with(2, 2, 3, &img, &[true], 1, &Interrupt::NONE).unwrap(), img);
-        assert_eq!(remove_with(2, 2, 0, &img, &[true; 4], 1, &Interrupt::NONE).unwrap(), img);
-        assert_eq!(remove_with(3, 2, 2, &img, &[false; 6], 1, &Interrupt::NONE).unwrap(), img);
+        assert_eq!(
+            remove_with(2, 2, 3, &img, &[true], 1, &Interrupt::NONE).unwrap(),
+            img
+        );
+        assert_eq!(
+            remove_with(2, 2, 0, &img, &[true; 4], 1, &Interrupt::NONE).unwrap(),
+            img
+        );
+        assert_eq!(
+            remove_with(3, 2, 2, &img, &[false; 6], 1, &Interrupt::NONE).unwrap(),
+            img
+        );
         assert!(close_loops(0, 0, &[]).is_empty());
         assert_eq!(dilate(3, 3, &[true], 1), vec![true]);
     }

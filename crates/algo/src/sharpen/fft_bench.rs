@@ -8,8 +8,16 @@ use std::time::Instant;
 #[test]
 #[ignore = "adaptive large-radius full-operation quality and performance; run alone"]
 fn unsharp_fft_performance() {
-    let number = |name: &str, default| std::env::var(name).ok().and_then(|v| v.parse::<i32>().ok()).unwrap_or(default);
-    let (w, h) = (number("PHOTOCRAFT_UNSHARP_WIDTH", 1920), number("PHOTOCRAFT_UNSHARP_HEIGHT", 1080));
+    let number = |name: &str, default| {
+        std::env::var(name)
+            .ok()
+            .and_then(|v| v.parse::<i32>().ok())
+            .unwrap_or(default)
+    };
+    let (w, h) = (
+        number("PHOTOCRAFT_UNSHARP_WIDTH", 1920),
+        number("PHOTOCRAFT_UNSHARP_HEIGHT", 1080),
+    );
     let reps = number("PHOTOCRAFT_UNSHARP_REPS", 3);
     assert!((1..=8192).contains(&w) && (1..=8192).contains(&h) && (1..=5).contains(&reps));
     let depth = match number("PHOTOCRAFT_UNSHARP_DEPTH", 8) {
@@ -20,12 +28,27 @@ fn unsharp_fft_performance() {
     };
     let area = Rect::new(0, 0, w, h);
     let surface = source(area, PixelFormat::new(ColorMode::Rgb, depth, true));
-    let cases = std::env::var("PHOTOCRAFT_UNSHARP_CASES").unwrap_or_else(|_| "100:150:0,300:150:0,500:150:8".into());
+    let cases = std::env::var("PHOTOCRAFT_UNSHARP_CASES")
+        .unwrap_or_else(|_| "100:150:0,300:150:0,500:150:8".into());
     for case in cases.split(',') {
         let v: Vec<f32> = case.split(':').map(|v| v.parse().unwrap()).collect();
         let (radius, amount, threshold) = (v[0], v[1], v[2]);
-        let params = FilterParams::UnsharpMask { amount, radius, threshold };
-        let baseline = || apply_reference(&surface, &params, area, area, None, Some(area), crate::auto_tile(&params, area));
+        let params = FilterParams::UnsharpMask {
+            amount,
+            radius,
+            threshold,
+        };
+        let baseline = || {
+            apply_reference(
+                &surface,
+                &params,
+                area,
+                area,
+                None,
+                Some(area),
+                crate::auto_tile(&params, area),
+            )
+        };
         let candidate = || crate::apply_in(&surface, &params, area, area, None, area);
         for _ in 0..2 {
             std::hint::black_box(baseline());
@@ -57,7 +80,10 @@ fn unsharp_fft_performance() {
                     SampleType::U16 => 3.0 / 65535.0 + 1e-7,
                     SampleType::F32 => 3e-5 * (1.0 + a.abs()),
                 };
-                assert!(e <= limit, "quality regression: {a} != {b} at radius {radius}, threshold {threshold}");
+                assert!(
+                    e <= limit,
+                    "quality regression: {a} != {b} at radius {radius}, threshold {threshold}"
+                );
                 max_error = max_error.max(e);
                 if rep == 0 {
                     sum_error += f64::from(e);
@@ -84,7 +110,11 @@ fn unsharp_fft_cancel_latency() {
     let area = Rect::new(0, 0, 3840, 2160);
     let surface = source(area, PixelFormat::RGBA8);
     let input = surface.to_interleaved(area);
-    let p = FilterParams::UnsharpMask { amount: 150.0, radius: 1000.0, threshold: 0.0 };
+    let p = FilterParams::UnsharpMask {
+        amount: 150.0,
+        radius: 1000.0,
+        threshold: 0.0,
+    };
     let mut latencies = Vec::new();
     for _ in 0..5 {
         let flag = AtomicBool::new(false);
@@ -97,11 +127,20 @@ fn unsharp_fft_cancel_latency() {
                 flag.store(true, Ordering::Release);
             });
             let cancel = || flag.load(Ordering::Acquire);
-            let result = crate::apply_in_with(&surface, &p, area, area, None, area, &photocraft_raster::Interrupt::cancel_only(&cancel));
+            let result = crate::apply_in_with(
+                &surface,
+                &p,
+                area,
+                area,
+                None,
+                area,
+                &photocraft_raster::Interrupt::cancel_only(&cancel),
+            );
             let elapsed = started.elapsed().as_micros() as u64;
             timer.join().unwrap();
             assert!(result.is_none());
-            latencies.push(elapsed.saturating_sub(cancel_at.load(Ordering::Relaxed)) as f64 / 1000.0);
+            latencies
+                .push(elapsed.saturating_sub(cancel_at.load(Ordering::Relaxed)) as f64 / 1000.0);
         });
         assert_eq!(surface.to_interleaved(area), input);
     }

@@ -1,7 +1,7 @@
+use rust_motion_rasterizer::algo::FilterParams;
 use rust_motion_rasterizer::backend::{FrameConfig, RasterizerBackend};
 use rust_motion_rasterizer::scene::{BlendMode, Color, Scene, SceneFilter, SceneNode};
 use rust_motion_rasterizer::tiny_skia_backend::TinySkiaBackend;
-use rust_motion_rasterizer::algo::FilterParams;
 
 #[test]
 fn test_photocraft_filter_serde_roundtrip() {
@@ -90,7 +90,9 @@ fn test_box_blur_filter_rendering() {
     let config = FrameConfig::new(100, 100, 0, 30.0);
     let scene = create_test_layer(SceneFilter::BoxBlur { radius: 4.0 });
 
-    let img = backend.render_frame(&scene, &config).expect("render box blur");
+    let img = backend
+        .render_frame(&scene, &config)
+        .expect("render box blur");
     assert_eq!(img.width(), 100);
     assert_eq!(img.height(), 100);
 
@@ -108,7 +110,9 @@ fn test_surface_blur_filter_rendering() {
         threshold: 20.0,
     });
 
-    let img = backend.render_frame(&scene, &config).expect("render surface blur");
+    let img = backend
+        .render_frame(&scene, &config)
+        .expect("render surface blur");
     assert_eq!(img.width(), 100);
     assert_eq!(img.height(), 100);
 }
@@ -144,7 +148,9 @@ fn test_distortions_twirl_spherize_pinch_ripple() {
 
     // Twirl
     let scene_twirl = create_test_layer(SceneFilter::Twirl { angle: 90.0 });
-    let img_twirl = backend.render_frame(&scene_twirl, &config).expect("render twirl");
+    let img_twirl = backend
+        .render_frame(&scene_twirl, &config)
+        .expect("render twirl");
     assert_eq!(img_twirl.width(), 100);
 
     // Spherize
@@ -156,7 +162,9 @@ fn test_distortions_twirl_spherize_pinch_ripple() {
 
     // Pinch
     let scene_pinch = create_test_layer(SceneFilter::Pinch { amount: -40.0 });
-    let img_pinch = backend.render_frame(&scene_pinch, &config).expect("render pinch");
+    let img_pinch = backend
+        .render_frame(&scene_pinch, &config)
+        .expect("render pinch");
     assert_eq!(img_pinch.width(), 100);
 
     // Ripple
@@ -164,7 +172,9 @@ fn test_distortions_twirl_spherize_pinch_ripple() {
         amount: 80.0,
         size: 15.0,
     });
-    let img_ripple = backend.render_frame(&scene_ripple, &config).expect("render ripple");
+    let img_ripple = backend
+        .render_frame(&scene_ripple, &config)
+        .expect("render ripple");
     assert_eq!(img_ripple.width(), 100);
 }
 
@@ -174,9 +184,9 @@ fn test_photofilter_direct_algorithm_execution() {
     let config = FrameConfig::new(100, 100, 0, 30.0);
 
     // Direct PhotoCraft algo execution: Median filter
-    let scene = create_test_layer(SceneFilter::PhotoFilter(Box::new(
-        FilterParams::Median { radius: 3.0 },
-    )));
+    let scene = create_test_layer(SceneFilter::PhotoFilter(Box::new(FilterParams::Median {
+        radius: 3.0,
+    })));
     let img = backend
         .render_frame(&scene, &config)
         .expect("render photo filter median");

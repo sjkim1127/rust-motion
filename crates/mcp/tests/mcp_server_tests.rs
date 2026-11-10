@@ -21,7 +21,9 @@ fn test_mcp_initialize_and_tools_list() {
         }
     });
 
-    let resp_str = server.handle_message(&init_msg.to_string()).expect("response");
+    let resp_str = server
+        .handle_message(&init_msg.to_string())
+        .expect("response");
     let resp: serde_json::Value = serde_json::from_str(&resp_str).expect("valid json");
     assert_eq!(resp["jsonrpc"], "2.0");
     assert_eq!(resp["id"], 1);
@@ -35,9 +37,13 @@ fn test_mcp_initialize_and_tools_list() {
         "params": {}
     });
 
-    let list_resp_str = server.handle_message(&list_msg.to_string()).expect("response");
+    let list_resp_str = server
+        .handle_message(&list_msg.to_string())
+        .expect("response");
     let list_resp: serde_json::Value = serde_json::from_str(&list_resp_str).expect("valid json");
-    let tools = list_resp["result"]["tools"].as_array().expect("tools array");
+    let tools = list_resp["result"]["tools"]
+        .as_array()
+        .expect("tools array");
 
     let tool_names: Vec<&str> = tools
         .iter()

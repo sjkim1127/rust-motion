@@ -20,10 +20,10 @@
 //! last slot) and the trailing image is the filter mask, in document coordinates. RLE row counts
 //! are four bytes wide (PSB style) in every file version.
 
-use crate::compression::{Compression, PlaneLayout, decode_planes, encode_planes};
+use crate::compression::{decode_planes, encode_planes, Compression, PlaneLayout};
 use crate::error::{PsdError, Result};
 use crate::header::Version;
-use crate::io::{Reader, WriteExt, read_pascal, write_pascal};
+use crate::io::{read_pascal, write_pascal, Reader, WriteExt};
 use crate::layer::Rect;
 
 /// Most slots an item may declare (Photoshop writes 24 channels + 2).
@@ -40,16 +40,37 @@ pub struct EffectsPlane {
 
 impl EffectsPlane {
     /// Encodes one plane of `w × h` big-endian samples of `depth` bits (RLE uses four-byte counts).
-    pub fn encode(compression: Compression, decoded: &[u8], w: usize, h: usize, depth: u16) -> Result<Self> {
-        let layout = PlaneLayout { planes: 1, width: w, height: h, depth, version: Version::Psb };
-        Ok(EffectsPlane { compression, data: encode_planes(compression, decoded, &layout)? })
+    pub fn encode(
+        compression: Compression,
+        decoded: &[u8],
+        w: usize,
+        h: usize,
+        depth: u16,
+    ) -> Result<Self> {
+        let layout = PlaneLayout {
+            planes: 1,
+            width: w,
+            height: h,
+            depth,
+            version: Version::Psb,
+        };
+        Ok(EffectsPlane {
+            compression,
+            data: encode_planes(compression, decoded, &layout)?,
+        })
     }
 
     /// Decodes into `w × h` big-endian samples of `depth` bits. A size the encoded data can't
     /// possibly hold (PackBits expands at most 64×, zlib about 1032×) is refused before any
     /// allocation, so a tiny corrupt block can't ask for gigabytes.
     pub fn decode(&self, w: usize, h: usize, depth: u16) -> Result<Vec<u8>> {
-        let layout = PlaneLayout { planes: 1, width: w, height: h, depth, version: Version::Psb };
+        let layout = PlaneLayout {
+            planes: 1,
+            width: w,
+            height: h,
+            depth,
+            version: Version::Psb,
+        };
         let n = self.data.len() as u64;
         let most = match self.compression {
             Compression::Raw => n,
@@ -57,7 +78,9 @@ impl EffectsPlane {
             _ => n.saturating_mul(1032).saturating_add(64),
         };
         if layout.total_bytes()? > most {
-            return Err(PsdError::invalid("filter effects: plane larger than its data can hold"));
+            return Err(PsdError::invalid(
+                "filter effects: plane larger than its data can hold",
+            ));
         }
         decode_planes(self.compression, &self.data, &layout)
     }
@@ -102,7 +125,12 @@ pub struct FilterEffects {
 }
 
 fn read_rect(r: &mut Reader<'_>) -> Result<Rect> {
-    Ok(Rect { top: r.i32()?, left: r.i32()?, bottom: r.i32()?, right: r.i32()? })
+    Ok(Rect {
+        top: r.i32()?,
+        left: r.i32()?,
+        bottom: r.i32()?,
+        right: r.i32()?,
+    })
 }
 
 fn write_rect(out: &mut Vec<u8>, r: &Rect) {
@@ -115,11 +143,16 @@ fn write_rect(out: &mut Vec<u8>, r: &Rect) {
 fn read_plane(r: &mut Reader<'_>) -> Result<EffectsPlane> {
     let len = r.u64()?;
     if len < 2 {
-        return Err(PsdError::invalid("filter effects: plane shorter than its compression field"));
+        return Err(PsdError::invalid(
+            "filter effects: plane shorter than its compression field",
+        ));
     }
     let mut sub = r.sub(len)?;
     let compression = Compression::from_u16(sub.u16()?);
-    Ok(EffectsPlane { compression, data: sub.peek_rest().to_vec() })
+    Ok(EffectsPlane {
+        compression,
+        data: sub.peek_rest().to_vec(),
+    })
 }
 
 /// One item: identifier, the cached planes and the filter mask after them.
@@ -136,13 +169,32 @@ fn read_item(body: &mut Reader<'_>) -> Result<FilterEffectsItem> {
     }
     let mut slots = Vec::with_capacity(max_channels as usize + 2);
     for _ in 0..max_channels + 2 {
-        slots.push(if it.u32()? != 0 { Some(read_plane(&mut it)?) } else { None });
+        slots.push(if it.u32()? != 0 {
+            Some(read_plane(&mut it)?)
+        } else {
+            None
+        });
     }
     if !it.is_empty() {
-        return Err(PsdError::invalid(format!("filter effects item {id}: {} unexpected bytes", it.remaining())));
+        return Err(PsdError::invalid(format!(
+            "filter effects item {id}: {} unexpected bytes",
+            it.remaining()
+        )));
     }
-    let mask = if body.is_empty() || body.u8()? == 0 { None } else { Some((read_rect(body)?, read_plane(body)?)) };
-    Ok(FilterEffectsItem { id, version, rect, depth, max_channels, slots, mask })
+    let mask = if body.is_empty() || body.u8()? == 0 {
+        None
+    } else {
+        Some((read_rect(body)?, read_plane(body)?))
+    };
+    Ok(FilterEffectsItem {
+        id,
+        version,
+        rect,
+        depth,
+        max_channels,
+        slots,
+        mask,
+    })
 }
 
 fn write_plane(out: &mut Vec<u8>, p: &EffectsPlane) {
@@ -157,7 +209,9 @@ impl FilterEffects {
         let mut r = Reader::new(data);
         let version = r.u32()?;
         if !(1..=3).contains(&version) {
-            return Err(PsdError::invalid(format!("filter effects version {version}")));
+            return Err(PsdError::invalid(format!(
+                "filter effects version {version}"
+            )));
         }
         let mut items = Vec::new();
         loop {
@@ -174,7 +228,10 @@ impl FilterEffects {
                 break;
             }
             if rest.len() < 8 {
-                return Err(PsdError::invalid(format!("filter effects: {} unexpected bytes after the data", rest.len())));
+                return Err(PsdError::invalid(format!(
+                    "filter effects: {} unexpected bytes after the data",
+                    rest.len()
+                )));
             }
         }
         Ok(FilterEffects { version, items })
@@ -228,31 +285,61 @@ mod tests {
     use super::*;
 
     fn item(id: &str, mask: bool) -> FilterEffectsItem {
-        let rect = Rect { top: 1, left: 2, bottom: 5, right: 6 };
+        let rect = Rect {
+            top: 1,
+            left: 2,
+            bottom: 5,
+            right: 6,
+        };
         let plane = |v: u8| EffectsPlane::encode(Compression::Rle, &[v; 16], 4, 4, 8).unwrap();
         let mut slots = vec![None; 26];
         slots[0] = Some(plane(10));
         slots[25] = Some(plane(255));
-        FilterEffectsItem { id: id.into(), version: 1, rect, depth: 8, max_channels: 24, slots, mask: mask.then(|| (rect, plane(128))) }
+        FilterEffectsItem {
+            id: id.into(),
+            version: 1,
+            rect,
+            depth: 8,
+            max_channels: 24,
+            slots,
+            mask: mask.then(|| (rect, plane(128))),
+        }
     }
 
     /// The unpadded body of `it`'s section.
     fn section(it: &FilterEffectsItem) -> Vec<u8> {
-        let b = FilterEffects { version: 3, items: vec![it.clone()] }.to_bytes();
+        let b = FilterEffects {
+            version: 3,
+            items: vec![it.clone()],
+        }
+        .to_bytes();
         let len = u64::from_be_bytes(b[4..12].try_into().unwrap()) as usize;
         b[12..12 + len].to_vec()
     }
 
     #[test]
     fn round_trips() {
-        let fx = FilterEffects { version: 3, items: vec![item("a-1", true), item("b-2", false)] };
+        let fx = FilterEffects {
+            version: 3,
+            items: vec![item("a-1", true), item("b-2", false)],
+        };
         let bytes = fx.to_bytes();
         let back = FilterEffects::parse(&bytes).unwrap();
         assert_eq!(back, fx);
         assert_eq!(back.items[0].decoded_mask().unwrap().1, vec![128; 16]);
-        assert_eq!(back.items[0].slots[0].as_ref().unwrap().decode(4, 4, 8).unwrap(), vec![10; 16]);
+        assert_eq!(
+            back.items[0].slots[0]
+                .as_ref()
+                .unwrap()
+                .decode(4, 4, 8)
+                .unwrap(),
+            vec![10; 16]
+        );
         // No items still writes a section, so the block reads back.
-        let empty = FilterEffects { version: 3, items: Vec::new() };
+        let empty = FilterEffects {
+            version: 3,
+            items: Vec::new(),
+        };
         assert_eq!(FilterEffects::parse(&empty.to_bytes()).unwrap(), empty);
         // Padding is allowed, garbage is not.
         let mut padded = bytes.clone();
@@ -297,7 +384,11 @@ mod tests {
 
     #[test]
     fn mutations_never_panic() {
-        let bytes = FilterEffects { version: 3, items: vec![item("x", true), item("y", false)] }.to_bytes();
+        let bytes = FilterEffects {
+            version: 3,
+            items: vec![item("x", true), item("y", false)],
+        }
+        .to_bytes();
         let mut state = 0x9E37_79B9_7F4A_7C15u64;
         let mut next = || {
             state ^= state << 13;
@@ -325,10 +416,17 @@ mod tests {
 
     #[test]
     fn malformed_data_is_an_error() {
-        let bytes = FilterEffects { version: 3, items: vec![item("x", true)] }.to_bytes();
+        let bytes = FilterEffects {
+            version: 3,
+            items: vec![item("x", true)],
+        }
+        .to_bytes();
         // Cut anywhere before the end of the section (only its padding may be missing).
         for n in 0..12 + section(&item("x", true)).len() {
-            assert!(FilterEffects::parse(&bytes[..n]).is_err(), "truncated at {n}");
+            assert!(
+                FilterEffects::parse(&bytes[..n]).is_err(),
+                "truncated at {n}"
+            );
         }
         let mut bad = bytes.clone();
         bad[3] = 9; // version

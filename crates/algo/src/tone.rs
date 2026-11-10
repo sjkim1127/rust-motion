@@ -59,7 +59,14 @@ pub use shadows_highlights::shadows_highlights;
 /// Image › Adjustments › Replace Color: Color Range-style selection (fuzziness in 0..=200 levels)
 /// around `color`, then a hue (±180°), saturation and lightness (±100) shift weighted by it.
 /// Returns the selection mask (what the dialog previews).
-pub fn replace_color(px: &mut [[f32; 4]], color: [f32; 3], fuzziness: f32, hue: f32, saturation: f32, lightness: f32) -> Vec<f32> {
+pub fn replace_color(
+    px: &mut [[f32; 4]],
+    color: [f32; 3],
+    fuzziness: f32,
+    hue: f32,
+    saturation: f32,
+    lightness: f32,
+) -> Vec<f32> {
     let mask = crate::selection::color_range(px, color, fuzziness);
     replace_color_masked(px, &mask, hue, saturation, lightness);
     mask
@@ -67,16 +74,34 @@ pub fn replace_color(px: &mut [[f32; 4]], color: [f32; 3], fuzziness: f32, hue: 
 
 /// Replace Color's hue, saturation and lightness shift, applied to each pixel as far as `mask`
 /// (`0..=1`, one per pixel: the colour match, localized or not) covers it.
-pub fn replace_color_masked(px: &mut [[f32; 4]], mask: &[f32], hue: f32, saturation: f32, lightness: f32) {
+pub fn replace_color_masked(
+    px: &mut [[f32; 4]],
+    mask: &[f32],
+    hue: f32,
+    saturation: f32,
+    lightness: f32,
+) {
     for (q, &k) in px.iter_mut().zip(mask) {
         if k <= 0.0 {
             continue;
         }
         let c = [q[0], q[1], q[2]];
         let [hh, ss, ll] = rgb_to_hsl(c);
-        let s = if saturation >= 0.0 { ss + (1.0 - ss) * saturation / 100.0 } else { ss * (1.0 + saturation / 100.0) };
-        let l = if lightness >= 0.0 { ll + (1.0 - ll) * lightness / 100.0 } else { ll * (1.0 + lightness / 100.0) };
-        let o = hsl_to_rgb([(hh + hue / 360.0).rem_euclid(1.0), s.clamp(0.0, 1.0), l.clamp(0.0, 1.0)]);
+        let s = if saturation >= 0.0 {
+            ss + (1.0 - ss) * saturation / 100.0
+        } else {
+            ss * (1.0 + saturation / 100.0)
+        };
+        let l = if lightness >= 0.0 {
+            ll + (1.0 - ll) * lightness / 100.0
+        } else {
+            ll * (1.0 + lightness / 100.0)
+        };
+        let o = hsl_to_rgb([
+            (hh + hue / 360.0).rem_euclid(1.0),
+            s.clamp(0.0, 1.0),
+            l.clamp(0.0, 1.0),
+        ]);
         for i in 0..3 {
             q[i] = (c[i] + (o[i] - c[i]) * k).clamp(0.0, 1.0);
         }
@@ -111,7 +136,8 @@ pub fn lab_stats(px: &[[f32; 4]], mask: Option<&[f32]>) -> Option<LabStats> {
         return None;
     }
     let mean: [f32; 3] = std::array::from_fn(|k| (sum[k] / wsum) as f32);
-    let std = std::array::from_fn(|k| ((sq[k] / wsum - (sum[k] / wsum).powi(2)).max(0.0).sqrt()) as f32);
+    let std =
+        std::array::from_fn(|k| ((sq[k] / wsum - (sum[k] / wsum).powi(2)).max(0.0).sqrt()) as f32);
     Some(LabStats { mean, std })
 }
 
@@ -130,20 +156,34 @@ pub struct MatchColor {
 
 impl Default for MatchColor {
     fn default() -> Self {
-        MatchColor { luminance: 100.0, intensity: 100.0, fade: 0.0, neutralize: false }
+        MatchColor {
+            luminance: 100.0,
+            intensity: 100.0,
+            fade: 0.0,
+            neutralize: false,
+        }
     }
 }
 
 /// Reinhard-style colour transfer in Lab: shift and scale each channel of `px` (statistics
 /// `target`) toward `source`'s statistics; with no source only Neutralize / intensity / luminance
 /// act on the image's own statistics.
-pub fn match_color(px: &mut [[f32; 4]], target: &LabStats, source: Option<&LabStats>, o: &MatchColor) {
+pub fn match_color(
+    px: &mut [[f32; 4]],
+    target: &LabStats,
+    source: Option<&LabStats>,
+    o: &MatchColor,
+) {
     let src = source.copied().unwrap_or(*target);
     let lum = o.luminance / 100.0;
     let inten = o.intensity / 100.0;
     let fade = (o.fade / 100.0).clamp(0.0, 1.0);
     let scale = |k: usize| {
-        if target.std[k] > 1e-4 { src.std[k] / target.std[k] } else { 1.0 }
+        if target.std[k] > 1e-4 {
+            src.std[k] / target.std[k]
+        } else {
+            1.0
+        }
     };
     let mut dst_mean = src.mean;
     if o.neutralize {
@@ -234,7 +274,13 @@ pub fn hdr_toning(px: &mut [[f32; 4]], w: usize, h: usize, p: &HdrToning) {
     let mut base = logl.clone();
     gauss_blur_n(&mut base, w, h, 1, p.radius.max(1.0) / 2.0);
     let n = px.iter().filter(|q| q[3] > 0.0).count().max(1) as f32;
-    let mean = base.iter().zip(px.iter()).filter(|(_, q)| q[3] > 0.0).map(|(b, _)| *b).sum::<f32>() / n;
+    let mean = base
+        .iter()
+        .zip(px.iter())
+        .filter(|(_, q)| q[3] > 0.0)
+        .map(|(b, _)| *b)
+        .sum::<f32>()
+        / n;
     let compress = 1.0 / (1.0 + p.strength.max(0.0));
     let detail = 1.0 + p.detail / 100.0;
     let exposure = 2f32.powf(p.exposure);
@@ -254,15 +300,23 @@ pub fn hdr_toning(px: &mut [[f32; 4]], w: usize, h: usize, p: &HdrToning) {
             // The contract is "lower = more contrast", i.e. gamma is the divisor of
             // the exponent, matching the crate's other gamma controls (hdr.rs, proof_sim.rs).
             let mut l1 = (new_log.exp() * exposure).max(0.0).powf(1.0 / gamma);
-            l1 += p.shadow / 100.0 * (1.0 - l1).powi(3) * 0.5 - p.highlight / 100.0 * l1.powi(3) * 0.5;
+            l1 += p.shadow / 100.0 * (1.0 - l1).powi(3) * 0.5
+                - p.highlight / 100.0 * l1.powi(3) * 0.5;
             l1 = curve_eval(&sorted, l1.clamp(0.0, 1.0));
             let ratio = l1 / l0;
             let mut out = c.map(|v| v * ratio);
             // Saturation then vibrance (less saturated colours move more), around the new luminance.
             let ll = luma(out);
             let sat_now = {
-                let (mx, mn) = (out[0].max(out[1]).max(out[2]), out[0].min(out[1]).min(out[2]));
-                if mx > 0.0 { (mx - mn) / mx } else { 0.0 }
+                let (mx, mn) = (
+                    out[0].max(out[1]).max(out[2]),
+                    out[0].min(out[1]).min(out[2]),
+                );
+                if mx > 0.0 {
+                    (mx - mn) / mx
+                } else {
+                    0.0
+                }
             };
             let s = 1.0 + p.saturation / 100.0 + p.vibrance / 100.0 * (1.0 - sat_now);
             out = out.map(|v| ll + (v - ll) * s.max(0.0));
@@ -297,19 +351,36 @@ mod tests {
 
     #[test]
     fn match_color_moves_statistics_toward_source() {
-        let src: Vec<[f32; 4]> = (0..64).map(|i| [0.8, 0.4 + (i % 8) as f32 * 0.02, 0.2, 1.0]).collect();
-        let mut tgt: Vec<[f32; 4]> = (0..64).map(|i| [0.2, 0.3, 0.6 + (i % 8) as f32 * 0.03, 1.0]).collect();
+        let src: Vec<[f32; 4]> = (0..64)
+            .map(|i| [0.8, 0.4 + (i % 8) as f32 * 0.02, 0.2, 1.0])
+            .collect();
+        let mut tgt: Vec<[f32; 4]> = (0..64)
+            .map(|i| [0.2, 0.3, 0.6 + (i % 8) as f32 * 0.03, 1.0])
+            .collect();
         let s = lab_stats(&src, None).unwrap();
         let t = lab_stats(&tgt, None).unwrap();
         match_color(&mut tgt, &t, Some(&s), &MatchColor::default());
         let after = lab_stats(&tgt, None).unwrap();
         for k in 0..3 {
-            assert!((after.mean[k] - s.mean[k]).abs() < (t.mean[k] - s.mean[k]).abs() * 0.2 + 1.0, "{k}: {after:?} vs {s:?}");
+            assert!(
+                (after.mean[k] - s.mean[k]).abs() < (t.mean[k] - s.mean[k]).abs() * 0.2 + 1.0,
+                "{k}: {after:?} vs {s:?}"
+            );
         }
         // Neutralize with no source: the mean colour goes gray.
-        let mut tint: Vec<[f32; 4]> = (0..16).map(|i| [0.7, 0.5, 0.3 + i as f32 * 0.01, 1.0]).collect();
+        let mut tint: Vec<[f32; 4]> = (0..16)
+            .map(|i| [0.7, 0.5, 0.3 + i as f32 * 0.01, 1.0])
+            .collect();
         let t = lab_stats(&tint, None).unwrap();
-        match_color(&mut tint, &t, None, &MatchColor { neutralize: true, ..Default::default() });
+        match_color(
+            &mut tint,
+            &t,
+            None,
+            &MatchColor {
+                neutralize: true,
+                ..Default::default()
+            },
+        );
         let n = lab_stats(&tint, None).unwrap();
         assert!(n.mean[1].abs() < 2.0 && n.mean[2].abs() < 2.0, "{n:?}");
     }
@@ -317,14 +388,37 @@ mod tests {
     #[test]
     fn hdr_toning_compresses_range_and_keeps_bounds() {
         let mut px = ramp(40, 10);
-        hdr_toning(&mut px, 40, 10, &HdrToning { strength: 2.0, detail: 0.0, saturation: 0.0, ..Default::default() });
+        hdr_toning(
+            &mut px,
+            40,
+            10,
+            &HdrToning {
+                strength: 2.0,
+                detail: 0.0,
+                saturation: 0.0,
+                ..Default::default()
+            },
+        );
         let l0 = luma([px[2][0], px[2][1], px[2][2]]);
         let l1 = luma([px[38][0], px[38][1], px[38][2]]);
         assert!(l1 > l0);
-        assert!(px.iter().all(|q| q[..3].iter().all(|v| (0.0..=1.0).contains(v))));
+        assert!(px
+            .iter()
+            .all(|q| q[..3].iter().all(|v| (0.0..=1.0).contains(v))));
         // A toning curve that inverts luminance flips the order.
         let mut px = ramp(40, 10);
-        hdr_toning(&mut px, 40, 10, &HdrToning { strength: 0.0, detail: 0.0, saturation: 0.0, curve: vec![(0.0, 1.0), (1.0, 0.0)], ..Default::default() });
+        hdr_toning(
+            &mut px,
+            40,
+            10,
+            &HdrToning {
+                strength: 0.0,
+                detail: 0.0,
+                saturation: 0.0,
+                curve: vec![(0.0, 1.0), (1.0, 0.0)],
+                ..Default::default()
+            },
+        );
         assert!(luma([px[2][0], px[2][1], px[2][2]]) > luma([px[38][0], px[38][1], px[38][2]]));
     }
 }

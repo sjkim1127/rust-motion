@@ -1,7 +1,7 @@
 //! Reuse each 3x3 quadrant at its four output pixels. Keep the original
 //! nine-sample addition order: reassociating the sums can change variance ties.
-use crate::fxutil::{MAXC, luma};
-use crate::{Ctx, image::Image};
+use crate::fxutil::{luma, MAXC};
+use crate::{image::Image, Ctx};
 use photocraft_geom::Rect;
 
 #[derive(Clone, Copy, Default)]
@@ -15,7 +15,12 @@ pub(super) fn run(src: &Image, out: Rect, ctx: &Ctx) -> Option<Vec<f32>> {
     if n == 0 || n > MAXC || out.is_empty() {
         return None;
     }
-    let win = Rect::new(out.x0.checked_sub(2)?, out.y0.checked_sub(2)?, out.x1.checked_add(2)?, out.y1.checked_add(2)?);
+    let win = Rect::new(
+        out.x0.checked_sub(2)?,
+        out.y0.checked_sub(2)?,
+        out.x1.checked_add(2)?,
+        out.y1.checked_add(2)?,
+    );
     if win.intersect(&src.rect) != win {
         return None;
     }
@@ -28,7 +33,9 @@ pub(super) fn run(src: &Image, out: Rect, ctx: &Ctx) -> Option<Vec<f32>> {
     let stride = (src.rect.width() as usize).checked_mul(n)?;
     let offset = (win.x0.abs_diff(src.rect.x0) as usize).checked_mul(n)?;
     let row = |y: i32| -> Option<&[f32]> {
-        let start = (y.abs_diff(src.rect.y0) as usize).checked_mul(stride)?.checked_add(offset)?;
+        let start = (y.abs_diff(src.rect.y0) as usize)
+            .checked_mul(stride)?
+            .checked_add(offset)?;
         src.data.get(start..start.checked_add(w.checked_mul(n)?)?)
     };
     let mut lum = Vec::new();
@@ -66,7 +73,10 @@ pub(super) fn run(src: &Image, out: Rect, ctx: &Ctx) -> Option<Vec<f32>> {
             for v in &mut sum {
                 *v /= 9.0;
             }
-            *q = Quadrant { variance: s2 / 9.0 - (s / 9.0).powi(2), mean: sum };
+            *q = Quadrant {
+                variance: s2 / 9.0 - (s / 9.0).powi(2),
+                mean: sum,
+            };
         }
         Some(())
     };
@@ -75,13 +85,23 @@ pub(super) fn run(src: &Image, out: Rect, ctx: &Ctx) -> Option<Vec<f32>> {
     let width = out.width() as usize;
     let height = out.height() as usize;
     let mut result = Vec::new();
-    result.try_reserve_exact(width.checked_mul(height)?.checked_mul(n)?).ok()?;
+    result
+        .try_reserve_exact(width.checked_mul(height)?.checked_mul(n)?)
+        .ok()?;
     for y in 0..height {
         build_row(y + 2, &mut quadrants[2])?;
         for x in 0..width {
-            let mut best = Quadrant { variance: f32::MAX, mean: [0.0; MAXC] };
+            let mut best = Quadrant {
+                variance: f32::MAX,
+                mean: [0.0; MAXC],
+            };
             // Preserve quadrant order, including exact ties and non-finite variances.
-            for q in [quadrants[0].get(x)?, quadrants[0].get(x + 2)?, quadrants[2].get(x)?, quadrants[2].get(x + 2)?] {
+            for q in [
+                quadrants[0].get(x)?,
+                quadrants[0].get(x + 2)?,
+                quadrants[2].get(x)?,
+                quadrants[2].get(x + 2)?,
+            ] {
                 if q.variance < best.variance {
                     best = *q;
                 }

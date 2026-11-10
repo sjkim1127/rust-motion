@@ -24,7 +24,14 @@ pub struct StrokeStyle {
 
 impl Default for StrokeStyle {
     fn default() -> Self {
-        StrokeStyle { width: 1.0, cap: LineCap::Butt, join: LineJoin::Miter, miter_limit: 4.0, dashes: Vec::new(), dash_offset: 0.0 }
+        StrokeStyle {
+            width: 1.0,
+            cap: LineCap::Butt,
+            join: LineJoin::Miter,
+            miter_limit: 4.0,
+            dashes: Vec::new(),
+            dash_offset: 0.0,
+        }
     }
 }
 
@@ -44,7 +51,11 @@ fn len(a: P) -> f64 {
 }
 fn norm(a: P) -> P {
     let l = len(a);
-    if l > 0.0 { (a.0 / l, a.1 / l) } else { (0.0, 0.0) }
+    if l > 0.0 {
+        (a.0 / l, a.1 / l)
+    } else {
+        (0.0, 0.0)
+    }
 }
 /// Left normal in y-down coordinates.
 fn perp(a: P) -> P {
@@ -85,7 +96,11 @@ fn arc_step(r: f64, tol: f64) -> f64 {
 /// Vertex radius for chords of `step` radians so each chord's pie slice has the area of the
 /// circular sector (keeps round caps/joins area-exact at any tessellation).
 fn area_radius(r: f64, step: f64) -> f64 {
-    if step < 1e-9 { r } else { r * (step / step.sin()).sqrt() }
+    if step < 1e-9 {
+        r
+    } else {
+        r * (step / step.sin()).sqrt()
+    }
 }
 
 /// Points a full circle needs at `tol` (at least 8).
@@ -121,7 +136,11 @@ const OUTLINE_POINT_BUDGET: usize = 1 << 20;
 /// that minimal tessellation, which is linear in the (budgeted) flattened points and dashes.
 pub fn stroke_polygons(lines: &[Polyline], style: &StrokeStyle, tol: f64) -> Vec<Vec<P>> {
     let mut out = Vec::new();
-    if style.width <= 0.0 || !style.width.is_finite() || !style.miter_limit.is_finite() || style.miter_limit < 1.0 {
+    if style.width <= 0.0
+        || !style.width.is_finite()
+        || !style.miter_limit.is_finite()
+        || style.miter_limit < 1.0
+    {
         return out;
     }
     let mut steps_left = DASH_STEP_BUDGET;
@@ -131,7 +150,11 @@ pub fn stroke_polygons(lines: &[Polyline], style: &StrokeStyle, tol: f64) -> Vec
             continue;
         }
         if !style.dashes.is_empty() {
-            pieces.extend(dash_polyline_budgeted(pl, &style.dashes, style.dash_offset, &mut steps_left).into_iter().map(Cow::Owned));
+            pieces.extend(
+                dash_polyline_budgeted(pl, &style.dashes, style.dash_offset, &mut steps_left)
+                    .into_iter()
+                    .map(Cow::Owned),
+            );
         } else {
             pieces.push(Cow::Borrowed(pl));
         }
@@ -166,12 +189,17 @@ fn round_arc_cap(pieces: &[Cow<Polyline>], style: &StrokeStyle, tol: f64) -> usi
         }
     }
     // A join sweeps at most half a circle, plus its centre and two end points.
-    let cost = |n: usize| base.saturating_add(circles.saturating_mul(n)).saturating_add(joins.saturating_mul(n / 2 + 3));
+    let cost = |n: usize| {
+        base.saturating_add(circles.saturating_mul(n))
+            .saturating_add(joins.saturating_mul(n / 2 + 3))
+    };
     let full = circle_points(style.width * 0.5, tol);
     if cost(full) <= OUTLINE_POINT_BUDGET {
         return usize::MAX;
     }
-    let left = OUTLINE_POINT_BUDGET.saturating_sub(base).saturating_sub(joins.saturating_mul(3)) as f64;
+    let left = OUTLINE_POINT_BUDGET
+        .saturating_sub(base)
+        .saturating_sub(joins.saturating_mul(3)) as f64;
     let per_circle = circles as f64 + joins as f64 * 0.5;
     ((left / per_circle.max(1.0)) as usize).clamp(4, full)
 }
@@ -204,7 +232,15 @@ fn stroke_one(pl: &Polyline, style: &StrokeStyle, tol: f64, arc_cap: usize, out:
         let c = pts[0];
         match style.cap {
             LineCap::Round => emit(out, circle(c, hw, tol, arc_cap)),
-            LineCap::Square => emit(out, vec![(c.0 - hw, c.1 - hw), (c.0 + hw, c.1 - hw), (c.0 + hw, c.1 + hw), (c.0 - hw, c.1 + hw)]),
+            LineCap::Square => emit(
+                out,
+                vec![
+                    (c.0 - hw, c.1 - hw),
+                    (c.0 + hw, c.1 - hw),
+                    (c.0 + hw, c.1 + hw),
+                    (c.0 - hw, c.1 + hw),
+                ],
+            ),
             LineCap::Butt => {}
         }
         return;
@@ -271,7 +307,21 @@ fn stroke_one(pl: &Polyline, style: &StrokeStyle, tol: f64, arc_cap: usize, out:
                 (jn, true) => jn,
                 (_, false) => LineJoin::Miter,
             };
-            join_piece(v, d1, d2, hw, join, if knot[j] { style.miter_limit.min(500.0) } else { f64::INFINITY }, tol, arc_cap, out);
+            join_piece(
+                v,
+                d1,
+                d2,
+                hw,
+                join,
+                if knot[j] {
+                    style.miter_limit.min(500.0)
+                } else {
+                    f64::INFINITY
+                },
+                tol,
+                arc_cap,
+                out,
+            );
         }
     }
     if !closed {
@@ -283,7 +333,17 @@ fn stroke_one(pl: &Polyline, style: &StrokeStyle, tol: f64, arc_cap: usize, out:
 }
 
 #[allow(clippy::too_many_arguments)]
-fn join_piece(v: P, d1: P, d2: P, hw: f64, join: LineJoin, miter_limit: f64, tol: f64, arc_cap: usize, out: &mut Vec<Vec<P>>) {
+fn join_piece(
+    v: P,
+    d1: P,
+    d2: P,
+    hw: f64,
+    join: LineJoin,
+    miter_limit: f64,
+    tol: f64,
+    arc_cap: usize,
+    out: &mut Vec<Vec<P>>,
+) {
     let c = cross(d1, d2);
     let d = dot(d1, d2);
     if c.abs() < 1e-12 && d > 0.0 {
@@ -327,7 +387,8 @@ fn join_piece(v: P, d1: P, d2: P, hw: f64, join: LineJoin, miter_limit: f64, tol
             let mut steps = (delta.abs() / arc_step(hw, tol)).ceil() as usize;
             if arc_cap != usize::MAX {
                 // Over the outline budget: the join's share of an `arc_cap`-point circle.
-                steps = steps.min((arc_cap as f64 * delta.abs() / std::f64::consts::TAU).ceil() as usize);
+                steps = steps
+                    .min((arc_cap as f64 * delta.abs() / std::f64::consts::TAU).ceil() as usize);
             }
             let steps = steps.max(1);
             let rr = area_radius(hw, delta.abs() / steps as f64);
@@ -349,7 +410,10 @@ fn cap_piece(p: P, dir: P, hw: f64, cap: LineCap, tol: f64, arc_cap: usize, out:
         LineCap::Square => {
             let n = mul(perp(dir), hw);
             let e = mul(dir, hw);
-            emit(out, vec![add(p, n), add(add(p, n), e), add(sub(p, n), e), sub(p, n)]);
+            emit(
+                out,
+                vec![add(p, n), add(add(p, n), e), add(sub(p, n), e), sub(p, n)],
+            );
         }
     }
 }
@@ -361,7 +425,12 @@ pub fn dash_polyline(pl: &Polyline, pattern: &[f64], offset: f64) -> Vec<Polylin
 
 /// [`dash_polyline`] spending at most `steps_left` dash steps (decremented); once they are
 /// spent, the rest of the line is drawn solid.
-fn dash_polyline_budgeted(pl: &Polyline, pattern: &[f64], offset: f64, steps_left: &mut usize) -> Vec<Polyline> {
+fn dash_polyline_budgeted(
+    pl: &Polyline,
+    pattern: &[f64],
+    offset: f64,
+    steps_left: &mut usize,
+) -> Vec<Polyline> {
     if pattern.is_empty() {
         return vec![pl.clone()];
     }
@@ -406,7 +475,15 @@ fn dash_polyline_budgeted(pl: &Polyline, pattern: &[f64], offset: f64, steps_lef
         }
     }
     let mut out = Vec::new();
-    let mut cur: Option<Polyline> = if idx.is_multiple_of(2) { Some(Polyline { pts: vec![pts[0]], knot: vec![true], closed: false }) } else { None };
+    let mut cur: Option<Polyline> = if idx.is_multiple_of(2) {
+        Some(Polyline {
+            pts: vec![pts[0]],
+            knot: vec![true],
+            closed: false,
+        })
+    } else {
+        None
+    };
     'walk: for (wi, w) in pts.windows(2).enumerate() {
         let (a, b) = (w[0], w[1]);
         let b_knot = knot_at(wi + 1);
@@ -419,8 +496,16 @@ fn dash_polyline_budgeted(pl: &Polyline, pattern: &[f64], offset: f64, steps_lef
                 // patterns; commands reject such patterns before mutating the document) or
                 // dashes below the coordinates' precision: keep the dashes made so far and draw
                 // the rest of the line solid rather than dropping the whole stroke (#5195).
-                let here = if pos > 0.0 { add(a, mul(sub(b, a), pos / seg)) } else { a };
-                let rest = cur.get_or_insert_with(|| Polyline { pts: vec![here], knot: vec![true], closed: false });
+                let here = if pos > 0.0 {
+                    add(a, mul(sub(b, a), pos / seg))
+                } else {
+                    a
+                };
+                let rest = cur.get_or_insert_with(|| Polyline {
+                    pts: vec![here],
+                    knot: vec![true],
+                    closed: false,
+                });
                 for (j, p) in pts.iter().enumerate().skip(wi + 1) {
                     rest.pts.push(*p);
                     rest.knot.push(knot_at(j));
@@ -431,7 +516,11 @@ fn dash_polyline_budgeted(pl: &Polyline, pattern: &[f64], offset: f64, steps_lef
             pos += step;
             left -= step;
             let at_end = seg - pos <= 1e-12;
-            let p = if at_end { b } else { add(a, mul(sub(b, a), pos / seg)) };
+            let p = if at_end {
+                b
+            } else {
+                add(a, mul(sub(b, a), pos / seg))
+            };
             if let Some(c) = cur.as_mut() {
                 c.pts.push(p);
                 c.knot.push(!at_end || b_knot);
@@ -444,7 +533,11 @@ fn dash_polyline_budgeted(pl: &Polyline, pattern: &[f64], offset: f64, steps_lef
                         out.push(c);
                     }
                 } else {
-                    cur = Some(Polyline { pts: vec![p], knot: vec![true], closed: false });
+                    cur = Some(Polyline {
+                        pts: vec![p],
+                        knot: vec![true],
+                        closed: false,
+                    });
                 }
             }
         }
@@ -459,7 +552,8 @@ fn dash_polyline_budgeted(pl: &Polyline, pattern: &[f64], offset: f64, steps_lef
         // A dash that crosses the closing vertex has a join there, not two caps.
         // Preserve knot flags when stitching the tail onto the first dash.
         let seam = pl.pts.first().copied();
-        let wraps = out.first().and_then(|d| d.pts.first()).copied() == seam && out.last().and_then(|d| d.pts.last()).copied() == seam;
+        let wraps = out.first().and_then(|d| d.pts.first()).copied() == seam
+            && out.last().and_then(|d| d.pts.last()).copied() == seam;
         if wraps && out.len() == 1 {
             if let Some(dash) = out.first_mut() {
                 dash.closed = true;
@@ -482,7 +576,11 @@ mod tests {
     use super::*;
 
     fn line(pts: &[P], closed: bool) -> Polyline {
-        Polyline { pts: pts.to_vec(), knot: vec![true; pts.len()], closed }
+        Polyline {
+            pts: pts.to_vec(),
+            knot: vec![true; pts.len()],
+            closed,
+        }
     }
 
     #[test]
@@ -491,7 +589,9 @@ mod tests {
         let d = dash_polyline(&pl, &[2.0, 1.0], 0.0);
         // on [0,2] [3,5] [6,8] [9,10]
         assert_eq!(d.len(), 4);
-        assert!((d[1].pts[0].0 - 3.0).abs() < 1e-9 && (d[1].pts.last().unwrap().0 - 5.0).abs() < 1e-9);
+        assert!(
+            (d[1].pts[0].0 - 3.0).abs() < 1e-9 && (d[1].pts.last().unwrap().0 - 5.0).abs() < 1e-9
+        );
         assert!((d[3].pts.last().unwrap().0 - 10.0).abs() < 1e-9);
         let o = dash_polyline(&pl, &[2.0, 1.0], 1.0);
         assert!((o[0].pts.last().unwrap().0 - 1.0).abs() < 1e-9);
@@ -502,7 +602,12 @@ mod tests {
         let pl = line(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)], false);
         for join in [LineJoin::Miter, LineJoin::Round, LineJoin::Bevel] {
             for cap in [LineCap::Butt, LineCap::Round, LineCap::Square] {
-                let st = StrokeStyle { width: 2.0, join, cap, ..Default::default() };
+                let st = StrokeStyle {
+                    width: 2.0,
+                    join,
+                    cap,
+                    ..Default::default()
+                };
                 for p in stroke_polygons(std::slice::from_ref(&pl), &st, 0.1) {
                     assert!(signed_area(&p) > 0.0);
                 }
@@ -526,11 +631,22 @@ mod tests {
     #[test]
     fn invalid_and_too_dense_dashes_finish_with_bounded_work() {
         let pl = line(&[(0.0, 0.0), (100.0, 0.0)], false);
-        for pattern in [vec![0.0, 0.0], vec![f64::INFINITY, 1.0], vec![f64::NAN, 1.0], vec![-1.0, 2.0], vec![1.0; 33]] {
+        for pattern in [
+            vec![0.0, 0.0],
+            vec![f64::INFINITY, 1.0],
+            vec![f64::NAN, 1.0],
+            vec![-1.0, 2.0],
+            vec![1.0; 33],
+        ] {
             assert!(dash_polyline(&pl, &pattern, 0.0).is_empty());
         }
         assert!(dash_polyline(&pl, &[2.0, 1.0], f64::INFINITY).is_empty());
-        assert!(dash_polyline(&line(&[(f64::NAN, 0.0), (1.0, 0.0)], false), &[2.0, 1.0], 0.0).is_empty());
+        assert!(dash_polyline(
+            &line(&[(f64::NAN, 0.0), (1.0, 0.0)], false),
+            &[2.0, 1.0],
+            0.0
+        )
+        .is_empty());
         // Too dense for the step budget: bounded work, and the line is still drawn.
         let d = dash_polyline(&pl, &[1e-8, 1e-8], 0.0);
         assert!(!d.is_empty() && d.len() <= 50_001);
@@ -550,13 +666,29 @@ mod tests {
         assert_eq!(tail.pts.last(), Some(&(60_000.0, 1000.0)));
         assert!(tail.pts.contains(&(60_000.0, 0.0)) && tail.pts.len() == tail.knot.len());
         // The solid tail starts where the dashes stopped (100000 steps of 0.5 px).
-        assert!((tail.pts[0].0 - 50_000.0).abs() < 1.0 && tail.pts[0].1 == 0.0, "{:?}", tail.pts[0]);
+        assert!(
+            (tail.pts[0].0 - 50_000.0).abs() < 1.0 && tail.pts[0].1 == 0.0,
+            "{:?}",
+            tail.pts[0]
+        );
         // Closed outlines finish the same way, back to their first point, where the solid tail
         // joins the first dash (one piece with a join at the seam, no caps).
-        let outline = line(&[(0.0, 0.0), (60_000.0, 0.0), (60_000.0, 1000.0), (0.0, 1000.0)], true);
+        let outline = line(
+            &[
+                (0.0, 0.0),
+                (60_000.0, 0.0),
+                (60_000.0, 1000.0),
+                (0.0, 1000.0),
+            ],
+            true,
+        );
         let d = dash_polyline(&outline, &[0.5, 0.5], 0.0);
         let joined = &d[0];
-        assert!(joined.pts.contains(&(60_000.0, 1000.0)) && joined.pts.contains(&(0.0, 1000.0)) && joined.pts.contains(&(0.0, 0.0)));
+        assert!(
+            joined.pts.contains(&(60_000.0, 1000.0))
+                && joined.pts.contains(&(0.0, 1000.0))
+                && joined.pts.contains(&(0.0, 0.0))
+        );
         assert_eq!(joined.pts.last(), Some(&(0.5, 0.0)));
     }
 
@@ -564,19 +696,52 @@ mod tests {
     fn wide_round_capped_dashes_keep_the_outline_within_its_point_budget() {
         let points = |polys: &[Vec<P>]| polys.iter().map(Vec::len).sum::<usize>();
         // 5000 dashes, each with two round caps of ~629 points at full resolution (#5211).
-        let st = StrokeStyle { width: 4000.0, cap: LineCap::Round, join: LineJoin::Round, dashes: vec![1.0, 9.0], ..Default::default() };
+        let st = StrokeStyle {
+            width: 4000.0,
+            cap: LineCap::Round,
+            join: LineJoin::Round,
+            dashes: vec![1.0, 9.0],
+            ..Default::default()
+        };
         let pl = line(&[(0.0, 0.0), (25_000.0, 0.0), (25_000.0, 25_000.0)], false);
         let polys = stroke_polygons(std::slice::from_ref(&pl), &st, 0.01);
-        assert!(points(&polys) <= OUTLINE_POINT_BUDGET, "{} points", points(&polys));
+        assert!(
+            points(&polys) <= OUTLINE_POINT_BUDGET,
+            "{} points",
+            points(&polys)
+        );
         // No dash is dropped: a ribbon and two caps each.
         assert!(polys.len() >= 3 * 5000, "{} pieces", polys.len());
         // Many tiny undashed subpaths: bounded too, every one still drawn.
-        let dots: Vec<Polyline> = (0..3000).map(|i| line(&[(f64::from(i), 0.0), (f64::from(i) + 0.5, 0.0)], false)).collect();
-        let polys = stroke_polygons(&dots, &StrokeStyle { dashes: Vec::new(), ..st.clone() }, 0.01);
-        assert!(points(&polys) <= OUTLINE_POINT_BUDGET && polys.len() >= 3 * 3000, "{} points", points(&polys));
+        let dots: Vec<Polyline> = (0..3000)
+            .map(|i| line(&[(f64::from(i), 0.0), (f64::from(i) + 0.5, 0.0)], false))
+            .collect();
+        let polys = stroke_polygons(
+            &dots,
+            &StrokeStyle {
+                dashes: Vec::new(),
+                ..st.clone()
+            },
+            0.01,
+        );
+        assert!(
+            points(&polys) <= OUTLINE_POINT_BUDGET && polys.len() >= 3 * 3000,
+            "{} points",
+            points(&polys)
+        );
         // Under the budget, round caps keep their full resolution.
-        let one = stroke_polygons(&dots[..1], &StrokeStyle { dashes: Vec::new(), ..st }, 0.01);
-        assert!(one.iter().any(|p| p.len() == circle_points(2000.0, 0.01)) && circle_points(2000.0, 0.01) > 600);
+        let one = stroke_polygons(
+            &dots[..1],
+            &StrokeStyle {
+                dashes: Vec::new(),
+                ..st
+            },
+            0.01,
+        );
+        assert!(
+            one.iter().any(|p| p.len() == circle_points(2000.0, 0.01))
+                && circle_points(2000.0, 0.01) > 600
+        );
     }
 
     #[test]
@@ -584,8 +749,17 @@ mod tests {
         let pl = line(&[(0.0, 0.0), (30.0, 0.0)], false);
         let d = dash_polyline(&pl, &[4.0, 2.0, 1.0, 3.0], -10.0);
         assert_eq!(
-            d.iter().map(|p| (p.pts.first().unwrap().0, p.pts.last().unwrap().0)).collect::<Vec<_>>(),
-            [(0.0, 4.0), (6.0, 7.0), (10.0, 14.0), (16.0, 17.0), (20.0, 24.0), (26.0, 27.0)]
+            d.iter()
+                .map(|p| (p.pts.first().unwrap().0, p.pts.last().unwrap().0))
+                .collect::<Vec<_>>(),
+            [
+                (0.0, 4.0),
+                (6.0, 7.0),
+                (10.0, 14.0),
+                (16.0, 17.0),
+                (20.0, 24.0),
+                (26.0, 27.0)
+            ]
         );
     }
 }

@@ -30,7 +30,12 @@ impl FoundPhoto {
     pub fn corners(&self) -> [[f64; 2]; 4] {
         let (s, c) = self.angle.to_radians().sin_cos();
         let (hw, hh) = (self.width / 2.0, self.height / 2.0);
-        [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)].map(|(x, y)| [self.center[0] + c * x - s * y, self.center[1] + s * x + c * y])
+        [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)].map(|(x, y)| {
+            [
+                self.center[0] + c * x - s * y,
+                self.center[1] + s * x + c * y,
+            ]
+        })
     }
 }
 
@@ -71,9 +76,21 @@ fn morph(w: usize, h: usize, m: &[bool], r: i64, dilate: bool) -> Vec<bool> {
             for x in 0..w {
                 let mut acc = !dilate;
                 for d in -r..=r {
-                    let (xx, yy) = if horizontal { (x as i64 + d, y as i64) } else { (x as i64, y as i64 + d) };
-                    let v = if xx < 0 || yy < 0 || xx >= w as i64 || yy >= h as i64 { false } else { src[yy as usize * w + xx as usize] };
-                    if dilate { acc |= v } else { acc &= v }
+                    let (xx, yy) = if horizontal {
+                        (x as i64 + d, y as i64)
+                    } else {
+                        (x as i64, y as i64 + d)
+                    };
+                    let v = if xx < 0 || yy < 0 || xx >= w as i64 || yy >= h as i64 {
+                        false
+                    } else {
+                        src[yy as usize * w + xx as usize]
+                    };
+                    if dilate {
+                        acc |= v
+                    } else {
+                        acc &= v
+                    }
                 }
                 out[y * w + x] = acc;
             }
@@ -89,7 +106,9 @@ fn convex_hull(mut pts: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
     if pts.len() < 3 {
         return pts;
     }
-    let cross = |o: [f64; 2], a: [f64; 2], b: [f64; 2]| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    let cross = |o: [f64; 2], a: [f64; 2], b: [f64; 2]| {
+        (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    };
     let mut lower: Vec<[f64; 2]> = Vec::new();
     for p in &pts {
         while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], *p) <= 0.0 {
@@ -129,7 +148,13 @@ fn min_rect(hull: &[[f64; 2]]) -> ([f64; 2], f64, f64, f64) {
         let area = (x1 - x0) * (y1 - y0);
         if area < best.0 {
             let (cu, cv) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
-            best = (area, [c * cu - s * cv, s * cu + c * cv], x1 - x0, y1 - y0, th.to_degrees());
+            best = (
+                area,
+                [c * cu - s * cv, s * cu + c * cv],
+                x1 - x0,
+                y1 - y0,
+                th.to_degrees(),
+            );
         }
     }
     let (_, center, mut w, mut h, mut ang) = best;
@@ -186,7 +211,13 @@ pub fn find_photos(w: usize, h: usize, rgba: &[[f32; 4]]) -> Vec<FoundPhoto> {
         v.sort_by(f32::total_cmp);
         v[v.len() / 2]
     });
-    let dist: Vec<f32> = small.iter().map(|p| ((p[0] - bg[0]).powi(2) + (p[1] - bg[1]).powi(2) + (p[2] - bg[2]).powi(2)).sqrt() / 3f32.sqrt()).collect();
+    let dist: Vec<f32> = small
+        .iter()
+        .map(|p| {
+            ((p[0] - bg[0]).powi(2) + (p[1] - bg[1]).powi(2) + (p[2] - bg[2]).powi(2)).sqrt()
+                / 3f32.sqrt()
+        })
+        .collect();
     let thr = otsu(&dist).max(0.04);
     let mask: Vec<bool> = dist.iter().map(|d| *d > thr).collect();
     let r = ((sw.max(sh) / 200) as i64).max(1);
@@ -232,7 +263,14 @@ pub fn find_photos(w: usize, h: usize, rgba: &[[f32; 4]]) -> Vec<FoundPhoto> {
                 .iter()
                 .filter(|&&i| {
                     let (x, y) = (i % sw, i / sw);
-                    x == 0 || y == 0 || x + 1 == sw || y + 1 == sh || !mask[i - 1] || !mask[i + 1] || !mask[i - sw] || !mask[i + sw]
+                    x == 0
+                        || y == 0
+                        || x + 1 == sw
+                        || y + 1 == sh
+                        || !mask[i - 1]
+                        || !mask[i + 1]
+                        || !mask[i - sw]
+                        || !mask[i + sw]
                 })
                 .flat_map(|&i| {
                     let (x, y) = ((i % sw) as f64, (i / sw) as f64);
@@ -243,12 +281,27 @@ pub fn find_photos(w: usize, h: usize, rgba: &[[f32; 4]]) -> Vec<FoundPhoto> {
             let hull = convex_hull(pts);
             let (center, wd, ht, ang) = min_rect(&hull);
             let inset = k as f64;
-            FoundPhoto { center, width: (wd - 2.0 * inset).max(1.0), height: (ht - 2.0 * inset).max(1.0), angle: ang, area: c.len() as f64 / total }
+            FoundPhoto {
+                center,
+                width: (wd - 2.0 * inset).max(1.0),
+                height: (ht - 2.0 * inset).max(1.0),
+                angle: ang,
+                area: c.len() as f64 / total,
+            }
         })
         .collect();
     // Reading order: rows by centre y (bands of a third of the smallest photo), then x.
-    let band = out.iter().map(|p| p.height.min(p.width)).fold(f64::MAX, f64::min).max(1.0) / 3.0;
-    out.sort_by(|a, b| ((a.center[1] / band).floor()).total_cmp(&(b.center[1] / band).floor()).then(a.center[0].total_cmp(&b.center[0])));
+    let band = out
+        .iter()
+        .map(|p| p.height.min(p.width))
+        .fold(f64::MAX, f64::min)
+        .max(1.0)
+        / 3.0;
+    out.sort_by(|a, b| {
+        ((a.center[1] / band).floor())
+            .total_cmp(&(b.center[1] / band).floor())
+            .then(a.center[0].total_cmp(&b.center[0]))
+    });
     out
 }
 
@@ -278,17 +331,41 @@ mod tests {
     #[test]
     fn finds_rotated_photos_in_reading_order() {
         let truth = [
-            FoundPhoto { center: [150.0, 120.0], width: 180.0, height: 120.0, angle: 7.0, area: 0.0 },
-            FoundPhoto { center: [450.0, 130.0], width: 160.0, height: 130.0, angle: -12.0, area: 0.0 },
-            FoundPhoto { center: [300.0, 330.0], width: 220.0, height: 110.0, angle: 3.0, area: 0.0 },
+            FoundPhoto {
+                center: [150.0, 120.0],
+                width: 180.0,
+                height: 120.0,
+                angle: 7.0,
+                area: 0.0,
+            },
+            FoundPhoto {
+                center: [450.0, 130.0],
+                width: 160.0,
+                height: 130.0,
+                angle: -12.0,
+                area: 0.0,
+            },
+            FoundPhoto {
+                center: [300.0, 330.0],
+                width: 220.0,
+                height: 110.0,
+                angle: 3.0,
+                area: 0.0,
+            },
         ];
         let (w, h) = (600, 440);
         let found = find_photos(w, h, &scan(w, h, &truth));
         assert_eq!(found.len(), 3, "{found:?}");
         for (f, t) in found.iter().zip(&truth) {
             assert!((f.angle - t.angle).abs() < 1.0, "{f:?} vs {t:?}");
-            assert!((f.center[0] - t.center[0]).abs() < 3.0 && (f.center[1] - t.center[1]).abs() < 3.0, "{f:?}");
-            assert!((f.width - t.width).abs() < 6.0 && (f.height - t.height).abs() < 6.0, "{f:?}");
+            assert!(
+                (f.center[0] - t.center[0]).abs() < 3.0 && (f.center[1] - t.center[1]).abs() < 3.0,
+                "{f:?}"
+            );
+            assert!(
+                (f.width - t.width).abs() < 6.0 && (f.height - t.height).abs() < 6.0,
+                "{f:?}"
+            );
         }
         // Corners are consistent with the centre.
         let c = found[0].corners();

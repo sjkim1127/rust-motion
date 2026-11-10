@@ -165,14 +165,30 @@ pub fn analyze_frame_scopes(
             b_sum += b as u64;
             y_sum += y_val as u64;
 
-            if r < hist.red.min_value { hist.red.min_value = r; }
-            if r > hist.red.max_value { hist.red.max_value = r; }
-            if g < hist.green.min_value { hist.green.min_value = g; }
-            if g > hist.green.max_value { hist.green.max_value = g; }
-            if b < hist.blue.min_value { hist.blue.min_value = b; }
-            if b > hist.blue.max_value { hist.blue.max_value = b; }
-            if y_val < hist.luma.min_value { hist.luma.min_value = y_val; }
-            if y_val > hist.luma.max_value { hist.luma.max_value = y_val; }
+            if r < hist.red.min_value {
+                hist.red.min_value = r;
+            }
+            if r > hist.red.max_value {
+                hist.red.max_value = r;
+            }
+            if g < hist.green.min_value {
+                hist.green.min_value = g;
+            }
+            if g > hist.green.max_value {
+                hist.green.max_value = g;
+            }
+            if b < hist.blue.min_value {
+                hist.blue.min_value = b;
+            }
+            if b > hist.blue.max_value {
+                hist.blue.max_value = b;
+            }
+            if y_val < hist.luma.min_value {
+                hist.luma.min_value = y_val;
+            }
+            if y_val > hist.luma.max_value {
+                hist.luma.max_value = y_val;
+            }
 
             // 2. Waveform Luma (columns = x column mapped to scope_width, rows = y_val mapped to scope_height, 0 at bottom)
             let col = ((x as usize * scope_width) / width as usize).min(scope_width - 1);

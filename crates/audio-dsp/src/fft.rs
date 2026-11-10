@@ -18,16 +18,26 @@ pub struct Fft {
 impl Fft {
     /// Plan an FFT of size `n` (must be a power of two ≥ 2).
     pub fn new(n: usize) -> Fft {
-        assert!(n >= 2 && n.is_power_of_two(), "FFT size must be a power of two");
+        assert!(
+            n >= 2 && n.is_power_of_two(),
+            "FFT size must be a power of two"
+        );
         let bits = n.trailing_zeros();
-        let rev = (0..n as u32).map(|i| i.reverse_bits() >> (32 - bits)).collect();
+        let rev = (0..n as u32)
+            .map(|i| i.reverse_bits() >> (32 - bits))
+            .collect();
         let (tw_re, tw_im) = (0..n / 2)
             .map(|k| {
                 let a = -2.0 * PI * k as f64 / n as f64;
                 (a.cos() as f32, a.sin() as f32)
             })
             .unzip();
-        Fft { n, tw_re, tw_im, rev }
+        Fft {
+            n,
+            tw_re,
+            tw_im,
+            rev,
+        }
     }
 
     pub fn len(&self) -> usize {

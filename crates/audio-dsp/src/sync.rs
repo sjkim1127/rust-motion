@@ -41,7 +41,13 @@ pub struct SyncOptions {
 
 impl Default for SyncOptions {
     fn default() -> Self {
-        Self { max_lag: None, coarse_rate: 8000, max_coarse_samples: 1 << 22, phat_beta: 0.75, refine_window: 1 << 17 }
+        Self {
+            max_lag: None,
+            coarse_rate: 8000,
+            max_coarse_samples: 1 << 22,
+            phat_beta: 0.75,
+            refine_window: 1 << 17,
+        }
     }
 }
 
@@ -71,7 +77,9 @@ impl SyncResult {
 pub fn mixdown(channels: &[&[f32]]) -> Vec<f32> {
     let n = channels.iter().map(|c| c.len()).min().unwrap_or(0);
     let k = channels.len().max(1) as f32;
-    (0..n).map(|i| channels.iter().map(|c| c[i]).sum::<f32>() / k).collect()
+    (0..n)
+        .map(|i| channels.iter().map(|c| c[i]).sum::<f32>() / k)
+        .collect()
 }
 
 /// Low-pass filter (Blackman-windowed sinc, cutoff at 0.42 × the new sample rate) and keep every
@@ -87,7 +95,11 @@ pub fn decimate(x: &[f32], d: usize) -> Vec<f32> {
         let mut h: Vec<f64> = (0..n)
             .map(|k| {
                 let t = k as f64 - half as f64;
-                let sinc = if t == 0.0 { 2.0 * fc } else { (2.0 * std::f64::consts::PI * fc * t).sin() / (std::f64::consts::PI * t) };
+                let sinc = if t == 0.0 {
+                    2.0 * fc
+                } else {
+                    (2.0 * std::f64::consts::PI * fc * t).sin() / (std::f64::consts::PI * t)
+                };
                 let w = 0.42 - 0.5 * (2.0 * std::f64::consts::PI * k as f64 / (n - 1) as f64).cos()
                     + 0.08 * (4.0 * std::f64::consts::PI * k as f64 / (n - 1) as f64).cos();
                 sinc * w
@@ -178,7 +190,12 @@ fn corr_at(r: &[f32], lag: i64) -> f32 {
 
 /// Find the lag `L` with `b[n] ≈ g·a[n + L]` (see the module docs). `None` when either signal is
 /// too short or silent, or no lag leaves enough overlap.
-pub fn find_offset(a: &[f32], b: &[f32], sample_rate: u32, opts: &SyncOptions) -> Option<SyncResult> {
+pub fn find_offset(
+    a: &[f32],
+    b: &[f32],
+    sample_rate: u32,
+    opts: &SyncOptions,
+) -> Option<SyncResult> {
     let sr = sample_rate.max(1) as usize;
     let min_len = (sr / 10).max(64);
     if a.len() < min_len || b.len() < min_len {
@@ -189,7 +206,9 @@ pub fn find_offset(a: &[f32], b: &[f32], sample_rate: u32, opts: &SyncOptions) -
         return None;
     }
     // ---- coarse
-    let d = (sr.div_ceil(opts.coarse_rate.max(500) as usize)).max((a.len() + b.len()).div_ceil(opts.max_coarse_samples.max(1 << 12))).max(1);
+    let d = (sr.div_ceil(opts.coarse_rate.max(500) as usize))
+        .max((a.len() + b.len()).div_ceil(opts.max_coarse_samples.max(1 << 12)))
+        .max(1);
     let mut ca = a.to_vec();
     let mut cb = b.to_vec();
     normalise(&mut ca);
@@ -235,7 +254,11 @@ pub fn find_offset(a: &[f32], b: &[f32], sample_rate: u32, opts: &SyncOptions) -
         }
         second = second.max(corr_at(&r, l).abs());
     }
-    let distinct = if second > 0.0 { best.1.abs() / second } else { f32::INFINITY };
+    let distinct = if second > 0.0 {
+        best.1.abs() / second
+    } else {
+        f32::INFINITY
+    };
     let inverted = best.1 < 0.0;
     let coarse = best.0 * d as i64;
     // ---- refine at the full rate
@@ -244,7 +267,13 @@ pub fn find_offset(a: &[f32], b: &[f32], sample_rate: u32, opts: &SyncOptions) -
     let ov0 = (-coarse).max(0);
     let ov1 = fb.min(fa - coarse);
     if ov1 - ov0 < 16 {
-        return Some(SyncResult { lag: coarse, lag_fine: coarse as f64, confidence, distinct, inverted });
+        return Some(SyncResult {
+            lag: coarse,
+            lag_fine: coarse as f64,
+            confidence,
+            distinct,
+            inverted,
+        });
     }
     let w = ((ov1 - ov0) as usize).min(opts.refine_window.max(256)) as i64;
     // the window of b with the most energy (both sides: a lag-shifted)
@@ -277,7 +306,9 @@ pub fn find_offset(a: &[f32], b: &[f32], sample_rate: u32, opts: &SyncOptions) -
         best_s
     };
     let bw: Vec<f32> = b[start as usize..(start + w) as usize].to_vec();
-    let aw: Vec<f32> = (start + coarse - margin..start + coarse + w + margin).map(|i| if i >= 0 && i < fa { a[i as usize] } else { 0.0 }).collect();
+    let aw: Vec<f32> = (start + coarse - margin..start + coarse + w + margin)
+        .map(|i| if i >= 0 && i < fa { a[i as usize] } else { 0.0 })
+        .collect();
     let mut aw = aw;
     let mut bw = bw;
     normalise(&mut aw);
@@ -297,10 +328,20 @@ pub fn find_offset(a: &[f32], b: &[f32], sample_rate: u32, opts: &SyncOptions) -
     }
     let (y0, y1, y2) = (corr_at(&r2, bl - 1) * sign, bv, corr_at(&r2, bl + 1) * sign);
     let den = y0 - 2.0 * y1 + y2;
-    let frac = if den.abs() > 1e-20 { (0.5 * (y0 - y2) / den).clamp(-0.5, 0.5) } else { 0.0 };
+    let frac = if den.abs() > 1e-20 {
+        (0.5 * (y0 - y2) / den).clamp(-0.5, 0.5)
+    } else {
+        0.0
+    };
     let delta = bl - margin;
     let lag = coarse + delta;
-    Some(SyncResult { lag, lag_fine: lag as f64 + frac as f64, confidence, distinct, inverted })
+    Some(SyncResult {
+        lag,
+        lag_fine: lag as f64 + frac as f64,
+        confidence,
+        distinct,
+        inverted,
+    })
 }
 
 #[cfg(test)]
@@ -326,7 +367,12 @@ mod tests {
                 let env = (std::f64::consts::PI * k as f64 / len as f64).sin() as f32;
                 let v = if kind > 0.3 {
                     let f = f0 * (1.0 + (glide - 1.0) * k as f64 / len as f64);
-                    (1..8).map(|h| ((2.0 * std::f64::consts::PI * f * h as f64 * t).sin() / h as f64) as f32).sum::<f32>()
+                    (1..8)
+                        .map(|h| {
+                            ((2.0 * std::f64::consts::PI * f * h as f64 * t).sin() / h as f64)
+                                as f32
+                        })
+                        .sum::<f32>()
                 } else if kind > -0.4 {
                     rng.uniform()
                 } else {
@@ -342,7 +388,15 @@ mod tests {
     /// `x` delayed by `delay` samples (fractional: windowed-sinc interpolation), scaled by `gain`,
     /// optionally coloured by a zero-phase low-pass (`[k, 1-2k, k]`, so the delay stays exact), with
     /// white noise `snr_db` below the signal.
-    fn mic(x: &[f32], delay: f64, gain: f32, lowpass: Option<f32>, snr_db: f32, len: usize, seed: u64) -> Vec<f32> {
+    fn mic(
+        x: &[f32],
+        delay: f64,
+        gain: f32,
+        lowpass: Option<f32>,
+        snr_db: f32,
+        len: usize,
+        seed: u64,
+    ) -> Vec<f32> {
         let mut out = vec![0.0f32; len];
         let di = delay.floor() as i64;
         let fr = delay - di as f64;
@@ -402,7 +456,15 @@ mod tests {
         let s = speechy(sr as f64, 12.0, 1);
         for delay in [0i64, 1, 7, 12_345, 96_001, -4_321, -50_000] {
             // b = s shifted: b[n] = s[n + delay]
-            let b: Vec<f32> = (0..400_000i64).map(|n| if n + delay >= 0 && ((n + delay) as usize) < s.len() { s[(n + delay) as usize] } else { 0.0 }).collect();
+            let b: Vec<f32> = (0..400_000i64)
+                .map(|n| {
+                    if n + delay >= 0 && ((n + delay) as usize) < s.len() {
+                        s[(n + delay) as usize]
+                    } else {
+                        0.0
+                    }
+                })
+                .collect();
             let r = find_offset(&s, &b, sr, &SyncOptions::default()).unwrap();
             assert_eq!(r.lag, delay, "{r:?}");
             assert!(r.reliable(), "{r:?}");
@@ -418,9 +480,17 @@ mod tests {
         let src = speechy(sr as f64, 30.0, 7);
         let len = 30 * sr as usize;
         // mic k records src delayed by d_k: mic_k[n] = src[n - d_k]
-        let cases: [(f64, f32, Option<f32>, f32); 4] =
-            [(0.0, 1.0, None, 40.0), (2_345.0, 0.1, None, 25.0), (-31_337.4, 3.0, Some(0.3), 10.0), (150_000.6, 0.5, None, 3.0)];
-        let mics: Vec<Vec<f32>> = cases.iter().enumerate().map(|(i, c)| mic(&src, c.0, c.1, c.2, c.3, len, 100 + i as u64)).collect();
+        let cases: [(f64, f32, Option<f32>, f32); 4] = [
+            (0.0, 1.0, None, 40.0),
+            (2_345.0, 0.1, None, 25.0),
+            (-31_337.4, 3.0, Some(0.3), 10.0),
+            (150_000.6, 0.5, None, 3.0),
+        ];
+        let mics: Vec<Vec<f32>> = cases
+            .iter()
+            .enumerate()
+            .map(|(i, c)| mic(&src, c.0, c.1, c.2, c.3, len, 100 + i as u64))
+            .collect();
         let mut worst = 0.0f64;
         let mut worst_fine = 0.0f64;
         for (k, c) in cases.iter().enumerate().skip(1) {
@@ -451,7 +521,10 @@ mod tests {
         let mut rng = Rng::new(9);
         let room: Vec<f32> = direct.iter().zip(&echo).map(|(a, b)| a + b).collect();
         let nrms = crate::testutil::rms(&room) as f32 * 3f32.sqrt();
-        let far: Vec<f32> = room.iter().map(|v| (v + rng.uniform() * nrms) * 0.3).collect();
+        let far: Vec<f32> = room
+            .iter()
+            .map(|v| (v + rng.uniform() * nrms) * 0.3)
+            .collect();
         let r = find_offset(&near, &far, sr, &SyncOptions::default()).unwrap();
         assert!((r.lag + 777).abs() <= 1, "{r:?}");
         assert!(r.reliable(), "{r:?}");
@@ -464,10 +537,22 @@ mod tests {
         let sr = 48_000u32;
         let src = speechy(sr as f64, 600.0, 31);
         let a = mic(&src, 0.0, 1.0, None, 20.0, src.len(), 1);
-        let b = mic(&src, -1_234_567.0, 0.5, None, 10.0, src.len() - 2_000_000, 2);
+        let b = mic(
+            &src,
+            -1_234_567.0,
+            0.5,
+            None,
+            10.0,
+            src.len() - 2_000_000,
+            2,
+        );
         let t = std::time::Instant::now();
         let r = find_offset(&a, &b, sr, &SyncOptions::default()).unwrap();
-        eprintln!("10 min + 9.3 min at 48 kHz: {:?} in {:.2} s", r, t.elapsed().as_secs_f64());
+        eprintln!(
+            "10 min + 9.3 min at 48 kHz: {:?} in {:.2} s",
+            r,
+            t.elapsed().as_secs_f64()
+        );
         assert!((r.lag - 1_234_567).abs() <= 1);
     }
 
@@ -475,7 +560,15 @@ mod tests {
     fn inverted_polarity_is_found() {
         let sr = 48_000;
         let s = speechy(sr as f64, 8.0, 3);
-        let b: Vec<f32> = (0..300_000usize).map(|n| if n + 1000 < s.len() { -0.5 * s[n + 1000] } else { 0.0 }).collect();
+        let b: Vec<f32> = (0..300_000usize)
+            .map(|n| {
+                if n + 1000 < s.len() {
+                    -0.5 * s[n + 1000]
+                } else {
+                    0.0
+                }
+            })
+            .collect();
         let r = find_offset(&s, &b, sr, &SyncOptions::default()).unwrap();
         assert_eq!(r.lag, 1000);
         assert!(r.inverted);
@@ -497,9 +590,27 @@ mod tests {
         let sr = 48_000;
         let s = speechy(sr as f64, 10.0, 5);
         let b: Vec<f32> = s[48_000..].to_vec();
-        let r = find_offset(&s, &b, sr, &SyncOptions { max_lag: Some(60_000), ..Default::default() }).unwrap();
+        let r = find_offset(
+            &s,
+            &b,
+            sr,
+            &SyncOptions {
+                max_lag: Some(60_000),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert_eq!(r.lag, 48_000);
-        let r = find_offset(&s, &b, sr, &SyncOptions { max_lag: Some(10_000), ..Default::default() }).unwrap();
+        let r = find_offset(
+            &s,
+            &b,
+            sr,
+            &SyncOptions {
+                max_lag: Some(10_000),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert!(!r.reliable() || r.lag != 48_000);
     }
 }

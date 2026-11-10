@@ -15,13 +15,20 @@ fn run(fmt: PixelFormat, label: &str, brush: &BrushSettings) {
     let n = 6016;
     let mut s = Surface::with_default(fmt, &photocraft_raster::from_rgba(&fmt, [1.0; 4]));
     // Materialise the layer like a real photo layer.
-    s.fill_rect(Rect::new(0, 0, n, n), &photocraft_raster::from_rgba(&fmt, [0.8, 0.7, 0.6, 1.0]));
+    s.fill_rect(
+        Rect::new(0, 0, n, n),
+        &photocraft_raster::from_rgba(&fmt, [0.8, 0.7, 0.6, 1.0]),
+    );
     let pts: Vec<StrokePoint> = (0..500)
         .map(|i| {
             let t = i as f64 / 499.0;
             StrokePoint {
                 time: i as f64 * 8.0,
-                ..StrokePoint::new(300.0 + t * 5400.0, 3000.0 + (t * 12.0).sin() * 2000.0, 0.6 + 0.4 * (t * 30.0).sin().abs() as f32)
+                ..StrokePoint::new(
+                    300.0 + t * 5400.0,
+                    3000.0 + (t * 12.0).sin() * 2000.0,
+                    0.6 + 0.4 * (t * 30.0).sin().abs() as f32,
+                )
             }
         })
         .collect();
@@ -59,17 +66,56 @@ fn main() {
         spacing: 0.25,
         pressure_size: false,
         seed: 1,
-        shape_dynamics: ShapeDynamics { enabled: true, size: Dynamic::jitter(0.3), angle: Dynamic::jitter(1.0), ..Default::default() },
-        scattering: Scattering { enabled: true, scatter: Dynamic::jitter(1.0), both_axes: true, count: 2, ..Default::default() },
-        texture: Texture { enabled: true, depth: 0.7, ..Default::default() },
+        shape_dynamics: ShapeDynamics {
+            enabled: true,
+            size: Dynamic::jitter(0.3),
+            angle: Dynamic::jitter(1.0),
+            ..Default::default()
+        },
+        scattering: Scattering {
+            enabled: true,
+            scatter: Dynamic::jitter(1.0),
+            both_axes: true,
+            count: 2,
+            ..Default::default()
+        },
+        texture: Texture {
+            enabled: true,
+            depth: 0.7,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let rgba8 = PixelFormat::RGBA8;
     run(rgba8, "RGBA8 textured+scattered 200px", &brush);
-    run(rgba8, "RGBA8 per-tip texture", &BrushSettings { texture: Texture { each_tip: true, ..brush.texture.clone() }, ..brush.clone() });
-    let chalk = presets::find(&presets::builtin(), "Chalk").unwrap().brush.clone();
-    run(rgba8, "RGBA8 Chalk (sampled) 200px", &BrushSettings { size: 200.0, ..chalk });
-    run(rgba8.with_sample(SampleType::U16), "RGBA16 textured+scattered", &brush);
+    run(
+        rgba8,
+        "RGBA8 per-tip texture",
+        &BrushSettings {
+            texture: Texture {
+                each_tip: true,
+                ..brush.texture.clone()
+            },
+            ..brush.clone()
+        },
+    );
+    let chalk = presets::find(&presets::builtin(), "Chalk")
+        .unwrap()
+        .brush
+        .clone();
+    run(
+        rgba8,
+        "RGBA8 Chalk (sampled) 200px",
+        &BrushSettings {
+            size: 200.0,
+            ..chalk
+        },
+    );
+    run(
+        rgba8.with_sample(SampleType::U16),
+        "RGBA16 textured+scattered",
+        &brush,
+    );
     run(PixelFormat::RGBA32F, "RGBA32F textured+scattered", &brush);
     run(PixelFormat::CMYKA8, "CMYKA8 textured+scattered", &brush);
 }

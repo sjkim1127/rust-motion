@@ -41,11 +41,11 @@ pub use metadata::{
     static_file, AudioMetadata, ImageDimensions, MediaMetadataError, ParsedMediaMetadata,
     VideoMetadata, MAX_MEDIA_RANGE_BYTES,
 };
-pub use sample::{read_encoded_sample, read_encoded_samples, EncodedSample};
-pub use scene::{SceneAudio, SceneGif, SceneImage, SceneVideo};
+pub use rust_motion_audio_dsp as audio_dsp;
 pub use rust_motion_rasterizer::{
     FrameInterpolationMode, OpticalFlowEngine, TimeRemapCurve, TimeRemapPoint,
 };
-pub use rust_motion_audio_dsp as audio_dsp;
+pub use sample::{read_encoded_sample, read_encoded_samples, EncodedSample};
+pub use scene::{SceneAudio, SceneGif, SceneImage, SceneVideo};
 #[cfg(feature = "dioxus")]
 pub use video::{Html5Video, OffthreadVideo, Video, VideoProps};

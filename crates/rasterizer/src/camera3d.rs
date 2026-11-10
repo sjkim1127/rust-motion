@@ -182,9 +182,18 @@ impl Camera3D {
                 );
 
                 Mat4([
-                    final_right.x, final_up.x, -forward.x, 0.0,
-                    final_right.y, final_up.y, -forward.y, 0.0,
-                    final_right.z, final_up.z, -forward.z, 0.0,
+                    final_right.x,
+                    final_up.x,
+                    -forward.x,
+                    0.0,
+                    final_right.y,
+                    final_up.y,
+                    -forward.y,
+                    0.0,
+                    final_right.z,
+                    final_up.z,
+                    -forward.z,
+                    0.0,
                     -self.position.dot(final_right),
                     -self.position.dot(final_up),
                     self.position.dot(forward),
@@ -205,9 +214,18 @@ impl Camera3D {
                 let rz = Vec3::new(sy * cp, -sp, cy * cp);
 
                 Mat4([
-                    rx.x, ry.x, rz.x, 0.0,
-                    rx.y, ry.y, rz.y, 0.0,
-                    rx.z, ry.z, rz.z, 0.0,
+                    rx.x,
+                    ry.x,
+                    rz.x,
+                    0.0,
+                    rx.y,
+                    ry.y,
+                    rz.y,
+                    0.0,
+                    rx.z,
+                    ry.z,
+                    rz.z,
+                    0.0,
                     -self.position.dot(rx),
                     -self.position.dot(ry),
                     -self.position.dot(rz),
@@ -226,17 +244,34 @@ impl Camera3D {
         let range_inv = 1.0 / (near - far);
 
         Mat4([
-            f / aspect_ratio, 0.0, 0.0, 0.0,
-            0.0, f, 0.0, 0.0,
-            0.0, 0.0, (far + near) * range_inv, -1.0,
-            0.0, 0.0, (2.0 * far * near) * range_inv, 0.0,
+            f / aspect_ratio,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            f,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            (far + near) * range_inv,
+            -1.0,
+            0.0,
+            0.0,
+            (2.0 * far * near) * range_inv,
+            0.0,
         ])
     }
 
     /// Projects a 3D world coordinate to 2D pixel coordinates and camera depth.
     ///
     /// Returns `(pixel_x, pixel_y, depth_from_camera)`.
-    pub fn project_point(&self, point: Vec3, screen_w: f32, screen_h: f32) -> Option<(f32, f32, f32)> {
+    pub fn project_point(
+        &self,
+        point: Vec3,
+        screen_w: f32,
+        screen_h: f32,
+    ) -> Option<(f32, f32, f32)> {
         let view = self.view_matrix();
         let eye_pt = view.transform_vec3(point);
 
@@ -291,10 +326,7 @@ impl Camera3D {
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum LightSource {
     /// Ambient light: uniform flat illumination without directionality or shadows.
-    Ambient {
-        color: Color,
-        intensity: f32,
-    },
+    Ambient { color: Color, intensity: f32 },
     /// Point light: omnidirectional spherical light with distance decay.
     Point {
         position: Vec3,
@@ -418,7 +450,12 @@ pub fn shade_surface(
     }
 
     let n = normal.normalize();
-    let v = Vec3::new(view_pos.x - point.x, view_pos.y - point.y, view_pos.z - point.z).normalize();
+    let v = Vec3::new(
+        view_pos.x - point.x,
+        view_pos.y - point.y,
+        view_pos.z - point.z,
+    )
+    .normalize();
 
     let mut r_acc = 0.0f32;
     let mut g_acc = 0.0f32;
@@ -439,7 +476,11 @@ pub fn shade_surface(
                 radius,
                 decay,
             } => {
-                let to_light = Vec3::new(position.x - point.x, position.y - point.y, position.z - point.z);
+                let to_light = Vec3::new(
+                    position.x - point.x,
+                    position.y - point.y,
+                    position.z - point.z,
+                );
                 let dist = to_light.length();
                 let l = to_light.normalize();
 
@@ -469,7 +510,11 @@ pub fn shade_surface(
                 feather,
                 radius,
             } => {
-                let to_light = Vec3::new(position.x - point.x, position.y - point.y, position.z - point.z);
+                let to_light = Vec3::new(
+                    position.x - point.x,
+                    position.y - point.y,
+                    position.z - point.z,
+                );
                 let dist = to_light.length();
                 let l = to_light.normalize();
 
@@ -479,7 +524,12 @@ pub fn shade_surface(
                 }
 
                 // Check angle relative to spot forward direction
-                let spot_dir = Vec3::new(target.x - position.x, target.y - position.y, target.z - position.z).normalize();
+                let spot_dir = Vec3::new(
+                    target.x - position.x,
+                    target.y - position.y,
+                    target.z - position.z,
+                )
+                .normalize();
                 let cos_theta = (-l).dot(spot_dir); // angle from spotlight axis
 
                 let half_cone_rad = (cone_angle_deg * 0.5).to_radians();
@@ -530,9 +580,15 @@ pub fn shade_surface(
         }
     }
 
-    let out_r = ((base_color.r as f32 / 255.0) * r_acc * 255.0).round().clamp(0.0, 255.0) as u8;
-    let out_g = ((base_color.g as f32 / 255.0) * g_acc * 255.0).round().clamp(0.0, 255.0) as u8;
-    let out_b = ((base_color.b as f32 / 255.0) * b_acc * 255.0).round().clamp(0.0, 255.0) as u8;
+    let out_r = ((base_color.r as f32 / 255.0) * r_acc * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+    let out_g = ((base_color.g as f32 / 255.0) * g_acc * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+    let out_b = ((base_color.b as f32 / 255.0) * b_acc * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
 
     Color::rgba(out_r, out_g, out_b, base_color.a)
 }
@@ -614,7 +670,14 @@ mod tests {
 
         // Light facing backward (from underneath) produces no diffuse illumination
         let light_below = LightSource::point(Vec3::new(0.0, -100.0, 0.0), Color::WHITE, 1.0, 500.0);
-        let shaded_below = shade_surface(surface_pt, normal, base_color, &mat, &[light_below], view_pos);
+        let shaded_below = shade_surface(
+            surface_pt,
+            normal,
+            base_color,
+            &mat,
+            &[light_below],
+            view_pos,
+        );
         assert_eq!(shaded_below.r, 0);
         assert_eq!(shaded_below.g, 0);
         assert_eq!(shaded_below.b, 0);

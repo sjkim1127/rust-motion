@@ -17,7 +17,14 @@
 //! [`PixelFormat`] (only tiles that differ from the default are allocated). Pure Rust, no
 //! platform dependencies; builds for `wasm32` (single-threaded there, rayon elsewhere).
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
 
 pub mod edit;
 pub mod flatten;
@@ -28,13 +35,15 @@ pub mod stroke;
 pub mod trace;
 
 use photocraft_color::{ColorMode, PixelFormat};
-use photocraft_doc::{Fill, FillRule, GradientStyle, Path, PathOp, ShapeLayer, ShapeStroke, StrokeAlign, VectorMask};
+use photocraft_doc::{
+    Fill, FillRule, GradientStyle, Path, PathOp, ShapeLayer, ShapeStroke, StrokeAlign, VectorMask,
+};
 use photocraft_geom::{Rect, TILE_SIZE};
 use photocraft_raster::Surface;
 
-pub use flatten::{Polyline, flatten_path, flatten_subpath};
+pub use flatten::{flatten_path, flatten_subpath, Polyline};
 pub use raster::Rasterizer;
-pub use stroke::{StrokeStyle, stroke_polygons};
+pub use stroke::{stroke_polygons, StrokeStyle};
 
 /// Default flattening tolerance in pixels (curve-to-chord distance).
 pub const DEFAULT_TOLERANCE: f64 = 0.01;
@@ -46,7 +55,11 @@ pub fn fill_rasterizer(path: &Path, tol: f64) -> Rasterizer {
     // One point budget for the whole path, then one edge sort for all components.
     let polys: Vec<Vec<(f64, f64)>> = flatten_path(path, tol).into_iter().map(|l| l.pts).collect();
     for c in path.components() {
-        r.push_component(polys.get(c.clone()).unwrap_or_default(), path.effective_op(c.start), path.fill_rule);
+        r.push_component(
+            polys.get(c.clone()).unwrap_or_default(),
+            path.effective_op(c.start),
+            path.fill_rule,
+        );
     }
     r.sort_edges();
     r
@@ -102,7 +115,10 @@ impl CompiledVectorMask {
         } else {
             MaskGeometry::Path(fill_rasterizer(&m.path, DEFAULT_TOLERANCE))
         };
-        Self { geometry, density: (m.enabled && m.density < 1.0).then(|| m.density.clamp(0.0, 1.0)) }
+        Self {
+            geometry,
+            density: (m.enabled && m.density < 1.0).then(|| m.density.clamp(0.0, 1.0)),
+        }
     }
 
     /// Effective mask values over `rect`, with invocation-local rasterization state.
@@ -123,9 +139,15 @@ impl CompiledVectorMask {
     }
 
     /// Mask values over `rect`, with a path's coverage from `coverage`.
-    fn render_with(&self, rect: Rect, coverage: impl FnOnce(&Rasterizer, Rect) -> Vec<f32>) -> Vec<f32> {
+    fn render_with(
+        &self,
+        rect: Rect,
+        coverage: impl FnOnce(&Rasterizer, Rect) -> Vec<f32>,
+    ) -> Vec<f32> {
         let mut v = match &self.geometry {
-            MaskGeometry::Constant(value) => vec![*value; rect.width() as usize * rect.height() as usize],
+            MaskGeometry::Constant(value) => {
+                vec![*value; rect.width() as usize * rect.height() as usize]
+            }
             MaskGeometry::Path(rasterizer) => coverage(rasterizer, rect),
         };
         self.apply_density(&mut v);
@@ -165,12 +187,22 @@ fn tile_bands(r: Rect) -> Vec<Rect> {
 
 /// Splits a band buffer (`channels` floats per pixel) into tile-aligned pieces, skipping
 /// pieces where `keep` is false for every pixel.
-fn band_tiles(band: Rect, data: &[f32], channels: usize, keep: impl Fn(&[f32]) -> bool) -> Vec<(Rect, Vec<f32>)> {
+fn band_tiles(
+    band: Rect,
+    data: &[f32],
+    channels: usize,
+    keep: impl Fn(&[f32]) -> bool,
+) -> Vec<(Rect, Vec<f32>)> {
     let w = band.width() as usize;
     let mut out = Vec::new();
     let mut x = band.x0.div_euclid(TILE_SIZE) * TILE_SIZE;
     while x < band.x1 {
-        let tr = Rect::new(x.max(band.x0), band.y0, (x + TILE_SIZE).min(band.x1), band.y1);
+        let tr = Rect::new(
+            x.max(band.x0),
+            band.y0,
+            (x + TILE_SIZE).min(band.x1),
+            band.y1,
+        );
         let tw = tr.width() as usize;
         let mut buf = Vec::with_capacity(tw * tr.height() as usize * channels);
         let mut any = false;
@@ -192,7 +224,11 @@ fn band_tiles(band: Rect, data: &[f32], channels: usize, keep: impl Fn(&[f32]) -
 
 /// Runs `f` over the bands of `r` (in parallel groups on native targets) and writes the
 /// resulting pieces into `surface`.
-fn render_bands(surface: &mut Surface, r: Rect, f: &(dyn Fn(Rect) -> Vec<(Rect, Vec<f32>)> + Sync)) {
+fn render_bands(
+    surface: &mut Surface,
+    r: Rect,
+    f: &(dyn Fn(Rect) -> Vec<(Rect, Vec<f32>)> + Sync),
+) {
     let bands = tile_bands(r);
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -219,7 +255,11 @@ fn render_bands(surface: &mut Surface, r: Rect, f: &(dyn Fn(Rect) -> Vec<(Rect, 
 pub fn coverage_surface(r: &Rasterizer, format: PixelFormat, clip: Rect) -> Surface {
     let fmt = PixelFormat::new(ColorMode::Grayscale, format.sample, false);
     let mut s = Surface::new(fmt);
-    let area = if r.is_inverted() { clip } else { r.pixel_bounds().map_or(Rect::EMPTY, |b| b.intersect(&clip)) };
+    let area = if r.is_inverted() {
+        clip
+    } else {
+        r.pixel_bounds().map_or(Rect::EMPTY, |b| b.intersect(&clip))
+    };
     render_bands(&mut s, area, &|band| {
         let cov = r.render(band);
         band_tiles(band, &cov, 1, |p| p[0] > 0.0)
@@ -259,7 +299,11 @@ impl Paint {
     /// `photocraft-compose` (which this crate cannot depend on) keep the two in step. Pattern
     /// fills are not rendered (transparent): they need the document's pattern table, which
     /// lives above this crate.
-    pub fn from_fill(f: &Fill, bounds: (f64, f64, f64, f64), canvas: (f64, f64, f64, f64)) -> Paint {
+    pub fn from_fill(
+        f: &Fill,
+        bounds: (f64, f64, f64, f64),
+        canvas: (f64, f64, f64, f64),
+    ) -> Paint {
         let rgba = |c: &photocraft_color::Color| {
             let v = c.to_rgb();
             [v[0], v[1], v[2], c.alpha]
@@ -268,9 +312,21 @@ impl Paint {
             Fill::Solid(c) => Paint::Solid(rgba(c)),
             // No `..` here on purpose: a new gradient field must fail to compile until the
             // shape renderer honours it (the same sentinel the document/compositor pair uses).
-            Fill::Gradient { stops, angle, scale, style, reverse, opacity_stops, midpoints, offset, dither, align } => {
+            Fill::Gradient {
+                stops,
+                angle,
+                scale,
+                style,
+                reverse,
+                opacity_stops,
+                midpoints,
+                offset,
+                dither,
+                align,
+            } => {
                 let frame = if *align { bounds } else { canvas };
-                let mut stops: Vec<(f32, [f32; 4])> = stops.iter().map(|(p, c)| (*p, rgba(c))).collect();
+                let mut stops: Vec<(f32, [f32; 4])> =
+                    stops.iter().map(|(p, c)| (*p, rgba(c))).collect();
                 stops.sort_by(|a, b| a.0.total_cmp(&b.0));
                 let mut opacity = opacity_stops.clone();
                 opacity.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -294,7 +350,16 @@ impl Paint {
         match self {
             Paint::None => [0.0; 4],
             Paint::Solid(c) => *c,
-            Paint::Gradient { stops, midpoints, opacity_stops, style, layout, reverse, dither: dith, frame } => {
+            Paint::Gradient {
+                stops,
+                midpoints,
+                opacity_stops,
+                style,
+                layout,
+                reverse,
+                dither: dith,
+                frame,
+            } => {
                 let t = gradient_t(*style, layout.0, layout.1, *reverse, layout.2, *frame, x, y);
                 let mut c = sample_stops(stops, midpoints, opacity_stops, t);
                 if *dith {
@@ -320,7 +385,13 @@ fn gradient_units(angle: f64, w: f64, h: f64) -> (f64, f64) {
 /// Reflected end points to whole pixels as Photoshop does: on small frames that changes the
 /// effective angle. Mirrors the compositor's `fill_layout::gradient_layout`, which the GPU
 /// compositor shares.
-fn gradient_layout(style: GradientStyle, angle: f32, scale: f32, offset: (f32, f32), frame: (f64, f64, f64, f64)) -> (f32, f32, (f32, f32)) {
+fn gradient_layout(
+    style: GradientStyle,
+    angle: f32,
+    scale: f32,
+    offset: (f32, f32),
+    frame: (f64, f64, f64, f64),
+) -> (f32, f32, (f32, f32)) {
     let unchanged = (angle, scale, offset);
     if !matches!(style, GradientStyle::Linear | GradientStyle::Reflected)
         || !angle.is_finite()
@@ -332,7 +403,10 @@ fn gradient_layout(style: GradientStyle, angle: f32, scale: f32, offset: (f32, f
     }
     let w = (frame.2 - frame.0).max(1.0);
     let h = (frame.3 - frame.1).max(1.0);
-    let (cx, cy) = (frame.0 + w / 2.0 + f64::from(offset.0) * w, frame.1 + h / 2.0 + f64::from(offset.1) * h);
+    let (cx, cy) = (
+        frame.0 + w / 2.0 + f64::from(offset.0) * w,
+        frame.1 + h / 2.0 + f64::from(offset.1) * h,
+    );
     // Unscaled chord length along `a` (radians), as `gradient_t`.
     let chord_of = |a: f64| gradient_units(a, w, h).0;
     let a = f64::from(angle).to_radians();
@@ -356,10 +430,18 @@ fn gradient_layout(style: GradientStyle, angle: f32, scale: f32, offset: (f32, f
     }
     let a2 = (-v.1).atan2(v.0);
     // Reflected spans half the chord from the centre; Linear the whole chord.
-    let span = if style == GradientStyle::Reflected { 2.0 * len } else { len };
+    let span = if style == GradientStyle::Reflected {
+        2.0 * len
+    } else {
+        len
+    };
     let scale2 = span / chord_of(a2);
     let shift = (((mid.0 - cx) / w) as f32, ((mid.1 - cy) / h) as f32);
-    (a2.to_degrees() as f32, scale2 as f32, (offset.0 + shift.0, offset.1 + shift.1))
+    (
+        a2.to_degrees() as f32,
+        scale2 as f32,
+        (offset.0 + shift.0, offset.1 + shift.1),
+    )
 }
 
 /// Gradient parameter `t` (`0..=1`) at pixel centre `(x, y)` in `frame`: the centre moves by
@@ -368,7 +450,16 @@ fn gradient_layout(style: GradientStyle, angle: f32, scale: f32, offset: (f32, f
 /// `effects::gradient_t` (which the parity tests keep in step); unlike the compositor, the
 /// frame stays exact fractional shape bounds.
 #[allow(clippy::too_many_arguments)]
-fn gradient_t(style: GradientStyle, angle: f32, scale: f32, reverse: bool, offset: (f32, f32), frame: (f64, f64, f64, f64), x: f64, y: f64) -> f32 {
+fn gradient_t(
+    style: GradientStyle,
+    angle: f32,
+    scale: f32,
+    reverse: bool,
+    offset: (f32, f32),
+    frame: (f64, f64, f64, f64),
+    x: f64,
+    y: f64,
+) -> f32 {
     let w = (frame.2 - frame.0).max(1.0);
     let h = (frame.3 - frame.1).max(1.0);
     let cx = frame.0 + w / 2.0 + f64::from(offset.0) * w;
@@ -379,7 +470,10 @@ fn gradient_t(style: GradientStyle, angle: f32, scale: f32, reverse: bool, offse
     let along = dx * c - dy * s;
     let across = dx * s + dy * c;
     let (chord, len) = gradient_units(a, w, h);
-    let (chord, len) = (chord * f64::from(scale.max(1e-3)), len * f64::from(scale.max(1e-3)));
+    let (chord, len) = (
+        chord * f64::from(scale.max(1e-3)),
+        len * f64::from(scale.max(1e-3)),
+    );
     let corner = 0.5 * (c - s);
     let mut t = match style {
         GradientStyle::Linear => (along - corner) / chord + 0.5,
@@ -409,14 +503,20 @@ fn midpoint_remap(u: f32, m: f32) -> f32 {
 
 /// Colour stops with midpoints at `t` (stops sorted by location).
 fn sample_color(stops: &[(f32, [f32; 4])], mids: &[f32], t: f32) -> [f32; 4] {
-    let (Some(first), Some(last)) = (stops.first(), stops.last()) else { return [0.0; 4] };
+    let (Some(first), Some(last)) = (stops.first(), stops.last()) else {
+        return [0.0; 4];
+    };
     if t <= first.0 {
         return first.1;
     }
     for (i, w) in stops.windows(2).enumerate() {
         let (a, b) = (&w[0], &w[1]);
         if t <= b.0 {
-            let u = if b.0 > a.0 { (t - a.0) / (b.0 - a.0) } else { 0.0 };
+            let u = if b.0 > a.0 {
+                (t - a.0) / (b.0 - a.0)
+            } else {
+                0.0
+            };
             let k = midpoint_remap(u, mids.get(i).copied().unwrap_or(0.5));
             return std::array::from_fn(|ch| a.1[ch] + (b.1[ch] - a.1[ch]) * k);
         }
@@ -426,13 +526,19 @@ fn sample_color(stops: &[(f32, [f32; 4])], mids: &[f32], t: f32) -> [f32; 4] {
 
 /// Opacity stops at `t` (stops sorted by location; 1.0 when empty).
 fn sample_opacity(stops: &[(f32, f32)], t: f32) -> f32 {
-    let (Some(first), Some(last)) = (stops.first(), stops.last()) else { return 1.0 };
+    let (Some(first), Some(last)) = (stops.first(), stops.last()) else {
+        return 1.0;
+    };
     if t <= first.0 {
         return first.1;
     }
     for w in stops.windows(2) {
         if t <= w[1].0 {
-            let u = if w[1].0 > w[0].0 { (t - w[0].0) / (w[1].0 - w[0].0) } else { 0.0 };
+            let u = if w[1].0 > w[0].0 {
+                (t - w[0].0) / (w[1].0 - w[0].0)
+            } else {
+                0.0
+            };
             return w[0].1 + (w[1].1 - w[0].1) * u;
         }
     }
@@ -441,7 +547,12 @@ fn sample_opacity(stops: &[(f32, f32)], t: f32) -> f32 {
 
 /// Colour and alpha at `t`: colour stops with midpoints, alpha times opacity stops. Mirrors
 /// the compositor's `gradient_fill::Ramp::sample`.
-fn sample_stops(stops: &[(f32, [f32; 4])], mids: &[f32], opacity: &[(f32, f32)], t: f32) -> [f32; 4] {
+fn sample_stops(
+    stops: &[(f32, [f32; 4])],
+    mids: &[f32],
+    opacity: &[(f32, f32)],
+    t: f32,
+) -> [f32; 4] {
     let mut c = sample_color(stops, mids, t);
     if !opacity.is_empty() {
         c[3] *= sample_opacity(opacity, t);
@@ -472,7 +583,12 @@ impl CompiledShape {
     /// without "Align with layer" are laid out in.
     pub fn new(shape: &ShapeLayer, tol: f64, canvas: Rect) -> Self {
         let pb = shape.path.control_bounds().unwrap_or((0.0, 0.0, 0.0, 0.0));
-        let cb = (f64::from(canvas.x0), f64::from(canvas.y0), f64::from(canvas.x1), f64::from(canvas.y1));
+        let cb = (
+            f64::from(canvas.x0),
+            f64::from(canvas.y0),
+            f64::from(canvas.x1),
+            f64::from(canvas.y1),
+        );
         let area = fill_rasterizer(&shape.path, tol);
         let mut bounds = None;
         let fill = shape.fill.as_ref().map(|f| {
@@ -481,25 +597,43 @@ impl CompiledShape {
         });
         let all_closed = shape.path.subpaths.iter().all(|s| s.closed);
         let mut align = None;
-        let stroke = shape.stroke.as_ref().filter(|s| s.width > 0.0 && s.opacity > 0.0).map(|s| {
-            let mut st = stroke_style(s);
-            if all_closed && s.align != StrokeAlign::Center {
-                // Inside/outside strokes: a centred stroke twice as wide, clipped by the fill area.
-                st.width *= 2.0;
-                align = Some((area.clone(), s.align == StrokeAlign::Inside));
-            }
-            let r = stroke_rasterizer(&shape.path, &st, tol);
-            let sb = r.pixel_bounds();
-            bounds = match (bounds, sb) {
-                (Some(a), Some(b)) => Some(a.union(&b)),
-                (a, b) => a.or(b),
-            };
-            (r, Paint::from_fill(&s.paint, pb, cb), s.opacity.clamp(0.0, 1.0))
-        });
+        let stroke = shape
+            .stroke
+            .as_ref()
+            .filter(|s| s.width > 0.0 && s.opacity > 0.0)
+            .map(|s| {
+                let mut st = stroke_style(s);
+                if all_closed && s.align != StrokeAlign::Center {
+                    // Inside/outside strokes: a centred stroke twice as wide, clipped by the fill area.
+                    st.width *= 2.0;
+                    align = Some((area.clone(), s.align == StrokeAlign::Inside));
+                }
+                let r = stroke_rasterizer(&shape.path, &st, tol);
+                let sb = r.pixel_bounds();
+                bounds = match (bounds, sb) {
+                    (Some(a), Some(b)) => Some(a.union(&b)),
+                    (a, b) => a.or(b),
+                };
+                (
+                    r,
+                    Paint::from_fill(&s.paint, pb, cb),
+                    s.opacity.clamp(0.0, 1.0),
+                )
+            });
         if shape.path.inverted && shape.fill.is_some() {
-            bounds = Some(Rect::new(i32::MIN / 4, i32::MIN / 4, i32::MAX / 4, i32::MAX / 4));
+            bounds = Some(Rect::new(
+                i32::MIN / 4,
+                i32::MIN / 4,
+                i32::MAX / 4,
+                i32::MAX / 4,
+            ));
         }
-        CompiledShape { fill, stroke, align, bounds }
+        CompiledShape {
+            fill,
+            stroke,
+            align,
+            bounds,
+        }
     }
 
     /// Pixel bounds of the rendering (`None` = nothing visible).
@@ -516,7 +650,10 @@ impl CompiledShape {
             let cov = r.render(rect);
             for (i, (o, c)) in out.iter_mut().zip(&cov).enumerate() {
                 if *c > 0.0 {
-                    let (x, y) = ((rect.x0 + (i % w) as i32) as f64 + 0.5, (rect.y0 + (i / w) as i32) as f64 + 0.5);
+                    let (x, y) = (
+                        (rect.x0 + (i % w) as i32) as f64 + 0.5,
+                        (rect.y0 + (i / w) as i32) as f64 + 0.5,
+                    );
                     let mut p = paint.at(x, y);
                     p[3] *= c;
                     *o = p;
@@ -535,7 +672,10 @@ impl CompiledShape {
                 if *c <= 0.0 {
                     continue;
                 }
-                let (x, y) = ((rect.x0 + (i % w) as i32) as f64 + 0.5, (rect.y0 + (i / w) as i32) as f64 + 0.5);
+                let (x, y) = (
+                    (rect.x0 + (i % w) as i32) as f64 + 0.5,
+                    (rect.y0 + (i / w) as i32) as f64 + 0.5,
+                );
                 let s = paint.at(x, y);
                 let sa = s[3] * c * opacity;
                 let da = o[3];
@@ -567,7 +707,13 @@ impl CompiledShape {
                 }
             }
             let alpha = format.alpha;
-            band_tiles(band, &vals, ch, |px| if alpha { px[ch - 1] > 0.0 } else { px.iter().any(|v| *v != 0.0) })
+            band_tiles(band, &vals, ch, |px| {
+                if alpha {
+                    px[ch - 1] > 0.0
+                } else {
+                    px.iter().any(|v| *v != 0.0)
+                }
+            })
         });
         s
     }

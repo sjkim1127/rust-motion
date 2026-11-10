@@ -16,9 +16,9 @@
 
 use photocraft_color::{BlendMode, PixelFormat};
 use photocraft_geom::Rect;
-use photocraft_raster::{Surface, from_rgba_into, to_rgba};
+use photocraft_raster::{from_rgba_into, to_rgba, Surface};
 
-use crate::{Dab, Stroke, dab_coverage, dabs};
+use crate::{dab_coverage, dabs, Dab, Stroke};
 
 /// A rectangle of native-channel pixels (`rect.width() × rect.height() × ch` floats, row-major).
 #[derive(Clone, Debug, PartialEq)]
@@ -31,11 +31,19 @@ pub struct Region {
 impl Region {
     /// A zeroed region.
     pub fn new(rect: Rect, ch: usize) -> Self {
-        Self { rect, ch, data: vec![0.0; rect.width() as usize * rect.height() as usize * ch] }
+        Self {
+            rect,
+            ch,
+            data: vec![0.0; rect.width() as usize * rect.height() as usize * ch],
+        }
     }
     /// Read `rect` from a surface.
     pub fn read(s: &Surface, rect: Rect) -> Self {
-        Self { rect, ch: s.channels(), data: s.read_region(rect) }
+        Self {
+            rect,
+            ch: s.channels(),
+            data: s.read_region(rect),
+        }
     }
     pub fn width(&self) -> usize {
         self.rect.width() as usize
@@ -91,7 +99,8 @@ pub struct Footprint {
 impl Footprint {
     #[inline]
     pub fn at(&self, x: i32, y: i32) -> f32 {
-        self.cov[(y - self.rect.y0) as usize * self.rect.width() as usize + (x - self.rect.x0) as usize]
+        self.cov
+            [(y - self.rect.y0) as usize * self.rect.width() as usize + (x - self.rect.x0) as usize]
     }
 }
 
@@ -112,7 +121,12 @@ pub fn footprint(d: &Dab, index: usize, hardness: f32) -> Footprint {
             cov.push(dab_coverage(dist, d.radius, hardness) * d.alpha);
         }
     }
-    Footprint { dab: *d, index, rect, cov }
+    Footprint {
+        dab: *d,
+        index,
+        rect,
+        cov,
+    }
 }
 
 /// Union of the dabs' rectangles.
@@ -139,7 +153,13 @@ pub fn alpha_index(fmt: &PixelFormat) -> Option<usize> {
 /// Normal-mode "source over destination" at coverage `k`, in native channels (colour channels are
 /// channel-agnostic, so this works for RGB, Gray, CMYK, Lab… at any depth).
 #[inline]
-pub fn over_native(fmt: &PixelFormat, dst: &mut [f32], src: &[f32], k: f32, lock_transparency: bool) {
+pub fn over_native(
+    fmt: &PixelFormat,
+    dst: &mut [f32],
+    src: &[f32],
+    k: f32,
+    lock_transparency: bool,
+) {
     match alpha_index(fmt) {
         Some(a) => {
             let (da, sa) = (dst[a], src[a] * k);
@@ -234,21 +254,44 @@ pub fn apply_dab_stroke(
         return Rect::EMPTY;
     }
     let ctx = crate::BrushContext::new(&stroke.brush);
-    let bounds = ds.iter().fold(Rect::EMPTY, |r, d| r.union(&ctx.dab_rect(d, false)));
-    let outer = Rect::new(bounds.x0 - halo, bounds.y0 - halo, bounds.x1 + halo, bounds.y1 + halo);
+    let bounds = ds
+        .iter()
+        .fold(Rect::EMPTY, |r, d| r.union(&ctx.dab_rect(d, false)));
+    let outer = Rect::new(
+        bounds.x0 - halo,
+        bounds.y0 - halo,
+        bounds.x1 + halo,
+        bounds.y1 + halo,
+    );
     let orig = Region::read(target, outer);
     let mut work = orig.clone();
     for (i, d) in ds.iter().enumerate() {
         effect(&mut work, &ctx.footprint(d, i));
     }
-    mix_back(target, &orig, &work, bounds, stroke.brush.opacity, selection, lock_transparency);
+    mix_back(
+        target,
+        &orig,
+        &work,
+        bounds,
+        stroke.brush.opacity,
+        selection,
+        lock_transparency,
+    );
     bounds
 }
 
 /// Mix a sequential-dab stroke's working pixels `work` back over the original `orig` at
 /// `opacity × selection` inside `rect`, and write that area to `target`: the last step of
 /// [`apply_dab_stroke`], shared with live previews that run the dabs as they come.
-pub fn mix_back(target: &mut Surface, orig: &Region, work: &Region, rect: Rect, opacity: f32, selection: Option<&Surface>, lock_transparency: bool) {
+pub fn mix_back(
+    target: &mut Surface,
+    orig: &Region,
+    work: &Region,
+    rect: Rect,
+    opacity: f32,
+    selection: Option<&Surface>,
+    lock_transparency: bool,
+) {
     let fmt = target.format();
     let a = alpha_index(&fmt);
     let mut out = orig.crop(rect);
@@ -284,13 +327,19 @@ pub fn mix_back(target: &mut Surface, orig: &Region, work: &Region, rect: Rect, 
 /// Where the result is fully transparent the colour is mixed straight, so it stays defined.
 #[inline]
 pub fn mix_premultiplied(dst: &mut [f32], src: &[f32], a: usize, k: f32) {
-    let (Some(&da), Some(&sa)) = (dst.get(a), src.get(a)) else { return };
+    let (Some(&da), Some(&sa)) = (dst.get(a), src.get(a)) else {
+        return;
+    };
     let oa = da + (sa - da) * k;
     for (c, (d, s)) in dst.iter_mut().zip(src).enumerate() {
         if c == a {
             continue;
         }
-        *d = if oa > 1e-6 { (*d * da + (*s * sa - *d * da) * k) / oa } else { *d + (*s - *d) * k };
+        *d = if oa > 1e-6 {
+            (*d * da + (*s * sa - *d * da) * k) / oa
+        } else {
+            *d + (*s - *d) * k
+        };
     }
     if let Some(d) = dst.get_mut(a) {
         *d = oa;
@@ -316,7 +365,13 @@ pub struct Smudge {
 
 impl Smudge {
     pub fn new(strength: f32, finger: Option<Vec<f32>>, max_brush_size: f32) -> Self {
-        Self { strength: strength.clamp(0.0, 1.0), finger, radius: (max_brush_size / 2.0).ceil() as i32 + 2, alpha: None, carry: None }
+        Self {
+            strength: strength.clamp(0.0, 1.0),
+            finger,
+            radius: (max_brush_size / 2.0).ceil() as i32 + 2,
+            alpha: None,
+            carry: None,
+        }
     }
 
     /// Mix in premultiplied space using alpha channel `a` (the format's [`alpha_index`]).
@@ -329,11 +384,16 @@ impl Smudge {
     pub fn dab(&mut self, work: &mut Region, fp: &Footprint) {
         let (r, n) = (self.radius, work.ch);
         let side = (2 * r + 1) as usize;
-        let (cx, cy) = (fp.dab.center.x.floor() as i32, fp.dab.center.y.floor() as i32);
+        let (cx, cy) = (
+            fp.dab.center.x.floor() as i32,
+            fp.dab.center.y.floor() as i32,
+        );
         let wr = work.rect;
         let alpha = self.alpha.filter(|a| *a < n);
         let clamp_px = |work: &Region, x: i32, y: i32| -> Vec<f32> {
-            let mut v = work.px(x.clamp(wr.x0, wr.x1 - 1), y.clamp(wr.y0, wr.y1 - 1)).to_vec();
+            let mut v = work
+                .px(x.clamp(wr.x0, wr.x1 - 1), y.clamp(wr.y0, wr.y1 - 1))
+                .to_vec();
             premultiply(&mut v, alpha);
             v
         };
@@ -402,7 +462,11 @@ impl Smudge {
                 let px = work.px(x, y);
                 let pa = alpha.map_or(1.0, |a| px[a]);
                 for c in 0..n {
-                    let v = if alpha.is_some_and(|a| a != c) { px[c] * pa } else { px[c] };
+                    let v = if alpha.is_some_and(|a| a != c) {
+                        px[c] * pa
+                    } else {
+                        px[c]
+                    };
                     carry[q + c] = carry[q + c] * keep + v * (1.0 - keep);
                 }
             }
@@ -412,7 +476,9 @@ impl Smudge {
 
 /// Premultiply a straight pixel in place (no-op without alpha).
 fn premultiply(px: &mut [f32], alpha: Option<usize>) {
-    let Some(pa) = alpha.and_then(|a| px.get(a).copied()) else { return };
+    let Some(pa) = alpha.and_then(|a| px.get(a).copied()) else {
+        return;
+    };
     for (c, v) in px.iter_mut().enumerate() {
         if Some(c) != alpha {
             *v *= pa;
@@ -428,8 +494,17 @@ mod tests {
 
     fn stroke(points: &[(f64, f64)], size: f32, hardness: f32) -> Stroke {
         Stroke {
-            brush: BrushSettings { size, hardness, spacing: 0.25, pressure_size: false, ..Default::default() },
-            points: points.iter().map(|&(x, y)| StrokePoint::new(x, y, 1.0)).collect(),
+            brush: BrushSettings {
+                size,
+                hardness,
+                spacing: 0.25,
+                pressure_size: false,
+                ..Default::default()
+            },
+            points: points
+                .iter()
+                .map(|&(x, y)| StrokePoint::new(x, y, 1.0))
+                .collect(),
         }
     }
 
@@ -445,20 +520,39 @@ mod tests {
 
     #[test]
     fn coverage_composite_copies_exactly_at_full_hardness() {
-        for fmt in [PixelFormat::RGBA8, PixelFormat::RGBA16, PixelFormat::RGBA32F, PixelFormat::CMYKA8, PixelFormat::GRAYA8] {
+        for fmt in [
+            PixelFormat::RGBA8,
+            PixelFormat::RGBA16,
+            PixelFormat::RGBA32F,
+            PixelFormat::CMYKA8,
+            PixelFormat::GRAYA8,
+        ] {
             let mut s = Surface::new(fmt);
             s.fill_rect(
                 Rect::new(0, 0, 64, 64),
-                &vec![0.2; fmt.channels()].iter().enumerate().map(|(i, v)| if i + 1 == fmt.channels() { 1.0 } else { *v }).collect::<Vec<_>>(),
+                &vec![0.2; fmt.channels()]
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| if i + 1 == fmt.channels() { 1.0 } else { *v })
+                    .collect::<Vec<_>>(),
             );
             let st = stroke(&[(20.0, 20.0)], 10.0, 1.0);
             let (r, cov) = stroke_coverage(&st);
             let mut paint = Region::new(r, fmt.channels());
             let n = fmt.channels();
-            paint.data.iter_mut().enumerate().for_each(|(i, v)| *v = if fmt.alpha && i % n == n - 1 { 1.0 } else { 0.8 });
+            paint.data.iter_mut().enumerate().for_each(|(i, v)| {
+                *v = if fmt.alpha && i % n == n - 1 {
+                    1.0
+                } else {
+                    0.8
+                }
+            });
             apply_coverage(&mut s, r, &cov, 1.0, None, false, &paint, BlendMode::Normal);
             let p = s.pixel(20, 20);
-            assert!(p[..n - 1].iter().all(|v| (v - 0.8).abs() < 1e-2) && p[n - 1] == 1.0, "{fmt:?} {p:?}");
+            assert!(
+                p[..n - 1].iter().all(|v| (v - 0.8).abs() < 1e-2) && p[n - 1] == 1.0,
+                "{fmt:?} {p:?}"
+            );
             assert!((s.pixel(40, 40)[0] - 0.2).abs() < 1e-2);
         }
     }
@@ -487,7 +581,11 @@ mod tests {
 
     #[test]
     fn smudge_drags_colour_along_the_stroke() {
-        for fmt in [PixelFormat::RGBA8, PixelFormat::RGBA16, PixelFormat::RGBA32F] {
+        for fmt in [
+            PixelFormat::RGBA8,
+            PixelFormat::RGBA16,
+            PixelFormat::RGBA32F,
+        ] {
             let mut s = Surface::new(fmt);
             s.fill_rect(Rect::new(0, 0, 100, 40), &[1.0, 1.0, 1.0, 1.0]);
             s.fill_rect(Rect::new(0, 0, 30, 40), &[1.0, 0.0, 0.0, 1.0]);
@@ -511,7 +609,11 @@ mod tests {
     #[test]
     fn smudge_into_transparency_leaves_no_dark_fringe() {
         // #207: straight mixing dragged the black of transparent pixels into the colour.
-        for fmt in [PixelFormat::RGBA8, PixelFormat::RGBA16, PixelFormat::RGBA32F] {
+        for fmt in [
+            PixelFormat::RGBA8,
+            PixelFormat::RGBA16,
+            PixelFormat::RGBA32F,
+        ] {
             let mut s = Surface::new(fmt);
             s.fill_rect(Rect::new(0, 0, 30, 40), &[1.0, 0.8, 0.0, 1.0]);
             let st = stroke(&[(20.0, 20.0), (70.0, 20.0)], 12.0, 0.5);
@@ -523,11 +625,17 @@ mod tests {
                     let p = s.rgba(x, y);
                     if p[3] > 0.02 {
                         smudged += 1;
-                        assert!(p[0] > 0.97 && (p[1] - 0.8).abs() < 0.03, "{fmt:?} ({x},{y}): {p:?} darkened");
+                        assert!(
+                            p[0] > 0.97 && (p[1] - 0.8).abs() < 0.03,
+                            "{fmt:?} ({x},{y}): {p:?} darkened"
+                        );
                     }
                 }
             }
-            assert!(smudged > 50, "{fmt:?}: colour was dragged into the transparent area");
+            assert!(
+                smudged > 50,
+                "{fmt:?}: colour was dragged into the transparent area"
+            );
             // And at partial opacity the mix back is premultiplied too.
             let mut s = Surface::new(fmt);
             s.fill_rect(Rect::new(0, 0, 30, 40), &[1.0, 0.8, 0.0, 1.0]);
@@ -564,7 +672,9 @@ mod tests {
             let mut farthest = 0.0f64;
             for y in fp.rect.y0..fp.rect.y1 {
                 for x in fp.rect.x0..fp.rect.x1 {
-                    let dist = ((x as f64 + 0.5 - dab.center.x).powi(2) + (y as f64 + 0.5 - dab.center.y).powi(2)).sqrt();
+                    let dist = ((x as f64 + 0.5 - dab.center.x).powi(2)
+                        + (y as f64 + 0.5 - dab.center.y).powi(2))
+                    .sqrt();
                     if fp.at(x, y) <= 0.0 {
                         continue;
                     }

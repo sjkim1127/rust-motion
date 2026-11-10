@@ -1,6 +1,6 @@
 //! NAL unit header (7.3.1.2) and slice segment header (7.3.6).
 
-use crate::error::{Result, ensure, invalid};
+use crate::error::{ensure, invalid, Result};
 use crate::params::{Pps, Sps, StRps};
 use filmcraft_bitstream::BitReader;
 
@@ -42,7 +42,11 @@ impl NalHeader {
         ensure!(b[0] & 0x80 == 0, "forbidden_zero_bit set");
         let tid = b[1] & 7;
         ensure!(tid != 0, "nuh_temporal_id_plus1 is 0");
-        Ok(NalHeader { nal_type: (b[0] >> 1) & 0x3f, layer_id: ((b[0] & 1) << 5) | (b[1] >> 3), temporal_id: tid - 1 })
+        Ok(NalHeader {
+            nal_type: (b[0] >> 1) & 0x3f,
+            layer_id: ((b[0] & 1) << 5) | (b[1] >> 3),
+            temporal_id: tid - 1,
+        })
     }
     pub fn is_vcl(&self) -> bool {
         self.nal_type < 32
@@ -136,7 +140,11 @@ pub struct SliceHeader {
 }
 
 fn ceil_log2(n: u32) -> u32 {
-    if n <= 1 { 0 } else { 32 - (n - 1).leading_zeros() }
+    if n <= 1 {
+        0
+    } else {
+        32 - (n - 1).leading_zeros()
+    }
 }
 
 impl SliceHeader {
@@ -149,7 +157,13 @@ impl SliceHeader {
 
     /// NumPicTotalCurr (7-55), without pps_curr_pic_ref.
     pub fn num_pic_total_curr(&self) -> u32 {
-        let st = self.st_rps.s0.iter().chain(self.st_rps.s1.iter()).filter(|e| e.1).count();
+        let st = self
+            .st_rps
+            .s0
+            .iter()
+            .chain(self.st_rps.s1.iter())
+            .filter(|e| e.1)
+            .count();
         let lt = self.lt.iter().filter(|e| e.1).count();
         (st + lt) as u32
     }
@@ -176,10 +190,15 @@ impl SliceHeader {
             }
             let pic_size = sps.pic_width_in_ctbs() * sps.pic_height_in_ctbs();
             segment_address = r.read_bits(ceil_log2(pic_size))?;
-            ensure!(segment_address < pic_size, "slice_segment_address out of range");
+            ensure!(
+                segment_address < pic_size,
+                "slice_segment_address out of range"
+            );
         }
         let mut sh = if dependent {
-            let Some(p) = prev else { return invalid("dependent slice segment without a preceding slice") };
+            let Some(p) = prev else {
+                return invalid("dependent slice segment without a preceding slice");
+            };
             let mut s = p.clone();
             s.nal = nal;
             s
@@ -234,7 +253,10 @@ impl SliceHeader {
                 _ => return invalid(format!("slice_type {st}")),
             };
             if nal.is_irap() {
-                ensure!(sh.slice_type == SliceType::I, "IRAP picture with inter slice");
+                ensure!(
+                    sh.slice_type == SliceType::I,
+                    "IRAP picture with inter slice"
+                );
             }
             if pps.output_flag_present {
                 sh.pic_output = r.read_flag()?;
@@ -247,24 +269,49 @@ impl SliceHeader {
                 let from_sps = r.read_flag()?;
                 if !from_sps {
                     let start = r.position();
-                    sh.st_rps = StRps::parse(&mut r, sps.st_rps.len(), &sps.st_rps, sps.st_rps.len())?;
+                    sh.st_rps =
+                        StRps::parse(&mut r, sps.st_rps.len(), &sps.st_rps, sps.st_rps.len())?;
                     sh.st_rps_bits = r.position() - start;
                 } else {
                     ensure!(!sps.st_rps.is_empty(), "no short-term RPS in the SPS");
-                    let idx = if sps.st_rps.len() > 1 { r.read_bits(ceil_log2(sps.st_rps.len() as u32))? as usize } else { 0 };
-                    ensure!(idx < sps.st_rps.len(), "short_term_ref_pic_set_idx out of range");
+                    let idx = if sps.st_rps.len() > 1 {
+                        r.read_bits(ceil_log2(sps.st_rps.len() as u32))? as usize
+                    } else {
+                        0
+                    };
+                    ensure!(
+                        idx < sps.st_rps.len(),
+                        "short_term_ref_pic_set_idx out of range"
+                    );
                     sh.st_rps = sps.st_rps[idx].clone();
                 }
                 if sps.long_term_refs_present {
-                    let num_lt_sps = if !sps.lt_ref_pics.is_empty() { r.read_ue()? } else { 0 };
-                    ensure!(num_lt_sps as usize <= sps.lt_ref_pics.len(), "num_long_term_sps out of range");
+                    let num_lt_sps = if !sps.lt_ref_pics.is_empty() {
+                        r.read_ue()?
+                    } else {
+                        0
+                    };
+                    ensure!(
+                        num_lt_sps as usize <= sps.lt_ref_pics.len(),
+                        "num_long_term_sps out of range"
+                    );
                     let num_lt_pics = r.read_ue()?;
-                    ensure!(num_lt_sps + num_lt_pics <= 32, "too many long-term pictures");
+                    ensure!(
+                        num_lt_sps + num_lt_pics <= 32,
+                        "too many long-term pictures"
+                    );
                     let mut msb_acc = 0u32;
                     for i in 0..num_lt_sps + num_lt_pics {
                         let (lsb, used) = if i < num_lt_sps {
-                            let idx = if sps.lt_ref_pics.len() > 1 { r.read_bits(ceil_log2(sps.lt_ref_pics.len() as u32))? } else { 0 };
-                            ensure!((idx as usize) < sps.lt_ref_pics.len(), "lt_idx_sps out of range");
+                            let idx = if sps.lt_ref_pics.len() > 1 {
+                                r.read_bits(ceil_log2(sps.lt_ref_pics.len() as u32))?
+                            } else {
+                                0
+                            };
+                            ensure!(
+                                (idx as usize) < sps.lt_ref_pics.len(),
+                                "lt_idx_sps out of range"
+                            );
                             sps.lt_ref_pics[idx as usize]
                         } else {
                             (r.read_bits(sps.log2_max_poc_lsb)?, r.read_flag()?)
@@ -291,16 +338,29 @@ impl SliceHeader {
                 }
             }
             if sh.slice_type != SliceType::I {
-                sh.num_ref_idx = [pps.num_ref_idx_l0_default, if sh.is_b() { pps.num_ref_idx_l1_default } else { 0 }];
+                sh.num_ref_idx = [
+                    pps.num_ref_idx_l0_default,
+                    if sh.is_b() {
+                        pps.num_ref_idx_l1_default
+                    } else {
+                        0
+                    },
+                ];
                 if r.read_flag()? {
                     sh.num_ref_idx[0] = r.read_ue()? + 1;
                     if sh.is_b() {
                         sh.num_ref_idx[1] = r.read_ue()? + 1;
                     }
                 }
-                ensure!(sh.num_ref_idx[0] <= 15 && sh.num_ref_idx[1] <= 15, "num_ref_idx_active out of range");
+                ensure!(
+                    sh.num_ref_idx[0] <= 15 && sh.num_ref_idx[1] <= 15,
+                    "num_ref_idx_active out of range"
+                );
                 let total = sh.num_pic_total_curr();
-                ensure!(total > 0, "inter slice without reference pictures in the RPS");
+                ensure!(
+                    total > 0,
+                    "inter slice without reference pictures in the RPS"
+                );
                 if pps.lists_modification_present && total > 1 {
                     let bits = ceil_log2(total);
                     for l in 0..if sh.is_b() { 2 } else { 1 } {
@@ -328,14 +388,22 @@ impl SliceHeader {
                     let l = if sh.collocated_from_l0 { 0 } else { 1 };
                     if sh.num_ref_idx[l] > 1 {
                         sh.collocated_ref_idx = r.read_ue()?;
-                        ensure!(sh.collocated_ref_idx < sh.num_ref_idx[l], "collocated_ref_idx out of range");
+                        ensure!(
+                            sh.collocated_ref_idx < sh.num_ref_idx[l],
+                            "collocated_ref_idx out of range"
+                        );
                     }
                 }
-                if (pps.weighted_pred && sh.slice_type == SliceType::P) || (pps.weighted_bipred && sh.is_b()) {
+                if (pps.weighted_pred && sh.slice_type == SliceType::P)
+                    || (pps.weighted_bipred && sh.is_b())
+                {
                     sh.pwt = Some(parse_pwt(&mut r, &sh, &sps)?);
                 }
                 let five_minus = r.read_ue()?;
-                ensure!(five_minus <= 4, "five_minus_max_num_merge_cand out of range");
+                ensure!(
+                    five_minus <= 4,
+                    "five_minus_max_num_merge_cand out of range"
+                );
                 sh.max_num_merge_cand = 5 - five_minus;
             }
             sh.qp_delta = r.read_se()?;
@@ -345,25 +413,41 @@ impl SliceHeader {
             if pps.slice_chroma_qp_offsets_present {
                 sh.cb_qp_offset = r.read_se()?;
                 sh.cr_qp_offset = r.read_se()?;
-                ensure!((-12..=12).contains(&sh.cb_qp_offset) && (-12..=12).contains(&sh.cr_qp_offset), "slice chroma QP offset out of range");
+                ensure!(
+                    (-12..=12).contains(&sh.cb_qp_offset) && (-12..=12).contains(&sh.cr_qp_offset),
+                    "slice chroma QP offset out of range"
+                );
             }
-            let override_flag = if pps.deblocking_override_enabled { r.read_flag()? } else { false };
+            let override_flag = if pps.deblocking_override_enabled {
+                r.read_flag()?
+            } else {
+                false
+            };
             if override_flag {
                 sh.deblocking_disabled = r.read_flag()?;
                 if !sh.deblocking_disabled {
                     sh.beta_offset_div2 = r.read_se()?;
                     sh.tc_offset_div2 = r.read_se()?;
-                    ensure!((-6..=6).contains(&sh.beta_offset_div2) && (-6..=6).contains(&sh.tc_offset_div2), "deblocking offsets out of range");
+                    ensure!(
+                        (-6..=6).contains(&sh.beta_offset_div2)
+                            && (-6..=6).contains(&sh.tc_offset_div2),
+                        "deblocking offsets out of range"
+                    );
                 }
             }
-            if pps.loop_filter_across_slices && (sh.sao_luma || sh.sao_chroma || !sh.deblocking_disabled) {
+            if pps.loop_filter_across_slices
+                && (sh.sao_luma || sh.sao_chroma || !sh.deblocking_disabled)
+            {
                 sh.loop_filter_across_slices = r.read_flag()?;
             }
         }
         sh.entry_points.clear();
         if pps.tiles_enabled || pps.entropy_coding_sync {
             let n = r.read_ue()?;
-            ensure!(n <= sps.pic_width_in_ctbs() * sps.pic_height_in_ctbs(), "num_entry_point_offsets out of range");
+            ensure!(
+                n <= sps.pic_width_in_ctbs() * sps.pic_height_in_ctbs(),
+                "num_entry_point_offsets out of range"
+            );
             if n > 0 {
                 let len = r.read_ue()? + 1;
                 ensure!(len <= 32, "offset_len_minus1 out of range");
@@ -374,21 +458,33 @@ impl SliceHeader {
         }
         if pps.slice_header_extension_present {
             let len = r.read_ue()?;
-            ensure!(len <= 256, "slice_segment_header_extension_length out of range");
+            ensure!(
+                len <= 256,
+                "slice_segment_header_extension_length out of range"
+            );
             r.skip(8 * len as usize)?;
         }
         // byte_alignment(): alignment_bit_equal_to_one then zeros
         ensure!(r.read_flag()?, "missing alignment_bit_equal_to_one");
         r.byte_align();
         sh.data_offset = r.position() / 8;
-        ensure!(sh.data_offset <= rbsp.len(), "slice header runs past the NAL unit");
+        ensure!(
+            sh.data_offset <= rbsp.len(),
+            "slice header runs past the NAL unit"
+        );
         Ok((sh, pps, sps))
     }
 }
 
 fn parse_pwt(r: &mut BitReader, sh: &SliceHeader, sps: &Sps) -> Result<PredWeightTable> {
-    let mut t = PredWeightTable { luma_log2_denom: r.read_ue()?, ..Default::default() };
-    ensure!(t.luma_log2_denom <= 7, "luma_log2_weight_denom out of range");
+    let mut t = PredWeightTable {
+        luma_log2_denom: r.read_ue()?,
+        ..Default::default()
+    };
+    ensure!(
+        t.luma_log2_denom <= 7,
+        "luma_log2_weight_denom out of range"
+    );
     let chroma = sps.chroma_array_type() != 0;
     if chroma {
         let d = t.luma_log2_denom as i32 + r.read_se()?;
@@ -412,7 +508,10 @@ fn parse_pwt(r: &mut BitReader, sh: &SliceHeader, sps: &Sps) -> Result<PredWeigh
             if x.luma_flag {
                 let dw = r.read_se()?;
                 let off = r.read_se()?;
-                ensure!((-128..=127).contains(&dw) && (-128..=127).contains(&off), "luma weight out of range");
+                ensure!(
+                    (-128..=127).contains(&dw) && (-128..=127).contains(&off),
+                    "luma weight out of range"
+                );
                 x.luma = ((1 << t.luma_log2_denom) + dw, off);
             }
             x.chroma = [(1 << t.chroma_log2_denom, 0); 2];
@@ -421,9 +520,13 @@ fn parse_pwt(r: &mut BitReader, sh: &SliceHeader, sps: &Sps) -> Result<PredWeigh
                 for c in 0..2 {
                     let dw = r.read_se()?;
                     let doff = r.read_se()?;
-                    ensure!((-128..=127).contains(&dw) && (-4 * half..4 * half).contains(&doff), "chroma weight out of range");
+                    ensure!(
+                        (-128..=127).contains(&dw) && (-4 * half..4 * half).contains(&doff),
+                        "chroma weight out of range"
+                    );
                     let w = (1 << t.chroma_log2_denom) + dw;
-                    let off = (half - ((half * w) >> t.chroma_log2_denom) + doff).clamp(-half, half - 1);
+                    let off =
+                        (half - ((half * w) >> t.chroma_log2_denom) + doff).clamp(-half, half - 1);
                     x.chroma[c] = (w, off);
                 }
             }

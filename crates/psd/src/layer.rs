@@ -1,11 +1,14 @@
 //! Layer records, layer masks, blending ranges and per-layer channel data.
 
 use crate::blend::BlendMode;
-use crate::compression::{Compression, PlaneLayout, decode_planes, encode_planes};
+use crate::compression::{decode_planes, encode_planes, Compression, PlaneLayout};
 use crate::error::{PsdError, Result};
-use crate::header::{MAX_DIMENSION, Version};
-use crate::io::{Reader, WriteExt, decode_legacy_name, read_pascal, write_pascal};
-use crate::tagged::{BlockData, SectionDivider, SectionType, TaggedBlock, read_blocks, uses_long_length, write_blocks};
+use crate::header::{Version, MAX_DIMENSION};
+use crate::io::{decode_legacy_name, read_pascal, write_pascal, Reader, WriteExt};
+use crate::tagged::{
+    read_blocks, uses_long_length, write_blocks, BlockData, SectionDivider, SectionType,
+    TaggedBlock,
+};
 
 /// Channel id of the transparency mask.
 pub const CHANNEL_TRANSPARENCY: i16 = -1;
@@ -35,7 +38,12 @@ pub struct Rect {
 impl Rect {
     /// Rectangle from origin and size.
     pub fn from_xywh(left: i32, top: i32, width: u32, height: u32) -> Self {
-        Rect { top, left, bottom: top.saturating_add(height.min(i32::MAX as u32) as i32), right: left.saturating_add(width.min(i32::MAX as u32) as i32) }
+        Rect {
+            top,
+            left,
+            bottom: top.saturating_add(height.min(i32::MAX as u32) as i32),
+            right: left.saturating_add(width.min(i32::MAX as u32) as i32),
+        }
     }
     /// Width (may be negative for malformed data).
     pub fn width(&self) -> i64 {
@@ -61,7 +69,12 @@ impl Rect {
         Ok((w as usize, h as usize))
     }
     fn read(r: &mut Reader<'_>) -> Result<Self> {
-        Ok(Rect { top: r.i32()?, left: r.i32()?, bottom: r.i32()?, right: r.i32()? })
+        Ok(Rect {
+            top: r.i32()?,
+            left: r.i32()?,
+            bottom: r.i32()?,
+            right: r.i32()?,
+        })
     }
     fn write(&self, out: &mut Vec<u8>) {
         out.put_i32(self.top);
@@ -190,7 +203,10 @@ fn default_true() -> bool {
 
 /// Byte length of the mask parameter values announced by the parameter flags byte `pf`.
 pub(crate) fn mask_parameter_bytes(pf: u8) -> usize {
-    usize::from(pf & 1 != 0) + 8 * usize::from(pf & 2 != 0) + usize::from(pf & 4 != 0) + 8 * usize::from(pf & 8 != 0)
+    usize::from(pf & 1 != 0)
+        + 8 * usize::from(pf & 2 != 0)
+        + usize::from(pf & 4 != 0)
+        + 8 * usize::from(pf & 8 != 0)
 }
 
 impl LayerMask {
@@ -205,7 +221,15 @@ impl LayerMask {
 
     /// The simple 20-byte form.
     pub fn new(rect: Rect, default_color: u8, flags: u8) -> Self {
-        LayerMask { rect, default_color, flags: flags & !Self::FLAG_PARAMETERS, parameters: None, real: None, trailing: vec![0, 0], real_first: true }
+        LayerMask {
+            rect,
+            default_color,
+            flags: flags & !Self::FLAG_PARAMETERS,
+            parameters: None,
+            real: None,
+            trailing: vec![0, 0],
+            real_first: true,
+        }
     }
     /// `true` if the disabled flag is set.
     pub fn disabled(&self) -> bool {
@@ -220,8 +244,12 @@ impl LayerMask {
     /// the spec does not define) while the spec's reading with a real mask is sound.
     pub(crate) fn real_before_parameters(d: &[u8]) -> bool {
         // Parameters at `pf_at`, then 0..=3 bytes of padding, and nothing else.
-        let fits =
-            |pf_at: usize| d.get(pf_at).is_some_and(|&pf| (pf_at + 1 + mask_parameter_bytes(pf)..=pf_at + 4 + mask_parameter_bytes(pf)).contains(&d.len()));
+        let fits = |pf_at: usize| {
+            d.get(pf_at).is_some_and(|&pf| {
+                (pf_at + 1 + mask_parameter_bytes(pf)..=pf_at + 4 + mask_parameter_bytes(pf))
+                    .contains(&d.len())
+            })
+        };
         if fits(18) {
             return false;
         }
@@ -232,11 +260,14 @@ impl LayerMask {
         let known_flags = |pf: u8| pf & 0xF0 == 0;
         let real_background_ok = |at: usize| d.get(at + 1).is_some_and(|&bg| bg == 0 || bg == 255);
         // Photoshop's reading: real-mask fields at 18, parameters at 36.
-        let photoshop_plausible = real_background_ok(18) && d.get(36).is_some_and(|&pf| known_flags(pf));
+        let photoshop_plausible =
+            real_background_ok(18) && d.get(36).is_some_and(|&pf| known_flags(pf));
         // The spec's reading: parameters at 18, then the 18 real-mask bytes, then padding.
         let spec_plausible = d.get(18).is_some_and(|&pf| {
             let real_at = 19 + mask_parameter_bytes(pf);
-            known_flags(pf) && (real_at + 18..=real_at + 21).contains(&d.len()) && real_background_ok(real_at)
+            known_flags(pf)
+                && (real_at + 18..=real_at + 21).contains(&d.len())
+                && real_background_ok(real_at)
         });
         photoshop_plausible || !spec_plausible
     }
@@ -247,7 +278,15 @@ impl LayerMask {
         let default_color = r.u8()?;
         let flags = r.u8()?;
         let read_real = |r: &mut Reader<'_>| -> Result<Option<RealMask>> {
-            Ok(if r.remaining() >= 18 { Some(RealMask { flags: r.u8()?, background: r.u8()?, rect: Rect::read(r)? }) } else { None })
+            Ok(if r.remaining() >= 18 {
+                Some(RealMask {
+                    flags: r.u8()?,
+                    background: r.u8()?,
+                    rect: Rect::read(r)?,
+                })
+            } else {
+                None
+            })
         };
         let has_parameters = flags & Self::FLAG_PARAMETERS != 0;
         let real_first = has_parameters && Self::real_before_parameters(d);
@@ -269,7 +308,15 @@ impl LayerMask {
         }
         // The order only matters when both are present; otherwise default to Photoshop's.
         let real_first = real_first || real.is_none() || parameters.is_none();
-        Ok(LayerMask { rect, default_color, flags, parameters, real, trailing: r.peek_rest().to_vec(), real_first })
+        Ok(LayerMask {
+            rect,
+            default_color,
+            flags,
+            parameters,
+            real,
+            trailing: r.peek_rest().to_vec(),
+            real_first,
+        })
     }
 
     /// Bytes [`Self::write`] produces.
@@ -363,7 +410,15 @@ impl BlendingRanges {
     }
     /// Parsed entries (incomplete trailing bytes are ignored).
     pub fn ranges(&self) -> Vec<BlendRange> {
-        self.data.as_chunks::<8>().0.iter().map(|c| BlendRange { source: [c[0], c[1], c[2], c[3]], dest: [c[4], c[5], c[6], c[7]] }).collect()
+        self.data
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| BlendRange {
+                source: [c[0], c[1], c[2], c[3]],
+                dest: [c[4], c[5], c[6], c[7]],
+            })
+            .collect()
     }
 }
 
@@ -383,14 +438,44 @@ pub struct ChannelData {
 
 impl ChannelData {
     /// Encodes planar samples (`height × row_bytes`).
-    pub fn encode(id: i16, compression: Compression, decoded: &[u8], width: usize, height: usize, depth: u16, version: Version) -> Result<Self> {
-        let layout = PlaneLayout { planes: 1, width, height, depth, version };
-        Ok(ChannelData { id, compression: Some(compression), data: encode_planes(compression, decoded, &layout)? })
+    pub fn encode(
+        id: i16,
+        compression: Compression,
+        decoded: &[u8],
+        width: usize,
+        height: usize,
+        depth: u16,
+        version: Version,
+    ) -> Result<Self> {
+        let layout = PlaneLayout {
+            planes: 1,
+            width,
+            height,
+            depth,
+            version,
+        };
+        Ok(ChannelData {
+            id,
+            compression: Some(compression),
+            data: encode_planes(compression, decoded, &layout)?,
+        })
     }
 
     /// Decodes into planar big-endian samples.
-    pub fn decode(&self, width: usize, height: usize, depth: u16, version: Version) -> Result<Vec<u8>> {
-        let layout = PlaneLayout { planes: 1, width, height, depth, version };
+    pub fn decode(
+        &self,
+        width: usize,
+        height: usize,
+        depth: u16,
+        version: Version,
+    ) -> Result<Vec<u8>> {
+        let layout = PlaneLayout {
+            planes: 1,
+            width,
+            height,
+            depth,
+            version,
+        };
         match self.compression {
             Some(c) => decode_planes(c, &self.data, &layout),
             None => {
@@ -405,7 +490,15 @@ impl ChannelData {
 
     /// Replaces the channel contents, re-encoding with `compression`.
     #[allow(clippy::too_many_arguments)]
-    pub fn set_decoded(&mut self, compression: Compression, decoded: &[u8], width: usize, height: usize, depth: u16, version: Version) -> Result<()> {
+    pub fn set_decoded(
+        &mut self,
+        compression: Compression,
+        decoded: &[u8],
+        width: usize,
+        height: usize,
+        depth: u16,
+        version: Version,
+    ) -> Result<()> {
         *self = Self::encode(self.id, compression, decoded, width, height, depth, version)?;
         Ok(())
     }
@@ -493,7 +586,9 @@ impl LayerRecord {
     /// Section divider (`lsct`, falling back to `lsdk`), if present and valid.
     pub fn section_divider(&self) -> Option<SectionDivider> {
         for key in [b"lsct", b"lsdk"] {
-            if let Some(Ok(BlockData::SectionDivider(s))) = self.block(key).and_then(TaggedBlock::parsed) {
+            if let Some(Ok(BlockData::SectionDivider(s))) =
+                self.block(key).and_then(TaggedBlock::parsed)
+            {
                 return Some(s);
             }
         }
@@ -502,7 +597,8 @@ impl LayerRecord {
 
     /// Section type (Other if no divider).
     pub fn section_type(&self) -> SectionType {
-        self.section_divider().map_or(SectionType::Other, |s| s.kind)
+        self.section_divider()
+            .map_or(SectionType::Other, |s| s.kind)
     }
 
     /// `true` unless the hidden flag is set.
@@ -535,7 +631,10 @@ impl LayerRecord {
     }
 
     /// Parsed adjustment layer settings, if this layer is an adjustment layer.
-    pub fn adjustment(&self, mode: crate::header::ColorMode) -> Option<rust_motion_color::adjust::Adjustment> {
+    pub fn adjustment(
+        &self,
+        mode: crate::header::ColorMode,
+    ) -> Option<rust_motion_color::adjust::Adjustment> {
         let cged = self.block(b"CgEd").map(|b| b.data.as_slice());
         for key in crate::adjust_map::ADJUSTMENT_KEYS {
             if let Some(block) = self.block(key) {
@@ -562,7 +661,9 @@ impl LayerRecord {
 
     /// Decodes a channel's samples (planar, big-endian).
     pub fn decode_channel(&self, id: i16, depth: u16, version: Version) -> Result<Vec<u8>> {
-        let ch = self.channel(id).ok_or_else(|| PsdError::invalid(format!("layer has no channel {id}")))?;
+        let ch = self
+            .channel(id)
+            .ok_or_else(|| PsdError::invalid(format!("layer has no channel {id}")))?;
         let (w, h) = self.channel_rect(id).size()?;
         ch.decode(w, h, depth, version)
     }
@@ -578,12 +679,19 @@ impl LayerRecord {
         for _ in 0..nch {
             let id = r.i16()?;
             let len = r.len_field(version.is_psb())?;
-            channels.push(ChannelData { id, compression: None, data: Vec::new() });
+            channels.push(ChannelData {
+                id,
+                compression: None,
+                data: Vec::new(),
+            });
             lens.push(len);
         }
         let sig = r.array::<4>()?;
         if &sig != b"8BIM" {
-            return Err(PsdError::InvalidSignature { expected: "8BIM (layer blend mode)", found: sig });
+            return Err(PsdError::InvalidSignature {
+                expected: "8BIM (layer blend mode)",
+                found: sig,
+            });
         }
         let blend_mode = BlendMode::from_key(r.array()?);
         let opacity = r.u8()?;
@@ -603,18 +711,42 @@ impl LayerRecord {
             }
         };
         let br_len = x.u32()?;
-        let blending_ranges = BlendingRanges { data: x.bytes_u64(u64::from(br_len))?.to_vec() };
+        let blending_ranges = BlendingRanges {
+            data: x.bytes_u64(u64::from(br_len))?.to_vec(),
+        };
         let name = read_pascal(&mut x, 4)?;
         let (blocks, extra_trailing) = read_blocks(&mut x, version)?;
-        Ok((LayerRecord { rect, channels, blend_mode, opacity, clipping, flags, filler, mask, blending_ranges, name, blocks, extra_trailing }, lens))
+        Ok((
+            LayerRecord {
+                rect,
+                channels,
+                blend_mode,
+                opacity,
+                clipping,
+                flags,
+                filler,
+                mask,
+                blending_ranges,
+                name,
+                blocks,
+                extra_trailing,
+            },
+            lens,
+        ))
     }
 
     /// Bytes [`Self::write`] produces, computed without serializing. Errors where `write` would.
     fn encoded_len(&self, version: Version) -> Result<u64> {
         let too_big = || PsdError::LimitExceeded("section too large for 32-bit length (use PSB)");
-        u16::try_from(self.channels.len()).map_err(|_| PsdError::LimitExceeded("too many channels"))?;
+        u16::try_from(self.channels.len())
+            .map_err(|_| PsdError::LimitExceeded("too many channels"))?;
         let channel_len: u64 = if version.is_psb() { 8 } else { 4 };
-        if !version.is_psb() && self.channels.iter().any(|c| u32::try_from(c.stored_len()).is_err()) {
+        if !version.is_psb()
+            && self
+                .channels
+                .iter()
+                .any(|c| u32::try_from(c.stored_len()).is_err())
+        {
             return Err(too_big());
         }
         let mask = match &self.mask {
@@ -627,7 +759,10 @@ impl LayerRecord {
         u32::try_from(ranges).map_err(|_| too_big())?;
         let name = 1 + self.name.len().min(255) as u64;
         let name = name.next_multiple_of(4);
-        let mut extra = (4 + mask).saturating_add(4 + ranges).saturating_add(name).saturating_add(self.extra_trailing.len() as u64);
+        let mut extra = (4 + mask)
+            .saturating_add(4 + ranges)
+            .saturating_add(name)
+            .saturating_add(self.extra_trailing.len() as u64);
         for b in &self.blocks {
             if !uses_long_length(version, &b.key) && u32::try_from(b.data.len()).is_err() {
                 return Err(too_big());
@@ -636,12 +771,16 @@ impl LayerRecord {
         }
         u32::try_from(extra).map_err(|_| too_big())?;
         // rect, channel count, channel entries, signature + blend key, four flag bytes, extra length.
-        Ok((16 + 2 + self.channels.len() as u64 * (2 + channel_len) + 8 + 4 + 4).saturating_add(extra))
+        Ok(
+            (16 + 2 + self.channels.len() as u64 * (2 + channel_len) + 8 + 4 + 4)
+                .saturating_add(extra),
+        )
     }
 
     fn write(&self, out: &mut Vec<u8>, version: Version) -> Result<()> {
         self.rect.write(out);
-        let nch = u16::try_from(self.channels.len()).map_err(|_| PsdError::LimitExceeded("too many channels"))?;
+        let nch = u16::try_from(self.channels.len())
+            .map_err(|_| PsdError::LimitExceeded("too many channels"))?;
         out.put_u16(nch);
         for c in &self.channels {
             out.put_i16(c.id);
@@ -713,8 +852,16 @@ impl LayerInfo {
         }
         let body_len = r.pos();
         let rest = r.peek_rest();
-        let padding = if rest.len() == body_len % 2 && rest.iter().all(|&b| b == 0) { None } else { Some(rest.to_vec()) };
-        Ok(LayerInfo { merged_alpha, layers, padding })
+        let padding = if rest.len() == body_len % 2 && rest.iter().all(|&b| b == 0) {
+            None
+        } else {
+            Some(rest.to_vec())
+        };
+        Ok(LayerInfo {
+            merged_alpha,
+            layers,
+            padding,
+        })
     }
 
     /// Length of the body (layer count, records and channel data) without
@@ -726,7 +873,12 @@ impl LayerInfo {
         for l in &self.layers {
             n = n.saturating_add(l.encoded_len(version)?);
         }
-        for c in self.layers.iter().flat_map(|l| &l.channels).filter(|c| c.compression.is_some()) {
+        for c in self
+            .layers
+            .iter()
+            .flat_map(|l| &l.channels)
+            .filter(|c| c.compression.is_some())
+        {
             n = n.saturating_add(2).saturating_add(c.data.len() as u64);
         }
         Ok(n)
@@ -751,12 +903,19 @@ impl LayerInfo {
     /// Bytes of channel data and their compression fields: the part of the body worth reserving up
     /// front (the records are small next to the pixels). Saturates instead of overflowing.
     pub(crate) fn channel_data_len(&self) -> usize {
-        self.layers.iter().flat_map(|l| &l.channels).filter(|c| c.compression.is_some()).fold(0usize, |n, c| n.saturating_add(2).saturating_add(c.data.len()))
+        self.layers
+            .iter()
+            .flat_map(|l| &l.channels)
+            .filter(|c| c.compression.is_some())
+            .fold(0usize, |n, c| {
+                n.saturating_add(2).saturating_add(c.data.len())
+            })
     }
 
     /// Serializes the body without any trailing padding (the padding field is ignored).
     pub(crate) fn write_unpadded(&self, out: &mut Vec<u8>, version: Version) -> Result<()> {
-        let n = i16::try_from(self.layers.len()).map_err(|_| PsdError::LimitExceeded("more than 32767 layers"))?;
+        let n = i16::try_from(self.layers.len())
+            .map_err(|_| PsdError::LimitExceeded("more than 32767 layers"))?;
         out.put_i16(if self.merged_alpha { -n } else { n });
         for l in &self.layers {
             l.write(out, version)?;
@@ -796,11 +955,18 @@ mod tests {
         let rect = Rect::from_xywh(-3, 2, 5, 4);
         let px: Vec<u8> = (0..20).collect();
         let mut channels = Vec::new();
-        for (id, comp) in [(-1, Compression::Rle), (0, Compression::Raw), (1, Compression::Zip), (2, Compression::ZipPrediction)] {
+        for (id, comp) in [
+            (-1, Compression::Rle),
+            (0, Compression::Raw),
+            (1, Compression::Zip),
+            (2, Compression::ZipPrediction),
+        ] {
             channels.push(ChannelData::encode(id, comp, &px, 5, 4, 8, version).unwrap());
         }
         let mask = LayerMask::new(Rect::from_xywh(0, 0, 2, 2), 255, LayerMask::FLAG_RELATIVE);
-        channels.push(ChannelData::encode(-2, Compression::Rle, &[1, 2, 3, 4], 2, 2, 8, version).unwrap());
+        channels.push(
+            ChannelData::encode(-2, Compression::Rle, &[1, 2, 3, 4], 2, 2, 8, version).unwrap(),
+        );
         LayerRecord {
             rect,
             channels,
@@ -811,7 +977,10 @@ mod tests {
             mask: MaskData::Mask(mask),
             blending_ranges: BlendingRanges::full(3),
             name: b"abc".to_vec(),
-            blocks: vec![TaggedBlock::unicode_name("\u{e4}bc"), TaggedBlock::layer_id(5)],
+            blocks: vec![
+                TaggedBlock::unicode_name("\u{e4}bc"),
+                TaggedBlock::layer_id(5),
+            ],
             ..Default::default()
         }
     }
@@ -836,7 +1005,11 @@ mod tests {
     #[test]
     fn record_roundtrip_psd_psb() {
         for v in [Version::Psd, Version::Psb] {
-            let info = LayerInfo { merged_alpha: true, layers: vec![sample_record(v), LayerRecord::default()], padding: None };
+            let info = LayerInfo {
+                merged_alpha: true,
+                layers: vec![sample_record(v), LayerRecord::default()],
+                padding: None,
+            };
             let out = rt(&info, v);
             assert_eq!(out.len() % 2, 0);
             assert_eq!(&out[..2], &(-2i16).to_be_bytes());
@@ -846,8 +1019,15 @@ mod tests {
     #[test]
     fn psb_channel_lengths_are_8_bytes() {
         let mut rec = LayerRecord::default();
-        rec.channels.push(ChannelData { id: 0, compression: Some(Compression::Raw), data: vec![] });
-        let info = LayerInfo { layers: vec![rec], ..Default::default() };
+        rec.channels.push(ChannelData {
+            id: 0,
+            compression: Some(Compression::Raw),
+            data: vec![],
+        });
+        let info = LayerInfo {
+            layers: vec![rec],
+            ..Default::default()
+        };
         let psd = rt(&info, Version::Psd);
         let psb = rt(&info, Version::Psb);
         assert_eq!(psb.len(), psd.len() + 4);
@@ -860,7 +1040,10 @@ mod tests {
         for id in [-1, 0, 1, 2] {
             assert_eq!(rec.decode_channel(id, 8, Version::Psd).unwrap(), px);
         }
-        assert_eq!(rec.decode_channel(-2, 8, Version::Psd).unwrap(), vec![1, 2, 3, 4]);
+        assert_eq!(
+            rec.decode_channel(-2, 8, Version::Psd).unwrap(),
+            vec![1, 2, 3, 4]
+        );
         assert!(rec.decode_channel(7, 8, Version::Psd).is_err());
     }
 
@@ -875,7 +1058,10 @@ mod tests {
         assert!(rec.layer_mask().is_some());
         assert_eq!(rec.channel_rect(-2), Rect::from_xywh(0, 0, 2, 2));
         assert_eq!(rec.channel_rect(0), rec.rect);
-        let mut plain = LayerRecord { name: b"legacy".to_vec(), ..Default::default() };
+        let mut plain = LayerRecord {
+            name: b"legacy".to_vec(),
+            ..Default::default()
+        };
         assert_eq!(plain.name(), "legacy");
         plain.blocks.push(TaggedBlock::fill_opacity(10));
         assert_eq!(plain.fill_opacity(), 10);
@@ -886,7 +1072,15 @@ mod tests {
     #[test]
     fn mask_variants_roundtrip() {
         let base = LayerMask::new(Rect::from_xywh(1, 2, 3, 4), 0, 0);
-        let with_real = LayerMask { real: Some(RealMask { flags: 1, background: 255, rect: Rect::from_xywh(0, 0, 9, 9) }), trailing: vec![], ..base.clone() };
+        let with_real = LayerMask {
+            real: Some(RealMask {
+                flags: 1,
+                background: 255,
+                rect: Rect::from_xywh(0, 0, 9, 9),
+            }),
+            trailing: vec![],
+            ..base.clone()
+        };
         let with_params = LayerMask {
             flags: LayerMask::FLAG_PARAMETERS,
             parameters: Some(MaskParameters {
@@ -902,7 +1096,11 @@ mod tests {
         };
         let partial_params = LayerMask {
             flags: LayerMask::FLAG_PARAMETERS,
-            parameters: Some(MaskParameters { flags: 0b0010, user_feather: Some(1.0), ..Default::default() }),
+            parameters: Some(MaskParameters {
+                flags: 0b0010,
+                user_feather: Some(1.0),
+                ..Default::default()
+            }),
             trailing: vec![],
             ..base.clone()
         };
@@ -952,7 +1150,14 @@ mod tests {
             let m = LayerMask::parse(&d).unwrap();
             assert!(!m.real_first, "density {density}, right {right}: {m:?}");
             assert_eq!(m.parameters.unwrap().user_density, Some(density));
-            assert_eq!(m.real, Some(RealMask { flags: 0, background: 0, rect: Rect::from_xywh(0, 0, right, 1) }));
+            assert_eq!(
+                m.real,
+                Some(RealMask {
+                    flags: 0,
+                    background: 0,
+                    rect: Rect::from_xywh(0, 0, right, 1)
+                })
+            );
             assert!(m.trailing.is_empty());
             let mut out = Vec::new();
             m.write(&mut out);
@@ -1000,7 +1205,10 @@ mod tests {
         d.extend([0, 0]);
         let m = LayerMask::parse(&d).unwrap();
         assert_eq!(m.real, None);
-        assert_eq!(m.parameters.map(|p| (p.user_feather, p.vector_feather)), Some((Some(1.0), Some(2.0))));
+        assert_eq!(
+            m.parameters.map(|p| (p.user_feather, p.vector_feather)),
+            Some((Some(1.0), Some(2.0)))
+        );
     }
 
     #[test]
@@ -1008,7 +1216,11 @@ mod tests {
         let mut out = Vec::new();
         LayerMask::new(Rect::default(), 0, 0).write(&mut out);
         assert_eq!(out.len(), 20);
-        let m = LayerMask { real: Some(RealMask::default()), trailing: vec![], ..LayerMask::new(Rect::default(), 0, 0) };
+        let m = LayerMask {
+            real: Some(RealMask::default()),
+            trailing: vec![],
+            ..LayerMask::new(Rect::default(), 0, 0)
+        };
         let mut out = Vec::new();
         m.write(&mut out);
         assert_eq!(out.len(), 36);
@@ -1016,9 +1228,15 @@ mod tests {
 
     #[test]
     fn short_mask_kept_raw() {
-        let mut rec = LayerRecord { mask: MaskData::Raw(vec![1, 2, 3]), ..Default::default() };
+        let mut rec = LayerRecord {
+            mask: MaskData::Raw(vec![1, 2, 3]),
+            ..Default::default()
+        };
         rec.channels.clear();
-        let info = LayerInfo { layers: vec![rec], ..Default::default() };
+        let info = LayerInfo {
+            layers: vec![rec],
+            ..Default::default()
+        };
         rt(&info, Version::Psd);
     }
 
@@ -1049,32 +1267,54 @@ mod tests {
         assert_eq!((r.width(), r.height()), (10, 3));
         assert_eq!(r.size().unwrap(), (10, 3));
         assert!(!r.is_empty());
-        let bad = Rect { top: 5, left: 0, bottom: 0, right: 1 };
+        let bad = Rect {
+            top: 5,
+            left: 0,
+            bottom: 0,
+            right: 1,
+        };
         assert!(bad.size().is_err());
         assert!(bad.is_empty());
-        let huge = Rect { top: 0, left: i32::MIN, bottom: 1, right: i32::MAX };
+        let huge = Rect {
+            top: 0,
+            left: i32::MIN,
+            bottom: 1,
+            right: i32::MAX,
+        };
         assert!(huge.size().is_err());
     }
 
     #[test]
     fn truncation_errors() {
-        let info = LayerInfo { layers: vec![sample_record(Version::Psd)], ..Default::default() };
+        let info = LayerInfo {
+            layers: vec![sample_record(Version::Psd)],
+            ..Default::default()
+        };
         let mut out = Vec::new();
         info.write_body(&mut out, Version::Psd).unwrap();
         // The final byte may be the (optional) even padding; stop before it.
         for cut in 0..out.len() - 1 {
-            assert!(LayerInfo::read_body(&out[..cut], Version::Psd).is_err(), "cut {cut}");
+            assert!(
+                LayerInfo::read_body(&out[..cut], Version::Psd).is_err(),
+                "cut {cut}"
+            );
         }
     }
 
     #[test]
     fn bad_blend_signature() {
-        let info = LayerInfo { layers: vec![LayerRecord::default()], ..Default::default() };
+        let info = LayerInfo {
+            layers: vec![LayerRecord::default()],
+            ..Default::default()
+        };
         let mut out = Vec::new();
         info.write_body(&mut out, Version::Psd).unwrap();
         // count(2) + rect(16) + nch(2) = 20 → signature
         out[20] = b'X';
-        assert!(matches!(LayerInfo::read_body(&out, Version::Psd), Err(PsdError::InvalidSignature { .. })));
+        assert!(matches!(
+            LayerInfo::read_body(&out, Version::Psd),
+            Err(PsdError::InvalidSignature { .. })
+        ));
     }
 
     #[test]
@@ -1086,10 +1326,20 @@ mod tests {
     #[test]
     fn zero_length_channel() {
         let mut rec = LayerRecord::default();
-        rec.channels.push(ChannelData { id: 0, compression: None, data: vec![] });
-        let info = LayerInfo { layers: vec![rec], ..Default::default() };
+        rec.channels.push(ChannelData {
+            id: 0,
+            compression: None,
+            data: vec![],
+        });
+        let info = LayerInfo {
+            layers: vec![rec],
+            ..Default::default()
+        };
         rt(&info, Version::Psd);
-        assert_eq!(info.layers[0].decode_channel(0, 8, Version::Psd).unwrap(), Vec::<u8>::new());
+        assert_eq!(
+            info.layers[0].decode_channel(0, 8, Version::Psd).unwrap(),
+            Vec::<u8>::new()
+        );
     }
 
     /// The computed length matches the bytes written for every mask form, long names, custom block
@@ -1098,8 +1348,14 @@ mod tests {
     fn unpadded_len_matches_the_written_body() {
         for version in [Version::Psd, Version::Psb] {
             let mut layers = vec![sample_record(version), LayerRecord::default()];
-            for (params, real, real_first) in [(true, true, true), (true, true, false), (true, false, true), (false, true, true)] {
-                let mut mask = LayerMask::new(Rect::from_xywh(1, 2, 3, 4), 0, LayerMask::FLAG_PARAMETERS);
+            for (params, real, real_first) in [
+                (true, true, true),
+                (true, true, false),
+                (true, false, true),
+                (false, true, true),
+            ] {
+                let mut mask =
+                    LayerMask::new(Rect::from_xywh(1, 2, 3, 4), 0, LayerMask::FLAG_PARAMETERS);
                 mask.parameters = params.then_some(MaskParameters {
                     flags: 0x0f,
                     user_density: Some(1),
@@ -1107,22 +1363,47 @@ mod tests {
                     vector_density: Some(3),
                     vector_feather: None,
                 });
-                mask.real = real.then_some(RealMask { flags: 0, background: 255, rect: Rect::from_xywh(0, 0, 1, 1) });
+                mask.real = real.then_some(RealMask {
+                    flags: 0,
+                    background: 255,
+                    rect: Rect::from_xywh(0, 0, 1, 1),
+                });
                 mask.real_first = real_first;
                 mask.trailing = vec![0; 3];
                 let mut rec = sample_record(version);
                 rec.mask = MaskData::Mask(mask);
                 rec.name = vec![b'n'; 300];
-                rec.blocks.push(TaggedBlock { signature: *b"8BIM", key: *b"lsct", data: vec![1; 5], padding: Some(vec![0; 3]) });
-                rec.blocks.push(TaggedBlock { signature: *b"8BIM", key: *b"Lr16", data: vec![2; 7], padding: None });
+                rec.blocks.push(TaggedBlock {
+                    signature: *b"8BIM",
+                    key: *b"lsct",
+                    data: vec![1; 5],
+                    padding: Some(vec![0; 3]),
+                });
+                rec.blocks.push(TaggedBlock {
+                    signature: *b"8BIM",
+                    key: *b"Lr16",
+                    data: vec![2; 7],
+                    padding: None,
+                });
                 rec.extra_trailing = vec![9; 2];
                 layers.push(rec);
             }
-            layers.push(LayerRecord { mask: MaskData::Raw(vec![5; 11]), name: b"ab".to_vec(), ..Default::default() });
-            let info = LayerInfo { layers, ..Default::default() };
+            layers.push(LayerRecord {
+                mask: MaskData::Raw(vec![5; 11]),
+                name: b"ab".to_vec(),
+                ..Default::default()
+            });
+            let info = LayerInfo {
+                layers,
+                ..Default::default()
+            };
             let mut out = Vec::new();
             info.write_unpadded(&mut out, version).unwrap();
-            assert_eq!(info.unpadded_len(version).unwrap(), out.len() as u64, "{version:?}");
+            assert_eq!(
+                info.unpadded_len(version).unwrap(),
+                out.len() as u64,
+                "{version:?}"
+            );
         }
     }
 
@@ -1130,7 +1411,7 @@ mod tests {
     /// channel data length hint is exact.
     #[test]
     fn unpadded_write_matches_pad_to_on_a_clone() {
-        use crate::{ColorMode, Compression, testgen};
+        use crate::{testgen, ColorMode, Compression};
         for version in [Version::Psd, Version::Psb] {
             for depth in [8u16, 16, 32] {
                 for compression in [Compression::Raw, Compression::Rle] {
@@ -1146,7 +1427,10 @@ mod tests {
                         info.write_unpadded(&mut got, version).unwrap();
                         assert!(got.len() >= info.channel_data_len());
                         got.resize(got.len() + pad, 0);
-                        assert_eq!(got, want, "{version:?} {depth} {compression:?} align {align}");
+                        assert_eq!(
+                            got, want,
+                            "{version:?} {depth} {compression:?} align {align}"
+                        );
                     }
                     info.padding = Some(vec![7, 7]);
                     let mut with_padding = Vec::new();
@@ -1159,14 +1443,27 @@ mod tests {
 
     #[test]
     fn nondefault_padding_kept() {
-        let info = LayerInfo { padding: Some(vec![0, 0]), ..Default::default() };
+        let info = LayerInfo {
+            padding: Some(vec![0, 0]),
+            ..Default::default()
+        };
         let out = rt(&info, Version::Psd);
         assert_eq!(out.len(), 4);
     }
 
     #[test]
     fn unknown_blend_and_blocks_passthrough() {
-        let rec = LayerRecord { blend_mode: BlendMode::Unknown(*b"wxyz"), blocks: vec![TaggedBlock::new(*b"Zzzz", vec![1, 2, 3, 4, 5])], ..Default::default() };
-        rt(&LayerInfo { layers: vec![rec], ..Default::default() }, Version::Psd);
+        let rec = LayerRecord {
+            blend_mode: BlendMode::Unknown(*b"wxyz"),
+            blocks: vec![TaggedBlock::new(*b"Zzzz", vec![1, 2, 3, 4, 5])],
+            ..Default::default()
+        };
+        rt(
+            &LayerInfo {
+                layers: vec![rec],
+                ..Default::default()
+            },
+            Version::Psd,
+        );
     }
 }

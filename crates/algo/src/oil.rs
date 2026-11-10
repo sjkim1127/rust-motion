@@ -11,10 +11,10 @@
 use photocraft_color::ColorMode;
 use photocraft_geom::Rect;
 
-use crate::Ctx;
-use crate::fxutil::{MAXC, gauss_blur_n, ncol, premul_window, unpremul_px};
+use crate::fxutil::{gauss_blur_n, ncol, premul_window, unpremul_px, MAXC};
 use crate::image::Image;
 use crate::noise::hash01;
+use crate::Ctx;
 
 pub(crate) struct OilSpec {
     pub stylization: f32,
@@ -48,12 +48,17 @@ pub(crate) fn oil_paint(src: &Image, out: Rect, ctx: &Ctx, spec: &OilSpec) -> Ve
     let mut p = premul_window(src, win, alpha);
     gauss_blur_n(&mut p, ww, wh, n, spec.cleanliness.clamp(0.0, 10.0) * 0.25);
     // 2. Luminance-like intensity for the structure tensor (channel mean works in every model).
-    let lum: Vec<f32> = p.chunks_exact(n).map(|px| px[..cc].iter().sum::<f32>() / cc as f32).collect();
+    let lum: Vec<f32> = p
+        .chunks_exact(n)
+        .map(|px| px[..cc].iter().sum::<f32>() / cc as f32)
+        .collect();
     // 3. Smoothed structure tensor (E, F, G).
     let mut efg = vec![0.0f32; ww * wh * 3];
     for y in 1..wh.saturating_sub(1) {
         for x in 1..ww - 1 {
-            let l = |dx: isize, dy: isize| lum[((y as isize + dy) as usize) * ww + (x as isize + dx) as usize];
+            let l = |dx: isize, dy: isize| {
+                lum[((y as isize + dy) as usize) * ww + (x as isize + dx) as usize]
+            };
             let gx = (l(1, -1) + 2.0 * l(1, 0) + l(1, 1)) - (l(-1, -1) + 2.0 * l(-1, 0) + l(-1, 1));
             let gy = (l(-1, 1) + 2.0 * l(0, 1) + l(1, 1)) - (l(-1, -1) + 2.0 * l(0, -1) + l(1, -1));
             let o = (y * ww + x) * 3;
@@ -76,7 +81,10 @@ pub(crate) fn oil_paint(src: &Image, out: Rect, ctx: &Ctx, spec: &OilSpec) -> Ve
             // Near-isotropic structure has no stable direction; treat as flat.
             if m < 1e-6 || (l1 - (e + g - l1)) < 1e-6 {
                 // Flat areas: gentle diagonal strokes.
-                (std::f32::consts::FRAC_1_SQRT_2, std::f32::consts::FRAC_1_SQRT_2)
+                (
+                    std::f32::consts::FRAC_1_SQRT_2,
+                    std::f32::consts::FRAC_1_SQRT_2,
+                )
             } else {
                 (tx / m, ty / m)
             }
@@ -100,7 +108,12 @@ pub(crate) fn oil_paint(src: &Image, out: Rect, ctx: &Ctx, spec: &OilSpec) -> Ve
         let w10 = ax * (1.0 - ay) * k;
         let w01 = (1.0 - ax) * ay * k;
         let w11 = ax * ay * k;
-        let (i00, i10, i01, i11) = ((y0 * ww + x0) * n, (y0 * ww + x1) * n, (y1 * ww + x0) * n, (y1 * ww + x1) * n);
+        let (i00, i10, i01, i11) = (
+            (y0 * ww + x0) * n,
+            (y0 * ww + x1) * n,
+            (y1 * ww + x0) * n,
+            (y1 * ww + x1) * n,
+        );
         for c in 0..acc.len() {
             acc[c] += p[i00 + c] * w00 + p[i10 + c] * w10 + p[i01 + c] * w01 + p[i11 + c] * w11;
         }
@@ -108,7 +121,10 @@ pub(crate) fn oil_paint(src: &Image, out: Rect, ctx: &Ctx, spec: &OilSpec) -> Ve
     let mut acc = [0.0f32; MAXC];
     for ry in 0..rh {
         for rx in 0..rw {
-            let (dx, dy) = ((r1.x0 - win.x0) as f32 + rx as f32, (r1.y0 - win.y0) as f32 + ry as f32);
+            let (dx, dy) = (
+                (r1.x0 - win.x0) as f32 + rx as f32,
+                (r1.y0 - win.y0) as f32 + ry as f32,
+            );
             acc[..n].fill(0.0);
             let mut wsum = 0.0;
             let mut nsum = 0.0;
@@ -119,7 +135,8 @@ pub(crate) fn oil_paint(src: &Image, out: Rect, ctx: &Ctx, spec: &OilSpec) -> Ve
                 let (mut qx, mut qy) = (dx, dy);
                 let (mut px, mut py) = (0.0f32, 0.0f32);
                 for k in 1..=steps {
-                    let ti = (qy.round().clamp(0.0, (wh - 1) as f32) as usize) * ww + qx.round().clamp(0.0, (ww - 1) as f32) as usize;
+                    let ti = (qy.round().clamp(0.0, (wh - 1) as f32) as usize) * ww
+                        + qx.round().clamp(0.0, (ww - 1) as f32) as usize;
                     let (mut tx, mut ty) = tangent[ti];
                     if k == 1 {
                         tx *= dir;
@@ -135,7 +152,13 @@ pub(crate) fn oil_paint(src: &Image, out: Rect, ctx: &Ctx, spec: &OilSpec) -> Ve
                     let wk = 1.0 - k as f32 / (steps + 1) as f32;
                     sample(qx, qy, &mut acc[..n], wk);
                     wsum += wk;
-                    nsum += wk * hash01(win.x0 + qx.round() as i32, win.y0 + qy.round() as i32, 71, 0);
+                    nsum += wk
+                        * hash01(
+                            win.x0 + qx.round() as i32,
+                            win.y0 + qy.round() as i32,
+                            71,
+                            0,
+                        );
                 }
             }
             let o = (ry * rw + rx) * n;
@@ -189,7 +212,11 @@ pub(crate) fn oil_paint(src: &Image, out: Rect, ctx: &Ctx, spec: &OilSpec) -> Ve
                 let spec_v = shine * (ndh.powf(40.0) - flat_spec).max(0.0) * 0.8;
                 let chans = if lab { 1 } else { cc };
                 for v in px.iter_mut().take(chans) {
-                    *v = if sub { 1.0 - ((1.0 - *v) * shade + spec_v) } else { *v * shade + spec_v };
+                    *v = if sub {
+                        1.0 - ((1.0 - *v) * shade + spec_v)
+                    } else {
+                        *v * shade + spec_v
+                    };
                 }
             }
             res.extend_from_slice(&px[..n]);

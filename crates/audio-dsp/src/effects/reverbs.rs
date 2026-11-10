@@ -4,13 +4,23 @@
 use super::time::Reverb;
 use super::util::{DelayLine, OnePole, Prng};
 use crate::fft::Fft;
-use crate::{AudioEffect, ParamSpec, ParamValues, Smoothed, Unit, block_len, db_to_gain, param_plumbing};
+use crate::{
+    block_len, db_to_gain, param_plumbing, AudioEffect, ParamSpec, ParamValues, Smoothed, Unit,
+};
 
 /// Partition (block) size; the effect's latency.
 const PART: usize = 256;
 
 /// Built-in impulse responses (generated, see [`generate_ir`]).
-pub const IMPULSES: &[&str] = &["Small Room", "Medium Room", "Large Hall", "Cathedral", "Plate", "Ambience", "Vocal Booth"];
+pub const IMPULSES: &[&str] = &[
+    "Small Room",
+    "Medium Room",
+    "Large Hall",
+    "Cathedral",
+    "Plate",
+    "Ambience",
+    "Vocal Booth",
+];
 
 /// Character of a generated impulse.
 #[derive(Clone, Copy, Debug)]
@@ -27,13 +37,62 @@ struct IrSpec {
 }
 
 const IR_SPECS: [IrSpec; 7] = [
-    IrSpec { rt60: 0.45, er_ms: 25.0, er_count: 10, hf_decay: 6.0, onset_ms: 8.0, seed: 11 },
-    IrSpec { rt60: 0.8, er_ms: 45.0, er_count: 14, hf_decay: 4.0, onset_ms: 15.0, seed: 12 },
-    IrSpec { rt60: 1.9, er_ms: 80.0, er_count: 18, hf_decay: 2.2, onset_ms: 30.0, seed: 13 },
-    IrSpec { rt60: 3.2, er_ms: 120.0, er_count: 22, hf_decay: 1.4, onset_ms: 45.0, seed: 14 },
-    IrSpec { rt60: 1.6, er_ms: 0.0, er_count: 0, hf_decay: 1.0, onset_ms: 1.0, seed: 15 },
-    IrSpec { rt60: 0.3, er_ms: 15.0, er_count: 8, hf_decay: 8.0, onset_ms: 4.0, seed: 16 },
-    IrSpec { rt60: 0.2, er_ms: 8.0, er_count: 6, hf_decay: 12.0, onset_ms: 2.0, seed: 17 },
+    IrSpec {
+        rt60: 0.45,
+        er_ms: 25.0,
+        er_count: 10,
+        hf_decay: 6.0,
+        onset_ms: 8.0,
+        seed: 11,
+    },
+    IrSpec {
+        rt60: 0.8,
+        er_ms: 45.0,
+        er_count: 14,
+        hf_decay: 4.0,
+        onset_ms: 15.0,
+        seed: 12,
+    },
+    IrSpec {
+        rt60: 1.9,
+        er_ms: 80.0,
+        er_count: 18,
+        hf_decay: 2.2,
+        onset_ms: 30.0,
+        seed: 13,
+    },
+    IrSpec {
+        rt60: 3.2,
+        er_ms: 120.0,
+        er_count: 22,
+        hf_decay: 1.4,
+        onset_ms: 45.0,
+        seed: 14,
+    },
+    IrSpec {
+        rt60: 1.6,
+        er_ms: 0.0,
+        er_count: 0,
+        hf_decay: 1.0,
+        onset_ms: 1.0,
+        seed: 15,
+    },
+    IrSpec {
+        rt60: 0.3,
+        er_ms: 15.0,
+        er_count: 8,
+        hf_decay: 8.0,
+        onset_ms: 4.0,
+        seed: 16,
+    },
+    IrSpec {
+        rt60: 0.2,
+        er_ms: 8.0,
+        er_count: 6,
+        hf_decay: 12.0,
+        onset_ms: 2.0,
+        seed: 17,
+    },
 ];
 
 fn ir_len(spec: &IrSpec, sr: f32) -> usize {
@@ -62,11 +121,17 @@ fn generate_ir(index: usize, sr: f32, out: [&mut [f32]; 2]) {
         for _ in 0..spec.er_count {
             let t = 0.002 + (rng.uniform() * 0.5 + 0.5) * spec.er_ms * 0.001;
             let i = ((t * sr) as usize).min(len - 1);
-            let amp = 0.6 * (-3.0 * t / (spec.er_ms * 0.001 + 1e-3)).exp() * if rng.uniform() < 0.0 { -1.0 } else { 1.0 };
+            let amp = 0.6
+                * (-3.0 * t / (spec.er_ms * 0.001 + 1e-3)).exp()
+                * if rng.uniform() < 0.0 { -1.0 } else { 1.0 };
             buf[i] += amp;
         }
         let e: f64 = buf.iter().map(|&v| (v as f64) * (v as f64)).sum();
-        let g = if e > 0.0 { (1.0 / e.sqrt()) as f32 } else { 0.0 };
+        let g = if e > 0.0 {
+            (1.0 / e.sqrt()) as f32
+        } else {
+            0.0
+        };
         buf.iter_mut().for_each(|v| *v *= g);
     }
 }
@@ -108,14 +173,25 @@ impl ConvolutionReverb {
         ParamSpec::new("mix", "Mix", 0.0, 100.0, 30.0, Unit::Percent),
         ParamSpec::new("room_size", "Room Size", 10.0, 100.0, 100.0, Unit::Percent),
         ParamSpec::log("damping_lf", "Damping LF", 10.0, 1000.0, 10.0, Unit::Hertz),
-        ParamSpec::log("damping_hf", "Damping HF", 1000.0, 20000.0, 20000.0, Unit::Hertz),
+        ParamSpec::log(
+            "damping_hf",
+            "Damping HF",
+            1000.0,
+            20000.0,
+            20000.0,
+            Unit::Hertz,
+        ),
         ParamSpec::new("predelay", "Pre-Delay", 0.0, 500.0, 0.0, Unit::Milliseconds),
         ParamSpec::new("width", "Width", 0.0, 100.0, 100.0, Unit::Percent),
         ParamSpec::new("gain", "Gain", -24.0, 12.0, 0.0, Unit::Decibels),
     ];
 
     pub fn new(sample_rate: f32, channels: usize) -> Self {
-        let max_len = IR_SPECS.iter().map(|s| ir_len(s, sample_rate)).max().unwrap_or(1);
+        let max_len = IR_SPECS
+            .iter()
+            .map(|s| ir_len(s, sample_rate))
+            .max()
+            .unwrap_or(1);
         let max_parts = max_len.div_ceil(PART);
         let bins2 = 2 * (PART + 1);
         let mut s = ConvolutionReverb {
@@ -149,12 +225,18 @@ impl ConvolutionReverb {
 
     /// Rebuild the partition spectra (only when the impulse, size or damping changed).
     fn rebuild(&mut self) {
-        let key = (self.pv.idx("impulse"), self.pv.v("room_size"), self.pv.v("damping_lf"), self.pv.v("damping_hf"));
+        let key = (
+            self.pv.idx("impulse"),
+            self.pv.v("room_size"),
+            self.pv.v("damping_lf"),
+            self.pv.v("damping_hf"),
+        );
         if key == self.key {
             return;
         }
         if key.0 != self.key.0 {
-            let len = ir_len(&IR_SPECS[key.0.min(IR_SPECS.len() - 1)], self.sr).min(self.base[0].len());
+            let len =
+                ir_len(&IR_SPECS[key.0.min(IR_SPECS.len() - 1)], self.sr).min(self.base[0].len());
             let [a, b] = &mut self.base;
             generate_ir(key.0, self.sr, [&mut a[..len], &mut b[..len]]);
             self.base_len = len;
@@ -164,7 +246,10 @@ impl ConvolutionReverb {
         let scale = (key.1 / 100.0).clamp(0.1, 1.0);
         let len = ((self.base_len as f32 * scale) as usize).max(1);
         self.parts = len.div_ceil(PART).min(self.max_parts);
-        let (alf, ahf) = (OnePole::alpha(key.2, self.sr), OnePole::alpha(key.3, self.sr));
+        let (alf, ahf) = (
+            OnePole::alpha(key.2, self.sr),
+            OnePole::alpha(key.3, self.sr),
+        );
         let bins2 = 2 * (PART + 1);
         for c in 0..2 {
             let mut hp = OnePole::default();
@@ -280,7 +365,9 @@ impl AudioEffect for ConvolutionReverb {
         self.fdl.iter_mut().for_each(|v| *v = 0.0);
         self.hist.iter_mut().for_each(|v| *v = 0.0);
         self.inbuf.iter_mut().for_each(|v| *v = 0.0);
-        self.out.iter_mut().for_each(|o| o.iter_mut().for_each(|v| *v = 0.0));
+        self.out
+            .iter_mut()
+            .for_each(|o| o.iter_mut().for_each(|v| *v = 0.0));
         self.head = 0;
         self.pos = 0;
         self.pre.reset();
@@ -297,7 +384,12 @@ impl AudioEffect for ConvolutionReverb {
             return;
         }
         for i in 0..n {
-            let (mix, gain, width, pd) = (self.mix.tick(), self.gain.tick(), self.width.tick(), self.predelay.tick());
+            let (mix, gain, width, pd) = (
+                self.mix.tick(),
+                self.gain.tick(),
+                self.width.tick(),
+                self.predelay.tick(),
+            );
             let mono = channels[..nch].iter().map(|c| c[i]).sum::<f32>() / nch as f32;
             self.pre.push(mono);
             self.inbuf[self.pos] = self.pre.read(pd);
@@ -354,14 +446,49 @@ pub struct SurroundReverb {
 
 impl SurroundReverb {
     pub const PARAMS: &'static [ParamSpec] = &[
-        ParamSpec::new("center_input", "Center Input", 0.0, 100.0, 100.0, Unit::Percent),
+        ParamSpec::new(
+            "center_input",
+            "Center Input",
+            0.0,
+            100.0,
+            100.0,
+            Unit::Percent,
+        ),
         ParamSpec::new("room_size", "Room Size", 0.0, 100.0, 50.0, Unit::Percent),
         ParamSpec::log("decay", "Decay", 0.1, 20.0, 1.5, Unit::Seconds),
-        ParamSpec::new("predelay", "Pre-Delay", 0.0, 200.0, 20.0, Unit::Milliseconds),
+        ParamSpec::new(
+            "predelay",
+            "Pre-Delay",
+            0.0,
+            200.0,
+            20.0,
+            Unit::Milliseconds,
+        ),
         ParamSpec::new("damping", "Damping", 0.0, 100.0, 40.0, Unit::Percent),
-        ParamSpec::new("early", "Early Reflections", 0.0, 100.0, 40.0, Unit::Percent),
-        ParamSpec::log("low_cut", "Low Frequency Cut", 20.0, 1000.0, 20.0, Unit::Hertz),
-        ParamSpec::log("high_cut", "High Frequency Cut", 1000.0, 20000.0, 12000.0, Unit::Hertz),
+        ParamSpec::new(
+            "early",
+            "Early Reflections",
+            0.0,
+            100.0,
+            40.0,
+            Unit::Percent,
+        ),
+        ParamSpec::log(
+            "low_cut",
+            "Low Frequency Cut",
+            20.0,
+            1000.0,
+            20.0,
+            Unit::Hertz,
+        ),
+        ParamSpec::log(
+            "high_cut",
+            "High Frequency Cut",
+            1000.0,
+            20000.0,
+            12000.0,
+            Unit::Hertz,
+        ),
         ParamSpec::new("width", "Width", 0.0, 100.0, 100.0, Unit::Percent),
         ParamSpec::new("dry", "Dry", 0.0, 100.0, 80.0, Unit::Percent),
         ParamSpec::new("wet", "Wet", 0.0, 100.0, 30.0, Unit::Percent),
@@ -403,7 +530,14 @@ impl SurroundReverb {
         self.size.set(0.5 + self.pv.v("room_size") / 100.0);
         if snap {
             self.late.reset();
-            for s in [&mut self.dry, &mut self.wet, &mut self.early, &mut self.width, &mut self.centre, &mut self.size] {
+            for s in [
+                &mut self.dry,
+                &mut self.wet,
+                &mut self.early,
+                &mut self.width,
+                &mut self.centre,
+                &mut self.size,
+            ] {
                 s.snap();
             }
         }
@@ -417,7 +551,14 @@ impl AudioEffect for SurroundReverb {
         self.er.reset();
         self.lc = [OnePole::default(); 2];
         self.hc = [OnePole::default(); 2];
-        for s in [&mut self.dry, &mut self.wet, &mut self.early, &mut self.width, &mut self.centre, &mut self.size] {
+        for s in [
+            &mut self.dry,
+            &mut self.wet,
+            &mut self.early,
+            &mut self.width,
+            &mut self.centre,
+            &mut self.size,
+        ] {
             s.snap();
         }
     }
@@ -427,14 +568,21 @@ impl AudioEffect for SurroundReverb {
         if nch == 0 {
             return;
         }
-        let (alc, ahc) = (OnePole::alpha(self.pv.v("low_cut"), self.sr), OnePole::alpha(self.pv.v("high_cut"), self.sr));
+        let (alc, ahc) = (
+            OnePole::alpha(self.pv.v("low_cut"), self.sr),
+            OnePole::alpha(self.pv.v("high_cut"), self.sr),
+        );
         let ms = self.sr * 0.001;
         let mut start = 0;
         while start < n {
             let len = (n - start).min(CHUNK);
             // Reverb input: side signal plus the centre-weighted mid.
             for i in 0..len {
-                let (l, r) = if nch == 2 { (channels[0][start + i], channels[1][start + i]) } else { (channels[0][start + i], channels[0][start + i]) };
+                let (l, r) = if nch == 2 {
+                    (channels[0][start + i], channels[1][start + i])
+                } else {
+                    (channels[0][start + i], channels[0][start + i])
+                };
                 let c = self.centre.tick();
                 let (mid, side) = (0.5 * (l + r), 0.5 * (l - r));
                 self.scratch[0][i] = c * mid + side;
@@ -445,17 +593,28 @@ impl AudioEffect for SurroundReverb {
                 self.late.process(&mut [&mut a[..len], &mut b[..len]]);
             }
             for i in 0..len {
-                let x = if nch == 2 { 0.5 * (channels[0][start + i] + channels[1][start + i]) } else { channels[0][start + i] };
+                let x = if nch == 2 {
+                    0.5 * (channels[0][start + i] + channels[1][start + i])
+                } else {
+                    channels[0][start + i]
+                };
                 let size = self.size.tick();
                 self.er.push(x);
                 let (mut el, mut er) = (0.0, 0.0);
                 for k in 0..ER_TAPS {
                     let v = ER_GAIN[k] * self.er.read(ER_MS[k] * size * ms);
-                    if k % 2 == 0 { el += v } else { er += v }
+                    if k % 2 == 0 {
+                        el += v
+                    } else {
+                        er += v
+                    }
                 }
                 let early = self.early.tick();
                 let (dry, wet, width) = (self.dry.tick(), self.wet.tick(), self.width.tick());
-                let mut w = [self.scratch[0][i] + early * el, self.scratch[1][i] + early * er];
+                let mut w = [
+                    self.scratch[0][i] + early * el,
+                    self.scratch[1][i] + early * er,
+                ];
                 for c in 0..2 {
                     w[c] = self.hc[c].lp(ahc, self.lc[c].hp(alc, w[c]));
                 }

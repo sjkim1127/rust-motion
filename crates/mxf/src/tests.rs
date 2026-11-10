@@ -58,15 +58,29 @@ fn batch(items: &[&[u8]]) -> Vec<u8> {
 }
 
 fn set_key(t: u8) -> [u8; 16] {
-    ul(&[0x06, 0x0E, 0x2B, 0x34, 0x02, 0x53, 0x01, 0x01, 0x0D, 0x01, 0x01, 0x01, 0x01, 0x01, t, 0x00])
+    ul(&[
+        0x06, 0x0E, 0x2B, 0x34, 0x02, 0x53, 0x01, 0x01, 0x0D, 0x01, 0x01, 0x01, 0x01, 0x01, t, 0x00,
+    ])
 }
 
-const PICTURE_DEF: [u8; 16] = [0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x01, 0x01, 0x03, 0x02, 0x02, 0x01, 0, 0, 0];
-const SOUND_DEF: [u8; 16] = [0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x01, 0x01, 0x03, 0x02, 0x02, 0x02, 0, 0, 0];
-const TC_DEF: [u8; 16] = [0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x01, 0x01, 0x03, 0x02, 0x01, 0x01, 0, 0, 0];
-const OP1A: [u8; 16] = [0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x01, 0x0D, 0x01, 0x02, 0x01, 0x01, 0x01, 0x09, 0x00];
-const PIC_KEY: [u8; 16] = [0x06, 0x0E, 0x2B, 0x34, 0x01, 0x02, 0x01, 0x01, 0x0D, 0x01, 0x03, 0x01, 0x15, 0x01, 0x05, 0x00];
-const SND_KEY: [u8; 16] = [0x06, 0x0E, 0x2B, 0x34, 0x01, 0x02, 0x01, 0x01, 0x0D, 0x01, 0x03, 0x01, 0x16, 0x01, 0x03, 0x00];
+const PICTURE_DEF: [u8; 16] = [
+    0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x01, 0x01, 0x03, 0x02, 0x02, 0x01, 0, 0, 0,
+];
+const SOUND_DEF: [u8; 16] = [
+    0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x01, 0x01, 0x03, 0x02, 0x02, 0x02, 0, 0, 0,
+];
+const TC_DEF: [u8; 16] = [
+    0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x01, 0x01, 0x03, 0x02, 0x01, 0x01, 0, 0, 0,
+];
+const OP1A: [u8; 16] = [
+    0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x01, 0x0D, 0x01, 0x02, 0x01, 0x01, 0x01, 0x09, 0x00,
+];
+const PIC_KEY: [u8; 16] = [
+    0x06, 0x0E, 0x2B, 0x34, 0x01, 0x02, 0x01, 0x01, 0x0D, 0x01, 0x03, 0x01, 0x15, 0x01, 0x05, 0x00,
+];
+const SND_KEY: [u8; 16] = [
+    0x06, 0x0E, 0x2B, 0x34, 0x01, 0x02, 0x01, 0x01, 0x0D, 0x01, 0x03, 0x01, 0x16, 0x01, 0x03, 0x00,
+];
 
 fn partition(kind: u8, this: u64, body_sid: u32, index_sid: u32, hbc: u64) -> Vec<u8> {
     let mut v = Vec::new();
@@ -84,25 +98,42 @@ fn partition(kind: u8, this: u64, body_sid: u32, index_sid: u32, hbc: u64) -> Ve
     v.extend_from_slice(&OP1A);
     v.extend_from_slice(&batch(&[]));
     let mut out = Vec::new();
-    klv(&mut out, ul(&[0x06, 0x0E, 0x2B, 0x34, 0x02, 0x05, 0x01, 0x01, 0x0D, 0x01, 0x02, 0x01, 0x01, kind, 0x04, 0x00]), &v);
+    klv(
+        &mut out,
+        ul(&[
+            0x06, 0x0E, 0x2B, 0x34, 0x02, 0x05, 0x01, 0x01, 0x0D, 0x01, 0x02, 0x01, 0x01, kind,
+            0x04, 0x00,
+        ]),
+        &v,
+    );
     out
 }
 
 fn track(uid: u8, id: u32, number: u32, seq: u8) -> Vec<u8> {
     let mut s = LocalSet::new(uid);
-    s.p(0x4801, &id.to_be_bytes()).p(0x4804, &number.to_be_bytes()).p(0x4B01, &[0, 0, 0, 25, 0, 0, 0, 1]).p(0x4B02, &0i64.to_be_bytes()).p(0x4803, &uuid(seq));
+    s.p(0x4801, &id.to_be_bytes())
+        .p(0x4804, &number.to_be_bytes())
+        .p(0x4B01, &[0, 0, 0, 25, 0, 0, 0, 1])
+        .p(0x4B02, &0i64.to_be_bytes())
+        .p(0x4803, &uuid(seq));
     s.0
 }
 
 fn sequence(uid: u8, def: [u8; 16], dur: i64, comp: u8) -> Vec<u8> {
     let mut s = LocalSet::new(uid);
-    s.p(0x0201, &def).p(0x0202, &dur.to_be_bytes()).p(0x1001, &batch(&[&uuid(comp)]));
+    s.p(0x0201, &def)
+        .p(0x0202, &dur.to_be_bytes())
+        .p(0x1001, &batch(&[&uuid(comp)]));
     s.0
 }
 
 fn source_clip(uid: u8, def: [u8; 16], dur: i64, pkg: [u8; 32], track: u32) -> Vec<u8> {
     let mut s = LocalSet::new(uid);
-    s.p(0x0201, &def).p(0x0202, &dur.to_be_bytes()).p(0x1201, &0i64.to_be_bytes()).p(0x1101, &pkg).p(0x1102, &track.to_be_bytes());
+    s.p(0x0201, &def)
+        .p(0x0202, &dur.to_be_bytes())
+        .p(0x1201, &0i64.to_be_bytes())
+        .p(0x1101, &pkg)
+        .p(0x1102, &track.to_be_bytes());
     s.0
 }
 
@@ -112,7 +143,14 @@ fn source_clip(uid: u8, def: [u8; 16], dur: i64, pkg: [u8; 32], track: u32) -> V
 fn build(n: usize, pic: impl Fn(usize) -> Vec<u8>, to: &[i8], flags: &[u8]) -> Vec<u8> {
     let mut md = Vec::new();
     // primer: no dynamic tags
-    klv(&mut md, ul(&[0x06, 0x0E, 0x2B, 0x34, 0x02, 0x05, 0x01, 0x01, 0x0D, 0x01, 0x02, 0x01, 0x01, 0x05, 0x01, 0x00]), &batch(&[]));
+    klv(
+        &mut md,
+        ul(&[
+            0x06, 0x0E, 0x2B, 0x34, 0x02, 0x05, 0x01, 0x01, 0x0D, 0x01, 0x02, 0x01, 0x01, 0x05,
+            0x01, 0x00,
+        ]),
+        &batch(&[]),
+    );
     let mut pre = LocalSet::new(1);
     pre.p(0x3B03, &uuid(2)).p(0x3B09, &OP1A);
     klv(&mut md, set_key(0x2F), &pre.0);
@@ -121,32 +159,58 @@ fn build(n: usize, pic: impl Fn(usize) -> Vec<u8>, to: &[i8], flags: &[u8]) -> V
     klv(&mut md, set_key(0x18), &cs.0);
     // material package: timecode, picture, sound
     let mut mp = LocalSet::new(3);
-    mp.p(0x4401, &umid(1)).p(0x4402, &[0, b'M', 0, b'P']).p(0x4403, &batch(&[&uuid(10), &uuid(11), &uuid(12)]));
+    mp.p(0x4401, &umid(1))
+        .p(0x4402, &[0, b'M', 0, b'P'])
+        .p(0x4403, &batch(&[&uuid(10), &uuid(11), &uuid(12)]));
     klv(&mut md, set_key(0x36), &mp.0);
     let d = n as i64;
     klv(&mut md, set_key(0x3B), &track(10, 1, 0, 20));
     klv(&mut md, set_key(0x0F), &sequence(20, TC_DEF, d, 30));
     let mut tc = LocalSet::new(30);
-    tc.p(0x0201, &TC_DEF).p(0x0202, &d.to_be_bytes()).p(0x1501, &90_000i64.to_be_bytes()).p(0x1502, &25u16.to_be_bytes()).p(0x1503, &[0]);
+    tc.p(0x0201, &TC_DEF)
+        .p(0x0202, &d.to_be_bytes())
+        .p(0x1501, &90_000i64.to_be_bytes())
+        .p(0x1502, &25u16.to_be_bytes())
+        .p(0x1503, &[0]);
     klv(&mut md, set_key(0x14), &tc.0);
     klv(&mut md, set_key(0x3B), &track(11, 2, 0, 21));
     klv(&mut md, set_key(0x0F), &sequence(21, PICTURE_DEF, d, 31));
-    klv(&mut md, set_key(0x11), &source_clip(31, PICTURE_DEF, d, umid(2), 2));
+    klv(
+        &mut md,
+        set_key(0x11),
+        &source_clip(31, PICTURE_DEF, d, umid(2), 2),
+    );
     klv(&mut md, set_key(0x3B), &track(12, 3, 0, 22));
     klv(&mut md, set_key(0x0F), &sequence(22, SOUND_DEF, d, 32));
-    klv(&mut md, set_key(0x11), &source_clip(32, SOUND_DEF, d, umid(2), 3));
+    klv(
+        &mut md,
+        set_key(0x11),
+        &source_clip(32, SOUND_DEF, d, umid(2), 3),
+    );
     // file package
     let mut fp = LocalSet::new(4);
-    fp.p(0x4401, &umid(2)).p(0x4403, &batch(&[&uuid(13), &uuid(14)])).p(0x4701, &uuid(40));
+    fp.p(0x4401, &umid(2))
+        .p(0x4403, &batch(&[&uuid(13), &uuid(14)]))
+        .p(0x4701, &uuid(40));
     klv(&mut md, set_key(0x37), &fp.0);
     klv(&mut md, set_key(0x3B), &track(13, 2, 0x1501_0500, 23));
     klv(&mut md, set_key(0x0F), &sequence(23, PICTURE_DEF, d, 33));
-    klv(&mut md, set_key(0x11), &source_clip(33, PICTURE_DEF, d, [0; 32], 0));
+    klv(
+        &mut md,
+        set_key(0x11),
+        &source_clip(33, PICTURE_DEF, d, [0; 32], 0),
+    );
     klv(&mut md, set_key(0x3B), &track(14, 3, 0x1601_0300, 24));
     klv(&mut md, set_key(0x0F), &sequence(24, SOUND_DEF, d, 34));
-    klv(&mut md, set_key(0x11), &source_clip(34, SOUND_DEF, d, [0; 32], 0));
+    klv(
+        &mut md,
+        set_key(0x11),
+        &source_clip(34, SOUND_DEF, d, [0; 32], 0),
+    );
     let mut mdesc = LocalSet::new(40);
-    mdesc.p(0x3001, &[0, 0, 0, 25, 0, 0, 0, 1]).p(0x3F01, &batch(&[&uuid(41), &uuid(42)]));
+    mdesc
+        .p(0x3001, &[0, 0, 0, 25, 0, 0, 0, 1])
+        .p(0x3F01, &batch(&[&uuid(41), &uuid(42)]));
     klv(&mut md, set_key(0x44), &mdesc.0);
     let mut cdci = LocalSet::new(41);
     cdci.p(0x3006, &2u32.to_be_bytes())
@@ -154,7 +218,13 @@ fn build(n: usize, pic: impl Fn(usize) -> Vec<u8>, to: &[i8], flags: &[u8]) -> V
         .p(0x3202, &32u32.to_be_bytes())
         .p(0x320E, &[0, 0, 0, 2, 0, 0, 0, 1])
         .p(0x3301, &8u32.to_be_bytes())
-        .p(0x3201, &ul(&[0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x0A, 0x04, 0x01, 0x02, 0x02, 0x03, 0x06, 0x03, 0x00]));
+        .p(
+            0x3201,
+            &ul(&[
+                0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x0A, 0x04, 0x01, 0x02, 0x02, 0x03, 0x06,
+                0x03, 0x00,
+            ]),
+        );
     klv(&mut md, set_key(0x28), &cdci.0);
     let mut wave = LocalSet::new(42);
     wave.p(0x3006, &3u32.to_be_bytes())
@@ -164,7 +234,9 @@ fn build(n: usize, pic: impl Fn(usize) -> Vec<u8>, to: &[i8], flags: &[u8]) -> V
         .p(0x3D0A, &4u16.to_be_bytes());
     klv(&mut md, set_key(0x48), &wave.0);
     let mut ecd = LocalSet::new(5);
-    ecd.p(0x2701, &umid(2)).p(0x3F07, &1u32.to_be_bytes()).p(0x3F06, &2u32.to_be_bytes());
+    ecd.p(0x2701, &umid(2))
+        .p(0x3F07, &1u32.to_be_bytes())
+        .p(0x3F06, &2u32.to_be_bytes());
     klv(&mut md, set_key(0x23), &ecd.0);
 
     let mut f = partition(2, 0, 0, 0, md.len() as u64);
@@ -191,7 +263,11 @@ fn build(n: usize, pic: impl Fn(usize) -> Vec<u8>, to: &[i8], flags: &[u8]) -> V
     let mut ix = LocalSet::new(6);
     let mut entries = Vec::new();
     for i in 0..n {
-        let mut e = vec![to.get(i).copied().unwrap_or(0) as u8, 0, flags.get(i).copied().unwrap_or(0)];
+        let mut e = vec![
+            to.get(i).copied().unwrap_or(0) as u8,
+            0,
+            flags.get(i).copied().unwrap_or(0),
+        ];
         e.extend_from_slice(&offsets[i].to_be_bytes());
         entries.push(e);
     }
@@ -202,13 +278,23 @@ fn build(n: usize, pic: impl Fn(usize) -> Vec<u8>, to: &[i8], flags: &[u8]) -> V
         .p(0x3F06, &2u32.to_be_bytes())
         .p(0x3F07, &1u32.to_be_bytes())
         .p(0x3F0A, &batch(&refs));
-    klv(&mut f, ul(&[0x06, 0x0E, 0x2B, 0x34, 0x02, 0x53, 0x01, 0x01, 0x0D, 0x01, 0x02, 0x01, 0x01, 0x10, 0x01, 0x00]), &ix.0);
+    klv(
+        &mut f,
+        ul(&[
+            0x06, 0x0E, 0x2B, 0x34, 0x02, 0x53, 0x01, 0x01, 0x0D, 0x01, 0x02, 0x01, 0x01, 0x10,
+            0x01, 0x00,
+        ]),
+        &ix.0,
+    );
     f
 }
 
 /// Stored order I0 P3 B1 B2 P6 B4 B5: display d is stored at d + TO[d].
 fn ipbb() -> (Vec<i8>, Vec<u8>) {
-    (vec![0, 1, 1, -2, 1, 1, -2], vec![0xC0, 0x22, 0x33, 0x33, 0x22, 0x33, 0x33])
+    (
+        vec![0, 1, 1, -2, 1, 1, -2],
+        vec![0xC0, 0x22, 0x33, 0x33, 0x22, 0x33, 0x33],
+    )
 }
 
 fn prores_like(i: usize) -> Vec<u8> {
@@ -223,11 +309,20 @@ fn opens_synthetic_op1a() {
     let (to, flags) = ipbb();
     let f = build(7, |i| vec![i as u8; 100 + i], &to, &flags);
     let m = open(&f).unwrap();
-    assert_eq!(m.operational_pattern, OperationalPattern::Generalized { item: 1, package: 1 });
+    assert_eq!(
+        m.operational_pattern,
+        OperationalPattern::Generalized {
+            item: 1,
+            package: 1
+        }
+    );
     assert_eq!(m.operational_pattern.name(), "OP1a");
     assert_eq!(m.material_package_name.as_deref(), Some("MP"));
     let tc = m.timecode.unwrap();
-    assert_eq!((tc.start, tc.rounded_base, tc.drop_frame), (90_000, 25, false));
+    assert_eq!(
+        (tc.start, tc.rounded_base, tc.drop_frame),
+        (90_000, 25, false)
+    );
     assert_eq!(tc.format(), "01:00:00:00");
     let v = m.track_of_kind(TrackKind::Picture).unwrap();
     let t = &m.tracks[v];
@@ -237,7 +332,11 @@ fn opens_synthetic_op1a() {
     assert_eq!(t.samples.len(), 7);
     let p = t.picture.as_ref().unwrap();
     assert_eq!((p.frame_width(), p.frame_height()), (64, 32));
-    assert_eq!(t.codec, Codec::ProRes { profile: Some(3) }, "coding label wins (the bytes do not sniff as anything)");
+    assert_eq!(
+        t.codec,
+        Codec::ProRes { profile: Some(3) },
+        "coding label wins (the bytes do not sniff as anything)"
+    );
     // presentation order from the temporal offsets
     let pts: Vec<i64> = t.samples.iter().map(|s| s.pts).collect();
     assert_eq!(pts, vec![0, 3, 1, 2, 6, 4, 5]);
@@ -299,7 +398,10 @@ fn missing_temporal_offsets_with_b_pictures_ask_for_reordering() {
 
 #[test]
 fn not_mxf_and_empty() {
-    assert!(matches!(open(&b"RIFF....WAVE".to_vec()), Err(Error::NotMxf(_))));
+    assert!(matches!(
+        open(&b"RIFF....WAVE".to_vec()),
+        Err(Error::NotMxf(_))
+    ));
     assert!(open(&Vec::new()).is_err());
     assert!(!sniff(b"\x1aE\xdf\xa3"));
 }
@@ -316,7 +418,10 @@ fn truncation_never_panics_and_keeps_whole_frames() {
             for (ti, t) in m.tracks.iter().enumerate() {
                 for i in 0..t.samples.len() {
                     // every listed sample is fully inside the file
-                    assert!(m.read_sample(&part, ti, i).is_ok(), "cut {cut} track {ti} sample {i}");
+                    assert!(
+                        m.read_sample(&part, ti, i).is_ok(),
+                        "cut {cut} track {ti} sample {i}"
+                    );
                 }
                 if t.sound.is_some() {
                     let _ = m.read_pcm(&part, ti, 0, 5000);
@@ -324,7 +429,10 @@ fn truncation_never_panics_and_keeps_whole_frames() {
             }
         }
     }
-    assert!(opened > 10, "truncated files with complete metadata still open ({opened})");
+    assert!(
+        opened > 10,
+        "truncated files with complete metadata still open ({opened})"
+    );
 }
 
 #[test]
@@ -354,11 +462,23 @@ fn mutation_never_panics() {
 
 #[test]
 fn drop_frame_timecode_format() {
-    let tc = Timecode { start: 107_892, rounded_base: 30, drop_frame: true };
+    let tc = Timecode {
+        start: 107_892,
+        rounded_base: 30,
+        drop_frame: true,
+    };
     assert_eq!(tc.format(), "01:00:00;00");
-    let tc = Timecode { start: 1800, rounded_base: 30, drop_frame: true };
+    let tc = Timecode {
+        start: 1800,
+        rounded_base: 30,
+        drop_frame: true,
+    };
     assert_eq!(tc.format(), "00:01:00;02");
-    let tc = Timecode { start: 90_000 + 25 * 61 + 3, rounded_base: 25, drop_frame: false };
+    let tc = Timecode {
+        start: 90_000 + 25 * 61 + 3,
+        rounded_base: 25,
+        drop_frame: false,
+    };
     assert_eq!(tc.format(), "01:01:01:03");
 }
 
@@ -382,8 +502,16 @@ fn a_corrupt_index_position_cannot_allocate_a_giant_sparse_table() {
     let (to, flags) = ipbb();
     let mut bytes = build(5, prores_like, &to, &flags);
     let prefix = [0x3f, 0x0c, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0];
-    let at = bytes.windows(prefix.len()).position(|w| w == prefix).unwrap();
+    let at = bytes
+        .windows(prefix.len())
+        .position(|w| w == prefix)
+        .unwrap();
     bytes[at + 4..at + 12].copy_from_slice(&49_999_999i64.to_be_bytes());
     let file = open(&bytes).unwrap();
-    assert_eq!(file.tracks[file.track_of_kind(TrackKind::Picture).unwrap()].samples.len(), 5);
+    assert_eq!(
+        file.tracks[file.track_of_kind(TrackKind::Picture).unwrap()]
+            .samples
+            .len(),
+        5
+    );
 }

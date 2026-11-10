@@ -30,7 +30,7 @@
 
 use photocraft_geom::Rect;
 
-use super::{FREE, HARD_FG, Region, RgbImage, Sampler};
+use super::{Region, RgbImage, Sampler, FREE, HARD_FG};
 
 /// The model's constants (see the module docs); [`Tuning::default`] is the fit to Photoshop.
 #[derive(Clone, Copy, Debug)]
@@ -72,23 +72,45 @@ impl Default for Tuning {
 /// The working step for a document of `w` x `h` pixels: Photoshop works on the whole document
 /// up to 512 x 512 pixels and at half resolution above.
 pub fn working_step(w: usize, h: usize) -> usize {
-    if w.saturating_mul(h) <= 512 * 512 { 1 } else { 2 }
+    if w.saturating_mul(h) <= 512 * 512 {
+        1
+    } else {
+        2
+    }
 }
 
 /// Grows a selection from a brush stroke (`points` in document pixels, brush diameter `size`)
 /// on the document `canvas`. Returns the new region (to be added to or subtracted from the
 /// current selection), or `None` when the stroke misses the canvas.
-pub fn quick_select(sampler: &dyn Sampler, canvas: Rect, points: &[(f32, f32)], size: f32) -> Option<Region> {
+pub fn quick_select(
+    sampler: &dyn Sampler,
+    canvas: Rect,
+    points: &[(f32, f32)],
+    size: f32,
+) -> Option<Region> {
     quick_select_with(sampler, canvas, points, size, &Tuning::default())
 }
 
 /// [`quick_select`] with explicit model constants.
-pub fn quick_select_with(sampler: &dyn Sampler, canvas: Rect, points: &[(f32, f32)], size: f32, t: &Tuning) -> Option<Region> {
+pub fn quick_select_with(
+    sampler: &dyn Sampler,
+    canvas: Rect,
+    points: &[(f32, f32)],
+    size: f32,
+    t: &Tuning,
+) -> Option<Region> {
     quick_select_using::<true>(sampler, canvas, points, size, t)
 }
 
-pub(super) fn quick_select_using<const OPTIMIZED: bool>(sampler: &dyn Sampler, canvas: Rect, points: &[(f32, f32)], size: f32, t: &Tuning) -> Option<Region> {
-    quick_select_batched::<OPTIMIZED>(sampler, canvas, points, size, t, SPECULATE).map(|(region, _)| region)
+pub(super) fn quick_select_using<const OPTIMIZED: bool>(
+    sampler: &dyn Sampler,
+    canvas: Rect,
+    points: &[(f32, f32)],
+    size: f32,
+    t: &Tuning,
+) -> Option<Region> {
+    quick_select_batched::<OPTIMIZED>(sampler, canvas, points, size, t, SPECULATE)
+        .map(|(region, _)| region)
 }
 
 /// [`quick_select_using`] cutting `batch` window sizes at a time (1: one after another). Also
@@ -113,7 +135,13 @@ pub(super) fn quick_select_batched<const OPTIMIZED: bool>(
         y1 = y1.max(y + r);
     }
     let clamp = |v: f32| v.clamp(i32::MIN as f32 / 2.0, i32::MAX as f32 / 2.0) as i32;
-    let bbox = Rect::new(clamp(x0.floor()), clamp(y0.floor()), clamp(x1.ceil()).saturating_add(1), clamp(y1.ceil()).saturating_add(1)).intersect(&canvas);
+    let bbox = Rect::new(
+        clamp(x0.floor()),
+        clamp(y0.floor()),
+        clamp(x1.ceil()).saturating_add(1),
+        clamp(y1.ceil()).saturating_add(1),
+    )
+    .intersect(&canvas);
     if bbox.is_empty() {
         return None;
     }
@@ -131,11 +159,19 @@ pub(super) fn quick_select_batched<const OPTIMIZED: bool>(
         }
         let snap0 = |v: i32, o: i32| o + (v - o).div_euclid(step) * step;
         let grown = bbox.inflate(margin).intersect(&canvas);
-        let window = Rect::new(snap0(grown.x0, canvas.x0), snap0(grown.y0, canvas.y0), grown.x1, grown.y1);
+        let window = Rect::new(
+            snap0(grown.x0, canvas.x0),
+            snap0(grown.y0, canvas.y0),
+            grown.x1,
+            grown.y1,
+        );
         let img = sampler.rgb_scaled(window, step as usize);
         let (lw, lh) = (img.w, img.h);
         let s = step as f32;
-        let pts: Vec<(f32, f32)> = points.iter().map(|&(x, y)| ((x - window.x0 as f32) / s, (y - window.y0 as f32) / s)).collect();
+        let pts: Vec<(f32, f32)> = points
+            .iter()
+            .map(|&(x, y)| ((x - window.x0 as f32) / s, (y - window.y0 as f32) / s))
+            .collect();
         let seeds = stroke_mask(&pts, rw.max(0.5), lw, lh);
         if !seeds.iter().any(|v| *v) {
             return Attempt::NoSeeds;
@@ -143,8 +179,15 @@ pub(super) fn quick_select_batched<const OPTIMIZED: bool>(
         if cancel() {
             return Attempt::Cancelled;
         }
-        let inner = [window.x0 > canvas.x0, window.y0 > canvas.y0, window.x1 < canvas.x1, window.y1 < canvas.y1];
-        let Some(low) = select_working_using::<OPTIMIZED>(&img, &seeds, rw, t, &cancel) else { return Attempt::Cancelled };
+        let inner = [
+            window.x0 > canvas.x0,
+            window.y0 > canvas.y0,
+            window.x1 < canvas.x1,
+            window.y1 < canvas.y1,
+        ];
+        let Some(low) = select_working_using::<OPTIMIZED>(&img, &seeds, rw, t, &cancel) else {
+            return Attempt::Cancelled;
+        };
         let touches = |side: usize| match side {
             0 => (0..lh).any(|y| low[y * lw]),
             1 => (0..lw).any(|x| low[x]),
@@ -155,7 +198,12 @@ pub(super) fn quick_select_batched<const OPTIMIZED: bool>(
             return Attempt::Touches;
         }
         kept.fetch_min(index, std::sync::atomic::Ordering::Relaxed);
-        Attempt::Done { window, low, lw, lh }
+        Attempt::Done {
+            window,
+            low,
+            lw,
+            lh,
+        }
     };
     let mut margin = (48.0f32).max(2.0 * rw) as i32 * step;
     let mut sizes = 0;
@@ -170,10 +218,18 @@ pub(super) fn quick_select_batched<const OPTIMIZED: bool>(
         #[cfg(not(target_arch = "wasm32"))]
         let results: Vec<Attempt> = {
             use rayon::prelude::*;
-            batch.par_iter().enumerate().map(|(i, &m)| attempt(i, m)).collect()
+            batch
+                .par_iter()
+                .enumerate()
+                .map(|(i, &m)| attempt(i, m))
+                .collect()
         };
         #[cfg(target_arch = "wasm32")]
-        let results: Vec<Attempt> = batch.iter().enumerate().map(|(i, &m)| attempt(i, m)).collect();
+        let results: Vec<Attempt> = batch
+            .iter()
+            .enumerate()
+            .map(|(i, &m)| attempt(i, m))
+            .collect();
         for result in results {
             sizes += 1;
             match result {
@@ -181,9 +237,22 @@ pub(super) fn quick_select_batched<const OPTIMIZED: bool>(
                 // Only a window larger than one already kept is cancelled, and that one comes
                 // first in this order, so a cancelled attempt is never reached.
                 Attempt::Touches | Attempt::Cancelled => continue,
-                Attempt::Done { window, low, lw, lh } => {
-                    let mask = upsample(&low, lw, lh, step as usize, window.width() as usize, window.height() as usize);
-                    return super::trim_region(Region { bbox: window, mask }).map(|region| (region, sizes));
+                Attempt::Done {
+                    window,
+                    low,
+                    lw,
+                    lh,
+                } => {
+                    let mask = upsample(
+                        &low,
+                        lw,
+                        lh,
+                        step as usize,
+                        window.width() as usize,
+                        window.height() as usize,
+                    );
+                    return super::trim_region(Region { bbox: window, mask })
+                        .map(|region| (region, sizes));
                 }
             }
         }
@@ -232,18 +301,38 @@ pub fn select_working(img: &RgbImage, seeds: &[bool], radius: f32, t: &Tuning) -
     select_working_using::<true>(img, seeds, radius, t, &|| false).unwrap_or_default()
 }
 
-fn select_working_using<const OPTIMIZED: bool>(img: &RgbImage, seeds: &[bool], radius: f32, t: &Tuning, cancel: &dyn Fn() -> bool) -> Option<Vec<bool>> {
+fn select_working_using<const OPTIMIZED: bool>(
+    img: &RgbImage,
+    seeds: &[bool],
+    radius: f32,
+    t: &Tuning,
+    cancel: &dyn Fn() -> bool,
+) -> Option<Vec<bool>> {
     let (w, h) = (img.w, img.h);
     let d = crate::selection::edt(seeds, w, h);
     let grow = (t.grow + t.grow_frac * radius).max(0.0);
-    let cost_fg: Vec<f32> = d.iter().map(|d| t.area * (1.0 + t.dist * (d - grow).max(0.0).powf(t.pow))).collect();
-    let fixed: Vec<u8> = d.iter().map(|d| if *d <= grow { HARD_FG } else { FREE }).collect();
+    let cost_fg: Vec<f32> = d
+        .iter()
+        .map(|d| t.area * (1.0 + t.dist * (d - grow).max(0.0).powf(t.pow)))
+        .collect();
+    let fixed: Vec<u8> = d
+        .iter()
+        .map(|d| if *d <= grow { HARD_FG } else { FREE })
+        .collect();
     let (floor, sigma, k) = (t.floor, t.sigma.max(1e-4), t.k);
     let weight = move |d2: f32| floor + 1.0 / (1.0 + (d2.sqrt() / sigma).powf(k));
     if cancel() {
         return None;
     }
-    cut_levels::<OPTIMIZED>(img, &fixed, &cost_fg, &weight, 1.0, t.direct_px.max(1024), cancel)
+    cut_levels::<OPTIMIZED>(
+        img,
+        &fixed,
+        &cost_fg,
+        &weight,
+        1.0,
+        t.direct_px.max(1024),
+        cancel,
+    )
 }
 
 /// Band half-width (pixels) re-cut at each finer level.
@@ -265,7 +354,14 @@ fn cut_levels<const OPTIMIZED: bool>(
     let (w, h) = (img.w, img.h);
     let zeros = vec![0.0f32; w * h];
     if w * h <= direct_px || w < 8 || h < 8 {
-        return super::grid_cut_impl::<OPTIMIZED>(img, cost_fg, &zeros, fixed, |d2| scale * weight(d2), cancel);
+        return super::grid_cut_impl::<OPTIMIZED>(
+            img,
+            cost_fg,
+            &zeros,
+            fixed,
+            |d2| scale * weight(d2),
+            cancel,
+        );
     }
     let (cw, ch) = (w.div_ceil(2), h.div_ceil(2));
     let coarse_img = img.downsample(2);
@@ -280,17 +376,30 @@ fn cut_levels<const OPTIMIZED: bool>(
             }
         }
     }
-    let coarse = cut_levels::<OPTIMIZED>(&coarse_img, &cfix, &ccost, weight, scale * 2.0, direct_px, cancel)?;
+    let coarse = cut_levels::<OPTIMIZED>(
+        &coarse_img,
+        &cfix,
+        &ccost,
+        weight,
+        scale * 2.0,
+        direct_px,
+        cancel,
+    )?;
     if cancel() {
         return None;
     }
-    let proj: Vec<bool> = (0..w * h).map(|i| coarse[(i / w / 2) * cw + (i % w) / 2]).collect();
+    let proj: Vec<bool> = (0..w * h)
+        .map(|i| coarse[(i / w / 2) * cw + (i % w) / 2])
+        .collect();
     // Band: within BAND of the projected boundary.
     let edge: Vec<bool> = (0..w * h)
         .map(|i| {
             let (x, y) = (i % w, i / w);
             let v = proj[i];
-            (x > 0 && proj[i - 1] != v) || (x + 1 < w && proj[i + 1] != v) || (y > 0 && proj[i - w] != v) || (y + 1 < h && proj[i + w] != v)
+            (x > 0 && proj[i - 1] != v)
+                || (x + 1 < w && proj[i + 1] != v)
+                || (y > 0 && proj[i - w] != v)
+                || (y + 1 < h && proj[i + w] != v)
         })
         .collect();
     if !edge.iter().any(|e| *e) {
@@ -310,13 +419,24 @@ fn cut_levels<const OPTIMIZED: bool>(
             }
         })
         .collect();
-    super::grid_cut_impl::<OPTIMIZED>(img, cost_fg, &zeros, &banded, |d2| scale * weight(d2), cancel)
+    super::grid_cut_impl::<OPTIMIZED>(
+        img,
+        cost_fg,
+        &zeros,
+        &banded,
+        |d2| scale * weight(d2),
+        cancel,
+    )
 }
 
 /// Pixels within `radius` (working pixels) of the polyline `pts`, plus each point's own pixel.
 pub fn stroke_mask(pts: &[(f32, f32)], radius: f32, w: usize, h: usize) -> Vec<bool> {
     let mut m = vec![false; w * h];
-    let segs: Vec<((f32, f32), (f32, f32))> = if pts.len() == 1 { vec![(pts[0], pts[0])] } else { pts.windows(2).map(|p| (p[0], p[1])).collect() };
+    let segs: Vec<((f32, f32), (f32, f32))> = if pts.len() == 1 {
+        vec![(pts[0], pts[0])]
+    } else {
+        pts.windows(2).map(|p| (p[0], p[1])).collect()
+    };
     for (a, b) in segs {
         let x0 = ((a.0.min(b.0) - radius).floor().max(0.0)) as usize;
         let y0 = ((a.1.min(b.1) - radius).floor().max(0.0)) as usize;
@@ -327,7 +447,11 @@ pub fn stroke_mask(pts: &[(f32, f32)], radius: f32, w: usize, h: usize) -> Vec<b
         for y in y0..y1 {
             for x in x0..x1 {
                 let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-                let t = if len2 > 0.0 { (((px - a.0) * dx + (py - a.1) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
+                let t = if len2 > 0.0 {
+                    (((px - a.0) * dx + (py - a.1) * dy) / len2).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
                 let (qx, qy) = (a.0 + t * dx - px, a.1 + t * dy - py);
                 if qx * qx + qy * qy <= radius * radius {
                     m[y * w + x] = true;
@@ -349,7 +473,13 @@ pub fn upsample(low: &[bool], lw: usize, lh: usize, step: usize, w: usize, h: us
     if step == 1 {
         return low.iter().map(|b| if *b { 255 } else { 0 }).collect();
     }
-    let at = |x: i64, y: i64| -> f32 { if low[(y.clamp(0, lh as i64 - 1) as usize) * lw + x.clamp(0, lw as i64 - 1) as usize] { 1.0 } else { 0.0 } };
+    let at = |x: i64, y: i64| -> f32 {
+        if low[(y.clamp(0, lh as i64 - 1) as usize) * lw + x.clamp(0, lw as i64 - 1) as usize] {
+            1.0
+        } else {
+            0.0
+        }
+    };
     let s = step as f32;
     let mut out = vec![0u8; w * h];
     for y in 0..h {
@@ -358,7 +488,8 @@ pub fn upsample(low: &[bool], lw: usize, lh: usize, step: usize, w: usize, h: us
         for x in 0..w {
             let fx = (x as f32 + 0.5) / s - 0.5;
             let (ix, tx) = (fx.floor() as i64, fx - fx.floor());
-            let v = (at(ix, iy) * (1.0 - tx) + at(ix + 1, iy) * tx) * (1.0 - ty) + (at(ix, iy + 1) * (1.0 - tx) + at(ix + 1, iy + 1) * tx) * ty;
+            let v = (at(ix, iy) * (1.0 - tx) + at(ix + 1, iy) * tx) * (1.0 - ty)
+                + (at(ix, iy + 1) * (1.0 - tx) + at(ix + 1, iy + 1) * tx) * ty;
             out[y * w + x] = (v * 255.0).round() as u8;
         }
     }

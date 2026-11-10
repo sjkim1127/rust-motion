@@ -9,7 +9,10 @@ use crate::{Ctx, Distribution};
 /// depend on tiling.
 #[inline]
 pub(crate) fn hash01(x: i32, y: i32, c: u32, seed: u32) -> f32 {
-    let mut h = (x as u32).wrapping_mul(0x8da6_b343) ^ (y as u32).wrapping_mul(0xd816_3841) ^ c.wrapping_mul(0xcb1a_b31f) ^ seed.wrapping_mul(0x9e37_79b9);
+    let mut h = (x as u32).wrapping_mul(0x8da6_b343)
+        ^ (y as u32).wrapping_mul(0xd816_3841)
+        ^ c.wrapping_mul(0xcb1a_b31f)
+        ^ seed.wrapping_mul(0x9e37_79b9);
     h ^= h >> 16;
     h = h.wrapping_mul(0x7feb_352d);
     h ^= h >> 15;
@@ -21,7 +24,15 @@ pub(crate) fn hash01(x: i32, y: i32, c: u32, seed: u32) -> f32 {
 /// Amount 100 % spans ±50 % of the range (uniform); Gaussian uses the same
 /// amount as ~2σ.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn add(src: &Image, out: Rect, ctx: &Ctx, amount: f32, dist: Distribution, mono: bool, seed: u32) -> Vec<f32> {
+pub(crate) fn add(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    amount: f32,
+    dist: Distribution,
+    mono: bool,
+    seed: u32,
+) -> Vec<f32> {
     let n = src.ch;
     let cc = if ctx.alpha { n - 1 } else { n };
     let a = amount.max(0.0) / 100.0 * 0.5;
@@ -105,7 +116,11 @@ fn median_ranked(src: &Image, out: Rect, r: i32, t: Option<f32>) -> Vec<f32> {
     for c in 0..n {
         // Window samples of this channel; outside the source reads as 0, as `Image::get` does.
         values.clear();
-        values.extend((win.y0..win.y1).flat_map(|y| (win.x0..win.x1).map(move |x| (x, y))).map(|(x, y)| src.get(x, y, c)));
+        values.extend(
+            (win.y0..win.y1)
+                .flat_map(|y| (win.x0..win.x1).map(move |x| (x, y)))
+                .map(|(x, y)| src.get(x, y, c)),
+        );
         let eight_bit = values.iter().all(|&v| {
             let k = (v * 255.0).round();
             (0.0..=255.0).contains(&k) && (k / 255.0).to_bits() == v.to_bits()
@@ -213,7 +228,10 @@ fn median_ranked(src: &Image, out: Rect, r: i32, t: Option<f32>) -> Vec<f32> {
 /// [`median`] by selecting the middle of every disc's samples.
 fn median_direct(src: &Image, out: Rect, r: i32, t: Option<f32>) -> Vec<f32> {
     let n = src.ch;
-    let offs: Vec<(i32, i32)> = (-r..=r).flat_map(|dy| (-r..=r).map(move |dx| (dx, dy))).filter(|(dx, dy)| dx * dx + dy * dy <= r * r + r).collect();
+    let offs: Vec<(i32, i32)> = (-r..=r)
+        .flat_map(|dy| (-r..=r).map(move |dx| (dx, dy)))
+        .filter(|(dx, dy)| dx * dx + dy * dy <= r * r + r)
+        .collect();
     let mut vals = Vec::with_capacity(offs.len());
     let mut res = Vec::with_capacity(out.width() as usize * out.height() as usize * n);
     for y in out.y0..out.y1 {
@@ -273,7 +291,11 @@ mod tests {
                 for t in [None, Some(0.0), Some(10.0 / 255.0), Some(1.0)] {
                     let bits = |v: Vec<f32>| v.into_iter().map(f32::to_bits).collect::<Vec<_>>();
                     let fast = bits(median_ranked(&img, out, r, t));
-                    assert_eq!(fast, bits(median_direct(&img, out, r, t)), "kind {kind} r {r} threshold {t:?}");
+                    assert_eq!(
+                        fast,
+                        bits(median_direct(&img, out, r, t)),
+                        "kind {kind} r {r} threshold {t:?}"
+                    );
                 }
             }
         }

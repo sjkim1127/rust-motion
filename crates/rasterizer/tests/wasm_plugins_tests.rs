@@ -17,7 +17,8 @@ fn test_wasm_plugin_serde_roundtrip() {
     };
 
     let serialized = serde_json::to_string(&filter).expect("serialize wasm plugin filter");
-    let deserialized: SceneFilter = serde_json::from_str(&serialized).expect("deserialize wasm plugin filter");
+    let deserialized: SceneFilter =
+        serde_json::from_str(&serialized).expect("deserialize wasm plugin filter");
     assert_eq!(filter, deserialized);
 }
 
@@ -55,7 +56,9 @@ fn test_sandboxed_wasm_plugin_execution() {
     let mut scene = Scene::new();
     scene.push(layer);
 
-    let img = backend.render_frame(&scene, &config).expect("render wasm plugin frame");
+    let img = backend
+        .render_frame(&scene, &config)
+        .expect("render wasm plugin frame");
     assert_eq!(img.width(), 40);
     assert_eq!(img.height(), 40);
 

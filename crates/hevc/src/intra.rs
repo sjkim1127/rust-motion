@@ -14,13 +14,22 @@ pub struct Refs {
 
 impl Default for Refs {
     fn default() -> Self {
-        Refs { left: [0; 129], top: [0; 129] }
+        Refs {
+            left: [0; 129],
+            top: [0; 129],
+        }
     }
 }
 
 /// Substitution process (8.4.4.2.2). `avail_left[1 + y]` / `avail_top[1 + x]` (index 0 = corner) tell
 /// which samples are available; unavailable ones are replaced.
-pub fn substitute(r: &mut Refs, avail_left: &[bool; 129], avail_top: &[bool; 129], n: usize, bit_depth: u32) {
+pub fn substitute(
+    r: &mut Refs,
+    avail_left: &[bool; 129],
+    avail_top: &[bool; 129],
+    n: usize,
+    bit_depth: u32,
+) {
     let n2 = 2 * n;
     // Sequence order: p[-1][2n-1] .. p[-1][-1], p[0][-1] .. p[2n-1][-1]
     let any = avail_left[..=n2].iter().any(|&a| a) || avail_top[1..=n2].iter().any(|&a| a);
@@ -63,7 +72,14 @@ pub fn substitute(r: &mut Refs, avail_left: &[bool; 129], avail_top: &[bool; 129
 }
 
 /// Filtering process of neighbouring samples (8.4.4.2.3) for luma (and 4:4:4 chroma).
-pub fn filter(r: &mut Refs, mode: u32, n: usize, strong_enabled: bool, is_luma: bool, bit_depth: u32) {
+pub fn filter(
+    r: &mut Refs,
+    mode: u32,
+    n: usize,
+    strong_enabled: bool,
+    is_luma: bool,
+    bit_depth: u32,
+) {
     if mode == 1 || n == 4 {
         return;
     }
@@ -81,7 +97,8 @@ pub fn filter(r: &mut Refs, mode: u32, n: usize, strong_enabled: bool, is_luma: 
     if strong_enabled && is_luma && n == 32 {
         let (bl, tr) = (r.left[n2] as i32, r.top[n2] as i32);
         let thr = 1 << (bit_depth - 5);
-        if (c + tr - 2 * r.top[n] as i32).abs() < thr && (c + bl - 2 * r.left[n] as i32).abs() < thr {
+        if (c + tr - 2 * r.top[n] as i32).abs() < thr && (c + bl - 2 * r.left[n] as i32).abs() < thr
+        {
             for i in 0..63 {
                 r.left[1 + i] = (((63 - i as i32) * c + (i as i32 + 1) * bl + 32) >> 6) as u16;
                 r.top[1 + i] = (((63 - i as i32) * c + (i as i32 + 1) * tr + 32) >> 6) as u16;
@@ -101,7 +118,15 @@ pub fn filter(r: &mut Refs, mode: u32, n: usize, strong_enabled: bool, is_luma: 
 
 /// Predict an n x n block with `mode` into `out` (stride `os`). `edge_filters`: DC / horizontal /
 /// vertical boundary smoothing (luma blocks smaller than 32x32).
-pub fn predict<S: Sample>(r: &Refs, mode: u32, n: usize, edge_filters: bool, bit_depth: u32, out: &mut [S], os: usize) {
+pub fn predict<S: Sample>(
+    r: &Refs,
+    mode: u32,
+    n: usize,
+    edge_filters: bool,
+    bit_depth: u32,
+    out: &mut [S],
+    os: usize,
+) {
     let max = (1i32 << bit_depth) - 1;
     match mode {
         0 => {
@@ -113,14 +138,20 @@ pub fn predict<S: Sample>(r: &Refs, mode: u32, n: usize, edge_filters: bool, bit
                 let l = r.left[1 + y] as i32;
                 for x in 0..n {
                     let t = r.top[1 + x] as i32;
-                    let v = ((n - 1 - x) as i32 * l + (x as i32 + 1) * tr + (n - 1 - y) as i32 * t + (y as i32 + 1) * bl + n as i32) >> (log2 + 1);
+                    let v = ((n - 1 - x) as i32 * l
+                        + (x as i32 + 1) * tr
+                        + (n - 1 - y) as i32 * t
+                        + (y as i32 + 1) * bl
+                        + n as i32)
+                        >> (log2 + 1);
                     out[y * os + x] = S::from_i32(v);
                 }
             }
         }
         1 => {
             let log2 = n.trailing_zeros();
-            let sum: u32 = r.top[1..=n].iter().map(|&v| v as u32).sum::<u32>() + r.left[1..=n].iter().map(|&v| v as u32).sum::<u32>();
+            let sum: u32 = r.top[1..=n].iter().map(|&v| v as u32).sum::<u32>()
+                + r.left[1..=n].iter().map(|&v| v as u32).sum::<u32>();
             let dc = ((sum + n as u32) >> (log2 + 1)) as u16;
             let dcs = S::from_u16(dc);
             for y in 0..n {
@@ -128,7 +159,8 @@ pub fn predict<S: Sample>(r: &Refs, mode: u32, n: usize, edge_filters: bool, bit
             }
             if edge_filters && n < 32 {
                 let d = dc as u32;
-                out[0] = S::from_i32(((r.left[1] as u32 + 2 * d + r.top[1] as u32 + 2) >> 2) as i32);
+                out[0] =
+                    S::from_i32(((r.left[1] as u32 + 2 * d + r.top[1] as u32 + 2) >> 2) as i32);
                 for x in 1..n {
                     out[x] = S::from_i32(((r.top[1 + x] as u32 + 3 * d + 2) >> 2) as i32);
                 }
@@ -142,7 +174,11 @@ pub fn predict<S: Sample>(r: &Refs, mode: u32, n: usize, edge_filters: bool, bit
             // reference array ref[-n..=2n] stored at offset n
             let mut refa = [0i32; 3 * 64 + 1];
             let base = n as i32;
-            let (main, side) = if mode >= 18 { (&r.top, &r.left) } else { (&r.left, &r.top) };
+            let (main, side) = if mode >= 18 {
+                (&r.top, &r.left)
+            } else {
+                (&r.left, &r.top)
+            };
             for x in 0..=n {
                 refa[(base + x as i32) as usize] = main[x] as i32; // ref[x] = p[-1+x][-1]
             }
@@ -167,7 +203,11 @@ pub fn predict<S: Sample>(r: &Refs, mode: u32, n: usize, edge_filters: bool, bit
                 let fact = pos & 31;
                 for i in 0..n {
                     let k = (base + i as i32 + idx + 1) as usize;
-                    let v = if fact != 0 { ((32 - fact) * refa[k] + fact * refa[k + 1] + 16) >> 5 } else { refa[k] };
+                    let v = if fact != 0 {
+                        ((32 - fact) * refa[k] + fact * refa[k + 1] + 16) >> 5
+                    } else {
+                        refa[k]
+                    };
                     if horizontal {
                         out[i * os + j] = S::from_i32(v);
                     } else {

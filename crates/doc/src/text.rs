@@ -152,7 +152,10 @@ pub enum TextAlign {
 
 impl TextAlign {
     pub fn is_justified(self) -> bool {
-        matches!(self, Self::JustifyLeft | Self::JustifyCenter | Self::JustifyRight | Self::JustifyAll)
+        matches!(
+            self,
+            Self::JustifyLeft | Self::JustifyCenter | Self::JustifyRight | Self::JustifyAll
+        )
     }
 }
 
@@ -215,12 +218,21 @@ pub enum TextShape {
     #[default]
     Point,
     /// Text-space pixels, before the layer transform.
-    Box { x: f32, y: f32, width: f32, height: f32 },
+    Box {
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    },
     /// Type on a path: one line laid out like point text, then each glyph is placed on `path`
     /// (text-space pixels, before the layer transform) by arc length and turned to follow the
     /// curve. `start` is the arc-length offset (px) of the text origin along the path; `flip`
     /// puts the text on the other side of the path.
-    Path { path: super::vector::Subpath, start: f32, flip: bool },
+    Path {
+        path: super::vector::Subpath,
+        start: f32,
+        flip: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -266,27 +278,47 @@ mod tests {
     use crate::TextLayer;
 
     fn run(len: usize, size: f32) -> TextRun {
-        TextRun { len, style: CharStyle { size_pt: size, ..Default::default() } }
+        TextRun {
+            len,
+            style: CharStyle {
+                size_pt: size,
+                ..Default::default()
+            },
+        }
     }
 
     #[test]
     fn runs_are_normalized_to_the_text() {
-        let base = TextLayer { text: "héllo".into(), size_pt: 9.0, ..Default::default() };
+        let base = TextLayer {
+            text: "héllo".into(),
+            size_pt: 9.0,
+            ..Default::default()
+        };
         // No runs: one run from the summary fields.
         let r = base.char_runs();
         assert_eq!(r.len(), 1);
         assert_eq!((r[0].len, r[0].style.size_pt), (6, 9.0));
         // Too short: last run stretched. Split inside 'é' snaps to the char boundary.
-        let t = TextLayer { runs: vec![run(2, 10.0), run(1, 20.0)], ..base.clone() };
+        let t = TextLayer {
+            runs: vec![run(2, 10.0), run(1, 20.0)],
+            ..base.clone()
+        };
         let r = t.char_runs();
         assert_eq!(r.iter().map(|r| r.len).collect::<Vec<_>>(), vec![3, 3]);
         // Too long: truncated; empty runs dropped.
-        let t = TextLayer { runs: vec![run(0, 1.0), run(100, 10.0), run(5, 20.0)], ..base.clone() };
+        let t = TextLayer {
+            runs: vec![run(0, 1.0), run(100, 10.0), run(5, 20.0)],
+            ..base.clone()
+        };
         let r = t.char_runs();
         assert_eq!(r.len(), 1);
         assert_eq!((r[0].len, r[0].style.size_pt), (6, 10.0));
         // Empty text keeps the first run's style.
-        let t = TextLayer { text: String::new(), runs: vec![run(0, 33.0)], ..base.clone() };
+        let t = TextLayer {
+            text: String::new(),
+            runs: vec![run(0, 33.0)],
+            ..base.clone()
+        };
         assert_eq!(t.char_runs()[0].style.size_pt, 33.0);
         assert_eq!(t.paragraph_runs().len(), 1);
     }
@@ -295,7 +327,14 @@ mod tests {
     fn summary_follows_first_run() {
         let mut t = TextLayer {
             text: "ab".into(),
-            runs: vec![TextRun { len: 2, style: CharStyle { font_family: "X".into(), size_pt: 7.0, ..Default::default() } }],
+            runs: vec![TextRun {
+                len: 2,
+                style: CharStyle {
+                    font_family: "X".into(),
+                    size_pt: 7.0,
+                    ..Default::default()
+                },
+            }],
             ..Default::default()
         };
         t.sync_summary();
@@ -304,7 +343,13 @@ mod tests {
 
     #[test]
     fn styles_serialize() {
-        let s = CharStyle { features: vec![FontFeature { tag: "ss01".into(), value: 1 }], ..Default::default() };
+        let s = CharStyle {
+            features: vec![FontFeature {
+                tag: "ss01".into(),
+                value: 1,
+            }],
+            ..Default::default()
+        };
         let v = serde_json::to_value(&s).unwrap();
         let back: CharStyle = serde_json::from_value(v).unwrap();
         assert_eq!(back, s);

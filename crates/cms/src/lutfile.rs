@@ -44,8 +44,12 @@ fn checked_data_len(size: usize) -> Result<(usize, usize), LutError> {
     if !(2..=MAX_SIZE).contains(&size) {
         return err(format!("unsupported LUT size {size}"));
     }
-    let entries = size.checked_pow(3).ok_or_else(|| LutError(format!("unsupported LUT size {size}")))?;
-    let data_len = entries.checked_mul(3).ok_or_else(|| LutError(format!("unsupported LUT size {size}")))?;
+    let entries = size
+        .checked_pow(3)
+        .ok_or_else(|| LutError(format!("unsupported LUT size {size}")))?;
+    let data_len = entries
+        .checked_mul(3)
+        .ok_or_else(|| LutError(format!("unsupported LUT size {size}")))?;
     Ok((entries, data_len))
 }
 
@@ -67,7 +71,13 @@ impl LutFile {
                 }
             }
         }
-        LutFile { title: title.to_string(), size, data, domain_min: [0.0; 3], domain_max: [1.0; 3] }
+        LutFile {
+            title: title.to_string(),
+            size,
+            data,
+            domain_min: [0.0; 3],
+            domain_max: [1.0; 3],
+        }
     }
 
     /// Whether the table expects plain 0..1 inputs (the common case; Photoshop's default).
@@ -78,7 +88,10 @@ impl LutFile {
     fn check(self) -> Result<Self, LutError> {
         let (entries, data_len) = checked_data_len(self.size)?;
         if self.data.len() != data_len {
-            return err(format!("expected {entries} entries, found {}", self.data.len() / 3));
+            return err(format!(
+                "expected {entries} entries, found {}",
+                self.data.len() / 3
+            ));
         }
         if self.data.iter().any(|v| !v.is_finite()) {
             return err("non-finite LUT value");
@@ -115,12 +128,26 @@ pub fn parse_cube(text: &str) -> Result<LutFile, LutError> {
         let key = it.next().unwrap_or("");
         let nums = |it: std::str::SplitWhitespace<'_>| -> Result<[f32; 3], LutError> {
             let v: Vec<f32> = it.filter_map(|s| s.parse().ok()).collect();
-            if v.len() == 3 { Ok([v[0], v[1], v[2]]) } else { err(format!("bad line `{line}`")) }
+            if v.len() == 3 {
+                Ok([v[0], v[1], v[2]])
+            } else {
+                err(format!("bad line `{line}`"))
+            }
         };
         match key {
             "TITLE" => title = line[5..].trim().trim_matches('"').to_string(),
-            "LUT_3D_SIZE" => size3 = it.next().and_then(|s| s.parse().ok()).ok_or_else(|| LutError("bad LUT_3D_SIZE".into()))?,
-            "LUT_1D_SIZE" => size1 = it.next().and_then(|s| s.parse().ok()).ok_or_else(|| LutError("bad LUT_1D_SIZE".into()))?,
+            "LUT_3D_SIZE" => {
+                size3 = it
+                    .next()
+                    .and_then(|s| s.parse().ok())
+                    .ok_or_else(|| LutError("bad LUT_3D_SIZE".into()))?
+            }
+            "LUT_1D_SIZE" => {
+                size1 = it
+                    .next()
+                    .and_then(|s| s.parse().ok())
+                    .ok_or_else(|| LutError("bad LUT_1D_SIZE".into()))?
+            }
             "DOMAIN_MIN" => dmin = nums(it)?,
             "DOMAIN_MAX" => dmax = nums(it)?,
             "LUT_3D_INPUT_RANGE" | "LUT_1D_INPUT_RANGE" => {
@@ -130,8 +157,12 @@ pub fn parse_cube(text: &str) -> Result<LutFile, LutError> {
                     dmax = [v[1]; 3];
                 }
             }
-            k if k.starts_with(|c: char| c.is_ascii_digit() || c == '-' || c == '+' || c == '.') => {
-                let mut v = vec![k.parse::<f32>().map_err(|_| LutError(format!("bad number in `{line}`")))?];
+            k if k
+                .starts_with(|c: char| c.is_ascii_digit() || c == '-' || c == '+' || c == '.') =>
+            {
+                let mut v = vec![k
+                    .parse::<f32>()
+                    .map_err(|_| LutError(format!("bad number in `{line}`")))?];
                 v.extend(it.filter_map(|s| s.parse::<f32>().ok()));
                 if v.len() != 3 {
                     return err(format!("bad data line `{line}`"));
@@ -144,13 +175,25 @@ pub fn parse_cube(text: &str) -> Result<LutFile, LutError> {
     }
     let domain_ok = (0..3).all(|k| dmin[k] < dmax[k] && dmin[k].is_finite() && dmax[k].is_finite());
     if (size3 > 0 || size1 >= 2) && !domain_ok {
-        return err(format!("DOMAIN_MIN {:?} must lie below DOMAIN_MAX {:?}", dmin, dmax));
+        return err(format!(
+            "DOMAIN_MIN {:?} must lie below DOMAIN_MAX {:?}",
+            dmin, dmax
+        ));
     }
     if size3 > 0 {
-        return LutFile { title, size: size3, data: rows, domain_min: dmin, domain_max: dmax }.check();
+        return LutFile {
+            title,
+            size: size3,
+            data: rows,
+            domain_min: dmin,
+            domain_max: dmax,
+        }
+        .check();
     }
     if size1 >= 2 {
-        let expected_rows = size1.checked_mul(3).ok_or_else(|| LutError(format!("unsupported 1D LUT size {size1}")))?;
+        let expected_rows = size1
+            .checked_mul(3)
+            .ok_or_else(|| LutError(format!("unsupported 1D LUT size {size1}")))?;
         if rows.len() != expected_rows {
             return err("no LUT_3D_SIZE in .cube file");
         }
@@ -159,12 +202,18 @@ pub fn parse_cube(text: &str) -> Result<LutFile, LutError> {
         // reads the table at `(v - min) / (max - min)`, saturating outside.
         let curve = |ch: usize, v: f32| {
             let t = (v - dmin[ch]) / (dmax[ch] - dmin[ch]);
-            let x = if t.is_finite() { t.clamp(0.0, 1.0) } else { 0.0 } * (size1 - 1) as f32;
+            let x = if t.is_finite() {
+                t.clamp(0.0, 1.0)
+            } else {
+                0.0
+            } * (size1 - 1) as f32;
             let i = (x.floor() as usize).min(size1 - 2);
             let f = x - i as f32;
             rows[i * 3 + ch] * (1.0 - f) + rows[(i + 1) * 3 + ch] * f
         };
-        let mut l = LutFile::from_fn(&title, 33, |c| [curve(0, c[0]), curve(1, c[1]), curve(2, c[2])]);
+        let mut l = LutFile::from_fn(&title, 33, |c| {
+            [curve(0, c[0]), curve(1, c[1]), curve(2, c[2])]
+        });
         l.title = title;
         return l.check();
     }
@@ -180,7 +229,10 @@ pub fn parse_3dl(text: &str) -> Result<LutFile, LutError> {
         if line.is_empty() || line.starts_with(|c: char| c.is_ascii_alphabetic()) {
             continue;
         }
-        let v: Vec<f64> = line.split_whitespace().filter_map(|s| s.parse().ok()).collect();
+        let v: Vec<f64> = line
+            .split_whitespace()
+            .filter_map(|s| s.parse().ok())
+            .collect();
         if v.len() == 3 {
             rows.push([v[0], v[1], v[2]]);
         }
@@ -191,7 +243,14 @@ pub fn parse_3dl(text: &str) -> Result<LutFile, LutError> {
         return err(format!("{} rows is not a cube", rows.len()));
     }
     let max = rows.iter().flatten().fold(0.0f64, |a, &b| a.max(b));
-    let scale = if max <= 1.0 { 1.0 } else { [1023.0, 4095.0, 16383.0, 65535.0].into_iter().find(|&s| max <= s).unwrap_or(max) };
+    let scale = if max <= 1.0 {
+        1.0
+    } else {
+        [1023.0, 4095.0, 16383.0, 65535.0]
+            .into_iter()
+            .find(|&s| max <= s)
+            .unwrap_or(max)
+    };
     let mut data = vec![0.0f32; n * n * n * 3];
     for (i, row) in rows.iter().enumerate() {
         let (r, g, b) = (i / (n * n), (i / n) % n, i % n);
@@ -200,7 +259,14 @@ pub fn parse_3dl(text: &str) -> Result<LutFile, LutError> {
             data[at + k] = (row[k] / scale) as f32;
         }
     }
-    LutFile { title: String::new(), size: n, data, domain_min: [0.0; 3], domain_max: [1.0; 3] }.check()
+    LutFile {
+        title: String::new(),
+        size: n,
+        data,
+        domain_min: [0.0; 3],
+        domain_max: [1.0; 3],
+    }
+    .check()
 }
 
 /// SpeedGrade `.look`: `<size>` and a hex `<data>` string of little-endian float32 RGB triplets
@@ -212,15 +278,49 @@ pub fn parse_look(text: &str) -> Result<LutFile, LutError> {
         let end = text[start..].find(&format!("</{name}>"))? + start;
         Some(text[start..end].trim().trim_matches('"').trim().to_string())
     };
-    let size: usize = tag("size").and_then(|s| s.parse().ok()).ok_or_else(|| LutError("no <size> in .look".into()))?;
+    let size: usize = tag("size")
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| LutError("no <size> in .look".into()))?;
     let (entries, _) = checked_data_len(size)?;
-    let hex: Vec<u8> = tag("data").ok_or_else(|| LutError("no <data> in .look".into()))?.bytes().filter(u8::is_ascii_hexdigit).collect();
+    let hex: Vec<u8> = tag("data")
+        .ok_or_else(|| LutError("no <data> in .look".into()))?
+        .bytes()
+        .filter(u8::is_ascii_hexdigit)
+        .collect();
     let nib = |c: u8| (c as char).to_digit(16).unwrap_or(0) as u8;
-    let bytes: Vec<u8> = hex.as_chunks::<2>().0.iter().map(|p| nib(p[0]) << 4 | nib(p[1])).collect();
-    let floats: Vec<f32> = bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
-    let rgba_entries = entries.checked_mul(4).ok_or_else(|| LutError(format!("unsupported LUT size {size}")))?;
-    let data = if floats.len() == rgba_entries { floats.as_chunks::<4>().0.iter().flat_map(|c| [c[0], c[1], c[2]]).collect() } else { floats };
-    LutFile { title: tag("title").unwrap_or_default(), size, data, domain_min: [0.0; 3], domain_max: [1.0; 3] }.check()
+    let bytes: Vec<u8> = hex
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|p| nib(p[0]) << 4 | nib(p[1]))
+        .collect();
+    let floats: Vec<f32> = bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .collect();
+    let rgba_entries = entries
+        .checked_mul(4)
+        .ok_or_else(|| LutError(format!("unsupported LUT size {size}")))?;
+    let data = if floats.len() == rgba_entries {
+        floats
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|c| [c[0], c[1], c[2]])
+            .collect()
+    } else {
+        floats
+    };
+    LutFile {
+        title: tag("title").unwrap_or_default(),
+        size,
+        data,
+        domain_min: [0.0; 3],
+        domain_max: [1.0; 3],
+    }
+    .check()
 }
 
 /// Writes a `.cube` file (what Photoshop embeds in a Color Lookup layer).
@@ -343,18 +443,32 @@ DOMAIN_MAX 0.5 1 1
         // An identity ramp over the domain 0.25..0.75: 0.25 maps to 0, 0.5 to 0.5, 0.75 to 1.
         let table = "LUT_1D_SIZE 2\nLUT_1D_INPUT_RANGE 0.25 0.75\n0 0 0\n1 1 1\n";
         let l = parse_cube(table).expect("1D with input range");
-        assert!(l.domain_is_default(), "the domain is baked in, so the cube is plain 0..1");
+        assert!(
+            l.domain_is_default(),
+            "the domain is baked in, so the cube is plain 0..1"
+        );
         let at = |r: usize| l.data[r * 3];
         // 33-point grid, red fastest: entry r on the red axis is input r / 32.
         assert!(at(0).abs() < 1e-6, "below the domain saturates to 0");
-        assert!((at(16) - 0.5).abs() < 1e-5, "0.5 is the middle of 0.25..0.75: {}", at(16));
+        assert!(
+            (at(16) - 0.5).abs() < 1e-5,
+            "0.5 is the middle of 0.25..0.75: {}",
+            at(16)
+        );
         assert!((at(8) - 0.0).abs() < 1e-5, "0.25 maps to 0: {}", at(8));
         assert!((at(24) - 1.0).abs() < 1e-5, "0.75 maps to 1: {}", at(24));
-        assert!((at(32) - 1.0).abs() < 1e-6, "above the domain saturates to 1");
+        assert!(
+            (at(32) - 1.0).abs() < 1e-6,
+            "above the domain saturates to 1"
+        );
         // Per-channel DOMAIN_MIN/MAX work the same way.
-        let l = parse_cube("LUT_1D_SIZE 2\nDOMAIN_MIN 0 0 0.5\nDOMAIN_MAX 1 1 1\n0 0 0\n1 1 1\n").expect("1D domain");
+        let l = parse_cube("LUT_1D_SIZE 2\nDOMAIN_MIN 0 0 0.5\nDOMAIN_MAX 1 1 1\n0 0 0\n1 1 1\n")
+            .expect("1D domain");
         let blue_mid = l.data[(16 * 33 * 33) * 3 + 2];
-        assert!(blue_mid.abs() < 1e-5, "blue 0.5 is the bottom of its domain: {blue_mid}");
+        assert!(
+            blue_mid.abs() < 1e-5,
+            "blue 0.5 is the bottom of its domain: {blue_mid}"
+        );
         // A degenerate 1D domain is rejected like the 3D one.
         let e = parse_cube("LUT_1D_SIZE 2\nLUT_1D_INPUT_RANGE 1 1\n0 0 0\n1 1 1\n").unwrap_err();
         assert!(e.0.contains("below DOMAIN_MAX"), "{e}");
@@ -363,7 +477,10 @@ DOMAIN_MAX 0.5 1 1
     #[test]
     fn cube_roundtrip_and_identity() {
         let id = LutFile::identity(5);
-        let text = write_cube(&LutFile { title: "Id".into(), ..id.clone() });
+        let text = write_cube(&LutFile {
+            title: "Id".into(),
+            ..id.clone()
+        });
         let back = parse_cube(&text).unwrap();
         assert_eq!(back.size, 5);
         assert_eq!(back.title, "Id");
@@ -414,7 +531,12 @@ DOMAIN_MAX 0.5 1 1
     #[test]
     fn look_hex_floats() {
         let id = LutFile::identity(2);
-        let hex: String = id.data.iter().flat_map(|v| v.to_le_bytes()).map(|b| format!("{b:02X}")).collect();
+        let hex: String = id
+            .data
+            .iter()
+            .flat_map(|v| v.to_le_bytes())
+            .map(|b| format!("{b:02X}"))
+            .collect();
         let xml = format!("<?xml version=\"1.0\"?><look><LUT><size>\"2\"</size><data>\"{hex}\"</data></LUT></look>");
         assert_eq!(parse("a.look", xml.as_bytes()).unwrap().data, id.data);
     }

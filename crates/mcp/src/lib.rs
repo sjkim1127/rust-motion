@@ -111,13 +111,18 @@ impl McpServer {
                     Ok(result) => {
                         let is_preview = tool_name == "preview_frame";
                         let content = if is_preview {
-                            let data_url = result.get("image_data_url").and_then(|v| v.as_str()).unwrap_or("");
+                            let data_url = result
+                                .get("image_data_url")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
                             vec![
                                 json!({ "type": "text", "text": format!("Rendered preview at frame {}", result.get("frame_number").unwrap_or(&json!(0))) }),
                                 json!({ "type": "image", "data": data_url.trim_start_matches("data:image/png;base64,"), "mimeType": "image/png" }),
                             ]
                         } else {
-                            vec![json!({ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() })]
+                            vec![
+                                json!({ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }),
+                            ]
                         };
 
                         json!({ "content": content, "isError": false })
@@ -194,7 +199,11 @@ impl McpServer {
     }
 
     /// Run stdio JSON-RPC loop reading from `reader` and writing to `writer`.
-    pub fn run_stdio<R: BufRead, W: Write>(&mut self, mut reader: R, mut writer: W) -> std::io::Result<()> {
+    pub fn run_stdio<R: BufRead, W: Write>(
+        &mut self,
+        mut reader: R,
+        mut writer: W,
+    ) -> std::io::Result<()> {
         let mut line = String::new();
         while reader.read_line(&mut line)? > 0 {
             if let Some(resp) = self.handle_message(&line) {

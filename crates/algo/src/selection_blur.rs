@@ -62,8 +62,18 @@ fn nonzero_bounds(m: &[f32], w: usize, h: usize) -> Option<Win> {
     for (y, r) in rows.into_iter().enumerate() {
         if let Some((a, z)) = r {
             b = Some(match b {
-                None => Win { x0: a, x1: z, y0: y, y1: y + 1 },
-                Some(b) => Win { x0: b.x0.min(a), x1: b.x1.max(z), y0: b.y0, y1: y + 1 },
+                None => Win {
+                    x0: a,
+                    x1: z,
+                    y0: y,
+                    y1: y + 1,
+                },
+                Some(b) => Win {
+                    x0: b.x0.min(a),
+                    x1: b.x1.max(z),
+                    y0: b.y0,
+                    y1: y + 1,
+                },
             });
         }
     }
@@ -72,7 +82,12 @@ fn nonzero_bounds(m: &[f32], w: usize, h: usize) -> Option<Win> {
 
 /// `b` grown by `g` on every side, clamped to `w × h`.
 fn grow(b: Win, g: usize, w: usize, h: usize) -> Win {
-    Win { x0: b.x0.saturating_sub(g), x1: b.x1.saturating_add(g).min(w), y0: b.y0.saturating_sub(g), y1: b.y1.saturating_add(g).min(h) }
+    Win {
+        x0: b.x0.saturating_sub(g),
+        x1: b.x1.saturating_add(g).min(w),
+        y0: b.y0.saturating_sub(g),
+        y1: b.y1.saturating_add(g).min(h),
+    }
 }
 
 /// The horizontal pass's output as the vertical pass reads it: `bh` rows of `gw` samples placed
@@ -103,14 +118,26 @@ fn strips(gw: usize, f: impl Fn(usize, usize) -> Vec<f32> + Sync + Send) -> Vec<
 }
 
 /// Writes the strips into a fresh `w × h` mask through `f`; outside the window it is `outside`.
-fn assemble(strips: &[Vec<f32>], win: Win, w: usize, h: usize, outside: f32, f: impl Fn(f32) -> f32 + Sync + Send) -> Vec<f32> {
+fn assemble(
+    strips: &[Vec<f32>],
+    win: Win,
+    w: usize,
+    h: usize,
+    outside: f32,
+    f: impl Fn(f32) -> f32 + Sync + Send,
+) -> Vec<f32> {
     let mut out = vec![outside; w * h];
     par_rows(&mut out, w, 1, |y, row| {
-        let Some(yy) = y.checked_sub(win.y0).filter(|_| y < win.y1) else { return };
+        let Some(yy) = y.checked_sub(win.y0).filter(|_| y < win.y1) else {
+            return;
+        };
         for (s, strip) in strips.iter().enumerate() {
             let c0 = s * STRIP;
             let sw = STRIP.min(win.w().saturating_sub(c0));
-            if let (Some(src), Some(dst)) = (strip.get(yy * sw..(yy + 1) * sw), row.get_mut(win.x0 + c0..win.x0 + c0 + sw)) {
+            if let (Some(src), Some(dst)) = (
+                strip.get(yy * sw..(yy + 1) * sw),
+                row.get_mut(win.x0 + c0..win.x0 + c0 + sw),
+            ) {
                 for (d, v) in dst.iter_mut().zip(src) {
                     *d = f(*v);
                 }
@@ -137,15 +164,25 @@ fn add_row(acc: &mut [f64], rows: &Rows, yy: usize, c0: usize, k: f64) {
 /// Running-sum box average of one line (radius `r`, edges replicated) into `dst`.
 fn box_line(src: &[f32], dst: &mut [f32], r: usize) {
     let n = src.len().min(dst.len());
-    let (Some(&first), Some(&last)) = (src.first(), src.get(n.wrapping_sub(1))) else { return };
+    let (Some(&first), Some(&last)) = (src.first(), src.get(n.wrapping_sub(1))) else {
+        return;
+    };
     if r == 0 {
         dst[..n].copy_from_slice(&src[..n]);
         return;
     }
-    let at = |i: i64| -> f64 { f64::from(src.get(i.clamp(0, n as i64 - 1) as usize).copied().unwrap_or(0.0)) };
+    let at = |i: i64| -> f64 {
+        f64::from(
+            src.get(i.clamp(0, n as i64 - 1) as usize)
+                .copied()
+                .unwrap_or(0.0),
+        )
+    };
     // Window at x = 0: r copies of the first sample, then src[0..=r], then copies of the last.
     let inside = r.min(n - 1);
-    let mut acc = r as f64 * f64::from(first) + src[..=inside].iter().map(|v| f64::from(*v)).sum::<f64>() + (r - inside) as f64 * f64::from(last);
+    let mut acc = r as f64 * f64::from(first)
+        + src[..=inside].iter().map(|v| f64::from(*v)).sum::<f64>()
+        + (r - inside) as f64 * f64::from(last);
     let norm = 1.0 / (2 * r + 1) as f64;
     let ri = r as i64;
     for (x, d) in dst[..n].iter_mut().enumerate() {
@@ -189,7 +226,13 @@ pub(crate) fn smooth(m: &[f32], w: usize, h: usize, r: f32) -> Vec<f32> {
         }
     });
     // Columns: a running sum of rows per strip of columns.
-    let rows = Rows { tmp: &tmp, gw, bh: b.h(), off: b.y0 - win.y0, gh };
+    let rows = Rows {
+        tmp: &tmp,
+        gw,
+        bh: b.h(),
+        off: b.y0 - win.y0,
+        gh,
+    };
     let res = strips(gw, |c0, sw| box_strip(&rows, c0, sw, r));
     drop(tmp);
     assemble(&res, win, w, h, curve(0.0), curve)
@@ -290,8 +333,15 @@ impl Kernel {
         }
         // Least squares over j = -jr..=jr (symmetric: weight 2 for j > 0).
         let l = (jr + 1) as f64;
-        let omega: [f64; TERMS] = std::array::from_fn(|k| std::f64::consts::PI * (k + 1) as f64 / l);
-        let basis = |q: usize, j: usize| if q == 0 { 1.0 } else { (omega[q - 1] * j as f64).cos() };
+        let omega: [f64; TERMS] =
+            std::array::from_fn(|k| std::f64::consts::PI * (k + 1) as f64 / l);
+        let basis = |q: usize, j: usize| {
+            if q == 0 {
+                1.0
+            } else {
+                (omega[q - 1] * j as f64).cos()
+            }
+        };
         let wt = |j: usize| if j == 0 { 1.0 } else { 2.0 };
         let mut a = vec![vec![0.0; TERMS + 1]; TERMS + 1];
         let mut b = vec![0.0; TERMS + 1];
@@ -304,14 +354,23 @@ impl Kernel {
                 }
             }
         }
-        let Some(c) = solve(a, b) else { return direct() };
+        let Some(c) = solve(a, b) else {
+            return direct();
+        };
         // Error bound per pass: half the L1 distance between the series and the kernel.
-        let err: f64 = taps.iter().enumerate().map(|(j, t)| wt(j) * ((0..=TERMS).map(|q| c[q] * basis(q, j)).sum::<f64>() - t).abs()).sum::<f64>() / 2.0;
+        let err: f64 = taps
+            .iter()
+            .enumerate()
+            .map(|(j, t)| wt(j) * ((0..=TERMS).map(|q| c[q] * basis(q, j)).sum::<f64>() - t).abs())
+            .sum::<f64>()
+            / 2.0;
         if !err.is_finite() || err > FIT_TOL {
             return direct();
         }
         let jf = jr as f64;
-        let full: [f64; TERMS] = std::array::from_fn(|k| 1.0 + 2.0 * (1..=jr).map(|j| (omega[k] * j as f64).cos()).sum::<f64>());
+        let full: [f64; TERMS] = std::array::from_fn(|k| {
+            1.0 + 2.0 * (1..=jr).map(|j| (omega[k] * j as f64).cos()).sum::<f64>()
+        });
         Kernel::Cos(Box::new(CosKernel {
             r: jr,
             a0: c[0],
@@ -358,7 +417,10 @@ impl Kernel {
                 }
                 for (yy, dst) in out.chunks_exact_mut(sw).enumerate() {
                     for (i, k) in taps.iter().enumerate() {
-                        let Some(src) = (yy + i).checked_sub(r).and_then(|y| rows.get(y, c0, sw)) else { continue };
+                        let Some(src) = (yy + i).checked_sub(r).and_then(|y| rows.get(y, c0, sw))
+                        else {
+                            continue;
+                        };
                         for (d, s) in dst.iter_mut().zip(src) {
                             *d += k * s;
                         }
@@ -380,7 +442,11 @@ impl CosKernel {
         runs.clear();
         runs.resize(n, n);
         for i in (0..n.saturating_sub(1)).rev() {
-            runs[i] = if src[i] == src[i + 1] { runs[i + 1] } else { i + 1 };
+            runs[i] = if src[i] == src[i + 1] {
+                runs[i + 1]
+            } else {
+                i + 1
+            };
         }
         let at = |i: usize| f64::from(src.get(i).copied().unwrap_or(0.0));
         // Window sums for the last position handled (valid when `have`).
@@ -408,9 +474,15 @@ impl CosKernel {
                 let come = at(x + r);
                 sb += come - gone;
                 for k in 0..TERMS {
-                    let (re, im) = (s[k].0 - gone * self.out_w[k].0, s[k].1 - gone * self.out_w[k].1);
+                    let (re, im) = (
+                        s[k].0 - gone * self.out_w[k].0,
+                        s[k].1 - gone * self.out_w[k].1,
+                    );
                     let (cr, ci) = self.rot[k];
-                    s[k] = (re * cr - im * ci + come * self.in_w[k].0, re * ci + im * cr + come * self.in_w[k].1);
+                    s[k] = (
+                        re * cr - im * ci + come * self.in_w[k].0,
+                        re * ci + im * cr + come * self.in_w[k].1,
+                    );
                 }
             } else {
                 // Direct sums over the in-line part of the window.
@@ -487,7 +559,12 @@ impl CosKernel {
             }
             if have {
                 // Slide from yy - 1: drop row yy - 1 - r, take row yy + r.
-                let gone = if yy > r { rows.get(yy - 1 - r, c0, sw) } else { None }.unwrap_or(&zeros);
+                let gone = if yy > r {
+                    rows.get(yy - 1 - r, c0, sw)
+                } else {
+                    None
+                }
+                .unwrap_or(&zeros);
                 let come = rows.get(yy + r, c0, sw).unwrap_or(&zeros);
                 for ((s, g), c) in sb.iter_mut().zip(gone).zip(come) {
                     *s += f64::from(*c) - f64::from(*g);
@@ -496,7 +573,9 @@ impl CosKernel {
                     let (cr, ci) = self.rot[k];
                     let (o0, o1) = self.out_w[k];
                     let (i0, i1) = self.in_w[k];
-                    for (((sr, si), g), c) in re[k].iter_mut().zip(im[k].iter_mut()).zip(gone).zip(come) {
+                    for (((sr, si), g), c) in
+                        re[k].iter_mut().zip(im[k].iter_mut()).zip(gone).zip(come)
+                    {
                         let (g, c) = (f64::from(*g), f64::from(*c));
                         let (a, b) = (*sr - g * o0, *si - g * o1);
                         *sr = a * cr - b * ci + c * i0;
@@ -511,7 +590,9 @@ impl CosKernel {
                     im[k].fill(0.0);
                 }
                 for i in lo..hi {
-                    let Some(row) = rows.get(i, c0, sw) else { continue };
+                    let Some(row) = rows.get(i, c0, sw) else {
+                        continue;
+                    };
                     let j = i as f64 - yy as f64;
                     add_row(&mut sb, rows, i, c0, 1.0);
                     for k in 0..TERMS {
@@ -578,11 +659,24 @@ pub(crate) fn feather(m: &[f32], w: usize, h: usize, radius: f32) -> Vec<f32> {
         }
     });
     // Columns, a strip of columns at a time.
-    let rows = Rows { tmp: &tmp, gw, bh: b.h(), off: b.y0 - win.y0, gh };
+    let rows = Rows {
+        tmp: &tmp,
+        gw,
+        bh: b.h(),
+        off: b.y0 - win.y0,
+        gh,
+    };
     let res = strips(gw, |c0, sw| kv.strip(&rows, c0, sw));
     drop(tmp);
     // Rounding residue of the sliding sums is not coverage.
-    assemble(&res, win, w, h, 0.0, |v| if v.abs() < 1e-7 { 0.0 } else { v })
+    assemble(
+        &res,
+        win,
+        w,
+        h,
+        0.0,
+        |v| if v.abs() < 1e-7 { 0.0 } else { v },
+    )
 }
 
 #[cfg(test)]
@@ -621,7 +715,10 @@ mod tests {
         }
 
         pub fn smooth(m: &[f32], w: usize, h: usize, r: f32) -> Vec<f32> {
-            box_blur(m, w, h, r.max(0.0).round() as usize).into_iter().map(|v| if v >= 0.5 { 1.0 } else { 0.0 }).collect()
+            box_blur(m, w, h, r.max(0.0).round() as usize)
+                .into_iter()
+                .map(|v| if v >= 0.5 { 1.0 } else { 0.0 })
+                .collect()
         }
 
         pub fn feather(m: &[f32], w: usize, h: usize, radius: f32) -> Vec<f32> {
@@ -630,7 +727,9 @@ mod tests {
                 return m.to_vec();
             }
             let r = (sigma * 3.0).ceil() as i64;
-            let k: Vec<f32> = (-r..=r).map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp()).collect();
+            let k: Vec<f32> = (-r..=r)
+                .map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp())
+                .collect();
             let s: f32 = k.iter().sum();
             let k: Vec<f32> = k.iter().map(|v| v / s).collect();
             let mut tmp = vec![0.0f32; m.len()];
@@ -665,7 +764,10 @@ mod tests {
 
     fn max_diff(a: &[f32], b: &[f32]) -> f32 {
         assert_eq!(a.len(), b.len());
-        a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max)
+        a.iter()
+            .zip(b)
+            .map(|(x, y)| (x - y).abs())
+            .fold(0.0, f32::max)
     }
 
     /// Random masks of several kinds: binary noise, soft noise, blobs with soft edges, a sparse
@@ -673,38 +775,78 @@ mod tests {
     fn masks(w: usize, h: usize, seed: u64) -> Vec<(&'static str, Vec<f32>)> {
         let mut rng = Rng(seed);
         let mut u = move || (rng.next() >> 11) as f32 / (1u64 << 53) as f32;
-        let binary: Vec<f32> = (0..w * h).map(|_| if u() < 0.5 { 1.0 } else { 0.0 }).collect();
+        let binary: Vec<f32> = (0..w * h)
+            .map(|_| if u() < 0.5 { 1.0 } else { 0.0 })
+            .collect();
         let soft: Vec<f32> = (0..w * h).map(|_| u()).collect();
-        let (cx, cy, rad) = (w as f32 * u(), h as f32 * u(), (w.min(h) as f32 * 0.4).max(1.0));
+        let (cx, cy, rad) = (
+            w as f32 * u(),
+            h as f32 * u(),
+            (w.min(h) as f32 * 0.4).max(1.0),
+        );
         let blob: Vec<f32> = (0..w * h)
             .map(|i| {
                 let (x, y) = ((i % w) as f32 + 0.5, (i / w) as f32 + 0.5);
                 (rad - ((x - cx).powi(2) + (y - cy).powi(2)).sqrt()).clamp(0.0, 1.0)
             })
             .collect();
-        let sparse: Vec<f32> = (0..w * h).map(|_| if u() < 0.02 { 1.0 } else { 0.0 }).collect();
-        let rect: Vec<f32> = (0..w * h).map(|i| if (i % w) * 3 >= w && (i / w) * 4 < h * 3 { 1.0 } else { 0.0 }).collect();
-        vec![("binary", binary), ("soft", soft), ("blob", blob), ("sparse", sparse), ("rect", rect)]
+        let sparse: Vec<f32> = (0..w * h)
+            .map(|_| if u() < 0.02 { 1.0 } else { 0.0 })
+            .collect();
+        let rect: Vec<f32> = (0..w * h)
+            .map(|i| {
+                if (i % w) * 3 >= w && (i / w) * 4 < h * 3 {
+                    1.0
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        vec![
+            ("binary", binary),
+            ("soft", soft),
+            ("blob", blob),
+            ("sparse", sparse),
+            ("rect", rect),
+        ]
     }
 
     /// Photoshop 27.11, measured: a 32×32 rectangle at (16,16) in 64×64, Select › Modify ›
     /// Feather 4 px, filled white. Row y = 32 for x = 8..=24, then (16,16), (18,18), (20,20).
     #[test]
     fn feather_matches_photoshop() {
-        const ROW: [u8; 17] = [7, 13, 22, 34, 50, 70, 92, 115, 140, 163, 185, 205, 221, 233, 242, 248, 252];
+        const ROW: [u8; 17] = [
+            7, 13, 22, 34, 50, 70, 92, 115, 140, 163, 185, 205, 221, 233, 242, 248, 252,
+        ];
         const DIAG: [(usize, u8); 3] = [(16, 76), (18, 134), (20, 190)];
         let (w, h) = (64, 64);
-        let m: Vec<f32> = (0..w * h).map(|i| if (16..48).contains(&(i % w)) && (16..48).contains(&(i / w)) { 1.0 } else { 0.0 }).collect();
+        let m: Vec<f32> = (0..w * h)
+            .map(|i| {
+                if (16..48).contains(&(i % w)) && (16..48).contains(&(i / w)) {
+                    1.0
+                } else {
+                    0.0
+                }
+            })
+            .collect();
         let f = feather(&m, w, h, 4.0);
         let v = |x: usize, y: usize| (f[y * w + x] * 255.0).round() as i32;
         for (i, want) in ROW.iter().enumerate() {
             let x = 8 + i;
-            assert!((v(x, 32) - i32::from(*want)).abs() <= 3, "x {x}: {} vs Photoshop {want}", v(x, 32));
+            assert!(
+                (v(x, 32) - i32::from(*want)).abs() <= 3,
+                "x {x}: {} vs Photoshop {want}",
+                v(x, 32)
+            );
         }
         // Photoshop's corners come out a few levels darker than a true 2-D Gaussian's; the row
         // is the defining measurement.
         for (d, want) in DIAG {
-            assert!((v(d, d) - i32::from(want)).abs() <= 4, "({d},{d}): {} vs Photoshop {want}", v(d, d));
+            assert!(
+                (v(d, d) - i32::from(want)).abs() <= 4,
+                "({d},{d}): {} vs Photoshop {want}",
+                v(d, d)
+            );
         }
     }
 
@@ -712,8 +854,13 @@ mod tests {
     fn feather_matches_direct_gaussian() {
         for (w, h, seed) in [(97, 61, 1), (40, 150, 2), (13, 7, 3)] {
             for (kind, m) in masks(w, h, seed) {
-                for radius in [0.1, 0.3, 1.0, 2.5, 8.0, 9.0, 17.0, 25.0, 50.0, 120.0, 1000.0] {
-                    let d = max_diff(&feather(&m, w, h, radius), &oracle::feather(&m, w, h, radius));
+                for radius in [
+                    0.1, 0.3, 1.0, 2.5, 8.0, 9.0, 17.0, 25.0, 50.0, 120.0, 1000.0,
+                ] {
+                    let d = max_diff(
+                        &feather(&m, w, h, radius),
+                        &oracle::feather(&m, w, h, radius),
+                    );
                     assert!(d <= 1.0 / 255.0, "{kind} {w}x{h} r {radius}: {d}");
                 }
             }
@@ -725,7 +872,15 @@ mod tests {
     #[test]
     fn smooth_matches_photoshop() {
         let (w, h) = (64, 64);
-        let m: Vec<f32> = (0..w * h).map(|i| if (16..48).contains(&(i % w)) && (16..48).contains(&(i / w)) { 1.0 } else { 0.0 }).collect();
+        let m: Vec<f32> = (0..w * h)
+            .map(|i| {
+                if (16..48).contains(&(i % w)) && (16..48).contains(&(i / w)) {
+                    1.0
+                } else {
+                    0.0
+                }
+            })
+            .collect();
         let s = smooth(&m, w, h, 8.0);
         let row: Vec<f32> = (8..=24).map(|x| s[32 * w + x]).collect();
         let want_row: Vec<f32> = (8..=24).map(|x| if x >= 16 { 1.0 } else { 0.0 }).collect();
@@ -744,7 +899,11 @@ mod tests {
                     let (fast, slow) = (smooth(&m, w, h, radius), oracle::smooth(&m, w, h, radius));
                     let avg = oracle::box_blur(&m, w, h, radius.max(0.0).round() as usize);
                     for (i, (a, b)) in fast.iter().zip(&slow).enumerate() {
-                        assert!(a == b || (avg[i] - 0.5).abs() < 1e-4, "{kind} {w}x{h} r {radius} pixel {i}: {a} vs {b} (average {})", avg[i]);
+                        assert!(
+                            a == b || (avg[i] - 0.5).abs() < 1e-4,
+                            "{kind} {w}x{h} r {radius} pixel {i}: {a} vs {b} (average {})",
+                            avg[i]
+                        );
                     }
                 }
             }
@@ -777,7 +936,10 @@ mod tests {
         assert_eq!(smooth(&m, 50, 40, 0.0), oracle::smooth(&m, 50, 40, 0.0));
         // 1×1 canvas and empty canvases.
         for r in [0.0, 1.0, 50.0, 1000.0] {
-            assert!((feather(&[1.0], 1, 1, r)[0] - oracle::feather(&[1.0], 1, 1, r)[0]).abs() <= 1.0 / 255.0);
+            assert!(
+                (feather(&[1.0], 1, 1, r)[0] - oracle::feather(&[1.0], 1, 1, r)[0]).abs()
+                    <= 1.0 / 255.0
+            );
             assert_eq!(smooth(&[1.0], 1, 1, r), vec![1.0]);
         }
         assert!(feather(&[], 0, 0, 5.0).is_empty());
@@ -801,20 +963,36 @@ mod tests {
         let (w, h) = (6000usize, 4000usize);
         let m: Vec<f32> = (0..w * h)
             .map(|i| {
-                let (x, y) = ((i % w) as f32 / w as f32 - 0.5, (i / w) as f32 / h as f32 - 0.5);
-                if x * x + y * y < 0.11 { 1.0 } else { 0.0 }
+                let (x, y) = (
+                    (i % w) as f32 / w as f32 - 0.5,
+                    (i / w) as f32 / h as f32 - 0.5,
+                );
+                if x * x + y * y < 0.11 {
+                    1.0
+                } else {
+                    0.0
+                }
             })
             .collect();
         // `SEL_BENCH=feather:250` runs one case (e.g. under `time` for its CPU cost).
         let only = std::env::var("SEL_BENCH").ok();
-        for (name, r) in [("smooth", 50.0), ("feather", 50.0), ("feather", 250.0), ("feather", 1000.0)] {
+        for (name, r) in [
+            ("smooth", 50.0),
+            ("feather", 50.0),
+            ("feather", 250.0),
+            ("feather", 1000.0),
+        ] {
             if only.as_ref().is_some_and(|o| *o != format!("{name}:{r}")) {
                 continue;
             }
             let mut best = f64::MAX;
             for _ in 0..5 {
                 let t = std::time::Instant::now();
-                let out = if name == "smooth" { smooth(&m, w, h, r) } else { feather(&m, w, h, r) };
+                let out = if name == "smooth" {
+                    smooth(&m, w, h, r)
+                } else {
+                    feather(&m, w, h, r)
+                };
                 best = best.min(t.elapsed().as_secs_f64() * 1000.0);
                 assert_eq!(out.len(), m.len());
             }

@@ -8,8 +8,8 @@
 //! (low phasiness). Duration is unchanged. At ratio 1 the output is the input delayed by the
 //! frame size.
 
-use super::stft::{Spectral, StftChannel, fft_size};
-use crate::{AudioEffect, ParamSpec, ParamValues, Unit, block_len, param_plumbing};
+use super::stft::{fft_size, Spectral, StftChannel};
+use crate::{block_len, param_plumbing, AudioEffect, ParamSpec, ParamValues, Unit};
 use std::f32::consts::PI;
 
 const OVERLAP: usize = 8;
@@ -53,7 +53,14 @@ fn wrap(p: f32) -> f32 {
 }
 
 impl PitchShifter {
-    pub const PARAMS: &'static [ParamSpec] = &[ParamSpec::new("semitones", "Pitch", -12.0, 12.0, 0.0, Unit::Semitones)];
+    pub const PARAMS: &'static [ParamSpec] = &[ParamSpec::new(
+        "semitones",
+        "Pitch",
+        -12.0,
+        12.0,
+        0.0,
+        Unit::Semitones,
+    )];
 
     pub fn new(sample_rate: f32, channels: usize) -> Self {
         let n = fft_size(sample_rate);
@@ -65,7 +72,14 @@ impl PitchShifter {
             hop: n / OVERLAP,
             spec: Spectral::new(n, false),
             stft: vec![StftChannel::new(n); ch],
-            state: vec![PvState { last_phase: vec![0.0; bins], rot: vec![0.0; bins], new_rot: vec![0.0; bins] }; ch],
+            state: vec![
+                PvState {
+                    last_phase: vec![0.0; bins],
+                    rot: vec![0.0; bins],
+                    new_rot: vec![0.0; bins]
+                };
+                ch
+            ],
             scratch: Scratch {
                 mag: vec![0.0; bins],
                 phase: vec![0.0; bins],
@@ -137,7 +151,11 @@ fn shift_frame(spec: &mut Spectral, st: &mut PvState, sc: &mut Scratch, ratio: f
         let f = p as f32 + d / expect;
         let target = (p as f32 * ratio).round() as isize;
         let delta = target - p as isize;
-        let prev_rot = if (0..bins as isize).contains(&target) { st.rot[target as usize] } else { 0.0 };
+        let prev_rot = if (0..bins as isize).contains(&target) {
+            st.rot[target as usize]
+        } else {
+            0.0
+        };
         let rot = wrap(prev_rot + (ratio - 1.0) * f * expect);
         for k in start..end {
             let t = k as isize + delta;
@@ -228,13 +246,25 @@ mod tests {
 
     #[test]
     fn octave_up_and_down() {
-        for (semis, f_in, f_out) in [(12.0, 440.0, 880.0), (-12.0, 440.0, 220.0), (7.0, 300.0, 300.0 * 1.498_307)] {
+        for (semis, f_in, f_out) in [
+            (12.0, 440.0, 880.0),
+            (-12.0, 440.0, 220.0),
+            (7.0, 300.0, 300.0 * 1.498_307),
+        ] {
             let (y, lat) = shifted(semis, f_in);
             let tail = &y[lat + 4096..];
             let a_out = tone_amplitude(tail, f_out, SR as f64);
             let a_in = tone_amplitude(tail, f_in, SR as f64);
-            assert!(db(a_out / 0.5).abs() < 3.0, "{semis}: level {} dB", db(a_out / 0.5));
-            assert!(db(a_in / a_out) < -30.0, "{semis}: residual {} dB", db(a_in / a_out));
+            assert!(
+                db(a_out / 0.5).abs() < 3.0,
+                "{semis}: level {} dB",
+                db(a_out / 0.5)
+            );
+            assert!(
+                db(a_in / a_out) < -30.0,
+                "{semis}: residual {} dB",
+                db(a_in / a_out)
+            );
             // Output is a clean tone: almost all energy at the target frequency.
             let r = rms(tail);
             assert!((db(a_out / std::f64::consts::SQRT_2 / r)).abs() < 1.0);

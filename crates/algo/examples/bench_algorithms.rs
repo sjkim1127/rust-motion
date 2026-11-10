@@ -2,7 +2,7 @@
 //! RAYON_NUM_THREADS=16 cargo run --release -p photocraft-algo --example bench_algorithms -- extrude 6000 4000 u8 3 output.bin
 //! Optional final argument after output.bin: rgb (default), gray, cmyk or lab.
 //! Run the same example at the base commit and the PR commit, then compare output.bin with cmp.
-use photocraft_algo::{FilterParams, apply_in};
+use photocraft_algo::{apply_in, FilterParams};
 use photocraft_color::{ColorMode, PixelFormat, SampleType};
 use photocraft_geom::Rect;
 use photocraft_raster::Surface;
@@ -41,13 +41,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "extrude" => extrude(30.0, 30.0),
         "extrude-dense" => extrude(8.0, 128.0),
         "extrude-small" => extrude(8.0, 64.0),
-        "wind" => FilterParams::Wind { method: photocraft_algo::WindMethod::Wind, from_right: false, seed: 17 },
-        "blast" => FilterParams::Wind { method: photocraft_algo::WindMethod::Blast, from_right: false, seed: 17 },
-        "blast-right" => FilterParams::Wind { method: photocraft_algo::WindMethod::Blast, from_right: true, seed: 17 },
-        "spin" => FilterParams::SpinBlur {
-            pins: vec![photocraft_algo::SpinPin { radius_x: 1.0, radius_y: 1.0, blur_angle: 30.0, angle: 17.0, ..Default::default() }],
+        "wind" => FilterParams::Wind {
+            method: photocraft_algo::WindMethod::Wind,
+            from_right: false,
+            seed: 17,
         },
-        "spin-default" => FilterParams::SpinBlur { pins: vec![Default::default()] },
+        "blast" => FilterParams::Wind {
+            method: photocraft_algo::WindMethod::Blast,
+            from_right: false,
+            seed: 17,
+        },
+        "blast-right" => FilterParams::Wind {
+            method: photocraft_algo::WindMethod::Blast,
+            from_right: true,
+            seed: 17,
+        },
+        "spin" => FilterParams::SpinBlur {
+            pins: vec![photocraft_algo::SpinPin {
+                radius_x: 1.0,
+                radius_y: 1.0,
+                blur_angle: 30.0,
+                angle: 17.0,
+                ..Default::default()
+            }],
+        },
+        "spin-default" => FilterParams::SpinBlur {
+            pins: vec![Default::default()],
+        },
         "lens" | "lens-ca" | "trap" | "trap-wide" | "trap-default" => FilterParams::Invert,
         _ => return Err("unknown case".into()),
     };
@@ -70,10 +90,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut pixels = Vec::with_capacity(r.width() as usize * r.height() as usize * n);
         for y in r.y0..r.y1 {
             for x in r.x0..r.x1 {
-                let seed = (x as u32).wrapping_mul(0x9e37_79b9) ^ (y as u32).wrapping_mul(0x85eb_ca6b);
+                let seed =
+                    (x as u32).wrapping_mul(0x9e37_79b9) ^ (y as u32).wrapping_mul(0x85eb_ca6b);
                 for c in 0..n {
                     let v = seed.rotate_left(c as u32 * 7).wrapping_add(c as u32 * 71) % 65536;
-                    pixels.push(if c + 1 == n && seed.is_multiple_of(5) { 0.0 } else { v as f32 / 65535.0 });
+                    pixels.push(if c + 1 == n && seed.is_multiple_of(5) {
+                        0.0
+                    } else {
+                        v as f32 / 65535.0
+                    });
                 }
             }
         }
@@ -114,14 +139,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => apply_in(&source, &params, area, bounds, None, bounds),
     };
-    let warm = Rect::new(bounds.x0, bounds.y0, bounds.x0 + w.min(128), bounds.y0 + h.min(128));
+    let warm = Rect::new(
+        bounds.x0,
+        bounds.y0,
+        bounds.x0 + w.min(128),
+        bounds.y0 + h.min(128),
+    );
     drop(run_filter(warm));
     let mut times = Vec::new();
     for run in 0..repeats {
         let start = Instant::now();
         let result = run_filter(bounds);
         let seconds = start.elapsed().as_secs_f64();
-        println!("{case} {w}x{h} {depth:?} {mode:?} run={} seconds={seconds:.6}", run + 1);
+        println!(
+            "{case} {w}x{h} {depth:?} {mode:?} run={} seconds={seconds:.6}",
+            run + 1
+        );
         times.push(seconds);
         if run + 1 == repeats {
             if let Some(path) = args.get(5) {
