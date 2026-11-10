@@ -69,4 +69,7 @@ Before any stable API is removed or replaced in future major versions:
 - **Windows**: `x86_64-pc-windows-msvc` (Windows 10+).
 
 ### 4.4 External Runtime Dependencies
-- **FFmpeg 4.4+** or newer (with `ffprobe`) is required for muxing video containers (`.mp4`, `.webm`, `.mov`, `.gif`) and extracting audio/video frame streams. Pure still-image rendering (`.png`, `.jpg`, `.webp`) does not require FFmpeg.
+- **FFmpeg 4.4+** or newer (with `ffprobe`) is required for muxing video containers (`.mp4`, `.webm`, `.mov`, `.gif`) and extracting audio/video frame streams. Pure still-image rendering (`.png`, `.jpg`, `.webp`) and native pure-Rust codecs (`rust-motion-h264enc`, `rust-motion-hevc`, `rust-motion-apv`, `rust-motion-dng`, `rust-motion-mxf`) do not require FFmpeg.
+
+## 5. Compatibility & Reference Matrix
+- See [`docs/compatibility_matrix.md`](./compatibility_matrix.md) for the complete Remotion 4.0.495 / 4.0.535 package compatibility table, Motion Canvas / Manim / MoviePy / Blender VSE gap closure inventory, and the native pure-Rust creative suite module directory.

@@ -55,3 +55,7 @@ If you discover a security vulnerability in Rust Motion:
 1. Please do **NOT** open a public GitHub issue.
 2. Report the vulnerability privately via GitHub Security Advisories or email the maintainers directly.
 3. We will acknowledge receipt within 48 hours and work with you on a coordinated disclosure timeline.
+
+## 5. Dependency Advisory Tracking (`#32`)
+- The legacy Tauri 2.5.1 shell (`apps/studio-tauri`) and its transitive `tauri-utils` / `kuchikiki` / `rand 0.7` dependency chain (`GHSA-7gmj-67g7-phm9`, `GHSA-cq8v-f236-94qc`) have been decoupled from the active Cargo workspace (`Cargo.toml`), eliminating the conflicting `wry` / `webkit2gtk-sys` link graph.
+- All headless rendering, CLI, MCP, codec, and rasterizer crates build with zero GTK/WebKit native dependencies.
