@@ -1227,13 +1227,13 @@ fn render_node(
                 ];
             }
 
-            let mut surface = photocraft_raster::Surface::new(photocraft_color::PixelFormat::RGBA8);
-            let damage = photocraft_paint::render_stroke(&mut surface, &brush, &pts, None, false, 1.0);
+            let mut surface = rust_motion_raster::Surface::new(rust_motion_color::PixelFormat::RGBA8);
+            let damage = rust_motion_paint::render_stroke(&mut surface, &brush, &pts, None, false, 1.0);
             if damage.is_empty() {
                 return Ok(());
             }
 
-            let canvas_rect = photocraft_geom::Rect::from_xywh(0, 0, pixmap.width(), pixmap.height());
+            let canvas_rect = rust_motion_geom::Rect::from_xywh(0, 0, pixmap.width(), pixmap.height());
             let r = damage.intersect(&canvas_rect);
             if r.is_empty() {
                 return Ok(());
@@ -1274,14 +1274,14 @@ fn render_node(
                 return Ok(());
             }
 
-            let shape = photocraft_doc::ShapeLayer {
+            let shape = rust_motion_doc::ShapeLayer {
                 path: path.clone(),
-                fill: fill.map(|c| photocraft_doc::Fill::Solid(photocraft_color::Color::rgba(c.r as f32 / 255.0, c.g as f32 / 255.0, c.b as f32 / 255.0, c.a as f32 / 255.0))),
+                fill: fill.map(|c| rust_motion_doc::Fill::Solid(rust_motion_color::Color::rgba(c.r as f32 / 255.0, c.g as f32 / 255.0, c.b as f32 / 255.0, c.a as f32 / 255.0))),
                 stroke: if let Some(sc) = stroke_color {
                     if *stroke_width > 0.0 {
-                        Some(photocraft_doc::ShapeStroke {
+                        Some(rust_motion_doc::ShapeStroke {
                             width: *stroke_width,
-                            paint: photocraft_doc::Fill::Solid(photocraft_color::Color::rgba(sc.r as f32 / 255.0, sc.g as f32 / 255.0, sc.b as f32 / 255.0, sc.a as f32 / 255.0)),
+                            paint: rust_motion_doc::Fill::Solid(rust_motion_color::Color::rgba(sc.r as f32 / 255.0, sc.g as f32 / 255.0, sc.b as f32 / 255.0, sc.a as f32 / 255.0)),
                             ..Default::default()
                         })
                     } else {
@@ -1295,12 +1295,12 @@ fn render_node(
                 psd_raw: None,
             };
 
-            let canvas_rect = photocraft_geom::Rect::from_xywh(0, 0, pixmap.width(), pixmap.height());
-            let compiled = photocraft_vector::CompiledShape::new(&shape, photocraft_vector::DEFAULT_TOLERANCE, canvas_rect);
+            let canvas_rect = rust_motion_geom::Rect::from_xywh(0, 0, pixmap.width(), pixmap.height());
+            let compiled = rust_motion_vector::CompiledShape::new(&shape, rust_motion_vector::DEFAULT_TOLERANCE, canvas_rect);
             if let Some(bounds) = compiled.bounds() {
                 let r = bounds.intersect(&canvas_rect);
                 if !r.is_empty() {
-                    let surface = compiled.render(photocraft_color::PixelFormat::RGBA8, canvas_rect);
+                    let surface = compiled.render(rust_motion_color::PixelFormat::RGBA8, canvas_rect);
                     let mut buf = vec![[0u8; 4]; r.width() as usize * r.height() as usize];
                     surface.read_rgba8_into(r, &mut buf);
 
@@ -1330,9 +1330,9 @@ fn render_node(
 }
 
 fn interpolate_stroke_progress(
-    points: &[photocraft_paint::StrokePoint],
+    points: &[rust_motion_paint::StrokePoint],
     progress: f32,
-) -> Vec<photocraft_paint::StrokePoint> {
+) -> Vec<rust_motion_paint::StrokePoint> {
     let p = progress.clamp(0.0, 1.0);
     if p <= 0.0 || points.is_empty() {
         return Vec::new();
@@ -1371,7 +1371,7 @@ fn interpolate_stroke_progress(
             };
             let p0 = &points[i - 1];
             let p1 = &points[i];
-            let interp = photocraft_paint::StrokePoint {
+            let interp = rust_motion_paint::StrokePoint {
                 x: p0.x + (p1.x - p0.x) * t,
                 y: p0.y + (p1.y - p0.y) * t,
                 pressure: (p0.pressure + (p1.pressure - p0.pressure) * (t as f32)).clamp(0.0, 1.0),
@@ -2248,7 +2248,7 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             if !radius.is_finite() || radius < 0.0 {
                 return Err(RasterError::Scene("box blur radius must be non-negative finite".into()));
             }
-            let params = photocraft_algo::FilterParams::BoxBlur { radius };
+            let params = rust_motion_algo::FilterParams::BoxBlur { radius };
             apply_photo_filter(pixmap, &params)?;
         }
         SceneFilter::RadialBlur {
@@ -2261,14 +2261,14 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
                 return Err(RasterError::Scene("radial blur amount must be non-negative finite".into()));
             }
             let method = if spin {
-                photocraft_algo::RadialMethod::Spin
+                rust_motion_algo::RadialMethod::Spin
             } else {
-                photocraft_algo::RadialMethod::Zoom
+                rust_motion_algo::RadialMethod::Zoom
             };
-            let params = photocraft_algo::FilterParams::RadialBlur {
+            let params = rust_motion_algo::FilterParams::RadialBlur {
                 amount: amount.clamp(1.0, 100.0),
                 method,
-                quality: photocraft_algo::RadialQuality::Good,
+                quality: rust_motion_algo::RadialQuality::Good,
                 center_x,
                 center_y,
             };
@@ -2278,7 +2278,7 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             if !radius.is_finite() || radius < 0.0 || !threshold.is_finite() || threshold < 0.0 {
                 return Err(RasterError::Scene("surface blur parameters must be non-negative finite".into()));
             }
-            let params = photocraft_algo::FilterParams::SurfaceBlur {
+            let params = rust_motion_algo::FilterParams::SurfaceBlur {
                 radius,
                 threshold,
             };
@@ -2292,7 +2292,7 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             if !amount.is_finite() || !radius.is_finite() || !threshold.is_finite() {
                 return Err(RasterError::Scene("unsharp mask parameters must be finite".into()));
             }
-            let params = photocraft_algo::FilterParams::UnsharpMask {
+            let params = rust_motion_algo::FilterParams::UnsharpMask {
                 amount,
                 radius,
                 threshold,
@@ -2307,7 +2307,7 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             if !amount.is_finite() || !radius.is_finite() {
                 return Err(RasterError::Scene("smart sharpen parameters must be finite".into()));
             }
-            let params = photocraft_algo::FilterParams::SmartSharpen {
+            let params = rust_motion_algo::FilterParams::SmartSharpen {
                 amount,
                 radius,
                 reduce_noise,
@@ -2318,23 +2318,23 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             if !radius.is_finite() || radius <= 0.0 {
                 return Err(RasterError::Scene("high pass radius must be positive finite".into()));
             }
-            let params = photocraft_algo::FilterParams::HighPass { radius };
+            let params = rust_motion_algo::FilterParams::HighPass { radius };
             apply_photo_filter(pixmap, &params)?;
         }
         SceneFilter::Twirl { angle } => {
             if !angle.is_finite() {
                 return Err(RasterError::Scene("twirl angle must be finite".into()));
             }
-            let params = photocraft_algo::FilterParams::Twirl { angle };
+            let params = rust_motion_algo::FilterParams::Twirl { angle };
             apply_photo_filter(pixmap, &params)?;
         }
         SceneFilter::Spherize { amount } => {
             if !amount.is_finite() {
                 return Err(RasterError::Scene("spherize amount must be finite".into()));
             }
-            let params = photocraft_algo::FilterParams::Spherize {
+            let params = rust_motion_algo::FilterParams::Spherize {
                 amount: amount.clamp(-100.0, 100.0),
-                mode: photocraft_algo::SpherizeMode::Normal,
+                mode: rust_motion_algo::SpherizeMode::Normal,
             };
             apply_photo_filter(pixmap, &params)?;
         }
@@ -2342,7 +2342,7 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
             if !amount.is_finite() {
                 return Err(RasterError::Scene("pinch amount must be finite".into()));
             }
-            let params = photocraft_algo::FilterParams::Pinch {
+            let params = rust_motion_algo::FilterParams::Pinch {
                 amount: amount.clamp(-100.0, 100.0),
             };
             apply_photo_filter(pixmap, &params)?;
@@ -2352,13 +2352,13 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
                 return Err(RasterError::Scene("ripple amount must be finite".into()));
             }
             let ripple_size = if size < 5.0 {
-                photocraft_algo::RippleSize::Small
+                rust_motion_algo::RippleSize::Small
             } else if size > 20.0 {
-                photocraft_algo::RippleSize::Large
+                rust_motion_algo::RippleSize::Large
             } else {
-                photocraft_algo::RippleSize::Medium
+                rust_motion_algo::RippleSize::Medium
             };
-            let params = photocraft_algo::FilterParams::Ripple {
+            let params = rust_motion_algo::FilterParams::Ripple {
                 amount,
                 size: ripple_size,
             };
@@ -2382,12 +2382,12 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
                     ))
                 })?
             };
-            let plugin = photocraft_plugins::Plugin::load(&bytes, photocraft_plugins::Limits::default())
+            let plugin = rust_motion_plugins::Plugin::load(&bytes, rust_motion_plugins::Limits::default())
                 .map_err(|e| RasterError::Scene(format!("wasm plugin validation error: {e}")))?;
             let w = pixmap.width();
             let h = pixmap.height();
             if w > 0 && h > 0 {
-                let rect = photocraft_geom::Rect::new(0, 0, w as i32, h as i32);
+                let rect = rust_motion_geom::Rect::new(0, 0, w as i32, h as i32);
                 let surf = pixmap_to_surface(pixmap);
                 let out_surf = plugin
                     .apply(&surf, rect, None, &params)
@@ -2482,9 +2482,9 @@ fn apply_filter(pixmap: &mut Pixmap, filter: &SceneFilter) -> Result<(), RasterE
     Ok(())
 }
 
-fn pixmap_to_surface(pixmap: &Pixmap) -> photocraft_raster::Surface {
-    use photocraft_color::{ColorMode, PixelFormat, SampleType};
-    use photocraft_geom::Rect;
+fn pixmap_to_surface(pixmap: &Pixmap) -> rust_motion_raster::Surface {
+    use rust_motion_color::{ColorMode, PixelFormat, SampleType};
+    use rust_motion_geom::Rect;
     let w = pixmap.width() as i32;
     let h = pixmap.height() as i32;
     let rect = Rect::new(0, 0, w, h);
@@ -2501,7 +2501,7 @@ fn pixmap_to_surface(pixmap: &Pixmap) -> photocraft_raster::Surface {
             dst_px.fill(0);
         }
     }
-    photocraft_raster::Surface::from_interleaved(
+    rust_motion_raster::Surface::from_interleaved(
         PixelFormat::new(ColorMode::Rgb, SampleType::U8, true),
         rect,
         &straight,
@@ -2509,11 +2509,11 @@ fn pixmap_to_surface(pixmap: &Pixmap) -> photocraft_raster::Surface {
 }
 
 fn surface_to_pixmap(
-    surface: &photocraft_raster::Surface,
+    surface: &rust_motion_raster::Surface,
     width: u32,
     height: u32,
 ) -> Result<Pixmap, RasterError> {
-    use photocraft_geom::Rect;
+    use rust_motion_geom::Rect;
     let rect = Rect::new(0, 0, width as i32, height as i32);
     let bytes = surface.to_interleaved(rect);
     let mut pixmap = Pixmap::new(width, height)
@@ -2531,9 +2531,9 @@ fn surface_to_pixmap(
 
 pub fn apply_photo_filter(
     pixmap: &mut Pixmap,
-    params: &photocraft_algo::FilterParams,
+    params: &rust_motion_algo::FilterParams,
 ) -> Result<(), RasterError> {
-    use photocraft_geom::Rect;
+    use rust_motion_geom::Rect;
     let w = pixmap.width();
     let h = pixmap.height();
     if w == 0 || h == 0 {
@@ -2541,7 +2541,7 @@ pub fn apply_photo_filter(
     }
     let rect = Rect::new(0, 0, w as i32, h as i32);
     let surf = pixmap_to_surface(pixmap);
-    let out_surf = photocraft_algo::apply_in(&surf, params, rect, rect, None, rect);
+    let out_surf = rust_motion_algo::apply_in(&surf, params, rect, rect, None, rect);
     let new_pixmap = surface_to_pixmap(&out_surf, w, h)?;
     pixmap.data_mut().copy_from_slice(new_pixmap.data());
     Ok(())

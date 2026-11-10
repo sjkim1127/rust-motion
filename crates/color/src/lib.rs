@@ -5,7 +5,7 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-extern crate rust_motion_cms as photocraft_cms;
+extern crate rust_motion_cms as rust_motion_cms;
 
 pub mod adjust;
 pub mod blend;

@@ -1,7 +1,7 @@
 //! Comprehensive tests for Model Context Protocol (MCP) server (#102).
 
-use lightcraft_mcp::session::McpSession;
-use lightcraft_mcp::McpServer;
+use rust_motion_mcp::session::McpSession;
+use rust_motion_mcp::McpServer;
 use serde_json::json;
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};

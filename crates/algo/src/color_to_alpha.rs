@@ -19,7 +19,7 @@
 //! every depth). That is the space PhotoCraft's Normal blending composites in, so the unmixed
 //! layer over a fill of the removed colour gives back the original pixels exactly.
 
-use photocraft_geom::Rect;
+use rust_motion_geom::Rect;
 
 use crate::Ctx;
 use crate::fxutil::{MAXC, native, ncol};
@@ -96,8 +96,8 @@ pub(crate) fn color_to_alpha(src: &Image, out: Rect, ctx: &Ctx, color: [f32; 4],
 mod tests {
     use super::*;
     use crate::{FilterParams, apply, output_area};
-    use photocraft_color::{ColorMode, PixelFormat, SampleType};
-    use photocraft_raster::Surface;
+    use rust_motion_color::{ColorMode, PixelFormat, SampleType};
+    use rust_motion_raster::Surface;
 
     fn close(a: f32, b: f32, tol: f32) -> bool {
         (a - b).abs() <= tol

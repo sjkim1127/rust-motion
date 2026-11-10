@@ -217,38 +217,38 @@ impl BlendMode {
     }
 }
 
-impl From<photocraft_psd::blend::BlendMode> for BlendMode {
-    fn from(m: photocraft_psd::blend::BlendMode) -> Self {
+impl From<rust_motion_psd::blend::BlendMode> for BlendMode {
+    fn from(m: rust_motion_psd::blend::BlendMode) -> Self {
         match m {
-            photocraft_psd::blend::BlendMode::Normal => Self::Normal,
-            photocraft_psd::blend::BlendMode::Dissolve => Self::Dissolve,
-            photocraft_psd::blend::BlendMode::Darken => Self::Darken,
-            photocraft_psd::blend::BlendMode::Multiply => Self::Multiply,
-            photocraft_psd::blend::BlendMode::ColorBurn => Self::ColorBurn,
-            photocraft_psd::blend::BlendMode::LinearBurn => Self::LinearBurn,
-            photocraft_psd::blend::BlendMode::DarkerColor => Self::DarkerColor,
-            photocraft_psd::blend::BlendMode::Lighten => Self::Lighten,
-            photocraft_psd::blend::BlendMode::Screen => Self::Screen,
-            photocraft_psd::blend::BlendMode::ColorDodge => Self::ColorDodge,
-            photocraft_psd::blend::BlendMode::LinearDodge => Self::LinearDodge,
-            photocraft_psd::blend::BlendMode::LighterColor => Self::LighterColor,
-            photocraft_psd::blend::BlendMode::Overlay => Self::Overlay,
-            photocraft_psd::blend::BlendMode::SoftLight => Self::SoftLight,
-            photocraft_psd::blend::BlendMode::HardLight => Self::HardLight,
-            photocraft_psd::blend::BlendMode::VividLight => Self::VividLight,
-            photocraft_psd::blend::BlendMode::LinearLight => Self::LinearLight,
-            photocraft_psd::blend::BlendMode::PinLight => Self::PinLight,
-            photocraft_psd::blend::BlendMode::HardMix => Self::HardMix,
-            photocraft_psd::blend::BlendMode::Difference => Self::Difference,
-            photocraft_psd::blend::BlendMode::Exclusion => Self::Exclusion,
-            photocraft_psd::blend::BlendMode::Subtract => Self::Subtract,
-            photocraft_psd::blend::BlendMode::Divide => Self::Divide,
-            photocraft_psd::blend::BlendMode::Hue => Self::Hue,
-            photocraft_psd::blend::BlendMode::Saturation => Self::Saturation,
-            photocraft_psd::blend::BlendMode::Color => Self::Color,
-            photocraft_psd::blend::BlendMode::Luminosity => Self::Luminosity,
-            photocraft_psd::blend::BlendMode::PassThrough => Self::PassThrough,
-            photocraft_psd::blend::BlendMode::Unknown(_) => Self::Normal,
+            rust_motion_psd::blend::BlendMode::Normal => Self::Normal,
+            rust_motion_psd::blend::BlendMode::Dissolve => Self::Dissolve,
+            rust_motion_psd::blend::BlendMode::Darken => Self::Darken,
+            rust_motion_psd::blend::BlendMode::Multiply => Self::Multiply,
+            rust_motion_psd::blend::BlendMode::ColorBurn => Self::ColorBurn,
+            rust_motion_psd::blend::BlendMode::LinearBurn => Self::LinearBurn,
+            rust_motion_psd::blend::BlendMode::DarkerColor => Self::DarkerColor,
+            rust_motion_psd::blend::BlendMode::Lighten => Self::Lighten,
+            rust_motion_psd::blend::BlendMode::Screen => Self::Screen,
+            rust_motion_psd::blend::BlendMode::ColorDodge => Self::ColorDodge,
+            rust_motion_psd::blend::BlendMode::LinearDodge => Self::LinearDodge,
+            rust_motion_psd::blend::BlendMode::LighterColor => Self::LighterColor,
+            rust_motion_psd::blend::BlendMode::Overlay => Self::Overlay,
+            rust_motion_psd::blend::BlendMode::SoftLight => Self::SoftLight,
+            rust_motion_psd::blend::BlendMode::HardLight => Self::HardLight,
+            rust_motion_psd::blend::BlendMode::VividLight => Self::VividLight,
+            rust_motion_psd::blend::BlendMode::LinearLight => Self::LinearLight,
+            rust_motion_psd::blend::BlendMode::PinLight => Self::PinLight,
+            rust_motion_psd::blend::BlendMode::HardMix => Self::HardMix,
+            rust_motion_psd::blend::BlendMode::Difference => Self::Difference,
+            rust_motion_psd::blend::BlendMode::Exclusion => Self::Exclusion,
+            rust_motion_psd::blend::BlendMode::Subtract => Self::Subtract,
+            rust_motion_psd::blend::BlendMode::Divide => Self::Divide,
+            rust_motion_psd::blend::BlendMode::Hue => Self::Hue,
+            rust_motion_psd::blend::BlendMode::Saturation => Self::Saturation,
+            rust_motion_psd::blend::BlendMode::Color => Self::Color,
+            rust_motion_psd::blend::BlendMode::Luminosity => Self::Luminosity,
+            rust_motion_psd::blend::BlendMode::PassThrough => Self::PassThrough,
+            rust_motion_psd::blend::BlendMode::Unknown(_) => Self::Normal,
         }
     }
 }
@@ -542,7 +542,7 @@ pub enum SceneFilter {
         size: f32,
     },
     /// Direct PhotoCraft FilterParams algorithm execution.
-    PhotoFilter(Box<photocraft_algo::FilterParams>),
+    PhotoFilter(Box<rust_motion_algo::FilterParams>),
     /// Sandboxed WebAssembly (Wasm) filter plugin.
     WasmPlugin {
         /// Name of the plugin file (e.g. "crt_scanlines.wasm").
@@ -1036,7 +1036,7 @@ pub enum SceneNode {
     /// Natural paint brush animated stroke (write-on animation).
     AnimatedStroke {
         /// Brush stroke data containing brush settings and sampled points.
-        stroke: photocraft_paint::Stroke,
+        stroke: rust_motion_paint::Stroke,
         /// Fraction of the stroke completed in `0.0..=1.0` (write-on timeline progress).
         #[serde(default = "default_one")]
         progress: f32,
@@ -1049,7 +1049,7 @@ pub enum SceneNode {
 
     /// Professional Photoshop-grade vector shape with boolean operations, fill, stroke, and winding rules.
     VectorShape {
-        path: photocraft_doc::Path,
+        path: rust_motion_doc::Path,
         fill: Option<Color>,
         #[serde(default)]
         stroke_color: Option<Color>,

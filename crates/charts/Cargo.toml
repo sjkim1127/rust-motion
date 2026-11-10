@@ -8,10 +8,6 @@ license.workspace     = true
 repository.workspace  = true
 readme.workspace      = true
 
-[lib]
-name = "rust_motion_charts"
-path = "src/lib.rs"
-
 [dependencies]
 rust-motion-paths       = { workspace = true }
 rust-motion-rasterizer  = { workspace = true }

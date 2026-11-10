@@ -15,7 +15,7 @@
 //!
 //! Pixels are handed over as interleaved, normalised `f32` samples in the document's own colour
 //! model (bit-depth and colour-mode agnostic), in horizontal bands so the copy stays bounded.
-//! [`Plugin::apply`] runs a filter on a [`photocraft_raster::Surface`], blending by the selection.
+//! [`Plugin::apply`] runs a filter on a [`rust_motion_raster::Surface`], blending by the selection.
 //! The process-wide [`registry`] holds the installed plug-ins.
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]

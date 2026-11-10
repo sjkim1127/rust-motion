@@ -31,7 +31,7 @@ fn test_lensdb_synthetic_profile_matching_and_correction() {
   </lens>
 </lensdatabase>"#;
 
-    let db = lightcraft_lensdb::LensDb::parse(xml).expect("parse lens database");
+    let db = rust_motion_lensdb::LensDb::parse(xml).expect("parse lens database");
     assert_eq!(db.cameras.len(), 1);
     assert_eq!(db.lenses.len(), 1);
 
@@ -43,7 +43,7 @@ fn test_lensdb_synthetic_profile_matching_and_correction() {
         .expect("find lens");
     assert_eq!(lens.maker, "Sony");
 
-    let shot = lightcraft_lensdb::Shot {
+    let shot = rust_motion_lensdb::Shot {
         focal: 24.0,
         aperture: Some(2.8),
         distance: Some(10.0),

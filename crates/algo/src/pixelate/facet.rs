@@ -2,7 +2,7 @@
 //! nine-sample addition order: reassociating the sums can change variance ties.
 use crate::fxutil::{MAXC, luma};
 use crate::{Ctx, image::Image};
-use photocraft_geom::Rect;
+use rust_motion_geom::Rect;
 
 #[derive(Clone, Copy, Default)]
 struct Quadrant {

@@ -6,7 +6,7 @@
 //! - Multi-face detection, landmark extraction, and cross-frame feature tracking
 //! - Multi-frame temporal denoising for camera footage
 
-use lightcraft_inpaint::{complete, CompleteParams};
+use rust_motion_inpaint::{complete, CompleteParams};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
 // ---------------------------------------------------------------------------

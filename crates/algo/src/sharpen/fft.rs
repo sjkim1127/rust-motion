@@ -1,8 +1,8 @@
 //! Wide exact-kernel Gaussian convolution using FFTs. Summation order changes:
 //! positive thresholds and unstable samples retain the sequential f32 fallback.
 use crate::{FilterParams, Image};
-use photocraft_geom::Rect;
-use photocraft_raster::{Interrupt, Surface};
+use rust_motion_geom::Rect;
+use rust_motion_raster::{Interrupt, Surface};
 use rayon::prelude::*;
 use rustfft::{Fft, FftPlanner, num_complex::Complex};
 use std::sync::{

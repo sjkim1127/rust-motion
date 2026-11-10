@@ -5,11 +5,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[lib]
-name = "photocraft_tablet"
 
 [dependencies]
-photocraft-paint = { workspace = true }
+rust-motion-paint = { workspace = true }
 serde = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]

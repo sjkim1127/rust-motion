@@ -3,7 +3,7 @@
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use image::{ImageBuffer, Rgba};
-use photocraft_psd::PsdFile;
+use rust_motion_psd::PsdFile;
 
 use crate::backend::{FrameConfig, RasterError, RasterizerBackend};
 use crate::scene::{
@@ -148,8 +148,8 @@ pub fn render_psd_to_pixmap(data: &[u8]) -> Result<tiny_skia::Pixmap, RasterErro
 #[cfg(test)]
 mod tests {
     use super::*;
-    use photocraft_psd::builder::{LayerSpec, PixelData, PsdBuilder};
-    use photocraft_psd::blend::BlendMode as PsdBlendMode;
+    use rust_motion_psd::builder::{LayerSpec, PixelData, PsdBuilder};
+    use rust_motion_psd::blend::BlendMode as PsdBlendMode;
 
     #[test]
     fn test_psd_builder_render_with_blend_modes() {

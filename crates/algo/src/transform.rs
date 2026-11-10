@@ -7,9 +7,9 @@
 //! bounded by the tile working set. Large reductions are pre-filtered with a proper resize first,
 //! so shrinking a layer doesn't alias.
 
-use photocraft_color::PixelFormat;
-use photocraft_geom::Rect;
-use photocraft_raster::{Interrupt, Surface};
+use rust_motion_color::PixelFormat;
+use rust_motion_geom::Rect;
+use rust_motion_raster::{Interrupt, Surface};
 use serde::{Deserialize, Serialize};
 
 use crate::resample::{Resample, resize_surface};
@@ -167,7 +167,7 @@ pub(crate) fn bicubic(t: f64) -> [f64; 4] {
 /// Warp `src` (its content inside `src_rect`) by `h` (source → destination document space).
 /// The result has the same format as `src`, with alpha added if `src` had none; pixels outside
 /// the warped quad are transparent.
-pub fn warp_surface(src: &Surface, src_rect: Rect, h: &Homography, interp: Interp) -> Result<Surface, photocraft_raster::AllocationError> {
+pub fn warp_surface(src: &Surface, src_rect: Rect, h: &Homography, interp: Interp) -> Result<Surface, rust_motion_raster::AllocationError> {
     warp(src, src_rect, h, interp, None, &Interrupt::NONE)
 }
 
@@ -178,7 +178,7 @@ pub fn warp_surface_with(
     h: &Homography,
     interp: Interp,
     ctl: &Interrupt,
-) -> Result<Option<Surface>, photocraft_raster::AllocationError> {
+) -> Result<Option<Surface>, rust_motion_raster::AllocationError> {
     let out = warp(src, src_rect, h, interp, None, ctl)?;
     Ok((!ctl.cancelled()).then_some(out))
 }
@@ -186,7 +186,7 @@ pub fn warp_surface_with(
 /// [`warp_surface`] keeping only the destination pixels inside `clip`. The work is bounded by
 /// `clip` even when part of the source lies at or beyond the map's horizon (a Perspective Crop of a
 /// layer that reaches far past the crop quad), which would make the full warped extent unbounded.
-pub fn warp_surface_clipped(src: &Surface, src_rect: Rect, h: &Homography, interp: Interp, clip: Rect) -> Result<Surface, photocraft_raster::AllocationError> {
+pub fn warp_surface_clipped(src: &Surface, src_rect: Rect, h: &Homography, interp: Interp, clip: Rect) -> Result<Surface, rust_motion_raster::AllocationError> {
     warp(src, src_rect, h, interp, Some(clip), &Interrupt::NONE)
 }
 
@@ -261,7 +261,7 @@ fn warp(
     interp: Interp,
     clip: Option<Rect>,
     ctl: &Interrupt,
-) -> Result<Surface, photocraft_raster::AllocationError> {
+) -> Result<Surface, rust_motion_raster::AllocationError> {
     let mut fmt = src.format();
     let converted;
     let mut src = if fmt.alpha {
@@ -325,15 +325,15 @@ fn warp(
     let n = fmt.channels();
     let a = n - 1;
     let tile_count = dst.tiles().count();
-    let tile_bytes = tile_count.checked_mul(std::mem::size_of::<Rect>()).ok_or(photocraft_raster::AllocationError::SizeOverflow)?;
+    let tile_bytes = tile_count.checked_mul(std::mem::size_of::<Rect>()).ok_or(rust_motion_raster::AllocationError::SizeOverflow)?;
     let mut tiles = Vec::new();
-    tiles.try_reserve_exact(tile_count).map_err(|_| photocraft_raster::AllocationError::NotEnoughMemory { bytes: tile_bytes })?;
+    tiles.try_reserve_exact(tile_count).map_err(|_| rust_motion_raster::AllocationError::NotEnoughMemory { bytes: tile_bytes })?;
     tiles.extend(dst.tiles().map(|tc| tc.rect().intersect(&dst)).filter(|r| !r.is_empty()));
     let src_ref: &Surface = src;
     // Tiles finished so far, for progress reported per tile (from any worker thread).
     let finished = std::sync::atomic::AtomicUsize::new(0);
     let total = tiles.len().max(1);
-    let work = |t: &Rect| -> Result<Option<(Rect, Vec<f32>)>, photocraft_raster::AllocationError> {
+    let work = |t: &Rect| -> Result<Option<(Rect, Vec<f32>)>, rust_motion_raster::AllocationError> {
         if ctl.cancelled() {
             return Ok(None);
         }
@@ -402,10 +402,10 @@ fn warp(
         let foot_u = extent((dx.0 - o.0).abs() + (dy.0 - o.0).abs());
         let foot_v = extent((dx.1 - o.1).abs() + (dy.1 - o.1).abs());
         let w = t.width() as usize;
-        let len = w.checked_mul(t.height() as usize).and_then(|v| v.checked_mul(n)).ok_or(photocraft_raster::AllocationError::SizeOverflow)?;
-        let bytes = len.checked_mul(std::mem::size_of::<f32>()).ok_or(photocraft_raster::AllocationError::SizeOverflow)?;
+        let len = w.checked_mul(t.height() as usize).and_then(|v| v.checked_mul(n)).ok_or(rust_motion_raster::AllocationError::SizeOverflow)?;
+        let bytes = len.checked_mul(std::mem::size_of::<f32>()).ok_or(rust_motion_raster::AllocationError::SizeOverflow)?;
         let mut outp = Vec::new();
-        outp.try_reserve_exact(len).map_err(|_| photocraft_raster::AllocationError::NotEnoughMemory { bytes })?;
+        outp.try_reserve_exact(len).map_err(|_| rust_motion_raster::AllocationError::NotEnoughMemory { bytes })?;
         outp.resize(len, 0.0f32);
         let mut any = false;
         let mut acc = [0.0f64; 8];
@@ -475,14 +475,14 @@ fn warp(
         }
         Ok(any.then_some((*t, outp)))
     };
-    let result_bytes = tiles.len().checked_mul(std::mem::size_of::<(Rect, Vec<f32>)>()).ok_or(photocraft_raster::AllocationError::SizeOverflow)?;
+    let result_bytes = tiles.len().checked_mul(std::mem::size_of::<(Rect, Vec<f32>)>()).ok_or(rust_motion_raster::AllocationError::SizeOverflow)?;
     let mut done = Vec::new();
-    done.try_reserve_exact(tiles.len()).map_err(|_| photocraft_raster::AllocationError::NotEnoughMemory { bytes: result_bytes })?;
+    done.try_reserve_exact(tiles.len()).map_err(|_| rust_motion_raster::AllocationError::NotEnoughMemory { bytes: result_bytes })?;
     let done = std::sync::Mutex::new(done);
     #[cfg(not(target_arch = "wasm32"))]
     {
         use rayon::prelude::*;
-        tiles.into_par_iter().try_for_each(|tile| -> Result<(), photocraft_raster::AllocationError> {
+        tiles.into_par_iter().try_for_each(|tile| -> Result<(), rust_motion_raster::AllocationError> {
             if let Some(result) = work(&tile)? {
                 done.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(result);
             }
@@ -680,7 +680,7 @@ mod tests {
 
     #[test]
     fn translation_preserves_colour_range_at_every_depth() {
-        use photocraft_color::{ColorMode, SampleType};
+        use rust_motion_color::{ColorMode, SampleType};
 
         let h = Homography([1.0, 0.0, 7.0, 0.0, 1.0, -3.0, 0.0, 0.0, 1.0]);
         for sample in SampleType::ALL {
@@ -757,7 +757,7 @@ mod tests {
 
     #[test]
     fn surfaces_without_alpha_gain_it() {
-        let mut s = Surface::new(PixelFormat::new(photocraft_color::ColorMode::Rgb, photocraft_color::SampleType::U8, false));
+        let mut s = Surface::new(PixelFormat::new(rust_motion_color::ColorMode::Rgb, rust_motion_color::SampleType::U8, false));
         s.fill_rect(Rect::new(0, 0, 10, 10), &[1.0, 0.0, 0.0]);
         let h = Homography([1.0, 0.0, 5.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
         let o = warp_surface(&s, Rect::new(0, 0, 10, 10), &h, Interp::Nearest).unwrap();

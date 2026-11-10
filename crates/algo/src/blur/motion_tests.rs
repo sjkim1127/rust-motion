@@ -1,6 +1,6 @@
 use super::*;
-use photocraft_color::{ColorMode, PixelFormat, SampleType};
-use photocraft_raster::Surface;
+use rust_motion_color::{ColorMode, PixelFormat, SampleType};
+use rust_motion_raster::Surface;
 
 fn assert_samples_equal(actual: &[f32], expected: &[f32], case: &str) {
     assert_eq!(actual.len(), expected.len(), "{case}");

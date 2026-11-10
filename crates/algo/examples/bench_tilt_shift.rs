@@ -1,10 +1,10 @@
 //! Complete Tilt-Shift filtering, including tiled reads and writes.
 //! Run alone in release: `bench_tilt_shift 6000 4000 5 1`.
 //! Fourth argument models the existing preview proxy scale (e.g. 1500 1000 7 4).
-use photocraft_algo::{FilterParams, apply_in};
-use photocraft_color::{ColorMode, PixelFormat, SampleType};
-use photocraft_geom::Rect;
-use photocraft_raster::Surface;
+use rust_motion_algo::{FilterParams, apply_in};
+use rust_motion_color::{ColorMode, PixelFormat, SampleType};
+use rust_motion_geom::Rect;
+use rust_motion_raster::Surface;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

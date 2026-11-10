@@ -1,7 +1,7 @@
 //! High-quality separable resampling of surfaces (Image Size).
 
-use photocraft_geom::{Rect, TILE_SIZE};
-use photocraft_raster::Surface;
+use rust_motion_geom::{Rect, TILE_SIZE};
+use rust_motion_raster::Surface;
 use serde::{Deserialize, Serialize};
 
 use crate::image::{premultiply, unpremultiply};
@@ -483,7 +483,7 @@ pub fn crop_surface(s: &Surface, keep: Rect) -> Surface {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use photocraft_color::{ColorMode, PixelFormat, SampleType};
+    use rust_motion_color::{ColorMode, PixelFormat, SampleType};
 
     fn ramp(sample: SampleType) -> Surface {
         let mut s = Surface::new(PixelFormat::new(ColorMode::Rgb, sample, true));

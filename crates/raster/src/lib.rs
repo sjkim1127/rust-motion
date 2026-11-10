@@ -14,8 +14,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use photocraft_color::{ColorMode, PixelFormat, SampleType, read_sample, write_sample};
-use photocraft_geom::{Rect, TILE_SIZE, TileCoord};
+use rust_motion_color::{ColorMode, PixelFormat, SampleType, read_sample, write_sample};
+use rust_motion_geom::{Rect, TILE_SIZE, TileCoord};
 
 /// A checked surface allocation could not be represented or reserved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -480,7 +480,7 @@ impl Surface {
                             let rgb = match previous {
                                 Some((key, rgb)) if key == ink => rgb,
                                 _ => {
-                                    let rgb = photocraft_color::convert::cmyk_to_rgb(ink.map(|v| v as f32 / 255.0));
+                                    let rgb = rust_motion_color::convert::cmyk_to_rgb(ink.map(|v| v as f32 / 255.0));
                                     previous = Some((ink, rgb));
                                     rgb
                                 }
@@ -1027,8 +1027,8 @@ pub fn to_rgba(format: &PixelFormat, px: &[f32]) -> [f32; 4] {
     let a = if format.alpha { px[n] } else { 1.0 };
     let rgb = match format.mode {
         ColorMode::Grayscale | ColorMode::Bitmap | ColorMode::Duotone => [px[0]; 3],
-        ColorMode::Cmyk => photocraft_color::convert::cmyk_to_rgb([px[0], px[1], px[2], px[3]]),
-        ColorMode::Lab => photocraft_color::convert::lab_to_srgb([px[0] * 100.0, px[1] * 255.0 - 128.0, px[2] * 255.0 - 128.0]),
+        ColorMode::Cmyk => rust_motion_color::convert::cmyk_to_rgb([px[0], px[1], px[2], px[3]]),
+        ColorMode::Lab => rust_motion_color::convert::lab_to_srgb([px[0] * 100.0, px[1] * 255.0 - 128.0, px[2] * 255.0 - 128.0]),
         _ => [px[0], px[1], px[2]],
     };
     [rgb[0], rgb[1], rgb[2], a]
@@ -1037,10 +1037,10 @@ pub fn to_rgba(format: &PixelFormat, px: &[f32]) -> [f32; 4] {
 pub fn from_rgba(format: &PixelFormat, rgba: [f32; 4]) -> Vec<f32> {
     let rgb = [rgba[0], rgba[1], rgba[2]];
     let mut out: Vec<f32> = match format.mode {
-        ColorMode::Grayscale | ColorMode::Bitmap | ColorMode::Duotone => vec![photocraft_color::convert::rgb_to_gray(rgb)],
-        ColorMode::Cmyk => photocraft_color::convert::rgb_to_cmyk(rgb).to_vec(),
+        ColorMode::Grayscale | ColorMode::Bitmap | ColorMode::Duotone => vec![rust_motion_color::convert::rgb_to_gray(rgb)],
+        ColorMode::Cmyk => rust_motion_color::convert::rgb_to_cmyk(rgb).to_vec(),
         ColorMode::Lab => {
-            let l = photocraft_color::convert::srgb_to_lab(rgb);
+            let l = rust_motion_color::convert::srgb_to_lab(rgb);
             vec![l[0] / 100.0, (l[1] + 128.0) / 255.0, (l[2] + 128.0) / 255.0]
         }
         _ => rgb.to_vec(),
@@ -1058,15 +1058,15 @@ pub fn from_rgba_into(format: &PixelFormat, rgba: [f32; 4], out: &mut [f32]) -> 
     let rgb = [rgba[0], rgba[1], rgba[2]];
     let n = match format.mode {
         ColorMode::Grayscale | ColorMode::Bitmap | ColorMode::Duotone => {
-            out[0] = photocraft_color::convert::rgb_to_gray(rgb);
+            out[0] = rust_motion_color::convert::rgb_to_gray(rgb);
             1
         }
         ColorMode::Cmyk => {
-            out[..4].copy_from_slice(&photocraft_color::convert::rgb_to_cmyk(rgb));
+            out[..4].copy_from_slice(&rust_motion_color::convert::rgb_to_cmyk(rgb));
             4
         }
         ColorMode::Lab => {
-            let l = photocraft_color::convert::srgb_to_lab(rgb);
+            let l = rust_motion_color::convert::srgb_to_lab(rgb);
             out[..3].copy_from_slice(&[l[0] / 100.0, (l[1] + 128.0) / 255.0, (l[2] + 128.0) / 255.0]);
             3
         }
@@ -1142,7 +1142,7 @@ mod tests {
     }
 
     use super::*;
-    use photocraft_color::PixelFormat;
+    use rust_motion_color::PixelFormat;
     use proptest::prelude::*;
 
     fn write_region_reference(surface: &mut Surface, r: Rect, data: &[f32]) {

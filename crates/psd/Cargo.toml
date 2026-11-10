@@ -5,10 +5,6 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[lib]
-name = "photocraft_psd"
-path = "src/lib.rs"
-
 [features]
 default = ["testgen", "serde"]
 serde = ["dep:serde"]
@@ -22,4 +18,4 @@ serde = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
-photocraft_psd = { path = ".", package = "rust-motion-psd", features = ["testgen"] }
+rust_motion_psd = { path = ".", package = "rust-motion-psd", features = ["testgen"] }

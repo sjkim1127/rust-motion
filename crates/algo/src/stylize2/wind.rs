@@ -5,7 +5,7 @@ use crate::fxutil::{MAXC, luma};
 use crate::image::Image;
 use crate::noise::hash01;
 use crate::{Ctx, WindMethod};
-use photocraft_geom::Rect;
+use rust_motion_geom::Rect;
 
 const MAX_ROW: usize = 1_048_576;
 

@@ -7,7 +7,7 @@
 //! Units: sizes are pixels, angles are degrees, every percentage is a 0..1 fraction (scatter and
 //! texture scale may exceed 1, like Photoshop's 1000 % scatter).
 
-use photocraft_color::BlendMode;
+use rust_motion_color::BlendMode;
 use serde::{Deserialize, Serialize};
 
 use crate::curve::ResponseCurve;

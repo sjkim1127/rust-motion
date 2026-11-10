@@ -1,19 +1,19 @@
 //! Liquify / Puppet / Perspective timings on a 24 MP image.
 //!
 //! ```sh
-//! cargo run --release -p photocraft-algo --example bench_liquify
+//! cargo run --release -p rust-motion-algo --example bench_liquify
 //! ```
 
 use std::time::Instant;
 
-use photocraft_algo::liquify::{LiquifyField, LiquifyStroke, LiquifyTool, ProxyImage, apply_liquify, auto_cell};
-use photocraft_algo::perspective::{PerspectiveMap, Plane};
-use photocraft_algo::puppet::{PuppetDensity, PuppetMode, PuppetPin, PuppetWarp, deform, render};
-use photocraft_algo::transform::Interp;
-use photocraft_algo::warp::warp_mesh_surface;
-use photocraft_color::PixelFormat;
-use photocraft_geom::Rect;
-use photocraft_raster::Surface;
+use rust_motion_algo::liquify::{LiquifyField, LiquifyStroke, LiquifyTool, ProxyImage, apply_liquify, auto_cell};
+use rust_motion_algo::perspective::{PerspectiveMap, Plane};
+use rust_motion_algo::puppet::{PuppetDensity, PuppetMode, PuppetPin, PuppetWarp, deform, render};
+use rust_motion_algo::transform::Interp;
+use rust_motion_algo::warp::warp_mesh_surface;
+use rust_motion_color::PixelFormat;
+use rust_motion_geom::Rect;
+use rust_motion_raster::Surface;
 
 fn main() {
     let (w, h) = (6000, 4000);
@@ -119,12 +119,12 @@ fn main() {
         expansion: 2.0,
     };
     let t = Instant::now();
-    let (solver, v, order) = deform(&s, b, &pw, photocraft_algo::puppet::ITERATIONS);
+    let (solver, v, order) = deform(&s, b, &pw, rust_motion_algo::puppet::ITERATIONS);
     println!(
         "puppet mesh {} verts / {} tris + ARAP ({} rounds): {:.1} ms",
         solver.mesh.verts.len(),
         solver.mesh.tris.len(),
-        photocraft_algo::puppet::ITERATIONS,
+        rust_motion_algo::puppet::ITERATIONS,
         t.elapsed().as_secs_f64() * 1e3
     );
     let dst: Vec<[f64; 2]> = pw.pins.iter().map(|p| p.dst).collect();

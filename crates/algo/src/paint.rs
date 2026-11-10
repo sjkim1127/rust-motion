@@ -1,8 +1,8 @@
 //! Paint helpers: bucket fill and the gradient tool.
 
-use photocraft_color::blend::{self, BlendMode};
-use photocraft_geom::Rect;
-use photocraft_raster::{Surface, from_rgba_into};
+use rust_motion_color::blend::{self, BlendMode};
+use rust_motion_geom::Rect;
+use rust_motion_raster::{Surface, from_rgba_into};
 use serde::{Deserialize, Serialize};
 
 /// Gradient tool shape.
@@ -88,7 +88,7 @@ fn composite_area(
                 }
                 let i = ((y - r.y0) as usize * w + (x - r.x0) as usize) * n;
                 let px = &mut region[i..i + n];
-                let d = photocraft_raster::to_rgba(&fmt, px);
+                let d = rust_motion_raster::to_rgba(&fmt, px);
                 let mut o = blend::composite(blend_mode, d, color(x, y), k);
                 if lock_transparency {
                     o[3] = d[3];
@@ -96,7 +96,7 @@ fn composite_area(
                 from_rgba_into(&fmt, o, &mut enc);
                 // A colour picked as CMYK inks replaces fully covered pixels of a CMYK target as it is.
                 if let Some(i) = inks {
-                    if fmt.mode == photocraft_color::ColorMode::Cmyk
+                    if fmt.mode == rust_motion_color::ColorMode::Cmyk
                         && blend_mode == BlendMode::Normal
                         && k >= 1.0
                     {
@@ -146,7 +146,7 @@ pub fn paint_gradient(
             let mut c = sample_stops(stops, if reverse { 1.0 - t } else { t });
             if dither {
                 // One quantisation step of monochromatic noise breaks 8-bit banding without speckle.
-                let n = (photocraft_color::dither_noise(x, y) - 0.5) / 255.0;
+                let n = (rust_motion_color::dither_noise(x, y) - 0.5) / 255.0;
                 for ch in c.iter_mut().take(3) {
                     *ch = (*ch + n).clamp(0.0, 1.0);
                 }
@@ -259,7 +259,7 @@ pub fn bucket_fill_region_inks(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use photocraft_color::PixelFormat;
+    use rust_motion_color::PixelFormat;
 
     #[test]
     fn gradient_t_shapes() {

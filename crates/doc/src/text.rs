@@ -9,7 +9,7 @@
 //! to `text.len()` is normalised by [`crate::TextLayer::char_runs`] (the last run is stretched or
 //! truncated), so edits never produce unstyled text.
 
-use photocraft_color::Color;
+use rust_motion_color::Color;
 use serde::{Deserialize, Serialize};
 
 /// Kerning mode (Photoshop: Metrics, Optical, 0).

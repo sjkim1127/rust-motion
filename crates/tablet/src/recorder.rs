@@ -1,10 +1,10 @@
 //! Tablet pointer input recording and stroke reconstruction.
 //!
 //! Captures live W3C PointerEvents (or stylus samples from platform monitors)
-//! and converts them into deterministic [`photocraft_paint::Stroke`] instances
+//! and converts them into deterministic [`rust_motion_paint::Stroke`] instances
 //! for write-on animation and reproducible rendering.
 
-use photocraft_paint::{BrushSettings, Stroke, StrokePoint};
+use rust_motion_paint::{BrushSettings, Stroke, StrokePoint};
 use serde::{Deserialize, Serialize};
 
 use crate::Sample;

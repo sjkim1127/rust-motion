@@ -1,5 +1,5 @@
 [package]
-name = "photocraft-affinity-fuzz"
+name = "rust-motion-affinity-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2024"
@@ -15,7 +15,7 @@ io = ["dep:photocraft-io"]
 
 [dependencies]
 libfuzzer-sys = "0.4"
-photocraft-affinity = { path = "..", features = ["synth"] }
+rust-motion-affinity = { path = "..", features = ["synth"] }
 photocraft-io = { path = "../../io", optional = true }
 
 [[bin]]

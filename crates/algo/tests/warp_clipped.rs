@@ -1,7 +1,7 @@
-use photocraft_algo::transform::{Homography, Interp, warp_surface, warp_surface_clipped};
-use photocraft_color::{ColorMode, PixelFormat, SampleType};
-use photocraft_geom::Rect;
-use photocraft_raster::Surface;
+use rust_motion_algo::transform::{Homography, Interp, warp_surface, warp_surface_clipped};
+use rust_motion_color::{ColorMode, PixelFormat, SampleType};
+use rust_motion_geom::Rect;
+use rust_motion_raster::Surface;
 
 #[test]
 fn clipped_warp_matches_the_existing_kernel_at_every_depth() {

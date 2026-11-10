@@ -1,7 +1,7 @@
 //! Filter › Other: Custom (5×5 convolution) and HSB/HSL.
 
-use photocraft_color::ColorMode;
-use photocraft_geom::Rect;
+use rust_motion_color::ColorMode;
+use rust_motion_geom::Rect;
 
 use crate::fxutil::{ncol, rgba, set_rgba, xy};
 use crate::image::Image;

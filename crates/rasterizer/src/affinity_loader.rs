@@ -10,9 +10,9 @@ use crate::psd::rgba_to_png_data_uri;
 use crate::scene::{BlendMode, Color, ImageFit, Scene, SceneNode};
 use crate::tiny_skia_backend::TinySkiaBackend;
 
-use photocraft_affinity::model::{Kind, Node};
-use photocraft_affinity::paint::{Color as AffColor, Paint};
-use photocraft_affinity::{preview, read, Limits};
+use rust_motion_affinity::model::{Kind, Node};
+use rust_motion_affinity::paint::{Color as AffColor, Paint};
+use rust_motion_affinity::{preview, read, Limits};
 
 /// Convert an Affinity color to a rasterizer RGBA [`Color`].
 pub fn affinity_color_to_rgba(c: &AffColor) -> Color {
@@ -46,39 +46,39 @@ pub fn affinity_color_to_rgba(c: &AffColor) -> Color {
 }
 
 /// Convert an Affinity blend mode to a native [`BlendMode`].
-pub fn map_affinity_blend(b: photocraft_affinity::model::Blend) -> BlendMode {
+pub fn map_affinity_blend(b: rust_motion_affinity::model::Blend) -> BlendMode {
     match b {
-        photocraft_affinity::model::Blend::Normal => BlendMode::Normal,
-        photocraft_affinity::model::Blend::PassThrough => BlendMode::PassThrough,
-        photocraft_affinity::model::Blend::Darken => BlendMode::Darken,
-        photocraft_affinity::model::Blend::DarkerColor => BlendMode::DarkerColor,
-        photocraft_affinity::model::Blend::Multiply => BlendMode::Multiply,
-        photocraft_affinity::model::Blend::ColorBurn => BlendMode::ColorBurn,
-        photocraft_affinity::model::Blend::Lighten => BlendMode::Lighten,
-        photocraft_affinity::model::Blend::LighterColor => BlendMode::LighterColor,
-        photocraft_affinity::model::Blend::Screen => BlendMode::Screen,
-        photocraft_affinity::model::Blend::ColorDodge => BlendMode::ColorDodge,
-        photocraft_affinity::model::Blend::Add => BlendMode::LinearDodge,
-        photocraft_affinity::model::Blend::Overlay => BlendMode::Overlay,
-        photocraft_affinity::model::Blend::SoftLight => BlendMode::SoftLight,
-        photocraft_affinity::model::Blend::HardLight => BlendMode::HardLight,
-        photocraft_affinity::model::Blend::VividLight => BlendMode::VividLight,
-        photocraft_affinity::model::Blend::PinLight => BlendMode::PinLight,
-        photocraft_affinity::model::Blend::LinearLight => BlendMode::LinearLight,
-        photocraft_affinity::model::Blend::HardMix => BlendMode::HardMix,
-        photocraft_affinity::model::Blend::Difference => BlendMode::Difference,
-        photocraft_affinity::model::Blend::Exclusion => BlendMode::Exclusion,
-        photocraft_affinity::model::Blend::Subtract => BlendMode::Subtract,
-        photocraft_affinity::model::Blend::Hue => BlendMode::Hue,
-        photocraft_affinity::model::Blend::Saturation => BlendMode::Saturation,
-        photocraft_affinity::model::Blend::Luminosity => BlendMode::Luminosity,
-        photocraft_affinity::model::Blend::Color => BlendMode::Color,
+        rust_motion_affinity::model::Blend::Normal => BlendMode::Normal,
+        rust_motion_affinity::model::Blend::PassThrough => BlendMode::PassThrough,
+        rust_motion_affinity::model::Blend::Darken => BlendMode::Darken,
+        rust_motion_affinity::model::Blend::DarkerColor => BlendMode::DarkerColor,
+        rust_motion_affinity::model::Blend::Multiply => BlendMode::Multiply,
+        rust_motion_affinity::model::Blend::ColorBurn => BlendMode::ColorBurn,
+        rust_motion_affinity::model::Blend::Lighten => BlendMode::Lighten,
+        rust_motion_affinity::model::Blend::LighterColor => BlendMode::LighterColor,
+        rust_motion_affinity::model::Blend::Screen => BlendMode::Screen,
+        rust_motion_affinity::model::Blend::ColorDodge => BlendMode::ColorDodge,
+        rust_motion_affinity::model::Blend::Add => BlendMode::LinearDodge,
+        rust_motion_affinity::model::Blend::Overlay => BlendMode::Overlay,
+        rust_motion_affinity::model::Blend::SoftLight => BlendMode::SoftLight,
+        rust_motion_affinity::model::Blend::HardLight => BlendMode::HardLight,
+        rust_motion_affinity::model::Blend::VividLight => BlendMode::VividLight,
+        rust_motion_affinity::model::Blend::PinLight => BlendMode::PinLight,
+        rust_motion_affinity::model::Blend::LinearLight => BlendMode::LinearLight,
+        rust_motion_affinity::model::Blend::HardMix => BlendMode::HardMix,
+        rust_motion_affinity::model::Blend::Difference => BlendMode::Difference,
+        rust_motion_affinity::model::Blend::Exclusion => BlendMode::Exclusion,
+        rust_motion_affinity::model::Blend::Subtract => BlendMode::Subtract,
+        rust_motion_affinity::model::Blend::Hue => BlendMode::Hue,
+        rust_motion_affinity::model::Blend::Saturation => BlendMode::Saturation,
+        rust_motion_affinity::model::Blend::Luminosity => BlendMode::Luminosity,
+        rust_motion_affinity::model::Blend::Color => BlendMode::Color,
         _ => BlendMode::Normal,
     }
 }
 
 /// Convert an Affinity Bézier path into SVG path command string.
-pub fn affinity_path_to_svg_d(path: &photocraft_affinity::model::Path) -> String {
+pub fn affinity_path_to_svg_d(path: &rust_motion_affinity::model::Path) -> String {
     let mut d = String::new();
     for subpath in &path.subpaths {
         d.push_str(&format!("M {} {} ", subpath.start.x, subpath.start.y));
@@ -170,11 +170,11 @@ fn node_to_scene_node(node: &Node) -> Result<Option<SceneNode>, RasterError> {
         }
         Kind::Image(img) => {
             let data_uri = match &img.pixels {
-                photocraft_affinity::model::Pixels::Encoded(bytes) => {
+                rust_motion_affinity::model::Pixels::Encoded(bytes) => {
                     let b64 = BASE64.encode(bytes);
                     format!("data:image/png;base64,{b64}")
                 }
-                photocraft_affinity::model::Pixels::Rgba8(rgba) => {
+                rust_motion_affinity::model::Pixels::Rgba8(rgba) => {
                     rgba_to_png_data_uri(img.width, img.height, rgba)?
                 }
             };
@@ -283,7 +283,7 @@ pub fn load_affinity_as_scene(data: &[u8]) -> Result<(Scene, u32, u32), RasterEr
 pub fn read_affinity_preview(data: &[u8]) -> Result<Option<Vec<u8>>, RasterError> {
     match preview(data) {
         Ok(p) => Ok(Some(p.png.to_vec())),
-        Err(photocraft_affinity::Error::Unsupported(_)) => Ok(None),
+        Err(rust_motion_affinity::Error::Unsupported(_)) => Ok(None),
         Err(e) => Err(RasterError::Scene(format!("failed to read Affinity preview: {e}"))),
     }
 }

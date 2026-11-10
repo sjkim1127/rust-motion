@@ -1,7 +1,7 @@
-//! Throughput check: `cargo test -p photocraft-cms --release --test bench -- --ignored --nocapture`.
+//! Throughput check: `cargo test -p rust-motion-cms --release --test bench -- --ignored --nocapture`.
 
-use rust_motion_cms as photocraft_cms;
-use photocraft_cms::{Builtin, Intent, Transform};
+use rust_motion_cms as rust_motion_cms;
+use rust_motion_cms::{Builtin, Intent, Transform};
 
 #[test]
 #[ignore]

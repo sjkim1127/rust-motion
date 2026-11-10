@@ -1,6 +1,6 @@
 //! Add Noise, Median, Dust & Scratches.
 
-use photocraft_geom::Rect;
+use rust_motion_geom::Rect;
 
 use crate::image::Image;
 use crate::{Ctx, Distribution};

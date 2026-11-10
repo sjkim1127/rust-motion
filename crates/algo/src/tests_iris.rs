@@ -1,6 +1,6 @@
 use super::*;
-use photocraft_color::{ColorMode, PixelFormat, SampleType};
-use photocraft_raster::{Interrupt, Surface};
+use rust_motion_color::{ColorMode, PixelFormat, SampleType};
+use rust_motion_raster::{Interrupt, Surface};
 
 #[path = "tests_iris_reference.rs"]
 mod reference;

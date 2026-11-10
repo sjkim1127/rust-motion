@@ -2,8 +2,8 @@ use rust_motion_rasterizer::affinity_loader::{
     affinity_color_to_rgba, affinity_path_to_svg_d, load_affinity_as_scene, map_affinity_blend,
     read_affinity_preview, render_affinity_to_image, render_affinity_to_pixmap,
 };
-use rust_motion_rasterizer::photocraft_affinity::model::{Path as AffPath, Point, SubPath};
-use rust_motion_rasterizer::photocraft_affinity::paint::Color as AffColor;
+use rust_motion_rasterizer::rust_motion_affinity::model::{Path as AffPath, Point, SubPath};
+use rust_motion_rasterizer::rust_motion_affinity::paint::Color as AffColor;
 use rust_motion_rasterizer::scene::BlendMode;
 
 #[test]
@@ -58,7 +58,7 @@ fn test_affinity_color_conversions() {
 
 #[test]
 fn test_affinity_blend_mode_mapping() {
-    use rust_motion_rasterizer::photocraft_affinity::model::Blend;
+    use rust_motion_rasterizer::rust_motion_affinity::model::Blend;
     assert_eq!(map_affinity_blend(Blend::Normal), BlendMode::Normal);
     assert_eq!(map_affinity_blend(Blend::Multiply), BlendMode::Multiply);
     assert_eq!(map_affinity_blend(Blend::Screen), BlendMode::Screen);

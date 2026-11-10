@@ -1,4 +1,4 @@
-# photocraft-cms
+# rust-motion-cms
 
 Pure-Rust ICC colour management for PhotoCraft. No workspace dependencies (L0, publishable),
 no C, no `unsafe`. Implemented from the public ICC.1:2010 (v4.3) and ICC.1:2001-04 (v2)
@@ -7,7 +7,7 @@ specifications, CIE 15, and Adobe's published black point compensation paper.
 ## API
 
 ```rust
-use photocraft_cms::{Builtin, Intent, Profile, Transform};
+use rust_motion_cms::{Builtin, Intent, Profile, Transform};
 
 let src = Profile::parse(&icc_bytes)?;                    // v2/v4: matrix/TRC, gray TRC, mft1/mft2/mAB/mBA
 let dst = Builtin::CoatedCmyk.profile();
@@ -68,7 +68,7 @@ sampled gamut boundary. `profiles/photocraft-coated-cmyk.icc` (237 KB, AToB 11‚Å
 21¬≥ lut16) is that output, dedicated to the public domain (CC0-1.0). Regenerate with
 
 ```sh
-PHOTOCRAFT_REGEN_PROFILES=1 cargo test -p photocraft-cms --release --test regen
+PHOTOCRAFT_REGEN_PROFILES=1 cargo test -p rust-motion-cms --release --test regen
 ```
 
 It is a plausible coated-offset profile, not a measured characterisation: use your printer's

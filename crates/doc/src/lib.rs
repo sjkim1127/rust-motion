@@ -37,9 +37,9 @@ pub use effects::{
 };
 pub use mode::{ColorTable, Duotone, DuotoneInk, StackMode};
 pub use pattern::Pattern;
-pub use photocraft_color::{BlendMode, Color, ColorMode, PixelFormat, SampleType};
-pub use photocraft_geom::{Affine, Rect, Size};
-pub use photocraft_raster::Surface;
+pub use rust_motion_color::{BlendMode, Color, ColorMode, PixelFormat, SampleType};
+pub use rust_motion_geom::{Affine, Rect, Size};
+pub use rust_motion_raster::Surface;
 use serde::{Deserialize, Serialize};
 pub use slices::{Slice, SliceKind, SliceOrigin, Slices};
 pub use text_styles::TextStyles;
@@ -522,7 +522,7 @@ pub struct SmartObject {
     pub filter_mask: Option<LayerMask>,
     /// Edit › Transform › Warp on the smart object, in source-image coordinates; applied before
     /// `transform` when re-rendering from the source, so warping stays lossless.
-    pub warp: Option<photocraft_geom::warp::Warp>,
+    pub warp: Option<rust_motion_geom::warp::Warp>,
     /// Layer › Smart Objects › Stack Mode: when set, the source's top-level layers are combined
     /// per pixel with this statistic instead of composited.
     pub stack_mode: Option<StackMode>,
@@ -991,7 +991,7 @@ impl Document {
         bg.locks.position = true;
         if let Some(s) = bg.surface_mut() {
             let rgba = fill.to_rgb();
-            let px = photocraft_raster::from_rgba(&s.format(), [rgba[0], rgba[1], rgba[2], fill.alpha]);
+            let px = rust_motion_raster::from_rgba(&s.format(), [rgba[0], rgba[1], rgba[2], fill.alpha]);
             s.fill_rect(d.bounds(), &px);
         }
         d.layers.push(bg);
