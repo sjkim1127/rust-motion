@@ -13,10 +13,11 @@ pub use safe_area::{
     fit_text, get_safe_area_insets, measure_text_approx, Platform, SafeAreaInsets,
 };
 pub use scene_emitter::{
-    FlipDirection, LinearWipeDirection, SceneEmitter, SceneEmitterComposition, SceneFrameContext,
-    SceneFreeze, SceneGroup, SceneLayer, SceneLinearGradient, SceneLoop, SceneNullObject,
-    SceneRect, SceneSequence, SceneSeries, SceneSeriesEntry, SceneStack, SceneText, SceneTextBlock,
-    SceneTrail, SceneTrailOpacity, SceneTransitionSeries, TransitionKind, TransitionTiming,
+    FlipDirection, LinearWipeDirection, SceneAction, SceneAuthoring, SceneAuthoringBuilder,
+    SceneEmitter, SceneEmitterComposition, SceneFrameContext, SceneFreeze, SceneGroup, SceneLayer,
+    SceneLinearGradient, SceneLoop, SceneNullObject, SceneRect, SceneSequence, SceneSeries,
+    SceneSeriesEntry, SceneStack, SceneText, SceneTextBlock, SceneTrail, SceneTrailOpacity,
+    SceneTransitionSeries, TransitionKind, TransitionTiming,
 };
 pub use time::{
     fields_to_frames, format_time, format_timecode_frames, frames_to_fields, parse_timecode,
