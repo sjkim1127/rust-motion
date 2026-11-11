@@ -192,7 +192,6 @@ impl BrowserWorker {
             let candidates = [
                 current_dir.join("node_modules"),
                 current_dir.join("crates/ts/node_modules"),
-                current_dir.join("apps/studio-web/node_modules"),
             ];
             let existing = std::env::var("NODE_PATH").unwrap_or_default();
             let sep = if cfg!(windows) { ";" } else { ":" };

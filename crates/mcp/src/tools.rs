@@ -144,23 +144,41 @@ pub fn get_tools() -> Vec<ToolDef> {
 }
 
 /// Execute an MCP tool call against the session.
-pub fn execute_tool(session: &Arc<Mutex<McpSession>>, name: &str, args: Value) -> Result<Value, String> {
-    let mut sess = session.lock().map_err(|e| format!("session lock error: {e}"))?;
+pub fn execute_tool(
+    session: &Arc<Mutex<McpSession>>,
+    name: &str,
+    args: Value,
+) -> Result<Value, String> {
+    let mut sess = session
+        .lock()
+        .map_err(|e| format!("session lock error: {e}"))?;
 
     match name {
         "project_create" => {
-            let p_name = args.get("name").and_then(|v| v.as_str()).ok_or("missing 'name'")?;
+            let p_name = args
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'name'")?;
             let width = args.get("width").and_then(|v| v.as_u64()).unwrap_or(1920) as u32;
             let height = args.get("height").and_then(|v| v.as_u64()).unwrap_or(1080) as u32;
             let fps = args.get("fps").and_then(|v| v.as_f64()).unwrap_or(30.0);
-            let duration_secs = args.get("duration_secs").and_then(|v| v.as_f64()).unwrap_or(10.0);
+            let duration_secs = args
+                .get("duration_secs")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(10.0);
 
             let res = sess.create_project(p_name, width, height, fps, duration_secs)?;
             Ok(json!({ "status": "ok", "message": res }))
         }
         "timeline_add_track" => {
-            let t_type = args.get("track_type").and_then(|v| v.as_str()).ok_or("missing 'track_type'")?;
-            let t_name = args.get("name").and_then(|v| v.as_str()).ok_or("missing 'name'")?;
+            let t_type = args
+                .get("track_type")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'track_type'")?;
+            let t_name = args
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'name'")?;
 
             let kind = match t_type.to_ascii_lowercase().as_str() {
                 "video" => TrackKind::Video,
@@ -174,54 +192,115 @@ pub fn execute_tool(session: &Arc<Mutex<McpSession>>, name: &str, args: Value) -
             Ok(json!({ "status": "ok", "track_id": track_id }))
         }
         "clip_insert" => {
-            let track_id = args.get("track_id").and_then(|v| v.as_str()).ok_or("missing 'track_id'")?;
-            let c_name = args.get("name").and_then(|v| v.as_str()).ok_or("missing 'name'")?;
-            let start = args.get("start_secs").and_then(|v| v.as_f64()).ok_or("missing 'start_secs'")?;
-            let dur = args.get("duration_secs").and_then(|v| v.as_f64()).ok_or("missing 'duration_secs'")?;
-            let asset_id = args.get("asset_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let track_id = args
+                .get("track_id")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'track_id'")?;
+            let c_name = args
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'name'")?;
+            let start = args
+                .get("start_secs")
+                .and_then(|v| v.as_f64())
+                .ok_or("missing 'start_secs'")?;
+            let dur = args
+                .get("duration_secs")
+                .and_then(|v| v.as_f64())
+                .ok_or("missing 'duration_secs'")?;
+            let asset_id = args
+                .get("asset_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
 
             let clip_id = sess.insert_clip(track_id, c_name, start, dur, asset_id)?;
             Ok(json!({ "status": "ok", "clip_id": clip_id }))
         }
         "clip_trim" => {
-            let clip_id = args.get("clip_id").and_then(|v| v.as_str()).ok_or("missing 'clip_id'")?;
-            let edge_in = args.get("edge_in").and_then(|v| v.as_bool()).ok_or("missing 'edge_in'")?;
-            let new_time = args.get("new_time_secs").and_then(|v| v.as_f64()).ok_or("missing 'new_time_secs'")?;
+            let clip_id = args
+                .get("clip_id")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'clip_id'")?;
+            let edge_in = args
+                .get("edge_in")
+                .and_then(|v| v.as_bool())
+                .ok_or("missing 'edge_in'")?;
+            let new_time = args
+                .get("new_time_secs")
+                .and_then(|v| v.as_f64())
+                .ok_or("missing 'new_time_secs'")?;
 
             let res = sess.trim_clip(clip_id, edge_in, new_time)?;
             Ok(json!({ "status": "ok", "message": res }))
         }
         "clip_split" => {
-            let clip_id = args.get("clip_id").and_then(|v| v.as_str()).ok_or("missing 'clip_id'")?;
-            let split_time = args.get("split_time_secs").and_then(|v| v.as_f64()).ok_or("missing 'split_time_secs'")?;
+            let clip_id = args
+                .get("clip_id")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'clip_id'")?;
+            let split_time = args
+                .get("split_time_secs")
+                .and_then(|v| v.as_f64())
+                .ok_or("missing 'split_time_secs'")?;
 
             let (c1, c2) = sess.split_clip(clip_id, split_time)?;
             Ok(json!({ "status": "ok", "clip1": c1, "clip2": c2 }))
         }
         "color_grade_apply" => {
-            let clip_id = args.get("clip_id").and_then(|v| v.as_str()).ok_or("missing 'clip_id'")?;
+            let clip_id = args
+                .get("clip_id")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'clip_id'")?;
             let params = ColorGradeParams {
-                exposure: args.get("exposure").and_then(|v| v.as_f64()).map(|x| x as f32),
-                contrast: args.get("contrast").and_then(|v| v.as_f64()).map(|x| x as f32),
-                saturation: args.get("saturation").and_then(|v| v.as_f64()).map(|x| x as f32),
+                exposure: args
+                    .get("exposure")
+                    .and_then(|v| v.as_f64())
+                    .map(|x| x as f32),
+                contrast: args
+                    .get("contrast")
+                    .and_then(|v| v.as_f64())
+                    .map(|x| x as f32),
+                saturation: args
+                    .get("saturation")
+                    .and_then(|v| v.as_f64())
+                    .map(|x| x as f32),
                 gamma: args.get("gamma").and_then(|v| v.as_f64()).map(|x| x as f32),
-                lut_cube: args.get("lut_cube").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                lut_cube: args
+                    .get("lut_cube")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
             };
 
             let res = sess.apply_color_grade(clip_id, params)?;
             Ok(json!({ "status": "ok", "message": res }))
         }
         "subtitles_generate" => {
-            let track_id = args.get("track_id").and_then(|v| v.as_str()).ok_or("missing 'track_id'")?;
-            let text = args.get("text").and_then(|v| v.as_str()).ok_or("missing 'text'")?;
-            let start = args.get("start_secs").and_then(|v| v.as_f64()).ok_or("missing 'start_secs'")?;
-            let dur = args.get("duration_secs").and_then(|v| v.as_f64()).ok_or("missing 'duration_secs'")?;
+            let track_id = args
+                .get("track_id")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'track_id'")?;
+            let text = args
+                .get("text")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'text'")?;
+            let start = args
+                .get("start_secs")
+                .and_then(|v| v.as_f64())
+                .ok_or("missing 'start_secs'")?;
+            let dur = args
+                .get("duration_secs")
+                .and_then(|v| v.as_f64())
+                .ok_or("missing 'duration_secs'")?;
 
-            let clip_id = sess.insert_clip(track_id, &format!("caption_{text}"), start, dur, None)?;
+            let clip_id =
+                sess.insert_clip(track_id, &format!("caption_{text}"), start, dur, None)?;
             Ok(json!({ "status": "ok", "clip_id": clip_id, "text": text }))
         }
         "preview_frame" => {
-            let time_secs = args.get("time_secs").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let time_secs = args
+                .get("time_secs")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             let width = args.get("width").and_then(|v| v.as_u64()).unwrap_or(640) as u32;
             let height = args.get("height").and_then(|v| v.as_u64()).unwrap_or(360) as u32;
 
@@ -236,7 +315,10 @@ pub fn execute_tool(session: &Arc<Mutex<McpSession>>, name: &str, args: Value) -
             }))
         }
         "render_composition" => {
-            let output_path = args.get("output_path").and_then(|v| v.as_str()).ok_or("missing 'output_path'")?;
+            let output_path = args
+                .get("output_path")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'output_path'")?;
             let codec = args.get("codec").and_then(|v| v.as_str()).unwrap_or("h264");
             let crf = args.get("crf").and_then(|v| v.as_u64()).unwrap_or(18) as u32;
 

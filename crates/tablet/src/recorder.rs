@@ -223,8 +223,24 @@ mod tests {
         let mut recorder = StrokeRecorder::new();
         recorder.start();
         recorder.record_sample(10.0, 10.0, None, 0.0);
-        recorder.record_sample(20.0, 20.0, Some(Sample { pressure: 0.5, ..Default::default() }), 50.0);
-        recorder.record_sample(30.0, 30.0, Some(Sample { pressure: 0.8, ..Default::default() }), 100.0);
+        recorder.record_sample(
+            20.0,
+            20.0,
+            Some(Sample {
+                pressure: 0.5,
+                ..Default::default()
+            }),
+            50.0,
+        );
+        recorder.record_sample(
+            30.0,
+            30.0,
+            Some(Sample {
+                pressure: 0.8,
+                ..Default::default()
+            }),
+            100.0,
+        );
 
         assert_eq!(recorder.point_count(), 3);
         assert!((recorder.duration_secs() - 0.1).abs() < 1e-4);

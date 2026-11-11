@@ -99,7 +99,10 @@ pub struct Adapt {
 
 impl Adapt {
     /// Copies are taken as they are.
-    pub const NONE: Adapt = Adapt { gain: (1.0, 1.0), bias: 0.0 };
+    pub const NONE: Adapt = Adapt {
+        gain: (1.0, 1.0),
+        bias: 0.0,
+    };
 
     pub fn is_none(&self) -> bool {
         self.gain == (1.0, 1.0) && self.bias == 0.0
@@ -133,7 +136,15 @@ pub struct CompleteParams {
 
 impl Default for CompleteParams {
     fn default() -> Self {
-        Self { patch_radius: 3, em_iters: 10, min_em_iters: 3, pm_iters: 2, refine_extent: 192, adapt: Adapt::NONE, seed: 1 }
+        Self {
+            patch_radius: 3,
+            em_iters: 10,
+            min_em_iters: 3,
+            pm_iters: 2,
+            refine_extent: 192,
+            adapt: Adapt::NONE,
+            seed: 1,
+        }
     }
 }
 
@@ -159,7 +170,12 @@ struct Level<'a> {
 }
 
 impl Level<'_> {
-    const EMPTY: Level<'static> = Level { w: 0, h: 0, img: Cow::Borrowed(&[]), px: Cow::Borrowed(&[]) };
+    const EMPTY: Level<'static> = Level {
+        w: 0,
+        h: 0,
+        img: Cow::Borrowed(&[]),
+        px: Cow::Borrowed(&[]),
+    };
 }
 
 /// The half-open box `[x0, x1) × [y0, y1)` of a level's grid.
@@ -174,12 +190,22 @@ struct Bounds {
 impl Bounds {
     /// Grown by `r` on every side, within a `w × h` grid.
     fn grow(self, r: usize, w: usize, h: usize) -> Bounds {
-        Bounds { x0: self.x0.saturating_sub(r), y0: self.y0.saturating_sub(r), x1: self.x1.saturating_add(r).min(w), y1: self.y1.saturating_add(r).min(h) }
+        Bounds {
+            x0: self.x0.saturating_sub(r),
+            y0: self.y0.saturating_sub(r),
+            x1: self.x1.saturating_add(r).min(w),
+            y1: self.y1.saturating_add(r).min(h),
+        }
     }
 
     /// The same box on the next coarser level (whose cells are 2 × 2 of these).
     fn half(self) -> Bounds {
-        Bounds { x0: self.x0 / 2, y0: self.y0 / 2, x1: self.x1.div_ceil(2), y1: self.y1.div_ceil(2) }
+        Bounds {
+            x0: self.x0 / 2,
+            y0: self.y0 / 2,
+            x1: self.x1.div_ceil(2),
+            y1: self.y1.div_ceil(2),
+        }
     }
 
     fn width(&self) -> usize {
@@ -243,7 +269,12 @@ fn downsample(l: &Level, ch: usize) -> Level<'static> {
         }
     };
     par::chunks2_mut(&mut img, w * ch, &mut px, w, w * h >= PAR_MIN, row);
-    Level { w, h, img: Cow::Owned(img), px: Cow::Owned(px) }
+    Level {
+        w,
+        h,
+        img: Cow::Owned(img),
+        px: Cow::Owned(px),
+    }
 }
 
 /// Summed-area table of a boolean grid (`(w+1) × (h+1)`). Not inlined: in [`synthesize`] it made
@@ -304,7 +335,9 @@ fn hole_thickness(w: usize, hb: Bounds, px: &[Px]) -> usize {
         }
         px.get((hb.y0 + gy - 1) * w + hb.x0 + gx - 1) != Some(&Px::Hole)
     });
-    let deepest = crate::selection::edt(&outside, gw, gh).into_iter().fold(0.0f32, f32::max);
+    let deepest = crate::selection::edt(&outside, gw, gh)
+        .into_iter()
+        .fold(0.0f32, f32::max);
     (2.0 * deepest).ceil() as usize
 }
 
@@ -315,7 +348,12 @@ const PEEL_BUDGET: usize = 1 << 28;
 /// Whether the onion peel of the hole cells within `hb` of a `w`-wide role grid from `sources`
 /// source centres stays within [`PEEL_BUDGET`].
 fn peel_affordable(w: usize, px: &[Px], hb: Bounds, sources: usize) -> bool {
-    let holes: usize = (hb.y0..hb.y1).map(|y| px.get(y * w + hb.x0..y * w + hb.x1).map_or(0, |row| row.iter().filter(|k| **k == Px::Hole).count())).sum();
+    let holes: usize = (hb.y0..hb.y1)
+        .map(|y| {
+            px.get(y * w + hb.x0..y * w + hb.x1)
+                .map_or(0, |row| row.iter().filter(|k| **k == Px::Hole).count())
+        })
+        .sum();
     holes.saturating_mul(sources) <= PEEL_BUDGET
 }
 
@@ -332,8 +370,18 @@ fn hole_bounds(w: usize, h: usize, px: &[Px]) -> Option<Bounds> {
     for (y, span) in rows.into_iter().enumerate() {
         if let Some((x0, x1)) = span {
             b = Some(match b {
-                None => Bounds { x0, y0: y, x1, y1: y + 1 },
-                Some(b) => Bounds { x0: b.x0.min(x0), y0: b.y0, x1: b.x1.max(x1), y1: y + 1 },
+                None => Bounds {
+                    x0,
+                    y0: y,
+                    x1,
+                    y1: y + 1,
+                },
+                Some(b) => Bounds {
+                    x0: b.x0.min(x0),
+                    y0: b.y0,
+                    x1: b.x1.max(x1),
+                    y1: y + 1,
+                },
             });
         }
     }
@@ -342,7 +390,13 @@ fn hole_bounds(w: usize, h: usize, px: &[Px]) -> Option<Bounds> {
 
 /// Valid source centres: the whole `2r+1` patch inside the grid and copyable. Found per row
 /// (each pixel's horizontal run), then per column of runs. `None` when cancelled.
-fn valid_sources(w: usize, h: usize, r: usize, px: &[Px], ctl: &rust_motion_raster::Interrupt) -> Option<Vec<bool>> {
+fn valid_sources(
+    w: usize,
+    h: usize,
+    r: usize,
+    px: &[Px],
+    ctl: &rust_motion_raster::Interrupt,
+) -> Option<Vec<bool>> {
     const BAND: usize = 64;
     let side = 2 * r + 1;
     let par = w * h >= PAR_MIN;
@@ -385,7 +439,12 @@ fn valid_sources(w: usize, h: usize, r: usize, px: &[Px], ctl: &rust_motion_rast
                 continue;
             }
             let y = yy - r;
-            for (v, n) in out[(y - y0) * w..(y - y0 + 1) * w].iter_mut().zip(&stack).take(w - r).skip(r) {
+            for (v, n) in out[(y - y0) * w..(y - y0 + 1) * w]
+                .iter_mut()
+                .zip(&stack)
+                .take(w - r)
+                .skip(r)
+            {
                 *v = *n >= side;
             }
         }
@@ -415,14 +474,24 @@ impl Sources {
         let blocks = w.div_ceil(SOURCE_BLOCK);
         let mut block_start = vec![0u32; h * blocks];
         // Per row: the block prefix, and the row's count.
-        let counts: Vec<usize> = par::map(h, valid.len() >= PAR_MIN, |y| valid[y * w..(y + 1) * w].iter().filter(|v| **v).count());
-        par::chunks_mut(&mut block_start, blocks, valid.len() >= PAR_MIN, |y, out| {
-            let mut n = 0u32;
-            for (b, o) in out.iter_mut().enumerate() {
-                *o = n;
-                n += valid[y * w + b * SOURCE_BLOCK..y * w + ((b + 1) * SOURCE_BLOCK).min(w)].iter().filter(|v| **v).count() as u32;
-            }
+        let counts: Vec<usize> = par::map(h, valid.len() >= PAR_MIN, |y| {
+            valid[y * w..(y + 1) * w].iter().filter(|v| **v).count()
         });
+        par::chunks_mut(
+            &mut block_start,
+            blocks,
+            valid.len() >= PAR_MIN,
+            |y, out| {
+                let mut n = 0u32;
+                for (b, o) in out.iter_mut().enumerate() {
+                    *o = n;
+                    n += valid[y * w + b * SOURCE_BLOCK..y * w + ((b + 1) * SOURCE_BLOCK).min(w)]
+                        .iter()
+                        .filter(|v| **v)
+                        .count() as u32;
+                }
+            },
+        );
         let mut row_start = Vec::with_capacity(counts.len() + 1);
         let mut total = 0usize;
         row_start.push(0);
@@ -430,7 +499,11 @@ impl Sources {
             total += c;
             row_start.push(total);
         }
-        Sources { row_start, block_start, blocks }
+        Sources {
+            row_start,
+            block_start,
+            blocks,
+        }
     }
 
     fn len(&self) -> usize {
@@ -439,13 +512,26 @@ impl Sources {
 
     /// The `k`-th valid centre in row-major order (`k < len`).
     fn nth(&self, k: usize, valid: &[bool], w: usize) -> (i32, i32) {
-        let y = self.row_start.partition_point(|&s| s <= k).saturating_sub(1);
+        let y = self
+            .row_start
+            .partition_point(|&s| s <= k)
+            .saturating_sub(1);
         let left = k.saturating_sub(self.row_start.get(y).copied().unwrap_or(0));
-        let row_blocks = self.block_start.get(y * self.blocks..(y + 1) * self.blocks).unwrap_or(&[]);
-        let b = row_blocks.partition_point(|&s| s as usize <= left).saturating_sub(1);
+        let row_blocks = self
+            .block_start
+            .get(y * self.blocks..(y + 1) * self.blocks)
+            .unwrap_or(&[]);
+        let b = row_blocks
+            .partition_point(|&s| s as usize <= left)
+            .saturating_sub(1);
         let mut left = left.saturating_sub(row_blocks.get(b).copied().unwrap_or(0) as usize);
         let x0 = b * SOURCE_BLOCK;
-        for (x, v) in valid.iter().skip(y * w + x0).take(w.saturating_sub(x0)).enumerate() {
+        for (x, v) in valid
+            .iter()
+            .skip(y * w + x0)
+            .take(w.saturating_sub(x0))
+            .enumerate()
+        {
             if *v {
                 if left == 0 {
                     return ((x0 + x) as i32, y as i32);
@@ -488,7 +574,15 @@ fn targets_around(w: usize, r: usize, px: &[Px], hb: Bounds, tb: Bounds) -> Vec<
         for x in tb.x0..tb.x1 {
             let k = (y - tb.y0) * tb.width() + (x - tb.x0);
             let (x, y) = (x as i32, y as i32);
-            targets[k] = window_count(&s, bw, bh, x - ri - ox, y - ri - oy, x + ri + 1 - ox, y + ri + 1 - oy) > 0;
+            targets[k] = window_count(
+                &s,
+                bw,
+                bh,
+                x - ri - ox,
+                y - ri - oy,
+                x + ri + 1 - ox,
+                y + ri + 1 - oy,
+            ) > 0;
         }
     }
     targets
@@ -511,7 +605,10 @@ impl Coarser {
         if x < t.x0 || x >= t.x1 || y < t.y0 || y >= t.y1 {
             return (i32::MIN, i32::MIN);
         }
-        self.field.get((y - t.y0) * t.width() + (x - t.x0)).copied().unwrap_or((i32::MIN, i32::MIN))
+        self.field
+            .get((y - t.y0) * t.width() + (x - t.x0))
+            .copied()
+            .unwrap_or((i32::MIN, i32::MIN))
     }
 }
 
@@ -581,7 +678,11 @@ pub(crate) fn fit(a: Adapt, n: f32, st: f32, stt: f32, ss: f32, sss: f32) -> (f3
 impl Solver<'_> {
     #[inline]
     fn is_valid(&self, x: i32, y: i32) -> bool {
-        x >= 0 && y >= 0 && (x as usize) < self.w && (y as usize) < self.h && self.valid[y as usize * self.w + x as usize]
+        x >= 0
+            && y >= 0
+            && (x as usize) < self.w
+            && (y as usize) < self.h
+            && self.valid[y as usize * self.w + x as usize]
     }
 
     /// Mark the full target patches (`full`), and keep the source moments where they pay off.
@@ -590,19 +691,28 @@ impl Solver<'_> {
         let side = 2 * r + 1;
         let mut full = vec![false; tb.area()];
         let px = self.px;
-        par::chunks_mut(&mut full, tb.width(), tb.area() >= PAR_MIN_PATCHES, |ty, out| {
-            let y = tb.y0 + ty;
-            if y < r || y + r >= h {
-                return;
-            }
-            for (tx, f) in out.iter_mut().enumerate() {
-                let x = tb.x0 + tx;
-                if x < r || x + r >= w {
-                    continue;
+        par::chunks_mut(
+            &mut full,
+            tb.width(),
+            tb.area() >= PAR_MIN_PATCHES,
+            |ty, out| {
+                let y = tb.y0 + ty;
+                if y < r || y + r >= h {
+                    return;
                 }
-                *f = (y - r..=y + r).all(|yy| px[yy * w + x - r..yy * w + x - r + side].iter().all(|k| *k != Px::Void));
-            }
-        });
+                for (tx, f) in out.iter_mut().enumerate() {
+                    let x = tb.x0 + tx;
+                    if x < r || x + r >= w {
+                        continue;
+                    }
+                    *f = (y - r..=y + r).all(|yy| {
+                        px[yy * w + x - r..yy * w + x - r + side]
+                            .iter()
+                            .all(|k| *k != Px::Void)
+                    });
+                }
+            },
+        );
         self.full = full;
         if self.adapt.is_none() {
             return;
@@ -620,7 +730,16 @@ impl Solver<'_> {
             }
             for x in 0..w {
                 if valid[y * w + x] {
-                    patch_moments(img, w, ch, c8, side, x - r, y - r, &mut out[x * c8..(x + 1) * c8]);
+                    patch_moments(
+                        img,
+                        w,
+                        ch,
+                        c8,
+                        side,
+                        x - r,
+                        y - r,
+                        &mut out[x * c8..(x + 1) * c8],
+                    );
                 }
             }
         });
@@ -634,9 +753,17 @@ impl Solver<'_> {
     fn dist(&self, t: (i32, i32), k: usize, s: (i32, i32), cutoff: f32) -> f32 {
         let full = self.full[k];
         if !self.adapt.is_none() {
-            return if full { self.dist_adapted_full(k, t, s) } else { self.dist_adapted(t, s) };
+            return if full {
+                self.dist_adapted_full(k, t, s)
+            } else {
+                self.dist_adapted(t, s)
+            };
         }
-        if full { self.dist_full(t, s, cutoff) } else { self.dist_clipped(t, s, cutoff) }
+        if full {
+            self.dist_full(t, s, cutoff)
+        } else {
+            self.dist_clipped(t, s, cutoff)
+        }
     }
 
     /// [`Solver::dist`] without adaptation, of a patch that may be clipped.
@@ -669,7 +796,11 @@ impl Solver<'_> {
                 return f32::INFINITY;
             }
         }
-        if n == 0 { f32::INFINITY } else { sum / n as f32 }
+        if n == 0 {
+            f32::INFINITY
+        } else {
+            sum / n as f32
+        }
     }
 
     /// [`Solver::dist_clipped`] of a full patch: the same sums, in the same order. It gives up
@@ -684,7 +815,10 @@ impl Solver<'_> {
         for dy in -r..=r {
             let ti = ((t.1 + dy) as usize * w + (t.0 - r) as usize) * ch;
             let si = ((s.1 + dy) as usize * w + (s.0 - r) as usize) * ch;
-            for (tp, sp) in self.img[ti..ti + span].chunks_exact(ch).zip(self.img[si..si + span].chunks_exact(ch)) {
+            for (tp, sp) in self.img[ti..ti + span]
+                .chunks_exact(ch)
+                .zip(self.img[si..si + span].chunks_exact(ch))
+            {
                 for (a, b) in tp.iter().zip(sp) {
                     let d = a - b;
                     sum += d * d;
@@ -738,7 +872,9 @@ impl Solver<'_> {
         let c8 = m.len();
         let side = (2 * r + 1) as usize;
         let tm = &self.tmom[k * c8..(k + 1) * c8];
-        let sm = self.smom.get((s.1 as usize * w + s.0 as usize) * c8..(s.1 as usize * w + s.0 as usize + 1) * c8);
+        let sm = self.smom.get(
+            (s.1 as usize * w + s.0 as usize) * c8..(s.1 as usize * w + s.0 as usize + 1) * c8,
+        );
         let mut acc = [[0.0f32; 3]; MOM_CH];
         for dy in -r..=r {
             let ti = ((t.1 + dy) as usize * w + (t.0 - r) as usize) * ch;
@@ -804,7 +940,11 @@ impl Solver<'_> {
             self.moments(t, s, &mut m[..ch])
         };
         for (c, o) in out.iter_mut().enumerate() {
-            *o = if n == 0 || c >= ch { (1.0, 0.0) } else { fit(self.adapt, n as f32, m[c][0], m[c][1], m[c][2], m[c][3]) };
+            *o = if n == 0 || c >= ch {
+                (1.0, 0.0)
+            } else {
+                fit(self.adapt, n as f32, m[c][0], m[c][1], m[c][2], m[c][3])
+            };
         }
     }
 
@@ -864,7 +1004,14 @@ impl Solver<'_> {
     /// parallel; when there are fewer of them than threads, each is also swept in wavefronts of
     /// blocks (a cell depends only on its neighbours before it in its row and its column), which
     /// visits every cell with the same neighbours and random numbers as the raster order.
-    fn patchmatch(&self, nnf: &mut [(i32, i32)], cost: &mut [f32], pass: usize, seed: u64, search_radius: i32) {
+    fn patchmatch(
+        &self,
+        nnf: &mut [(i32, i32)],
+        cost: &mut [f32],
+        pass: usize,
+        seed: u64,
+        search_radius: i32,
+    ) {
         const BAND: usize = 16;
         let tb = self.tbox;
         let tw = tb.width();
@@ -873,7 +1020,9 @@ impl Solver<'_> {
         }
         let reverse = pass % 2 == 1;
         let step: i32 = if reverse { -1 } else { 1 };
-        let band_seed = |bi: usize| seed ^ (bi as u64).wrapping_mul(0x2545_F491_4F6C_DD1D) ^ ((pass as u64) << 40);
+        let band_seed = |bi: usize| {
+            seed ^ (bi as u64).wrapping_mul(0x2545_F491_4F6C_DD1D) ^ ((pass as u64) << 40)
+        };
         // The bands crossing the target box: index, first row, rows in the box.
         let mut bands = Vec::new();
         let mut y = tb.y0;
@@ -911,9 +1060,19 @@ impl Solver<'_> {
                     let nx = lx as i32 - step;
                     let left = (nx >= 0 && (nx as usize) < tw).then(|| nn[ly * tw + nx as usize]);
                     let nly = ly as i32 - step;
-                    let up = (nly >= 0 && (nly as usize) < rows).then(|| nn[nly as usize * tw + lx]);
+                    let up =
+                        (nly >= 0 && (nly as usize) < rows).then(|| nn[nly as usize * tw + lx]);
                     let t = ((tb.x0 + lx) as i32, y as i32);
-                    (nn[li], co[li]) = self.pm_step(t, k, (nn[li], co[li]), left, up, step, &mut rng, search_radius);
+                    (nn[li], co[li]) = self.pm_step(
+                        t,
+                        k,
+                        (nn[li], co[li]),
+                        left,
+                        up,
+                        step,
+                        &mut rng,
+                        search_radius,
+                    );
                 }
             }
         };
@@ -980,8 +1139,14 @@ impl Solver<'_> {
             .collect();
         let block = (tw / 8).clamp(4, 32);
         let blocks = tw.div_ceil(block);
-        let nn: Vec<AtomicU64> = nnf[..tb.area()].iter().map(|m| AtomicU64::new(pack(*m))).collect();
-        let co: Vec<AtomicU32> = cost[..tb.area()].iter().map(|c| AtomicU32::new(c.to_bits())).collect();
+        let nn: Vec<AtomicU64> = nnf[..tb.area()]
+            .iter()
+            .map(|m| AtomicU64::new(pack(*m)))
+            .collect();
+        let co: Vec<AtomicU32> = cost[..tb.area()]
+            .iter()
+            .map(|c| AtomicU32::new(c.to_bits()))
+            .collect();
         let sweep = |(j, pr, b): (usize, usize, usize)| {
             let (bi, ys, rows) = bands[j];
             let ly = if reverse { rows - 1 - pr } else { pr };
@@ -991,7 +1156,11 @@ impl Solver<'_> {
             // The targets visited before this block, in raster order.
             let first = if reverse { tw - 1 - pc0 } else { pc0 };
             let row = &before[ry * (tw + 1)..(ry + 1) * (tw + 1)];
-            let in_row = if reverse { row[tw] - row[first + 1] } else { row[first] };
+            let in_row = if reverse {
+                row[tw] - row[first + 1]
+            } else {
+                row[first]
+            };
             let mut rng = Rng::new(band_seed(bi));
             rng.skip((row_base[j][pr] + u64::from(in_row)) * draws);
             for pc in pc0..pc1 {
@@ -1001,10 +1170,15 @@ impl Solver<'_> {
                     continue;
                 }
                 let nx = lx as i32 - step;
-                let left = (nx >= 0 && (nx as usize) < tw).then(|| unpack(nn[ry * tw + nx as usize].load(Relaxed)));
+                let left = (nx >= 0 && (nx as usize) < tw)
+                    .then(|| unpack(nn[ry * tw + nx as usize].load(Relaxed)));
                 let nly = ly as i32 - step;
-                let up = (nly >= 0 && (nly as usize) < rows).then(|| unpack(nn[(ys + nly as usize - tb.y0) * tw + lx].load(Relaxed)));
-                let cur = (unpack(nn[k].load(Relaxed)), f32::from_bits(co[k].load(Relaxed)));
+                let up = (nly >= 0 && (nly as usize) < rows)
+                    .then(|| unpack(nn[(ys + nly as usize - tb.y0) * tw + lx].load(Relaxed)));
+                let cur = (
+                    unpack(nn[k].load(Relaxed)),
+                    f32::from_bits(co[k].load(Relaxed)),
+                );
                 let t = ((tb.x0 + lx) as i32, y as i32);
                 let (m, c) = self.pm_step(t, k, cur, left, up, step, &mut rng, search_radius);
                 nn[k].store(pack(m), Relaxed);
@@ -1021,7 +1195,11 @@ impl Solver<'_> {
             let wave: Vec<(usize, usize, usize)> = bands
                 .iter()
                 .enumerate()
-                .flat_map(|(j, &(_, _, rows))| (0..rows).filter(move |&pr| pr <= d && d - pr < blocks).map(move |pr| (j, pr, d - pr)))
+                .flat_map(|(j, &(_, _, rows))| {
+                    (0..rows)
+                        .filter(move |&pr| pr <= d && d - pr < blocks)
+                        .map(move |pr| (j, pr, d - pr))
+                })
                 .collect();
             par::each(wave, true, sweep);
         }
@@ -1035,7 +1213,11 @@ impl Solver<'_> {
 
     /// Recompute every target's match cost (hole pixels change between iterations), and with
     /// colour adaptation the full target patches' own moments.
-    fn costs(&mut self, nnf: &[(i32, i32)], cost: &mut [f32]) -> Result<(), rust_motion_raster::Cancelled> {
+    fn costs(
+        &mut self,
+        nnf: &[(i32, i32)],
+        cost: &mut [f32],
+    ) -> Result<(), rust_motion_raster::Cancelled> {
         let (w, ch, r, tb) = (self.w, self.ch, self.r as usize, self.tbox);
         let par = tb.area() >= PAR_MIN_PATCHES;
         self.ctl.check()?;
@@ -1050,7 +1232,16 @@ impl Solver<'_> {
                 }
                 for tx in 0..tb.width() {
                     if full[ty * tb.width() + tx] {
-                        patch_moments(img, w, ch, c8, side, tb.x0 + tx - r, tb.y0 + ty - r, &mut out[tx * c8..(tx + 1) * c8]);
+                        patch_moments(
+                            img,
+                            w,
+                            ch,
+                            c8,
+                            side,
+                            tb.x0 + tx - r,
+                            tb.y0 + ty - r,
+                            &mut out[tx * c8..(tx + 1) * c8],
+                        );
                     }
                 }
             });
@@ -1083,7 +1274,10 @@ impl Solver<'_> {
         }
         let used = |k: usize| self.targets[k] && cost[k].is_finite();
         // σ² from the 75th percentile of match costs (Wexler et al. use a robust scale like this).
-        let cs: Vec<f32> = (0..tb.area()).filter(|&k| used(k)).map(|k| cost[k]).collect();
+        let cs: Vec<f32> = (0..tb.area())
+            .filter(|&k| used(k))
+            .map(|k| cost[k])
+            .collect();
         let mut cs = cs;
         let sigma2 = if cs.is_empty() {
             1.0
@@ -1101,15 +1295,22 @@ impl Solver<'_> {
         // index) per target.
         let mut wt = vec![0.0f32; tb.area()];
         let mut src = vec![0isize; tb.area()];
-        par::chunks2_mut(&mut wt, tb.width(), &mut src, tb.width(), par, |ty, wrow, srow| {
-            for (tx, (o, sc)) in wrow.iter_mut().zip(srow.iter_mut()).enumerate() {
-                let k = ty * tb.width() + tx;
-                if used(k) {
-                    *o = (-cost[k] / (2.0 * sigma2)).exp().max(1e-8);
-                    *sc = nnf[k].1 as isize * w as isize + nnf[k].0 as isize;
+        par::chunks2_mut(
+            &mut wt,
+            tb.width(),
+            &mut src,
+            tb.width(),
+            par,
+            |ty, wrow, srow| {
+                for (tx, (o, sc)) in wrow.iter_mut().zip(srow.iter_mut()).enumerate() {
+                    let k = ty * tb.width() + tx;
+                    if used(k) {
+                        *o = (-cost[k] / (2.0 * sigma2)).exp().max(1e-8);
+                        *sc = nnf[k].1 as isize * w as isize + nnf[k].0 as isize;
+                    }
                 }
-            }
-        });
+            },
+        );
         let mut gb: Vec<(f32, f32)> = Vec::new();
         if adapted {
             gb = vec![(1.0f32, 0.0f32); tb.area() * ch];
@@ -1122,13 +1323,28 @@ impl Solver<'_> {
                 for tx in 0..tb.width() {
                     let k = ty * tb.width() + tx;
                     if used(k) {
-                        this.transform(((tb.x0 + tx) as i32, y as i32), k, nnf[k], &mut out[tx * ch..(tx + 1) * ch]);
+                        this.transform(
+                            ((tb.x0 + tx) as i32, y as i32),
+                            k,
+                            nnf[k],
+                            &mut out[tx * ch..(tx + 1) * ch],
+                        );
                     }
                 }
             });
         }
         // The vote, into a buffer over the hole's bounds (every pixel reads the old pixels).
-        let votes = Votes { w, h, ch, r: r as usize, tbox: tb, img: &*self.img, wt: &wt, src: &src, gb: &gb };
+        let votes = Votes {
+            w,
+            h,
+            ch,
+            r: r as usize,
+            tbox: tb,
+            img: &*self.img,
+            wt: &wt,
+            src: &src,
+            gb: &gb,
+        };
         let (px, ctl) = (self.px, &self.ctl);
         let mut out = vec![0.0f32; hb.area() * ch];
         let mut got = vec![false; hb.area()];
@@ -1154,11 +1370,21 @@ impl Solver<'_> {
                 };
             }
         };
-        par::chunks2_mut(&mut out, hb.width() * ch, &mut got, hb.width(), hb.area() >= PAR_MIN_PATCHES, row);
+        par::chunks2_mut(
+            &mut out,
+            hb.width() * ch,
+            &mut got,
+            hb.width(),
+            hb.area() >= PAR_MIN_PATCHES,
+            row,
+        );
         for yy in 0..hb.height() {
             for xx in 0..hb.width() {
                 if got[yy * hb.width() + xx] {
-                    let (d, s) = (((hb.y0 + yy) * w + hb.x0 + xx) * ch, (yy * hb.width() + xx) * ch);
+                    let (d, s) = (
+                        ((hb.y0 + yy) * w + hb.x0 + xx) * ch,
+                        (yy * hb.width() + xx) * ch,
+                    );
                     self.img[d..d + ch].copy_from_slice(&out[s..s + ch]);
                 }
             }
@@ -1186,7 +1412,12 @@ impl Votes<'_> {
     /// matches of the patches covering it put there, summed patch by patch in raster order of
     /// their centres. False when no patch votes.
     #[inline(always)]
-    fn pixel<const CH: usize, const ADAPT: bool>(&self, x: usize, y: usize, out: &mut [f32]) -> bool {
+    fn pixel<const CH: usize, const ADAPT: bool>(
+        &self,
+        x: usize,
+        y: usize,
+        out: &mut [f32],
+    ) -> bool {
         let (w, r, tb) = (self.w, self.r, self.tbox);
         let mut acc = [0.0f32; CH];
         let mut wsum = 0.0f32;
@@ -1263,7 +1494,16 @@ impl Votes<'_> {
 /// `Σv, Σv²` per channel (the first `out.len()`) of the `side × side` patch with top-left
 /// `(x0, y0)`, summed row by row, pixel by pixel, as [`Solver::moments`] does.
 #[allow(clippy::too_many_arguments)]
-fn patch_moments(img: &[f32], w: usize, ch: usize, c8: usize, side: usize, x0: usize, y0: usize, out: &mut [[f32; 2]]) {
+fn patch_moments(
+    img: &[f32],
+    w: usize,
+    ch: usize,
+    c8: usize,
+    side: usize,
+    x0: usize,
+    y0: usize,
+    out: &mut [[f32; 2]],
+) {
     out.iter_mut().for_each(|v| *v = [0.0; 2]);
     for y in y0..y0 + side {
         let row = &img[(y * w + x0) * ch..(y * w + x0 + side) * ch];
@@ -1285,7 +1525,8 @@ fn adapted_cost(a: Adapt, nf: f32, m: &[[f32; 5]]) -> f32 {
     for mc in m {
         let (g, b) = fit(a, nf, mc[0], mc[1], mc[2], mc[3]);
         // Σ (t − g s − b)², expanded.
-        sum += mc[1] + g * g * mc[3] + nf * b * b - 2.0 * g * mc[4] - 2.0 * b * mc[0] + 2.0 * g * b * mc[2];
+        sum += mc[1] + g * g * mc[3] + nf * b * b - 2.0 * g * mc[4] - 2.0 * b * mc[0]
+            + 2.0 * g * b * mc[2];
     }
     sum.max(0.0) / (nf * m.len() as f32)
 }
@@ -1294,7 +1535,13 @@ fn adapted_cost(a: Adapt, nf: f32, m: &[[f32; 5]]) -> f32 {
 /// `tv`, `CH` per pixel) against the source patch centred at pixel `base`, summed in that order;
 /// `None` once the sum reaches `limit` (it only grows).
 #[inline(always)]
-fn known_sse<const CH: usize>(image: &[f32], offs: &[isize], tv: &[f32], base: isize, limit: f32) -> Option<f32> {
+fn known_sse<const CH: usize>(
+    image: &[f32],
+    offs: &[isize],
+    tv: &[f32],
+    base: isize,
+    limit: f32,
+) -> Option<f32> {
     let mut e = 0.0f32;
     for (o, t) in offs.iter().zip(tv.as_chunks::<CH>().0) {
         let si = (base + o) as usize * CH;
@@ -1313,7 +1560,13 @@ fn known_sse<const CH: usize>(image: &[f32], offs: &[isize], tv: &[f32], base: i
 /// [`known_sse`] of [`LANES`] sources at once, each against its own limit (summed in step: the
 /// sums are independent, so the processor overlaps them).
 #[inline(always)]
-fn known_sse_lanes<const CH: usize>(image: &[f32], offs: &[isize], tv: &[f32], bases: [isize; LANES], limits: [f32; LANES]) -> [Option<f32>; LANES] {
+fn known_sse_lanes<const CH: usize>(
+    image: &[f32],
+    offs: &[isize],
+    tv: &[f32],
+    bases: [isize; LANES],
+    limits: [f32; LANES],
+) -> [Option<f32>; LANES] {
     let mut e = [0.0f32; LANES];
     for (o, t) in offs.iter().zip(tv.as_chunks::<CH>().0) {
         for l in 0..LANES {
@@ -1336,7 +1589,14 @@ fn known_sse_lanes<const CH: usize>(image: &[f32], offs: &[isize], tv: &[f32], b
 const LANES: usize = 4;
 
 /// [`known_sse`] for any number of channels.
-fn known_sse_any(image: &[f32], ch: usize, offs: &[isize], tv: &[f32], base: isize, limit: f32) -> Option<f32> {
+fn known_sse_any(
+    image: &[f32],
+    ch: usize,
+    offs: &[isize],
+    tv: &[f32],
+    base: isize,
+    limit: f32,
+) -> Option<f32> {
     let mut e = 0.0f32;
     for (o, t) in offs.iter().zip(tv.chunks_exact(ch.max(1))) {
         let si = (base + o) as usize * ch;
@@ -1401,14 +1661,26 @@ fn onion_peel(
     ctl: &rust_motion_raster::Interrupt,
 ) -> Result<(), rust_motion_raster::Cancelled> {
     const NONE: u32 = u32::MAX;
-    let mut known: Vec<bool> = px.iter().map(|k| matches!(k, Px::Known | Px::Source)).collect();
+    let mut known: Vec<bool> = px
+        .iter()
+        .map(|k| matches!(k, Px::Known | Px::Source))
+        .collect();
     // Each source centre's place in `sources`, and the source each filled pixel took.
     let mut index = vec![NONE; w * h];
     for (j, &(x, y)) in sources.iter().enumerate() {
         index[y as usize * w + x as usize] = j as u32;
     }
     let mut took = vec![NONE; w * h];
-    let neighbours = [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)];
+    let neighbours = [
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
+    ];
     loop {
         ctl.check()?;
         let mut front: Vec<usize> = Vec::new();
@@ -1422,7 +1694,11 @@ fn onion_peel(
                 let edge = (-1..=1).any(|dy: i32| {
                     (-1..=1).any(|dx: i32| {
                         let (nx, ny) = (x + dx, y + dy);
-                        nx >= 0 && ny >= 0 && (nx as usize) < w && (ny as usize) < h && known[ny as usize * w + nx as usize]
+                        nx >= 0
+                            && ny >= 0
+                            && (nx as usize) < w
+                            && (ny as usize) < h
+                            && known[ny as usize * w + nx as usize]
                     })
                 });
                 if edge {
@@ -1445,7 +1721,12 @@ fn onion_peel(
             for dy in -r..=r {
                 for dx in -r..=r {
                     let (tx, ty) = (x + dx, y + dy);
-                    if tx >= 0 && ty >= 0 && (tx as usize) < w && (ty as usize) < h && known_now[ty as usize * w + tx as usize] {
+                    if tx >= 0
+                        && ty >= 0
+                        && (tx as usize) < w
+                        && (ty as usize) < h
+                        && known_now[ty as usize * w + tx as usize]
+                    {
                         let ti = (ty as usize * w + tx as usize) * ch;
                         offs.push(dy as isize * w as isize + dx as isize);
                         tv.extend_from_slice(&image[ti..ti + ch]);
@@ -1455,17 +1736,32 @@ fn onion_peel(
             // The best so far: its error per sample, its place in `sources` (the first of equals
             // wins, as in a scan in order), and the sums of squares at which a source surely loses
             // to it (`e / n` above the best) or ties it (at least the best).
-            let mut best = Best { v: f32::INFINITY, j: usize::MAX, worse: f32::INFINITY, equal: f32::INFINITY };
+            let mut best = Best {
+                v: f32::INFINITY,
+                j: usize::MAX,
+                worse: f32::INFINITY,
+                equal: f32::INFINITY,
+            };
             if !offs.is_empty() {
                 let nf = offs.len() as f32;
-                let base_of = |j: usize| sources.get(j).map_or(0, |&(sx, sy)| sy as isize * w as isize + sx as isize);
+                let base_of = |j: usize| {
+                    sources
+                        .get(j)
+                        .map_or(0, |&(sx, sy)| sy as isize * w as isize + sx as isize)
+                };
                 // The sum at which source `j` can't win: a tie loses to an earlier source.
-                let limit_of = |j: usize, best: &Best| if j > best.j { best.equal } else { best.worse };
+                let limit_of =
+                    |j: usize, best: &Best| if j > best.j { best.equal } else { best.worse };
                 // Source `j`'s whole sum `e` (it did not reach its limit): does it win?
                 let adopt = |j: usize, e: f32, best: &mut Best| {
                     let v = e / nf;
                     if v < f32::INFINITY && (v < best.v || (v == best.v && j < best.j)) {
-                        *best = Best { v, j, worse: least_sum(v, nf, true), equal: least_sum(v, nf, false) };
+                        *best = Best {
+                            v,
+                            j,
+                            worse: least_sum(v, nf, true),
+                            equal: least_sum(v, nf, false),
+                        };
                     }
                 };
                 let consider = |j: usize, best: &mut Best| {
@@ -1491,9 +1787,18 @@ fn onion_peel(
                     if qx < 0 || qy < 0 || qx as usize >= w || qy as usize >= h {
                         continue;
                     }
-                    let Some(&(sx, sy)) = sources.get(took_now[qy as usize * w + qx as usize] as usize) else { continue };
+                    let Some(&(sx, sy)) =
+                        sources.get(took_now[qy as usize * w + qx as usize] as usize)
+                    else {
+                        continue;
+                    };
                     let (cx, cy) = (sx - dx, sy - dy);
-                    if cx >= 0 && cy >= 0 && (cx as usize) < w && (cy as usize) < h && index[cy as usize * w + cx as usize] != NONE {
+                    if cx >= 0
+                        && cy >= 0
+                        && (cx as usize) < w
+                        && (cy as usize) < h
+                        && index[cy as usize * w + cx as usize] != NONE
+                    {
                         consider(index[cy as usize * w + cx as usize] as usize, &mut best);
                     }
                 }
@@ -1516,7 +1821,9 @@ fn onion_peel(
                         1 => known_sse_lanes::<1>(image, &offs, &tv, bases, limits),
                         3 => known_sse_lanes::<3>(image, &offs, &tv, bases, limits),
                         4 => known_sse_lanes::<4>(image, &offs, &tv, bases, limits),
-                        _ => std::array::from_fn(|l| known_sse_any(image, ch, &offs, &tv, bases[l], limits[l])),
+                        _ => std::array::from_fn(|l| {
+                            known_sse_any(image, ch, &offs, &tv, bases[l], limits[l])
+                        }),
                     };
                     for (l, e) in sums.into_iter().enumerate() {
                         if let Some(e) = e {
@@ -1531,9 +1838,19 @@ fn onion_peel(
             }
             let (sx, sy) = sources.get(best.j).copied().unwrap_or((0, 0));
             let si = (sy as usize * w + sx as usize) * ch;
-            (image[si..si + ch].to_vec(), if best.j == usize::MAX { NONE } else { best.j as u32 })
+            (
+                image[si..si + ch].to_vec(),
+                if best.j == usize::MAX {
+                    NONE
+                } else {
+                    best.j as u32
+                },
+            )
         };
-        let vals: Vec<(Vec<f32>, u32)> = par::map(front.len(), front.len() * sources.len() >= 4096, |k| best(&front[k]));
+        let vals: Vec<(Vec<f32>, u32)> =
+            par::map(front.len(), front.len() * sources.len() >= 4096, |k| {
+                best(&front[k])
+            });
         ctl.check()?;
         for (&i, (v, j)) in front.iter().zip(vals) {
             img[i * ch..(i + 1) * ch].copy_from_slice(&v);
@@ -1547,7 +1864,14 @@ fn onion_peel(
 /// Content-aware completion of `hole` (see module docs), copying from any pixel outside it. Returns
 /// `None` when there is no fully-known patch to copy from (the caller can fall back to
 /// [`membrane_fill`]).
-pub fn complete(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], p: &CompleteParams) -> Option<Vec<f32>> {
+pub fn complete(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    hole: &[bool],
+    p: &CompleteParams,
+) -> Option<Vec<f32>> {
     // Never cancelled, so never `Err`.
     complete_with(w, h, ch, img, hole, p, &rust_motion_raster::Interrupt::NONE).unwrap_or(None)
 }
@@ -1564,7 +1888,10 @@ pub fn complete_with(
     ctl: &rust_motion_raster::Interrupt,
 ) -> Result<Option<Vec<f32>>, rust_motion_raster::Cancelled> {
     assert_eq!(hole.len(), w * h);
-    let px: Vec<Px> = hole.iter().map(|h| if *h { Px::Hole } else { Px::Source }).collect();
+    let px: Vec<Px> = hole
+        .iter()
+        .map(|h| if *h { Px::Hole } else { Px::Source })
+        .collect();
     complete_masked(w, h, ch, img, &px, p, ctl)
 }
 
@@ -1609,7 +1936,9 @@ fn complete_cow<'a>(
 ) -> Result<Result<Vec<f32>, Cow<'a, [f32]>>, rust_motion_raster::Cancelled> {
     assert_eq!(img.len(), w * h * ch);
     assert_eq!(px.len(), w * h);
-    let Some(hb0) = hole_bounds(w, h, px) else { return Ok(Ok(img.into_owned())) };
+    let Some(hb0) = hole_bounds(w, h, px) else {
+        return Ok(Ok(img.into_owned()));
+    };
     if ch == 0 {
         return Ok(Ok(Vec::new()));
     }
@@ -1618,7 +1947,12 @@ fn complete_cow<'a>(
     // Pyramid: shrink until the hole is about four patches across (a deeper pyramid decides the
     // structure where the texture has averaged out, and fills flat). A thin hole stops while it
     // is still about two patches thick: through it, not along it, is what counts (#1366).
-    let mut levels = vec![Level { w, h, img, px: Cow::Borrowed(px) }];
+    let mut levels = vec![Level {
+        w,
+        h,
+        img,
+        px: Cow::Borrowed(px),
+    }];
     let mut boxes = vec![hb0];
     let mut ext = hb0.width().max(hb0.height());
     let thickness = hole_thickness(w, hb0, px);
@@ -1646,7 +1980,12 @@ fn complete_cow<'a>(
     let ri = r as i32;
     for li in (0..nlev).rev() {
         ctl.check()?;
-        let Level { w: lw, h: lh, img: limg, px: lpx } = std::mem::replace(&mut levels[li], Level::EMPTY);
+        let Level {
+            w: lw,
+            h: lh,
+            img: limg,
+            px: lpx,
+        } = std::mem::replace(&mut levels[li], Level::EMPTY);
         let hb = boxes[li];
         let tb = hb.grow(r, lw, lh);
         let valid = valid_sources(lw, lh, r, &lpx, ctl).ok_or(rust_motion_raster::Cancelled)?;
@@ -1662,7 +2001,9 @@ fn complete_cow<'a>(
             Cow::Borrowed(b) => {
                 const CHUNK: usize = 1 << 16;
                 let mut v = vec![0.0f32; b.len()];
-                par::chunks_mut(&mut v, CHUNK, true, |i, d| d.copy_from_slice(&b[i * CHUNK..i * CHUNK + d.len()]));
+                par::chunks_mut(&mut v, CHUNK, true, |i, d| {
+                    d.copy_from_slice(&b[i * CHUNK..i * CHUNK + d.len()])
+                });
                 v
             }
         };
@@ -1687,11 +2028,26 @@ fn complete_cow<'a>(
             }
             // A thin hole, when peeling it would take too long, takes the membrane below: a few
             // patches thick here, a membrane across it is its surroundings.
-            None if sources.len() > 0 && (!thin || peel_affordable(lw, &lpx, hb, sources.len())) => {
-                onion_peel(lw, lh, ch, ri, &mut limg, &lpx, hb, &sources.all(&valid, lw), ctl)?
+            None if sources.len() > 0
+                && (!thin || peel_affordable(lw, &lpx, hb, sources.len())) =>
+            {
+                onion_peel(
+                    lw,
+                    lh,
+                    ch,
+                    ri,
+                    &mut limg,
+                    &lpx,
+                    hb,
+                    &sources.all(&valid, lw),
+                    ctl,
+                )?
             }
             None => {
-                let mut unknown: Vec<bool> = lpx.iter().map(|k| matches!(k, Px::Hole | Px::Void)).collect();
+                let mut unknown: Vec<bool> = lpx
+                    .iter()
+                    .map(|k| matches!(k, Px::Hole | Px::Void))
+                    .collect();
                 // Across a thin hole the membrane starts a patch radius out, past the
                 // anti-aliased fringe or halo that a selection drawn close to the object leaves.
                 if thin {
@@ -1709,13 +2065,20 @@ fn complete_cow<'a>(
             }
         }
         if sources.len() == 0 {
-            prev = Some(Coarser { w: lw, h: lh, img: limg, field: Vec::new(), tbox: tb });
+            prev = Some(Coarser {
+                w: lw,
+                h: lh,
+                img: limg,
+                field: Vec::new(),
+                tbox: tb,
+            });
             continue;
         }
         let refine_only = li + 1 < nlev && exts[li] > p.refine_extent;
         let n_targets = targets.iter().filter(|t| **t).count();
         // Source moments are worth keeping when there are few sources for the matches tried.
-        let keep_source_moments = lw * lh <= SOURCE_MOMENTS_MAX && sources.len() <= n_targets.saturating_mul(if refine_only { 4 } else { 64 });
+        let keep_source_moments = lw * lh <= SOURCE_MOMENTS_MAX
+            && sources.len() <= n_targets.saturating_mul(if refine_only { 4 } else { 64 });
         let mut solver = Solver {
             w: lw,
             h: lh,
@@ -1757,7 +2120,10 @@ fn complete_cow<'a>(
                         let (sx, sy) = c.field_at(cx, cy);
                         if sx != i32::MIN {
                             // The same displacement, twice as long.
-                            let c = (x as i32 + 2 * (sx - cx as i32), y as i32 + 2 * (sy - cy as i32));
+                            let c = (
+                                x as i32 + 2 * (sx - cx as i32),
+                                y as i32 + 2 * (sy - cy as i32),
+                            );
                             if solver.is_valid(c.0, c.1) {
                                 cand = Some(c);
                             }
@@ -1765,7 +2131,13 @@ fn complete_cow<'a>(
                     }
                 }
                 upsampled |= cand.is_some();
-                nnf[k] = cand.unwrap_or_else(|| sources.nth((rng.next() % sources.len() as u64) as usize, &solver.valid, lw));
+                nnf[k] = cand.unwrap_or_else(|| {
+                    sources.nth(
+                        (rng.next() % sources.len() as u64) as usize,
+                        &solver.valid,
+                        lw,
+                    )
+                });
             }
         }
         // The coarser level has given all it had.
@@ -1799,7 +2171,13 @@ fn complete_cow<'a>(
             };
             for pass in 0..pm_iters {
                 ctl.check()?;
-                solver.patchmatch(&mut nnf, &mut cost, pass + it * pm_iters, p.seed.wrapping_add((li * 1000 + it) as u64), radius);
+                solver.patchmatch(
+                    &mut nnf,
+                    &mut cost,
+                    pass + it * pm_iters,
+                    p.seed.wrapping_add((li * 1000 + it) as u64),
+                    radius,
+                );
             }
             ctl.check()?;
             solver.vote(&nnf, &cost);
@@ -1808,12 +2186,24 @@ fn complete_cow<'a>(
         // A vote that saw the cancellation stopped part-way: never hand its pixels on.
         ctl.check()?;
         // Keep the match field (unmatched cells marked) for the next level (none after the last).
-        let field: Vec<(i32, i32)> =
-            if li == 0 { Vec::new() } else { nnf.iter().zip(&solver.targets).map(|(n, t)| if *t { *n } else { (i32::MIN, i32::MIN) }).collect() };
+        let field: Vec<(i32, i32)> = if li == 0 {
+            Vec::new()
+        } else {
+            nnf.iter()
+                .zip(&solver.targets)
+                .map(|(n, t)| if *t { *n } else { (i32::MIN, i32::MIN) })
+                .collect()
+        };
         // Finer levels cost ~4× the previous one: weight progress by pixel count.
         done_px += lw * lh;
         ctl.progress(done_px as f32 / total_px.max(1) as f32);
-        prev = Some(Coarser { w: lw, h: lh, img: limg, field, tbox: tb });
+        prev = Some(Coarser {
+            w: lw,
+            h: lh,
+            img: limg,
+            field,
+            tbox: tb,
+        });
     }
     Ok(prev.map(|c| c.img).ok_or(Cow::Owned(Vec::new())))
 }
@@ -1821,7 +2211,15 @@ fn complete_cow<'a>(
 /// Proximity match: the displacement `(dx, dy)` (within `max_radius`) whose surroundings best match the
 /// ring of `ring` pixels around the hole, with the displaced hole fully inside the grid and outside the
 /// hole. `None` if no displacement fits.
-pub fn best_offset(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], ring: usize, max_radius: i32) -> Option<(i32, i32)> {
+pub fn best_offset(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    hole: &[bool],
+    ring: usize,
+    max_radius: i32,
+) -> Option<(i32, i32)> {
     let (bx0, by0, bx1, by1) = hole_bbox(w, h, hole)?;
     // No valid translation can move farther than the source image's extent.
     // Bound arbitrary public API inputs before constructing i32 search ranges:
@@ -1861,7 +2259,10 @@ pub fn best_offset(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], ri
         let n = pts.len().max(1) as f32;
         let penalty = 1.0 + 1e-3 * ((dx as f32).hypot(dy as f32) / max_radius as f32);
         for (i, &(x, y)) in pts.iter().enumerate() {
-            let (a, b) = ((y as usize * w + x as usize) * ch, ((y + dy) as usize * w + (x + dx) as usize) * ch);
+            let (a, b) = (
+                (y as usize * w + x as usize) * ch,
+                ((y + dy) as usize * w + (x + dx) as usize) * ch,
+            );
             for c in 0..ch {
                 let d = img[a + c] - img[b + c];
                 e += d * d;
@@ -1908,9 +2309,19 @@ pub fn best_offset(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], ri
 }
 
 /// Create texture: fill the hole with blocks of surrounding texture (see module docs).
-pub fn synthesize(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], block: usize, seed: u64) -> Vec<f32> {
+pub fn synthesize(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    hole: &[bool],
+    block: usize,
+    seed: u64,
+) -> Vec<f32> {
     let mut out = img.to_vec();
-    let Some((bx0, by0, bx1, by1)) = hole_bbox(w, h, hole) else { return out };
+    let Some((bx0, by0, bx1, by1)) = hole_bbox(w, h, hole) else {
+        return out;
+    };
     let b = block.max(4) as i32;
     let ov = (b / 3).max(1);
     let hs = integral(w, h, hole);
@@ -1940,10 +2351,18 @@ pub fn synthesize(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], blo
                     let (mut e, mut n) = (0.0f32, 0u32);
                     for y in (by - ov)..(by + b + ov) {
                         for x in (bx - ov)..(bx + b + ov) {
-                            if x < 0 || y < 0 || x >= w as i32 || y >= h as i32 || !filled[y as usize * w + x as usize] {
+                            if x < 0
+                                || y < 0
+                                || x >= w as i32
+                                || y >= h as i32
+                                || !filled[y as usize * w + x as usize]
+                            {
                                 continue;
                             }
-                            let (a, s) = ((y as usize * w + x as usize) * ch, ((y - by + c.1) as usize * w + (x - bx + c.0) as usize) * ch);
+                            let (a, s) = (
+                                (y as usize * w + x as usize) * ch,
+                                ((y - by + c.1) as usize * w + (x - bx + c.0) as usize) * ch,
+                            );
                             for k in 0..ch {
                                 let d = out[a + k] - img[s + k];
                                 e += d * d;
@@ -1959,7 +2378,8 @@ pub fn synthesize(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], blo
                 let c = best.0;
                 let (x0, y0) = ((bx - ov).max(0), (by - ov).max(0));
                 let (x1, y1) = ((bx + b + ov).min(w as i32), (by + b + ov).min(h as i32));
-                let src = |x: i32, y: i32| ((y - by + c.1) as usize * w + (x - bx + c.0) as usize) * ch;
+                let src =
+                    |x: i32, y: i32| ((y - by + c.1) as usize * w + (x - bx + c.0) as usize) * ch;
                 // Squared difference between what is there and the block, where both exist.
                 let err = |x: i32, y: i32| {
                     let i = y as usize * w + x as usize;
@@ -1967,13 +2387,19 @@ pub fn synthesize(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], blo
                         return 0.0;
                     }
                     let (a, s) = (i * ch, src(x, y));
-                    (0..ch).map(|q| (out[a + q] - img[s + q]).powi(2)).sum::<f32>()
+                    (0..ch)
+                        .map(|q| (out[a + q] - img[s + q]).powi(2))
+                        .sum::<f32>()
                 };
                 // Minimum-error boundary cuts through the overlaps with the blocks to the left and
                 // above: the block is copied right of and below them, untouched pixels are kept
                 // on the other side. Copying (rather than averaging) keeps the texture's grain.
-                let left = min_cut((x0..(bx + ov).min(x1)).len(), (y0..y1).len(), |u, v| err(x0 + u as i32, y0 + v as i32));
-                let top = min_cut((y0..(by + ov).min(y1)).len(), (x0..x1).len(), |u, v| err(x0 + v as i32, y0 + u as i32));
+                let left = min_cut((x0..(bx + ov).min(x1)).len(), (y0..y1).len(), |u, v| {
+                    err(x0 + u as i32, y0 + v as i32)
+                });
+                let top = min_cut((y0..(by + ov).min(y1)).len(), (x0..x1).len(), |u, v| {
+                    err(x0 + v as i32, y0 + u as i32)
+                });
                 for y in y0..y1 {
                     for x in x0..x1 {
                         let i = y as usize * w + x as usize;
@@ -1981,7 +2407,9 @@ pub fn synthesize(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], blo
                             continue;
                         }
                         let (u, v) = ((x - x0) as usize, (y - y0) as usize);
-                        let keep = filled[i] && (left.get(v).is_some_and(|s| u < *s) || top.get(u).is_some_and(|s| v < *s));
+                        let keep = filled[i]
+                            && (left.get(v).is_some_and(|s| u < *s)
+                                || top.get(u).is_some_and(|s| v < *s));
                         if !keep {
                             let (a, s) = (i * ch, src(x, y));
                             out[a..a + ch].copy_from_slice(&img[s..s + ch]);
@@ -2006,7 +2434,10 @@ fn min_cut(across: usize, along: usize, err: impl Fn(usize, usize) -> f32) -> Ve
         return Vec::new();
     }
     // Cumulative cost, step by step along the band; the cut may move by one pixel per step.
-    let mut acc: Vec<f32> = (0..along).flat_map(|v| (0..across).map(move |u| (u, v))).map(|(u, v)| err(u, v)).collect();
+    let mut acc: Vec<f32> = (0..along)
+        .flat_map(|v| (0..across).map(move |u| (u, v)))
+        .map(|(u, v)| err(u, v))
+        .collect();
     if acc.iter().all(|x| *x == 0.0) {
         return Vec::new();
     }
@@ -2014,11 +2445,17 @@ fn min_cut(across: usize, along: usize, err: impl Fn(usize, usize) -> f32) -> Ve
         for u in 0..across {
             let lo = u.saturating_sub(1);
             let hi = (u + 1).min(across - 1);
-            let m = (lo..=hi).map(|k| acc[(v - 1) * across + k]).fold(f32::INFINITY, f32::min);
+            let m = (lo..=hi)
+                .map(|k| acc[(v - 1) * across + k])
+                .fold(f32::INFINITY, f32::min);
             acc[v * across + u] += m;
         }
     }
-    let argmin = |v: usize, lo: usize, hi: usize| (lo..=hi).min_by(|a, b| acc[v * across + a].total_cmp(&acc[v * across + b])).unwrap_or(lo);
+    let argmin = |v: usize, lo: usize, hi: usize| {
+        (lo..=hi)
+            .min_by(|a, b| acc[v * across + a].total_cmp(&acc[v * across + b]))
+            .unwrap_or(lo)
+    };
     let mut cut = vec![0; along];
     let mut u = argmin(along - 1, 0, across - 1);
     for v in (0..along).rev() {
@@ -2038,12 +2475,26 @@ mod tests {
     /// gain stays where the bias can still reach the target's mean.
     #[test]
     fn fit_matches_the_mean_before_the_contrast() {
-        let a = Adapt { gain: (0.9, 1.1), bias: 0.04 };
+        let a = Adapt {
+            gain: (0.9, 1.1),
+            bias: 0.04,
+        };
         // Target mean 0.70, source mean 0.70; deviations 0.01 vs 0.004 (ratio 2.5).
         let n = 25.0;
         let (mt, ms, sdt, sds) = (0.70f32, 0.70f32, 0.01f32, 0.004f32);
-        let (g, b) = fit(a, n, mt * n, (sdt * sdt + mt * mt) * n, ms * n, (sds * sds + ms * ms) * n);
-        assert!((g * ms + b - mt).abs() < 1e-5, "mean {} vs {mt} (g {g}, b {b})", g * ms + b);
+        let (g, b) = fit(
+            a,
+            n,
+            mt * n,
+            (sdt * sdt + mt * mt) * n,
+            ms * n,
+            (sds * sds + ms * ms) * n,
+        );
+        assert!(
+            (g * ms + b - mt).abs() < 1e-5,
+            "mean {} vs {mt} (g {g}, b {b})",
+            g * ms + b
+        );
         // Where the mean can't be reached anyway, the limits hold as before.
         let (g, b) = fit(a, n, 0.2 * n, 0.04 * n, 0.9 * n, 0.81 * n);
         assert!((a.gain.0..=a.gain.1).contains(&g) && b.abs() <= a.bias + 1e-6);
@@ -2062,7 +2513,9 @@ mod tests {
     }
 
     fn disc(w: usize, h: usize, cx: f32, cy: f32, r: f32) -> Vec<bool> {
-        (0..w * h).map(|i| ((i % w) as f32 - cx).hypot((i / w) as f32 - cy) < r).collect()
+        (0..w * h)
+            .map(|i| ((i % w) as f32 - cx).hypot((i / w) as f32 - cy) < r)
+            .collect()
     }
 
     fn hole_rmse(a: &[f32], b: &[f32], hole: &[bool], ch: usize) -> f32 {
@@ -2092,20 +2545,36 @@ mod tests {
         let out = complete(w, h, ch, &dirty, &hole, &CompleteParams::default()).unwrap();
         let before = hole_rmse(&dirty, &clean, &hole, ch);
         let after = hole_rmse(&out, &clean, &hole, ch);
-        assert!(after < 0.06 && after < before * 0.15, "rmse before {before} after {after}");
+        assert!(
+            after < 0.06 && after < before * 0.15,
+            "rmse before {before} after {after}"
+        );
         // Outside the hole untouched.
-        assert!(out.iter().zip(&dirty).zip(hole.iter().flat_map(|h| [*h; 3])).all(|((a, b), h)| h || a == b));
+        assert!(out
+            .iter()
+            .zip(&dirty)
+            .zip(hole.iter().flat_map(|h| [*h; 3]))
+            .all(|((a, b), h)| h || a == b));
         // Deterministic.
-        assert_eq!(out, complete(w, h, ch, &dirty, &hole, &CompleteParams::default()).unwrap());
+        assert_eq!(
+            out,
+            complete(w, h, ch, &dirty, &hole, &CompleteParams::default()).unwrap()
+        );
     }
 
     #[test]
     fn completion_continues_structure() {
         // Vertical stripes: the filled hole should keep the stripes (not a blur).
         let (w, h, ch) = (80, 80, 1);
-        let clean: Vec<f32> = (0..w * h).map(|i| if (i % w / 4) % 2 == 0 { 0.2 } else { 0.8 }).collect();
+        let clean: Vec<f32> = (0..w * h)
+            .map(|i| if (i % w / 4) % 2 == 0 { 0.2 } else { 0.8 })
+            .collect();
         let hole = disc(w, h, 40.0, 40.0, 7.0);
-        let dirty: Vec<f32> = clean.iter().zip(&hole).map(|(c, h)| if *h { 0.5 } else { *c }).collect();
+        let dirty: Vec<f32> = clean
+            .iter()
+            .zip(&hole)
+            .map(|(c, h)| if *h { 0.5 } else { *c })
+            .collect();
         let out = complete(w, h, ch, &dirty, &hole, &CompleteParams::default()).unwrap();
         let err = hole_rmse(&out, &clean, &hole, ch);
         assert!(err < 0.15, "{err}");
@@ -2115,7 +2584,9 @@ mod tests {
     fn proximity_finds_matching_offset() {
         let (w, h, ch) = (80, 60, 1);
         // Periodic pattern with period 10 in x: a match is any multiple-of-10 displacement.
-        let img: Vec<f32> = (0..w * h).map(|i| ((i % w) as f32 * std::f32::consts::TAU / 10.0).sin() * 0.4 + 0.5).collect();
+        let img: Vec<f32> = (0..w * h)
+            .map(|i| ((i % w) as f32 * std::f32::consts::TAU / 10.0).sin() * 0.4 + 0.5)
+            .collect();
         let hole = disc(w, h, 40.0, 30.0, 5.0);
         let (dx, dy) = best_offset(w, h, ch, &img, &hole, 3, 20).unwrap();
         assert_eq!(dx.rem_euclid(10), 0, "dx {dx} dy {dy}");
@@ -2145,8 +2616,14 @@ mod tests {
                 let (x, y) = (i % w, i / w);
                 let flat = (x / 9 + y / 7) % 5 == 0;
                 let n = (rng.next() % 1000) as f32 / 1000.0;
-                (0..ch)
-                    .map(move |c| if flat { 0.25 + 0.1 * c as f32 } else { (0.2 + 0.004 * x as f32 + 0.1 * ((x + 2 * y + c) % 6) as f32 + 0.05 * n).min(1.0) })
+                (0..ch).map(move |c| {
+                    if flat {
+                        0.25 + 0.1 * c as f32
+                    } else {
+                        (0.2 + 0.004 * x as f32 + 0.1 * ((x + 2 * y + c) % 6) as f32 + 0.05 * n)
+                            .min(1.0)
+                    }
+                })
             })
             .collect()
     }
@@ -2176,14 +2653,24 @@ mod tests {
     #[test]
     fn a_hole_is_as_thick_as_it_is_through_not_along() {
         let (w, h) = (240, 120);
-        let all = Bounds { x0: 0, y0: 0, x1: w, y1: h };
+        let all = Bounds {
+            x0: 0,
+            y0: 0,
+            x1: w,
+            y1: h,
+        };
         let thickness = |hole: &[bool]| {
-            let px: Vec<Px> = hole.iter().map(|&o| if o { Px::Hole } else { Px::Source }).collect();
+            let px: Vec<Px> = hole
+                .iter()
+                .map(|&o| if o { Px::Hole } else { Px::Source })
+                .collect();
             hole_thickness(w, hole_bounds(w, h, &px).unwrap_or(all), &px)
         };
         // A band 200 px long and 9 px thick; a disc of radius 20; the band touching the edge
         // counts the outside of the image as not hole.
-        let band: Vec<bool> = (0..w * h).map(|i| (20..220).contains(&(i % w)) && (50..59).contains(&(i / w))).collect();
+        let band: Vec<bool> = (0..w * h)
+            .map(|i| (20..220).contains(&(i % w)) && (50..59).contains(&(i / w)))
+            .collect();
         assert!((9..=11).contains(&thickness(&band)), "{}", thickness(&band));
         assert!((39..=42).contains(&thickness(&disc(w, h, 120.0, 60.0, 20.0))));
         let edge: Vec<bool> = (0..w * h).map(|i| i / w < 9).collect();
@@ -2198,16 +2685,37 @@ mod tests {
         let (w, h) = (300, 200);
         let img = busy(w, h, 3, 5);
         // A wavy line 6 px thick across the image.
-        let hole: Vec<bool> = (0..w * h).map(|i| (((i % w) as f32 * 0.05).sin() * 30.0 + 100.0 - (i / w) as f32).abs() < 3.0).collect();
+        let hole: Vec<bool> = (0..w * h)
+            .map(|i| (((i % w) as f32 * 0.05).sin() * 30.0 + 100.0 - (i / w) as f32).abs() < 3.0)
+            .collect();
         let px = roles(w, h, &hole);
         let run = |threads: usize| {
-            let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
-            pool.install(|| complete_masked(w, h, 3, &img, &px, &CompleteParams::default(), &rust_motion_raster::Interrupt::NONE)).unwrap().unwrap()
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            pool.install(|| {
+                complete_masked(
+                    w,
+                    h,
+                    3,
+                    &img,
+                    &px,
+                    &CompleteParams::default(),
+                    &rust_motion_raster::Interrupt::NONE,
+                )
+            })
+            .unwrap()
+            .unwrap()
         };
         let one = run(1);
         assert_eq!(bits(&one), bits(&run(7)));
-        assert!((0..w * h).all(|i| hole[i] || (0..3).all(|c| one[i * 3 + c].to_bits() == img[i * 3 + c].to_bits())));
-        assert!((0..w * h).filter(|&i| hole[i]).all(|i| (0..3).all(|c| one[i * 3 + c].is_finite())));
+        assert!((0..w * h).all(
+            |i| hole[i] || (0..3).all(|c| one[i * 3 + c].to_bits() == img[i * 3 + c].to_bits())
+        ));
+        assert!((0..w * h)
+            .filter(|&i| hole[i])
+            .all(|i| (0..3).all(|c| one[i * 3 + c].is_finite())));
     }
 
     #[test]
@@ -2216,14 +2724,44 @@ mod tests {
         // Big enough for the parallel passes, and for PatchMatch to sweep in wavefronts where
         // there are fewer bands than threads (never with one thread).
         let (w, h) = (300, 260);
-        for (ch, adapt) in [(3, Adapt::NONE), (4, Adapt { gain: (0.9, 1.1), bias: 0.04 })] {
+        for (ch, adapt) in [
+            (3, Adapt::NONE),
+            (
+                4,
+                Adapt {
+                    gain: (0.9, 1.1),
+                    bias: 0.04,
+                },
+            ),
+        ] {
             let img = busy(w, h, ch, 3);
             let hole = disc(w, h, 140.0, 130.0, 40.0);
             let px = roles(w, h, &hole);
-            let p = CompleteParams { adapt, ..Default::default() };
+            let p = CompleteParams {
+                adapt,
+                ..Default::default()
+            };
             let run = |threads: usize| {
-                let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
-                bits(&pool.install(|| complete_masked(w, h, ch, &img, &px, &p, &rust_motion_raster::Interrupt::NONE)).unwrap().unwrap())
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .build()
+                    .unwrap();
+                bits(
+                    &pool
+                        .install(|| {
+                            complete_masked(
+                                w,
+                                h,
+                                ch,
+                                &img,
+                                &px,
+                                &p,
+                                &rust_motion_raster::Interrupt::NONE,
+                            )
+                        })
+                        .unwrap()
+                        .unwrap(),
+                )
             };
             let one = run(1);
             assert_eq!(one, run(3), "{ch} channels, 3 threads");
@@ -2232,8 +2770,19 @@ mod tests {
     }
 
     /// The onion peel as first written: every source in order, every known pixel summed.
-    fn onion_peel_plain(w: usize, h: usize, ch: usize, r: i32, img: &mut [f32], px: &[Px], sources: &[(i32, i32)]) {
-        let mut known: Vec<bool> = px.iter().map(|k| matches!(k, Px::Known | Px::Source)).collect();
+    fn onion_peel_plain(
+        w: usize,
+        h: usize,
+        ch: usize,
+        r: i32,
+        img: &mut [f32],
+        px: &[Px],
+        sources: &[(i32, i32)],
+    ) {
+        let mut known: Vec<bool> = px
+            .iter()
+            .map(|k| matches!(k, Px::Known | Px::Source))
+            .collect();
         loop {
             let front: Vec<usize> = (0..w * h)
                 .filter(|&i| {
@@ -2243,7 +2792,11 @@ mod tests {
                         && (-1..=1).any(|dy: i32| {
                             (-1..=1).any(|dx: i32| {
                                 let (nx, ny) = (x + dx, y + dy);
-                                nx >= 0 && ny >= 0 && (nx as usize) < w && (ny as usize) < h && known[ny as usize * w + nx as usize]
+                                nx >= 0
+                                    && ny >= 0
+                                    && (nx as usize) < w
+                                    && (ny as usize) < h
+                                    && known[ny as usize * w + nx as usize]
                             })
                         })
                 })
@@ -2261,10 +2814,18 @@ mod tests {
                         for dy in -r..=r {
                             for dx in -r..=r {
                                 let (tx, ty) = (x + dx, y + dy);
-                                if tx < 0 || ty < 0 || tx as usize >= w || ty as usize >= h || !known[ty as usize * w + tx as usize] {
+                                if tx < 0
+                                    || ty < 0
+                                    || tx as usize >= w
+                                    || ty as usize >= h
+                                    || !known[ty as usize * w + tx as usize]
+                                {
                                     continue;
                                 }
-                                let (ti, si) = ((ty as usize * w + tx as usize) * ch, ((sy + dy) as usize * w + (sx + dx) as usize) * ch);
+                                let (ti, si) = (
+                                    (ty as usize * w + tx as usize) * ch,
+                                    ((sy + dy) as usize * w + (sx + dx) as usize) * ch,
+                                );
                                 for c in 0..ch {
                                     let d = img[ti + c] - img[si + c];
                                     e += d * d;
@@ -2276,7 +2837,7 @@ mod tests {
                             best = (e / n as f32, (sx, sy));
                         }
                     }
-                    let si = (best.1.1 as usize * w + best.1.0 as usize) * ch;
+                    let si = (best.1 .1 as usize * w + best.1 .0 as usize) * ch;
                     img[si..si + ch].to_vec()
                 })
                 .collect();
@@ -2302,16 +2863,35 @@ mod tests {
         }
         let none = rust_motion_raster::Interrupt::NONE;
         for hole in [disc(w, h, 20.0, 18.0, 7.5), disc(w, h, 34.0, 22.0, 5.0)] {
-            let px: Vec<Px> = hole.iter().map(|h| if *h { Px::Hole } else { Px::Source }).collect();
+            let px: Vec<Px> = hole
+                .iter()
+                .map(|h| if *h { Px::Hole } else { Px::Source })
+                .collect();
             let near = integral(w, h, &hole);
             let sources: Vec<(i32, i32)> = (r..h as i32 - r)
                 .flat_map(|y| (r..w as i32 - r).map(move |x| (x, y)))
-                .filter(|&(x, y)| window_count(&near, w, h, x - r, y - r, x + r + 1, y + r + 1) == 0)
+                .filter(|&(x, y)| {
+                    window_count(&near, w, h, x - r, y - r, x + r + 1, y + r + 1) == 0
+                })
                 .collect();
             let (mut fast, mut plain) = (img.clone(), img.clone());
-            onion_peel(w, h, ch, r, &mut fast, &px, hole_bounds(w, h, &px).unwrap(), &sources, &none).unwrap();
+            onion_peel(
+                w,
+                h,
+                ch,
+                r,
+                &mut fast,
+                &px,
+                hole_bounds(w, h, &px).unwrap(),
+                &sources,
+                &none,
+            )
+            .unwrap();
             onion_peel_plain(w, h, ch, r, &mut plain, &px, &sources);
-            assert!(fast.iter().zip(&plain).all(|(a, b)| a.to_bits() == b.to_bits()));
+            assert!(fast
+                .iter()
+                .zip(&plain)
+                .all(|(a, b)| a.to_bits() == b.to_bits()));
             assert_ne!(fast, img);
         }
     }
@@ -2330,7 +2910,18 @@ mod tests {
             let valid = valid_sources(w, h, 3, &px, &none).unwrap();
             let sources = Sources::new(&valid, w).all(&valid, w);
             let (mut a, mut b) = (img.clone(), img.clone());
-            onion_peel(w, h, ch, 3, &mut a, &px, hole_bounds(w, h, &px).unwrap(), &sources, &none).unwrap();
+            onion_peel(
+                w,
+                h,
+                ch,
+                3,
+                &mut a,
+                &px,
+                hole_bounds(w, h, &px).unwrap(),
+                &sources,
+                &none,
+            )
+            .unwrap();
             onion_peel_plain(w, h, ch, 3, &mut b, &px, &sources);
             assert_eq!(bits(&a), bits(&b), "{w}×{h}×{ch}");
         }
@@ -2350,7 +2941,10 @@ mod tests {
                 let holds = |e: f32| if strict { e / n > v } else { e / n >= v };
                 let e = least_sum(v, n, strict);
                 assert!(holds(e), "{v} {n} {strict}: {e}");
-                assert!(e == 0.0 || !holds(e.next_down()), "{v} {n} {strict}: {e} is not the least");
+                assert!(
+                    e == 0.0 || !holds(e.next_down()),
+                    "{v} {n} {strict}: {e} is not the least"
+                );
             }
         }
         assert_eq!(least_sum(f32::INFINITY, 4.0, true), f32::INFINITY);
@@ -2375,7 +2969,8 @@ mod tests {
         for y in 0..h as i32 {
             for x in 0..w as i32 {
                 let inside = x >= ri && y >= ri && x + ri < w as i32 && y + ri < h as i32;
-                let want = inside && window_count(&ss, w, h, x - ri, y - ri, x + ri + 1, y + ri + 1) == full;
+                let want = inside
+                    && window_count(&ss, w, h, x - ri, y - ri, x + ri + 1, y + ri + 1) == full;
                 assert_eq!(valid[y as usize * w + x as usize], want, "({x}, {y})");
             }
         }
@@ -2388,7 +2983,9 @@ mod tests {
         }
         // And on a grid wider than a block, with empty blocks and rows.
         let (w, h) = (300, 9);
-        let wide: Vec<bool> = (0..w * h).map(|i| (i % w) % 7 == 3 && (i % w) / 64 != 2 && i / w != 4).collect();
+        let wide: Vec<bool> = (0..w * h)
+            .map(|i| (i % w) % 7 == 3 && (i % w) / 64 != 2 && i / w != 4)
+            .collect();
         let sources = Sources::new(&wide, w);
         let list = sources.all(&wide, w);
         for (k, p) in list.iter().enumerate() {
@@ -2406,9 +3003,20 @@ mod tests {
         let hb = hole_bounds(w, h, &px).unwrap();
         let tb = hb.grow(r, w, h);
         let valid = valid_sources(w, h, r, &px, &none).unwrap();
-        let picks: Vec<(i32, i32)> = Sources::new(&valid, w).all(&valid, w).iter().step_by(37).copied().collect();
+        let picks: Vec<(i32, i32)> = Sources::new(&valid, w)
+            .all(&valid, w)
+            .iter()
+            .step_by(37)
+            .copied()
+            .collect();
         assert!(picks.len() > 5);
-        for adapt in [Adapt::NONE, Adapt { gain: (0.8, 1.25), bias: 0.08 }] {
+        for adapt in [
+            Adapt::NONE,
+            Adapt {
+                gain: (0.8, 1.25),
+                bias: 0.08,
+            },
+        ] {
             for keep in [false, true] {
                 let targets = targets_around(w, r, &px, hb, tb);
                 let mut s = Solver {
@@ -2437,21 +3045,34 @@ mod tests {
                     if !s.targets[k] || !s.full[k] {
                         continue;
                     }
-                    let t = ((tb.x0 + k % tb.width()) as i32, (tb.y0 + k / tb.width()) as i32);
+                    let t = (
+                        (tb.x0 + k % tb.width()) as i32,
+                        (tb.y0 + k / tb.width()) as i32,
+                    );
                     for &src in &picks {
                         if adapt.is_none() {
                             let exact = s.dist_clipped(t, src, f32::INFINITY);
-                            assert_eq!(s.dist_full(t, src, f32::INFINITY).to_bits(), exact.to_bits());
+                            assert_eq!(
+                                s.dist_full(t, src, f32::INFINITY).to_bits(),
+                                exact.to_bits()
+                            );
                             for cutoff in [exact * 0.5, exact, exact * 2.0] {
-                                let (a, b) = (s.dist_full(t, src, cutoff), s.dist_clipped(t, src, cutoff));
+                                let (a, b) =
+                                    (s.dist_full(t, src, cutoff), s.dist_clipped(t, src, cutoff));
                                 assert_eq!(a < cutoff, b < cutoff);
                             }
                         } else {
                             let (mut m1, mut m2) = ([[0.0f32; 5]; 4], [[0.0f32; 5]; 4]);
                             s.moments_full(k, t, src, &mut m1);
                             assert_eq!(s.moments(t, src, &mut m2), (2 * r + 1) * (2 * r + 1));
-                            assert_eq!(m1.map(|c| c.map(f32::to_bits)), m2.map(|c| c.map(f32::to_bits)));
-                            assert_eq!(s.dist_adapted_full(k, t, src).to_bits(), s.dist_adapted(t, src).to_bits());
+                            assert_eq!(
+                                m1.map(|c| c.map(f32::to_bits)),
+                                m2.map(|c| c.map(f32::to_bits))
+                            );
+                            assert_eq!(
+                                s.dist_adapted_full(k, t, src).to_bits(),
+                                s.dist_adapted(t, src).to_bits()
+                            );
                         }
                         checked += 1;
                     }
@@ -2467,18 +3088,41 @@ mod tests {
         let img = busy(w, h, ch, 6);
         let hole = disc(w, h, 30.0, 26.0, 8.0);
         let px = roles(w, h, &hole);
-        let (p, none) = (CompleteParams::default(), rust_motion_raster::Interrupt::NONE);
-        let borrowed = complete_masked(w, h, ch, &img, &px, &p, &none).unwrap().unwrap();
-        let owned = complete_masked_owned(w, h, ch, img.clone(), &px, &p, &none).unwrap().unwrap();
+        let (p, none) = (
+            CompleteParams::default(),
+            rust_motion_raster::Interrupt::NONE,
+        );
+        let borrowed = complete_masked(w, h, ch, &img, &px, &p, &none)
+            .unwrap()
+            .unwrap();
+        let owned = complete_masked_owned(w, h, ch, img.clone(), &px, &p, &none)
+            .unwrap()
+            .unwrap();
         assert_eq!(bits(&owned), bits(&borrowed));
         // Nothing may be copied: no completion, and the pixels come back as they were.
-        let known: Vec<Px> = px.iter().map(|k| if *k == Px::Source { Px::Known } else { *k }).collect();
-        assert!(complete_masked(w, h, ch, &img, &known, &p, &none).unwrap().is_none());
-        let back = complete_masked_owned(w, h, ch, img.clone(), &known, &p, &none).unwrap().unwrap_err();
+        let known: Vec<Px> = px
+            .iter()
+            .map(|k| if *k == Px::Source { Px::Known } else { *k })
+            .collect();
+        assert!(complete_masked(w, h, ch, &img, &known, &p, &none)
+            .unwrap()
+            .is_none());
+        let back = complete_masked_owned(w, h, ch, img.clone(), &known, &p, &none)
+            .unwrap()
+            .unwrap_err();
         assert_eq!(bits(&back), bits(&img));
         // Cancelled, it stops.
         let yes = || true;
-        assert!(complete_masked_owned(w, h, ch, img, &px, &p, &rust_motion_raster::Interrupt::cancel_only(&yes)).is_err());
+        assert!(complete_masked_owned(
+            w,
+            h,
+            ch,
+            img,
+            &px,
+            &p,
+            &rust_motion_raster::Interrupt::cancel_only(&yes)
+        )
+        .is_err());
     }
 
     #[test]

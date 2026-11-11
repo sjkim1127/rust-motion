@@ -99,7 +99,11 @@ fn test_hdr_mtb_auto_alignment() {
     let true_dy = -2i32;
     for y in 0..h as i32 {
         for x in 0..w as i32 {
-            let pat_ref = if ((x / 8) + (y / 8)) % 2 == 0 { 160u8 } else { 40u8 };
+            let pat_ref = if ((x / 8) + (y / 8)) % 2 == 0 {
+                160u8
+            } else {
+                40u8
+            };
             ref_pm.pixels_mut()[(y * w as i32 + x) as usize] =
                 PremultipliedColorU8::from_rgba(pat_ref, pat_ref, pat_ref, 255).unwrap();
 
@@ -133,8 +137,7 @@ fn test_hdr_deghosting_moving_object() {
     for y in 10..22 {
         for x in 10..22 {
             let idx = (y * width + x) as usize;
-            ghost_pixmap.pixels_mut()[idx] =
-                PremultipliedColorU8::from_rgba(8, 8, 8, 255).unwrap();
+            ghost_pixmap.pixels_mut()[idx] = PremultipliedColorU8::from_rgba(8, 8, 8, 255).unwrap();
         }
     }
 

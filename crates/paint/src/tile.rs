@@ -25,12 +25,24 @@ impl GrayTile {
                 data.push(q16(f(x, y)));
             }
         }
-        Self { width, height, data: data.into() }
+        Self {
+            width,
+            height,
+            data: data.into(),
+        }
     }
     /// Build from 0..1 floats (`width × height`).
     pub fn from_f32(width: u32, height: u32, v: &[f32]) -> Self {
-        assert_eq!(v.len(), width as usize * height as usize, "GrayTile size mismatch");
-        Self { width, height, data: v.iter().map(|&x| q16(x)).collect() }
+        assert_eq!(
+            v.len(),
+            width as usize * height as usize,
+            "GrayTile size mismatch"
+        );
+        Self {
+            width,
+            height,
+            data: v.iter().map(|&x| q16(x)).collect(),
+        }
     }
     #[inline]
     pub fn get(&self, x: u32, y: u32) -> f32 {
@@ -40,7 +52,9 @@ impl GrayTile {
         self.data.iter().map(|&v| f32::from(v) / 65535.0).collect()
     }
     pub fn is_valid(&self) -> bool {
-        self.width > 0 && self.height > 0 && self.data.len() == self.width as usize * self.height as usize
+        self.width > 0
+            && self.height > 0
+            && self.data.len() == self.width as usize * self.height as usize
     }
 
     /// A box-filtered copy whose larger side is at most `max_side` (the whole tile when it is
@@ -50,7 +64,11 @@ impl GrayTile {
     pub fn preview(&self, max_side: u32) -> GrayTile {
         let q8 = |v: u32| ((v + 128) / 257 * 257) as u16;
         if !self.is_valid() {
-            return GrayTile { width: 1, height: 1, data: vec![0].into() };
+            return GrayTile {
+                width: 1,
+                height: 1,
+                data: vec![0].into(),
+            };
         }
         let (w, h) = (self.width as usize, self.height as usize);
         let max = max_side.max(1) as usize;
@@ -67,9 +85,23 @@ impl GrayTile {
                 }
             }
         }
-        let data: Vec<u16> = sum.iter().zip(&cnt).map(|(s, c)| q8(if *c > 0 { (*s / u64::from(*c)) as u32 } else { 0 })).collect();
+        let data: Vec<u16> = sum
+            .iter()
+            .zip(&cnt)
+            .map(|(s, c)| {
+                q8(if *c > 0 {
+                    (*s / u64::from(*c)) as u32
+                } else {
+                    0
+                })
+            })
+            .collect();
         let data = data.into();
-        GrayTile { width: nw as u32, height: nh as u32, data }
+        GrayTile {
+            width: nw as u32,
+            height: nh as u32,
+            data,
+        }
     }
 }
 
@@ -149,7 +181,12 @@ impl Serialize for GrayTile {
             bytes.extend_from_slice(&v.to_le_bytes());
         }
         let enc = b64_encode(&bytes);
-        GrayTileOut { width: self.width, height: self.height, data: &enc }.serialize(s)
+        GrayTileOut {
+            width: self.width,
+            height: self.height,
+            data: &enc,
+        }
+        .serialize(s)
     }
 }
 
@@ -160,15 +197,29 @@ impl<'de> Deserialize<'de> for GrayTile {
         let n = t.width as usize * t.height as usize;
         let data: Vec<u16> = match t.data {
             DataIn::B64(s) => {
-                let b = b64_decode(&s).ok_or_else(|| D::Error::custom("invalid base64 in tile data"))?;
-                b.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]])).collect()
+                let b = b64_decode(&s)
+                    .ok_or_else(|| D::Error::custom("invalid base64 in tile data"))?;
+                b.as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                    .collect()
             }
             DataIn::Floats(v) => v.iter().map(|&x| q16(x)).collect(),
         };
         if n == 0 || data.len() != n {
-            return Err(D::Error::custom(format!("tile data has {} samples, expected {}×{}", data.len(), t.width, t.height)));
+            return Err(D::Error::custom(format!(
+                "tile data has {} samples, expected {}×{}",
+                data.len(),
+                t.width,
+                t.height
+            )));
         }
-        Ok(GrayTile { width: t.width, height: t.height, data: data.into() })
+        Ok(GrayTile {
+            width: t.width,
+            height: t.height,
+            data: data.into(),
+        })
     }
 }
 
@@ -178,11 +229,21 @@ const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 pub fn b64_encode(b: &[u8]) -> String {
     let mut out = String::with_capacity(b.len().div_ceil(3) * 4);
     for c in b.chunks(3) {
-        let n = (u32::from(c[0]) << 16) | (u32::from(*c.get(1).unwrap_or(&0)) << 8) | u32::from(*c.get(2).unwrap_or(&0));
+        let n = (u32::from(c[0]) << 16)
+            | (u32::from(*c.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*c.get(2).unwrap_or(&0));
         out.push(B64[(n >> 18) as usize & 63] as char);
         out.push(B64[(n >> 12) as usize & 63] as char);
-        out.push(if c.len() > 1 { B64[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if c.len() > 2 { B64[n as usize & 63] as char } else { '=' });
+        out.push(if c.len() > 1 {
+            B64[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            B64[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -276,7 +337,13 @@ impl Mips {
         let (x0, y0) = (fx.floor(), fy.floor());
         let (tx, ty) = (fx - x0, fy - y0);
         let (x0, y0) = (x0 as i64, y0 as i64);
-        let get = |x: i64, y: i64| if x < 0 || y < 0 || x >= *w as i64 || y >= *h as i64 { 0.0 } else { d[y as usize * w + x as usize] };
+        let get = |x: i64, y: i64| {
+            if x < 0 || y < 0 || x >= *w as i64 || y >= *h as i64 {
+                0.0
+            } else {
+                d[y as usize * w + x as usize]
+            }
+        };
         let a = get(x0, y0) + (get(x0 + 1, y0) - get(x0, y0)) * tx;
         let b = get(x0, y0 + 1) + (get(x0 + 1, y0 + 1) - get(x0, y0 + 1)) * tx;
         a + (b - a) * ty
@@ -312,10 +379,18 @@ mod tests {
         let c = t.clone();
         assert!(std::sync::Arc::ptr_eq(&t.data, &c.data));
         assert_eq!(t, c);
-        let brush = crate::brush::BrushSettings { tip: crate::brush::TipShape::Sampled(t.clone()), ..Default::default() };
+        let brush = crate::brush::BrushSettings {
+            tip: crate::brush::TipShape::Sampled(t.clone()),
+            ..Default::default()
+        };
         let copy = brush.clone();
-        let crate::brush::TipShape::Sampled(ct) = &copy.tip else { panic!("sampled") };
-        assert!(std::sync::Arc::ptr_eq(&t.data, &ct.data), "the settings' clone shares the tip");
+        let crate::brush::TipShape::Sampled(ct) = &copy.tip else {
+            panic!("sampled")
+        };
+        assert!(
+            std::sync::Arc::ptr_eq(&t.data, &ct.data),
+            "the settings' clone shares the tip"
+        );
     }
 
     #[test]
@@ -332,23 +407,43 @@ mod tests {
         let j = serde_json::to_string(&t).unwrap();
         let back: GrayTile = serde_json::from_str(&j).unwrap();
         assert_eq!(back, t);
-        let f: GrayTile = serde_json::from_str(r#"{"width":2,"height":1,"data":[0.0,1.0]}"#).unwrap();
+        let f: GrayTile =
+            serde_json::from_str(r#"{"width":2,"height":1,"data":[0.0,1.0]}"#).unwrap();
         assert_eq!(f.data, vec![0, 65535].into());
-        assert!(serde_json::from_str::<GrayTile>(r#"{"width":2,"height":2,"data":[0.0,1.0]}"#).is_err());
+        assert!(
+            serde_json::from_str::<GrayTile>(r#"{"width":2,"height":2,"data":[0.0,1.0]}"#).is_err()
+        );
     }
 
     #[test]
     fn preview_downscales_deterministically_and_tolerates_bad_tiles() {
         let t = GrayTile::from_fn(1000, 400, |x, _| if x < 500 { 1.0 } else { 0.0 });
         let p = t.preview(96);
-        assert!(p.is_valid() && p.width <= 96 && p.height <= 96, "{}×{}", p.width, p.height);
+        assert!(
+            p.is_valid() && p.width <= 96 && p.height <= 96,
+            "{}×{}",
+            p.width,
+            p.height
+        );
         assert_eq!(p, t.preview(96));
         assert!(p.get(0, 0) > 0.99 && p.get(p.width - 1, 0) < 0.01);
         assert!(p.data.iter().all(|v| v % 257 == 0), "8-bit levels");
         // Small tiles keep their size; invalid ones never panic.
         assert_eq!(GrayTile::from_fn(5, 3, |_, _| 0.5).preview(96).width, 5);
-        assert!(GrayTile { width: 4, height: 4, data: vec![1].into() }.preview(96).is_valid());
-        assert!(GrayTile { width: 0, height: 0, data: vec![].into() }.preview(0).is_valid());
+        assert!(GrayTile {
+            width: 4,
+            height: 4,
+            data: vec![1].into()
+        }
+        .preview(96)
+        .is_valid());
+        assert!(GrayTile {
+            width: 0,
+            height: 0,
+            data: vec![].into()
+        }
+        .preview(0)
+        .is_valid());
     }
 
     #[test]
@@ -356,9 +451,21 @@ mod tests {
         use crate::brush::{Pattern, TipShape};
         use std::sync::Arc;
         let full = GrayTile::from_fn(300, 200, |x, y| ((x + y) % 7) as f32 / 7.0);
-        let r = StoredTile { key: "abc".into(), width: 300, height: 200, preview: Arc::new(full.preview(PREVIEW_SIDE)), full: None };
-        let loaded = StoredTile { full: Some(Arc::new(full.clone())), ..r.clone() };
-        assert_eq!(TipShape::Stored(r.clone()), TipShape::Stored(loaded.clone()));
+        let r = StoredTile {
+            key: "abc".into(),
+            width: 300,
+            height: 200,
+            preview: Arc::new(full.preview(PREVIEW_SIDE)),
+            full: None,
+        };
+        let loaded = StoredTile {
+            full: Some(Arc::new(full.clone())),
+            ..r.clone()
+        };
+        assert_eq!(
+            TipShape::Stored(r.clone()),
+            TipShape::Stored(loaded.clone())
+        );
         assert_ne!(TipShape::Stored(r.clone()), TipShape::Sampled(full.clone()));
         assert_eq!(r.bitmap().width, r.preview.width);
         assert_eq!(loaded.bitmap(), &full);
@@ -366,11 +473,23 @@ mod tests {
         let j = serde_json::to_value(TipShape::Stored(r.clone())).unwrap();
         assert_eq!(j["stored"]["key"], "abc");
         assert!(j["stored"].get("full").is_none());
-        assert_eq!(serde_json::from_value::<TipShape>(j).unwrap(), TipShape::Stored(r.clone()));
+        assert_eq!(
+            serde_json::from_value::<TipShape>(j).unwrap(),
+            TipShape::Stored(r.clone())
+        );
         // Loaded: the same JSON as an embedded bitmap.
-        assert_eq!(serde_json::to_value(TipShape::Stored(loaded.clone())).unwrap(), serde_json::to_value(TipShape::Sampled(full.clone())).unwrap());
-        assert_eq!(serde_json::to_value(Pattern::Stored(loaded)).unwrap(), serde_json::to_value(Pattern::Tile(full)).unwrap());
-        assert_eq!(serde_json::to_value(Pattern::Stored(r)).unwrap()["stored"]["width"], 300);
+        assert_eq!(
+            serde_json::to_value(TipShape::Stored(loaded.clone())).unwrap(),
+            serde_json::to_value(TipShape::Sampled(full.clone())).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(Pattern::Stored(loaded)).unwrap(),
+            serde_json::to_value(Pattern::Tile(full)).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(Pattern::Stored(r)).unwrap()["stored"]["width"],
+            300
+        );
     }
 
     #[test]

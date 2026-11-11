@@ -1,13 +1,13 @@
 //! Wide exact-kernel Gaussian convolution using FFTs. Summation order changes:
 //! positive thresholds and unstable samples retain the sequential f32 fallback.
 use crate::{FilterParams, Image};
+use rayon::prelude::*;
 use rust_motion_geom::Rect;
 use rust_motion_raster::{Interrupt, Surface};
-use rayon::prelude::*;
-use rustfft::{Fft, FftPlanner, num_complex::Complex};
+use rustfft::{num_complex::Complex, Fft, FftPlanner};
 use std::sync::{
-    Arc,
     atomic::{AtomicUsize, Ordering},
+    Arc,
 };
 
 const MAX_BYTES: usize = 1 << 30;
@@ -40,16 +40,27 @@ impl Plan {
         }
         let forward = planner.plan_fft_forward(size);
         let inverse = planner.plan_fft_inverse(size);
-        let scratch = forward.get_inplace_scratch_len().max(inverse.get_inplace_scratch_len());
+        let scratch = forward
+            .get_inplace_scratch_len()
+            .max(inverse.get_inplace_scratch_len());
         let mut spectrum = buffer(size, Number::default())?;
         for (dst, &weight) in spectrum.iter_mut().zip(kernel) {
             dst.re = f64::from(weight) / size as f64;
         }
         forward.process_with_scratch(&mut spectrum, &mut buffer(scratch, Number::default())?);
-        Some(Self { size, forward, inverse, spectrum, scratch })
+        Some(Self {
+            size,
+            forward,
+            inverse,
+            spectrum,
+            scratch,
+        })
     }
     fn work(&self) -> Option<(Vec<Number>, Vec<Number>)> {
-        Some((buffer(self.size, Number::default())?, buffer(self.scratch, Number::default())?))
+        Some((
+            buffer(self.size, Number::default())?,
+            buffer(self.scratch, Number::default())?,
+        ))
     }
     fn convolve(&self, data: &mut [Number], scratch: &mut [Number]) -> Option<()> {
         if data.len() != self.size || scratch.len() < self.scratch {
@@ -68,7 +79,11 @@ impl Plan {
 // column gathers, originals, FFT scratch and result stripes. Document tiles are
 // excluded, just as in the existing tile scheduler's scratch budget.
 fn group_size(resident: usize, worker: usize, count: usize, workers: usize) -> Option<usize> {
-    let group = MAX_BYTES.checked_sub(resident)?.checked_div(worker.max(1))?.min(workers).min(count);
+    let group = MAX_BYTES
+        .checked_sub(resident)?
+        .checked_div(worker.max(1))?
+        .min(workers)
+        .min(count);
     (group > 0).then_some(group)
 }
 
@@ -82,7 +97,14 @@ pub(crate) fn apply(
     extent: Option<Rect>,
     ctl: &Interrupt,
 ) -> Option<Option<Surface>> {
-    let FilterParams::UnsharpMask { amount, radius, threshold } = *params else { return None };
+    let FilterParams::UnsharpMask {
+        amount,
+        radius,
+        threshold,
+    } = *params
+    else {
+        return None;
+    };
     // At a positive threshold, even a tiny sum-order difference can switch the
     // entire sharpen contribution. Zero/negative thresholds always keep it.
     if !(64.0..=1000.0).contains(&radius)
@@ -109,8 +131,20 @@ pub(crate) fn apply(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn run(surface: &Surface, area: Rect, amount: f32, radius: f32, selection: Option<&Surface>, extent: Option<Rect>, ctl: &Interrupt) -> Option<Surface> {
-    let (w, h, n) = (area.width() as usize, area.height() as usize, surface.channels());
+fn run(
+    surface: &Surface,
+    area: Rect,
+    amount: f32,
+    radius: f32,
+    selection: Option<&Surface>,
+    extent: Option<Rect>,
+    ctl: &Interrupt,
+) -> Option<Surface> {
+    let (w, h, n) = (
+        area.width() as usize,
+        area.height() as usize,
+        surface.channels(),
+    );
     let alpha = surface.format().alpha;
     let kernel = super::gaussian_kernel(radius);
     let r = kernel.len() / 2;
@@ -130,17 +164,35 @@ fn run(surface: &Surface, area: Rect, amount: f32, radius: f32, selection: Optio
     let horizontal = Plan::new(w.checked_add(2 * r)?, &kernel, &mut planner)?;
     let vertical = Plan::new(h.checked_add(2 * r)?, &kernel, &mut planner)?;
     // A conservative allowance includes FFT plans/twiddles in addition to spectra.
-    let plans = horizontal.size.checked_add(vertical.size)?.checked_mul(256)?;
+    let plans = horizontal
+        .size
+        .checked_add(vertical.size)?
+        .checked_mul(256)?;
     let resident = resident.checked_add(plans)?;
     let workers = rayon::current_num_threads().max(1);
-    let horizontal_worker = read_width.checked_mul(n)?.checked_mul(4)?.checked_add(horizontal.size.checked_add(horizontal.scratch)?.checked_mul(16)?)?;
+    let horizontal_worker = read_width.checked_mul(n)?.checked_mul(4)?.checked_add(
+        horizontal
+            .size
+            .checked_add(horizontal.scratch)?
+            .checked_mul(16)?,
+    )?;
     let vertical_worker = STRIPE
         .checked_mul(rows)?
         .checked_mul(n)?
         .checked_mul(4)?
         .checked_add(STRIPE.checked_mul(h)?.checked_mul(n)?.checked_mul(12)?)?
-        .checked_add(vertical.size.checked_add(vertical.scratch)?.checked_mul(16)?)?;
-    let group = group_size(resident, horizontal_worker.max(vertical_worker), w.div_ceil(STRIPE), workers)?;
+        .checked_add(
+            vertical
+                .size
+                .checked_add(vertical.scratch)?
+                .checked_mul(16)?,
+        )?;
+    let group = group_size(
+        resident,
+        horizontal_worker.max(vertical_worker),
+        w.div_ceil(STRIPE),
+        workers,
+    )?;
     let mut tmp = buffer(samples, 0.0f32)?;
     let finished = AtomicUsize::new(0);
     // Read each needed real row once. Outside a repeated extent, horizontal
@@ -157,10 +209,13 @@ fn run(surface: &Surface, area: Rect, amount: f32, radius: f32, selection: Optio
                 let y = read_y0.checked_add(i32::try_from(first.checked_add(offset)?).ok()?)?;
                 let mut row = buffer(read_width.checked_mul(n)?, 0.0f32)?;
                 // Reservation above covers resize, so the reusable raster read cannot allocate.
-                surface.read_region_into(Rect::new(read_x0, y, read_x1, y.checked_add(1)?), &mut row);
+                surface
+                    .read_region_into(Rect::new(read_x0, y, read_x1, y.checked_add(1)?), &mut row);
                 let mut scales = [0.0f64; crate::fxutil::MAXC];
                 for px in row.chunks_exact_mut(n) {
-                    if px.iter().any(|v| !v.is_finite() || v.abs() > 1e6) || (alpha && !px.last().is_some_and(|a| (0.0..=1.0).contains(a))) {
+                    if px.iter().any(|v| !v.is_finite() || v.abs() > 1e6)
+                        || (alpha && !px.last().is_some_and(|a| (0.0..=1.0).contains(a)))
+                    {
                         return None;
                     }
                     let a = if alpha { *px.last()? } else { 1.0 };
@@ -179,7 +234,9 @@ fn run(surface: &Surface, area: Rect, amount: f32, radius: f32, selection: Optio
                     }
                     data.fill(Number::default());
                     for (i, d) in data.iter_mut().take(w + 2 * r).enumerate() {
-                        let sx = x0.checked_add(i32::try_from(i).ok()?)?.clamp(read_x0, read_x1.checked_sub(1)?);
+                        let sx = x0
+                            .checked_add(i32::try_from(i).ok()?)?
+                            .clamp(read_x0, read_x1.checked_sub(1)?);
                         let start = usize::try_from(sx - read_x0).ok()?.checked_mul(n)?;
                         let px = row.get(start..start.checked_add(n)?)?;
                         let sample = |c: usize| -> f64 {
@@ -230,7 +287,12 @@ fn run(surface: &Surface, area: Rect, amount: f32, radius: f32, selection: Optio
                         columns.get_mut(start..start + n)?.copy_from_slice(px);
                     }
                 }
-                let rect = Rect::new(area.x0.checked_add(x as i32)?, area.y0, area.x0.checked_add((x + width) as i32)?, area.y1);
+                let rect = Rect::new(
+                    area.x0.checked_add(x as i32)?,
+                    area.y0,
+                    area.x0.checked_add((x + width) as i32)?,
+                    area.y1,
+                );
                 let len = width.checked_mul(h)?.checked_mul(n)?;
                 let mut result = buffer(len, 0.0f32)?;
                 let mut original = buffer(len, 0.0f32)?;
@@ -252,7 +314,9 @@ fn run(surface: &Surface, area: Rect, amount: f32, radius: f32, selection: Optio
                         }
                         data.fill(Number::default());
                         for (i, d) in data.iter_mut().take(h + 2 * r).enumerate() {
-                            let sy = y0.checked_add(i as i32)?.clamp(read_y0, read_y1.checked_sub(1)?);
+                            let sy = y0
+                                .checked_add(i as i32)?
+                                .clamp(read_y0, read_y1.checked_sub(1)?);
                             let start = usize::try_from(sy - read_y0).ok()?.checked_mul(n)?;
                             let px = samples.get(start..start + n)?;
                             let sample = |c: usize| -> f64 {
@@ -266,8 +330,12 @@ fn run(surface: &Surface, area: Rect, amount: f32, radius: f32, selection: Optio
                         vertical.convolve(&mut data, &mut scratch)?;
                         for (y, d) in data.get(2 * r..2 * r + h)?.iter().enumerate() {
                             let start = (y * width + c) * n;
-                            *result.get_mut(start + channel)? = (d.re * scales.get(channel)?) as f32;
-                            if let Some(v) = result.get_mut(start + channel + 1).filter(|_| channel + 1 < n) {
+                            *result.get_mut(start + channel)? =
+                                (d.re * scales.get(channel)?) as f32;
+                            if let Some(v) = result
+                                .get_mut(start + channel + 1)
+                                .filter(|_| channel + 1 < n)
+                            {
                                 *v = (d.im * scales.get(channel + 1)?) as f32;
                             }
                         }
@@ -297,7 +365,17 @@ fn run(surface: &Surface, area: Rect, amount: f32, radius: f32, selection: Optio
                     }
                 }
                 if let Some(sel) = selection {
-                    crate::mix_selection(&mut result, rect, sel, &Image { rect, ch: n, data: original }, alpha);
+                    crate::mix_selection(
+                        &mut result,
+                        rect,
+                        sel,
+                        &Image {
+                            rect,
+                            ch: n,
+                            data: original,
+                        },
+                        alpha,
+                    );
                 }
                 Some((rect, result))
             })

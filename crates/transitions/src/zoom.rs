@@ -1,10 +1,7 @@
-//! Zoom and scale transitions presentation and component.
+//! Zoom and scale transitions presentation and scene emitter.
 
 use crate::presentation::{PresentationVisual, TransitionContext, TransitionPresentation};
-use dioxus::prelude::*;
-use rust_motion_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
 use rust_motion_composition::{CompositionError, SceneEmitter, SceneFrameContext};
-use rust_motion_core::hooks::use_current_frame;
 use rust_motion_rasterizer::{Scene, SceneNode, Transform2D};
 use serde_json::Value;
 
@@ -197,58 +194,5 @@ impl<E: SceneEmitter> SceneEmitter for SceneZoom<E> {
             });
         }
         Ok(())
-    }
-}
-
-/// Props for `<Zoom>` Dioxus component.
-#[derive(Props, Clone, PartialEq)]
-pub struct ZoomProps {
-    #[props(default = 20)]
-    pub enter_duration: u32,
-    #[props(default)]
-    pub mode: ZoomMode,
-    #[props(default = 1.5)]
-    pub max_scale: f32,
-    pub children: Element,
-}
-
-/// Zoom scale transition component.
-#[component]
-pub fn Zoom(props: ZoomProps) -> Element {
-    let frame = use_current_frame() as f64;
-    let enter = props.enter_duration as f64;
-
-    let p = if enter > 0.0 {
-        interpolate(
-            frame,
-            &[0.0, enter],
-            &[0.0, 1.0],
-            InterpolateOptions {
-                extrapolate_left: ExtrapolateType::Clamp,
-                extrapolate_right: ExtrapolateType::Clamp,
-                ..Default::default()
-            },
-        )
-    } else {
-        1.0
-    } as f32;
-
-    let zoom = Zoom {
-        mode: props.mode,
-        max_scale: props.max_scale,
-    };
-    let ctx = TransitionContext::new(p, 100.0, 100.0, frame as u32, props.enter_duration);
-    let visual = zoom.render_entering(&ctx);
-
-    rsx! {
-        div {
-            style: "
-                position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                opacity: {visual.opacity:.4};
-                transform: scale({visual.transform.scale_x:.4});
-                transform-origin: center center;
-            ",
-            {props.children}
-        }
     }
 }

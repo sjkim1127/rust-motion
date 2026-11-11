@@ -21,7 +21,10 @@ fn bump() {
 /// Installs `plugin`, replacing one with the same id.
 pub fn install(plugin: Plugin) -> Arc<Plugin> {
     let p = Arc::new(plugin);
-    PLUGINS.write().unwrap_or_else(|e| e.into_inner()).insert(p.id().to_string(), p.clone());
+    PLUGINS
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(p.id().to_string(), p.clone());
     bump();
     p
 }
@@ -32,17 +35,30 @@ pub fn install_bytes(bytes: &[u8]) -> Result<Arc<Plugin>> {
 }
 
 pub fn get(id: &str) -> Option<Arc<Plugin>> {
-    PLUGINS.read().unwrap_or_else(|e| e.into_inner()).get(id).cloned()
+    PLUGINS
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(id)
+        .cloned()
 }
 
 /// Installed plug-ins, sorted by id.
 pub fn list() -> Vec<Arc<Plugin>> {
-    PLUGINS.read().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
+    PLUGINS
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .values()
+        .cloned()
+        .collect()
 }
 
 /// Uninstalls `id`; false if it wasn't installed.
 pub fn remove(id: &str) -> bool {
-    let gone = PLUGINS.write().unwrap_or_else(|e| e.into_inner()).remove(id).is_some();
+    let gone = PLUGINS
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(id)
+        .is_some();
     if gone {
         bump();
     }
@@ -59,16 +75,24 @@ pub fn revision() -> u64 {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_file(path: &std::path::Path, limits: Limits) -> Result<Plugin> {
     use std::io::Read;
-    let meta = std::fs::metadata(path).map_err(|e| Error::Io(format!("{}: {e}", path.display())))?;
+    let meta =
+        std::fs::metadata(path).map_err(|e| Error::Io(format!("{}: {e}", path.display())))?;
     if !meta.is_file() {
         return Err(Error::Io(format!("{} is not a file", path.display())));
     }
     if meta.len() > limits.max_module_bytes as u64 {
-        return Err(Error::Module(format!("{} is {} bytes (limit {})", path.display(), meta.len(), limits.max_module_bytes)));
+        return Err(Error::Module(format!(
+            "{} is {} bytes (limit {})",
+            path.display(),
+            meta.len(),
+            limits.max_module_bytes
+        )));
     }
     let f = std::fs::File::open(path).map_err(|e| Error::Io(format!("{}: {e}", path.display())))?;
     let mut bytes = Vec::new();
-    f.take(limits.max_module_bytes as u64 + 1).read_to_end(&mut bytes).map_err(|e| Error::Io(format!("{}: {e}", path.display())))?;
+    f.take(limits.max_module_bytes as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| Error::Io(format!("{}: {e}", path.display())))?;
     Ok(Plugin::load(&bytes, limits)?.with_source(path.display().to_string()))
 }
 
@@ -86,8 +110,13 @@ pub struct FolderReport {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_folder(dir: &std::path::Path) -> Result<FolderReport> {
     let rd = std::fs::read_dir(dir).map_err(|e| Error::Io(format!("{}: {e}", dir.display())))?;
-    let mut files: Vec<std::path::PathBuf> =
-        rd.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("wasm"))).collect();
+    let mut files: Vec<std::path::PathBuf> = rd
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.extension()
+                .is_some_and(|x| x.eq_ignore_ascii_case("wasm"))
+        })
+        .collect();
     files.sort();
     files.truncate(1000);
     let mut report = FolderReport::default();

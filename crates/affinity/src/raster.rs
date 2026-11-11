@@ -4,9 +4,9 @@
 
 use std::collections::HashMap;
 
-use crate::Error;
 use crate::model::{Affine, Image, Pixels, Reader};
 use crate::stream::{self, ObjId, Tag, Value};
+use crate::Error;
 
 /// Pixels decoded per layer (the content's bounding box, not the canvas).
 const MAX_PIXELS: u64 = 64 << 20;
@@ -23,8 +23,14 @@ pub(crate) fn node_image(r: &mut Reader, id: ObjId, world: Affine) -> Result<Opt
         r.warn("pixel layers stored in an unknown way");
         return Ok(None);
     }
-    let width = s.int(bitmap, b"BmpW").and_then(|v| u32::try_from(v).ok()).unwrap_or(0);
-    let height = s.int(bitmap, b"BmpH").and_then(|v| u32::try_from(v).ok()).unwrap_or(0);
+    let width = s
+        .int(bitmap, b"BmpW")
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(0);
+    let height = s
+        .int(bitmap, b"BmpH")
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(0);
     if width == 0 || height == 0 {
         return Ok(None);
     }
@@ -33,16 +39,31 @@ pub(crate) fn node_image(r: &mut Reader, id: ObjId, world: Affine) -> Result<Opt
     if let Some(name) = s.entry(bitmap, b"Bckg").filter(|n| !n.is_empty()) {
         if s.is(id, b"ImgN") || !has_tiles {
             match original(r, name) {
-                Ok(bytes) => return Ok(Some(Image { width, height, pixels: Pixels::Encoded(bytes), transform: world })),
+                Ok(bytes) => {
+                    return Ok(Some(Image {
+                        width,
+                        height,
+                        pixels: Pixels::Encoded(bytes),
+                        transform: world,
+                    }))
+                }
                 Err(Error::Limit(e)) => return Err(Error::Limit(e)),
-                Err(_) => r.warn("an embedded image file that could not be read (its cached pixels were used)"),
+                Err(_) => r.warn(
+                    "an embedded image file that could not be read (its cached pixels were used)",
+                ),
             }
         }
     }
     // The content's bounding box, so a mostly empty canvas-sized layer stays small.
     let crop = s
         .field(id, b"BitR")
-        .and_then(|v| if let Value::Ints(i) = v { Some(i.clone()) } else { None })
+        .and_then(|v| {
+            if let Value::Ints(i) = v {
+                Some(i.clone())
+            } else {
+                None
+            }
+        })
         .filter(|v| v.len() == 4 && v[0] > i64::from(i32::MIN) + 1)
         .map(|v| {
             (
@@ -62,9 +83,17 @@ pub(crate) fn node_image(r: &mut Reader, id: ObjId, world: Affine) -> Result<Opt
 /// A mask layer (`MRst`): one channel of coverage as grey pixels (white shows, black hides).
 pub(crate) fn mask(r: &mut Reader, id: ObjId, world: Affine) -> Result<Option<Image>, Error> {
     let s = r.s;
-    let Some(bitmap) = s.obj(id, b"Bitm") else { return Ok(None) };
-    let width = s.int(bitmap, b"BmpW").and_then(|v| u32::try_from(v).ok()).unwrap_or(0);
-    let height = s.int(bitmap, b"BmpH").and_then(|v| u32::try_from(v).ok()).unwrap_or(0);
+    let Some(bitmap) = s.obj(id, b"Bitm") else {
+        return Ok(None);
+    };
+    let width = s
+        .int(bitmap, b"BmpW")
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(0);
+    let height = s
+        .int(bitmap, b"BmpH")
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(0);
     if width == 0 || height == 0 || !matches!(s.enumeration(bitmap, b"Frmt"), Some((6 | 7, _))) {
         r.warn("pixel masks in an unknown format (imported without them)");
         return Ok(None);
@@ -75,10 +104,20 @@ pub(crate) fn mask(r: &mut Reader, id: ObjId, world: Affine) -> Result<Option<Im
 /// An embedded document or symbol instance (`EmbN`), as the picture of it Affinity caches.
 pub(crate) fn embedded(r: &mut Reader, id: ObjId, world: Affine) -> Result<Option<Image>, Error> {
     let s = r.s;
-    let Some(cache) = s.obj(id, b"Bitm").and_then(|e| s.obj(e, b"Cach")) else { return Ok(None) };
-    let Some(bbox) = s.obj(id, b"Bitm").and_then(|e| s.floats::<4>(e, b"ChBB")) else { return Ok(None) };
-    let width = s.int(cache, b"BmpW").and_then(|v| u32::try_from(v).ok()).unwrap_or(0);
-    let height = s.int(cache, b"BmpH").and_then(|v| u32::try_from(v).ok()).unwrap_or(0);
+    let Some(cache) = s.obj(id, b"Bitm").and_then(|e| s.obj(e, b"Cach")) else {
+        return Ok(None);
+    };
+    let Some(bbox) = s.obj(id, b"Bitm").and_then(|e| s.floats::<4>(e, b"ChBB")) else {
+        return Ok(None);
+    };
+    let width = s
+        .int(cache, b"BmpW")
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(0);
+    let height = s
+        .int(cache, b"BmpH")
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(0);
     if width == 0 || height == 0 {
         return Ok(None);
     }
@@ -86,12 +125,25 @@ pub(crate) fn embedded(r: &mut Reader, id: ObjId, world: Affine) -> Result<Optio
     // The instance's origin is the centre of the embedded content (checked against the
     // thumbnails of documents with embedded documents and SVG files).
     let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
-    let place = Affine([(x1 - x0) / f64::from(width), 0.0, 0.0, (y1 - y0) / f64::from(height), x0 - cx, y0 - cy]).then(world);
+    let place = Affine([
+        (x1 - x0) / f64::from(width),
+        0.0,
+        0.0,
+        (y1 - y0) / f64::from(height),
+        x0 - cx,
+        y0 - cy,
+    ])
+    .then(world);
     decode(r, cache, (0, 0, width, height), place)
 }
 
 /// Decode the tiles of a bitmap inside `crop` (pixels), placed by `world` (bitmap pixels to document).
-fn decode(r: &mut Reader, bitmap: ObjId, crop: (u32, u32, u32, u32), world: Affine) -> Result<Option<Image>, Error> {
+fn decode(
+    r: &mut Reader,
+    bitmap: ObjId,
+    crop: (u32, u32, u32, u32),
+    world: Affine,
+) -> Result<Option<Image>, Error> {
     let s = r.s;
     let (x0, y0, x1, y1) = crop;
     if x1 <= x0 || y1 <= y0 {
@@ -119,9 +171,18 @@ fn decode(r: &mut Reader, bitmap: ObjId, crop: (u32, u32, u32, u32), world: Affi
     };
     // A layer is materialized from its declared size, whatever the tiles hold: admit the output
     // and the planes it decodes through before either is allocated (#4960).
-    let pixels = (w as usize).checked_mul(h as usize).ok_or(Error::Limit("pixel layer size"))?;
-    let scratch = pixels.checked_mul(channels * bps).ok_or(Error::Limit("pixel layer size"))?;
-    r.admit_pixels(pixels.checked_mul(4).ok_or(Error::Limit("pixel layer size"))?, scratch)?;
+    let pixels = (w as usize)
+        .checked_mul(h as usize)
+        .ok_or(Error::Limit("pixel layer size"))?;
+    let scratch = pixels
+        .checked_mul(channels * bps)
+        .ok_or(Error::Limit("pixel layer size"))?;
+    r.admit_pixels(
+        pixels
+            .checked_mul(4)
+            .ok_or(Error::Limit("pixel layer size"))?,
+        scratch,
+    )?;
     let mut planes = Vec::with_capacity(channels);
     let mut cache = HashMap::new();
     for c in 1..=channels {
@@ -131,7 +192,10 @@ fn decode(r: &mut Reader, bitmap: ObjId, crop: (u32, u32, u32, u32), world: Affi
     let mut rgba = vec![0u8; n * 4];
     let sample = |p: &Vec<u8>, i: usize| -> f64 {
         if bps == 2 {
-            f64::from(u16::from_le_bytes([p.get(2 * i).copied().unwrap_or(0), p.get(2 * i + 1).copied().unwrap_or(0)])) / 65535.0
+            f64::from(u16::from_le_bytes([
+                p.get(2 * i).copied().unwrap_or(0),
+                p.get(2 * i + 1).copied().unwrap_or(0),
+            ])) / 65535.0
         } else {
             f64::from(p.get(i).copied().unwrap_or(0)) / 255.0
         }
@@ -149,7 +213,12 @@ fn decode(r: &mut Reader, bitmap: ObjId, crop: (u32, u32, u32, u32), world: Affi
         px.copy_from_slice(&[r2, g, b, a].map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8));
     }
     let transform = Affine([1.0, 0.0, 0.0, 1.0, f64::from(x0), f64::from(y0)]).then(world);
-    Ok(Some(Image { width: w, height: h, pixels: Pixels::Rgba8(rgba), transform }))
+    Ok(Some(Image {
+        width: w,
+        height: h,
+        pixels: Pixels::Rgba8(rgba),
+        transform,
+    }))
 }
 
 /// The original image file: entry `c/N` is a stream whose root (`Blck`) holds it as `Data`.
@@ -177,12 +246,33 @@ fn plane(
     cache: &mut HashMap<String, Vec<u8>>,
 ) -> Result<Vec<u8>, Error> {
     let s = r.s;
-    let width = s.int(bitmap, b"BmpW").and_then(|v| usize::try_from(v).ok()).unwrap_or(0);
-    let height = s.int(bitmap, b"BmpH").and_then(|v| usize::try_from(v).ok()).unwrap_or(0);
-    let tw = s.int(bitmap, &tag(b"TWi", c)).and_then(|v| usize::try_from(v).ok()).unwrap_or_else(|| (width * bps).div_ceil(TILE));
-    let th = s.int(bitmap, &tag(b"THi", c)).and_then(|v| usize::try_from(v).ok()).unwrap_or_else(|| height.div_ceil(TILE));
+    let width = s
+        .int(bitmap, b"BmpW")
+        .and_then(|v| usize::try_from(v).ok())
+        .unwrap_or(0);
+    let height = s
+        .int(bitmap, b"BmpH")
+        .and_then(|v| usize::try_from(v).ok())
+        .unwrap_or(0);
+    let tw = s
+        .int(bitmap, &tag(b"TWi", c))
+        .and_then(|v| usize::try_from(v).ok())
+        .unwrap_or_else(|| (width * bps).div_ceil(TILE));
+    let th = s
+        .int(bitmap, &tag(b"THi", c))
+        .and_then(|v| usize::try_from(v).ok())
+        .unwrap_or_else(|| height.div_ceil(TILE));
     let states: Vec<u8> = match s.field(bitmap, &tag(b"Sta", c)) {
-        Some(Value::Array(a)) => a.iter().map(|v| if let Value::UInt(u) = v { u8::try_from(*u).unwrap_or(255) } else { 255 }).collect(),
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|v| {
+                if let Value::UInt(u) = v {
+                    u8::try_from(*u).unwrap_or(255)
+                } else {
+                    255
+                }
+            })
+            .collect(),
         _ => Vec::new(),
     };
     let tiles = s.objs(bitmap, &tag(b"Idx", c));
@@ -197,18 +287,26 @@ fn plane(
             0 | 1 => None,
             2 => Some(0xFF),
             4 => {
-                let Some(blck) = tiles.get(next).copied() else { return Err(Error::Malformed("missing pixel tile")) };
+                let Some(blck) = tiles.get(next).copied() else {
+                    return Err(Error::Malformed("missing pixel tile"));
+                };
                 next += 1;
                 let (ox, oy) = (tx * TILE, ty * TILE);
                 if ox >= bx1 || ox + TILE <= bx0 || oy >= py1 || oy + TILE <= py0 {
                     continue;
                 }
-                let name = s.entry(blck, b"Data").ok_or(Error::Malformed("pixel tile without data"))?.to_string();
+                let name = s
+                    .entry(blck, b"Data")
+                    .ok_or(Error::Malformed("pixel tile without data"))?
+                    .to_string();
                 if !cache.contains_key(&name) {
                     let mut data = r.archive.read(&name)?;
                     // Older files wrap a tile in a one-field stream: header, then a 64 KiB blob.
                     if data.len() == TILE_BYTES + 22 && data.starts_with(b"\x00\xffKS") {
-                        data = data.get(21..21 + TILE_BYTES).ok_or(Error::Malformed("pixel tile"))?.to_vec();
+                        data = data
+                            .get(21..21 + TILE_BYTES)
+                            .ok_or(Error::Malformed("pixel tile"))?
+                            .to_vec();
                     }
                     if data.len() != TILE_BYTES {
                         return Err(Error::Malformed("pixel tile size"));
@@ -216,7 +314,9 @@ fn plane(
                     cache.insert(name.clone(), data);
                 }
                 let tile = cache.get(&name).ok_or(Error::Malformed("pixel tile"))?;
-                copy(&mut out, row, (bx0, py0, bx1, py1), (ox, oy), |x, y| tile.get(y * TILE + x).copied().unwrap_or(0));
+                copy(&mut out, row, (bx0, py0, bx1, py1), (ox, oy), |x, y| {
+                    tile.get(y * TILE + x).copied().unwrap_or(0)
+                });
                 continue;
             }
             3 => {
@@ -230,14 +330,26 @@ fn plane(
             _ => return Err(Error::Malformed("unknown pixel tile state")),
         };
         if let Some(v) = fill {
-            copy(&mut out, row, (bx0, py0, bx1, py1), (tx * TILE, ty * TILE), |_, _| v);
+            copy(
+                &mut out,
+                row,
+                (bx0, py0, bx1, py1),
+                (tx * TILE, ty * TILE),
+                |_, _| v,
+            );
         }
     }
     Ok(out)
 }
 
 /// Copy the overlap of a tile at byte column `ox`, row `oy` into the cropped plane.
-fn copy(out: &mut [u8], row: usize, (bx0, py0, bx1, py1): (usize, usize, usize, usize), (ox, oy): (usize, usize), at: impl Fn(usize, usize) -> u8) {
+fn copy(
+    out: &mut [u8],
+    row: usize,
+    (bx0, py0, bx1, py1): (usize, usize, usize, usize),
+    (ox, oy): (usize, usize),
+    at: impl Fn(usize, usize) -> u8,
+) {
     for y in oy.max(py0)..(oy + TILE).min(py1) {
         for x in ox.max(bx0)..(ox + TILE).min(bx1) {
             if let Some(b) = out.get_mut((y - py0) * row + (x - bx0)) {

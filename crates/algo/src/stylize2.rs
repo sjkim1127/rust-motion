@@ -5,7 +5,7 @@ use rust_motion_geom::Rect;
 mod extrude;
 mod wind;
 
-use crate::fxutil::{MAXC, luma, native, ncol, subtractive, xy};
+use crate::fxutil::{luma, native, ncol, subtractive, xy, MAXC};
 use crate::image::Image;
 use crate::noise::hash01;
 use crate::{Ctx, DiffuseMode, ExtrudeType, TileFill, WindMethod};
@@ -31,7 +31,16 @@ pub(crate) fn diffuse(src: &Image, out: Rect, ctx: &Ctx, mode: DiffuseMode, seed
                 let mut best = (f32::MAX, (0, 0));
                 // Random start so ties do not bias one direction.
                 let start = (hash01(x, y, 3, seed) * 8.0) as usize;
-                const RING: [(i32, i32); 8] = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)];
+                const RING: [(i32, i32); 8] = [
+                    (1, 0),
+                    (1, 1),
+                    (0, 1),
+                    (-1, 1),
+                    (-1, 0),
+                    (-1, -1),
+                    (0, -1),
+                    (1, -1),
+                ];
                 for k in 0..8 {
                     let (dx, dy) = RING[(start + k) % 8];
                     read_px(src, x + dx, y + dy, &mut nb[..n]);
@@ -100,7 +109,14 @@ fn extrude_direct(src: &Image, out: Rect, ctx: &Ctx, spec: &ExtrudeSpec) -> Vec<
     let half_diag = ((b.width() as f32).hypot(b.height() as f32) / 2.0).max(1.0);
     let reach = extrude_reach(spec.depth);
     let mut res = src.crop(out);
-    let cell_rect = |gx: i32, gy: i32| Rect::new(b.x0 + gx * cs, b.y0 + gy * cs, b.x0 + (gx + 1) * cs, b.y0 + (gy + 1) * cs);
+    let cell_rect = |gx: i32, gy: i32| {
+        Rect::new(
+            b.x0 + gx * cs,
+            b.y0 + gy * cs,
+            b.x0 + (gx + 1) * cs,
+            b.y0 + (gy + 1) * cs,
+        )
+    };
     let incomplete = |r: &Rect| r.intersect(&b) != *r;
     // Average colour and height of a cell (cached for the last cell queried per pixel row).
     let cell_info = |gx: i32, gy: i32| -> ([f32; MAXC], f32) {
@@ -113,7 +129,11 @@ fn extrude_direct(src: &Image, out: Rect, ctx: &Ctx, spec: &ExtrudeSpec) -> Vec<
         while yy < r.y1 {
             let mut xx = r.x0;
             while xx < r.x1 {
-                let a = if ctx.alpha { src.get(xx, yy, n - 1) } else { 1.0 };
+                let a = if ctx.alpha {
+                    src.get(xx, yy, n - 1)
+                } else {
+                    1.0
+                };
                 for (c, v) in acc.iter_mut().enumerate().take(n) {
                     let s = src.get(xx, yy, c);
                     *v += if ctx.alpha && c < n - 1 { s * a } else { s };
@@ -129,14 +149,23 @@ fn extrude_direct(src: &Image, out: Rect, ctx: &Ctx, spec: &ExtrudeSpec) -> Vec<
             }
         }
         crate::fxutil::unpremul_px(&mut acc[..n], ctx.alpha);
-        let h = if spec.level_based { luma(ctx, &acc[..n]).clamp(0.0, 1.0) } else { hash01(gx, gy, 21, spec.seed) };
+        let h = if spec.level_based {
+            luma(ctx, &acc[..n]).clamp(0.0, 1.0)
+        } else {
+            hash01(gx, gy, 21, spec.seed)
+        };
         (acc, h)
     };
     let shade = |px: &mut [f32], col: &[f32], k: f32| {
         let cc = ncol(ctx, n);
         let sub = subtractive(ctx);
         for c in 0..cc {
-            px[c] = if sub { 1.0 - (1.0 - col[c]) * k } else { col[c] * k }.clamp(0.0, 1.0);
+            px[c] = if sub {
+                1.0 - (1.0 - col[c]) * k
+            } else {
+                col[c] * k
+            }
+            .clamp(0.0, 1.0);
         }
         if ctx.alpha {
             px[n - 1] = col[n - 1];
@@ -173,11 +202,18 @@ fn extrude_direct(src: &Image, out: Rect, ctx: &Ctx, spec: &ExtrudeSpec) -> Vec<
                     continue;
                 }
                 let (col, h) = info(gx, gy);
-                let (u, v) = (fx - (r.x0 as f32 + cs as f32 / 2.0), fy - (r.y0 as f32 + cs as f32 / 2.0));
+                let (u, v) = (
+                    fx - (r.x0 as f32 + cs as f32 / 2.0),
+                    fy - (r.y0 as f32 + cs as f32 / 2.0),
+                );
                 // Face normals of a pyramid of height H over a cell of half-size s; light from the top-left.
                 let hgt = h * spec.depth.clamp(1.0, 255.0) / 255.0 * cs as f32;
                 let s = cs as f32 / 2.0;
-                let (nx, ny) = if u.abs() >= v.abs() { (u.signum() * hgt, 0.0) } else { (0.0, v.signum() * hgt) };
+                let (nx, ny) = if u.abs() >= v.abs() {
+                    (u.signum() * hgt, 0.0)
+                } else {
+                    (0.0, v.signum() * hgt)
+                };
                 let norm = (nx * nx + ny * ny + s * s).sqrt();
                 let (lx, ly, lz) = (-0.5f32, -0.5f32, std::f32::consts::FRAC_1_SQRT_2);
                 let lambert = ((nx * lx + ny * ly + s * lz) / norm).max(0.0);
@@ -202,7 +238,8 @@ fn extrude_direct(src: &Image, out: Rect, ctx: &Ctx, spec: &ExtrudeSpec) -> Vec<
                             continue;
                         }
                         // Front face offset grows with height and distance from the centre.
-                        let (mx, my) = (r.x0 as f32 + cs as f32 / 2.0, r.y0 as f32 + cs as f32 / 2.0);
+                        let (mx, my) =
+                            (r.x0 as f32 + cs as f32 / 2.0, r.y0 as f32 + cs as f32 / 2.0);
                         let off = reach * h / half_diag;
                         let (ox, oy) = ((mx - bcx) * off, (my - bcy) * off);
                         let half = cs as f32 / 2.0;
@@ -216,7 +253,10 @@ fn extrude_direct(src: &Image, out: Rect, ctx: &Ctx, spec: &ExtrudeSpec) -> Vec<
                             let (lo, hi) = (a.min(bb).max(0.0), a.max(bb).min(1.0));
                             (lo <= hi).then_some((lo, hi))
                         };
-                        let (Some(ix), Some(iy)) = (interval(fx, mx, ox), interval(fy, my, oy)) else { continue };
+                        let (Some(ix), Some(iy)) = (interval(fx, mx, ox), interval(fy, my, oy))
+                        else {
+                            continue;
+                        };
                         let (lo, hi) = (ix.0.max(iy.0), ix.1.min(iy.1));
                         if lo > hi {
                             continue;
@@ -225,7 +265,11 @@ fn extrude_direct(src: &Image, out: Rect, ctx: &Ctx, spec: &ExtrudeSpec) -> Vec<
                             0
                         } else if ix.1 < iy.1 {
                             // Left the square through an x side first.
-                            if ox > 0.0 { 1 } else { 2 }
+                            if ox > 0.0 {
+                                1
+                            } else {
+                                2
+                            }
                         } else if oy > 0.0 {
                             3
                         } else {
@@ -234,7 +278,9 @@ fn extrude_direct(src: &Image, out: Rect, ctx: &Ctx, spec: &ExtrudeSpec) -> Vec<
                         best = Some((h, cx, cy, face));
                     }
                 }
-                let Some((h, cx, cy, face)) = best else { continue };
+                let Some((h, cx, cy, face)) = best else {
+                    continue;
+                };
                 let r = cell_rect(cx, cy);
                 let (mx, my) = (r.x0 as f32 + cs as f32 / 2.0, r.y0 as f32 + cs as f32 / 2.0);
                 let off = reach * h / half_diag;
@@ -244,7 +290,10 @@ fn extrude_direct(src: &Image, out: Rect, ctx: &Ctx, spec: &ExtrudeSpec) -> Vec<
                         shade(px, &col, 1.0);
                     } else {
                         // Image texture shifted with the face.
-                        let (sx, sy) = ((fx - (mx - bcx) * off).floor() as i32, (fy - (my - bcy) * off).floor() as i32);
+                        let (sx, sy) = (
+                            (fx - (mx - bcx) * off).floor() as i32,
+                            (fy - (my - bcy) * off).floor() as i32,
+                        );
                         let (sx, sy) = (sx.clamp(r.x0, r.x1 - 1), sy.clamp(r.y0, r.y1 - 1));
                         for (c, v) in px.iter_mut().enumerate() {
                             *v = src.get(sx, sy, c);
@@ -270,7 +319,16 @@ fn extrude_direct(src: &Image, out: Rect, ctx: &Ctx, spec: &ExtrudeSpec) -> Vec<
 /// side), each shifted randomly by up to `max_offset` % of its size; later
 /// tiles overlap earlier ones and gaps get the chosen fill.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn tiles(src: &Image, out: Rect, ctx: &Ctx, count: u32, max_offset: f32, fill: TileFill, colours: ([f32; 4], [f32; 4]), seed: u32) -> Vec<f32> {
+pub(crate) fn tiles(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    count: u32,
+    max_offset: f32,
+    fill: TileFill,
+    colours: ([f32; 4], [f32; 4]),
+    seed: u32,
+) -> Vec<f32> {
     let n = src.ch;
     let b = ctx.bounds;
     let ts = (b.width().min(b.height()) as f32 / count.clamp(1, 99) as f32).max(1.0);
@@ -280,7 +338,12 @@ pub(crate) fn tiles(src: &Image, out: Rect, ctx: &Ctx, count: u32, max_offset: f
     let cc = ncol(ctx, n);
     let mut res = src.crop(out);
     let w = out.width() as usize;
-    let offset = |gx: i32, gy: i32| ((hash01(gx, gy, 31, seed) * 2.0 - 1.0) * m, (hash01(gx, gy, 32, seed) * 2.0 - 1.0) * m);
+    let offset = |gx: i32, gy: i32| {
+        (
+            (hash01(gx, gy, 31, seed) * 2.0 - 1.0) * m,
+            (hash01(gx, gy, 32, seed) * 2.0 - 1.0) * m,
+        )
+    };
     for (i, px) in res.chunks_exact_mut(n).enumerate() {
         let (x, y) = (out.x0 + (i % w) as i32, out.y0 + (i / w) as i32);
         if !b.contains(x, y) {
@@ -295,7 +358,14 @@ pub(crate) fn tiles(src: &Image, out: Rect, ctx: &Ctx, count: u32, max_offset: f
                 let (cx, cy) = (gx + dx, gy + dy);
                 let (ox, oy) = offset(cx, cy);
                 let (u, v) = (fx - ox - cx as f32 * ts, fy - oy - cy as f32 * ts);
-                if u >= 0.0 && v >= 0.0 && u < ts && v < ts && (cx as f32 * ts) < b.width() as f32 && (cy as f32 * ts) < b.height() as f32 && cx >= 0 && cy >= 0
+                if u >= 0.0
+                    && v >= 0.0
+                    && u < ts
+                    && v < ts
+                    && (cx as f32 * ts) < b.width() as f32
+                    && (cy as f32 * ts) < b.height() as f32
+                    && cx >= 0
+                    && cy >= 0
                 {
                     let order = (cy, cx);
                     if hit.is_none_or(|(o, _, _)| order > o) {
@@ -306,7 +376,10 @@ pub(crate) fn tiles(src: &Image, out: Rect, ctx: &Ctx, count: u32, max_offset: f
         }
         match hit {
             Some((_, ox, oy)) => {
-                let (sx, sy) = ((x as f32 + 0.5 - ox).floor() as i32, (y as f32 + 0.5 - oy).floor() as i32);
+                let (sx, sy) = (
+                    (x as f32 + 0.5 - ox).floor() as i32,
+                    (y as f32 + 0.5 - oy).floor() as i32,
+                );
                 let (sx, sy) = (sx.clamp(b.x0, b.x1 - 1), sy.clamp(b.y0, b.y1 - 1));
                 for (c, v) in px.iter_mut().enumerate() {
                     *v = src.get(sx, sy, c);
@@ -329,7 +402,13 @@ pub(crate) fn tiles(src: &Image, out: Rect, ctx: &Ctx, count: u32, max_offset: f
 
 /// Trace Contour: per channel, outlines where values cross `level` (0–255)
 /// with a 1 px line (dark in additive models) on a white canvas.
-pub(crate) fn trace_contour(src: &Image, out: Rect, ctx: &Ctx, level: f32, upper: bool) -> Vec<f32> {
+pub(crate) fn trace_contour(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    level: f32,
+    upper: bool,
+) -> Vec<f32> {
     let n = src.ch;
     let cc = ncol(ctx, n);
     let sub = subtractive(ctx);
@@ -338,14 +417,21 @@ pub(crate) fn trace_contour(src: &Image, out: Rect, ctx: &Ctx, level: f32, upper
     let t = level.clamp(0.0, 255.0) / 255.0;
     let bright = |x: i32, y: i32, c: usize| {
         let v = src.get_edge(x, y, c, crate::image::Edge::Repeat, area);
-        if sub { 1.0 - v } else { v }
+        if sub {
+            1.0 - v
+        } else {
+            v
+        }
     };
     let mut res = src.crop(out);
     for (i, px) in res.chunks_exact_mut(n).enumerate() {
         let (x, y) = xy(out, i);
         for (c, v) in px.iter_mut().enumerate().take(cc) {
             let me = bright(x, y, c) > t;
-            let line = me == upper && [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|(dx, dy)| (bright(x + dx, y + dy, c) > t) != me);
+            let line = me == upper
+                && [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                    .iter()
+                    .any(|(dx, dy)| (bright(x + dx, y + dy, c) > t) != me);
             let paper = if line { 0.0 } else { 1.0 };
             *v = if sub { 1.0 - paper } else { paper };
         }
@@ -364,11 +450,26 @@ pub(crate) fn wind_reach(method: WindMethod) -> f32 {
 
 /// Wind: streaks trail downwind from edges (Blast: longer and denser);
 /// Stagger shifts random row segments along the wind.
-pub(crate) fn wind(src: &Image, out: Rect, ctx: &Ctx, method: WindMethod, from_right: bool, seed: u32) -> Vec<f32> {
-    wind::streaks(src, out, ctx, method, from_right, seed).unwrap_or_else(|| wind_direct(src, out, ctx, method, from_right, seed))
+pub(crate) fn wind(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    method: WindMethod,
+    from_right: bool,
+    seed: u32,
+) -> Vec<f32> {
+    wind::streaks(src, out, ctx, method, from_right, seed)
+        .unwrap_or_else(|| wind_direct(src, out, ctx, method, from_right, seed))
 }
 
-fn wind_direct(src: &Image, out: Rect, ctx: &Ctx, method: WindMethod, from_right: bool, seed: u32) -> Vec<f32> {
+fn wind_direct(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    method: WindMethod,
+    from_right: bool,
+    seed: u32,
+) -> Vec<f32> {
     let n = src.ch;
     let lmax = wind_reach(method) as i32;
     // Streaks move downwind: from the left they extend to the right (+x).
@@ -393,7 +494,11 @@ fn wind_direct(src: &Image, out: Rect, ctx: &Ctx, method: WindMethod, from_right
             px.copy_from_slice(&tmp[..n]);
             continue;
         }
-        let strength = if method == WindMethod::Blast { 8.0 } else { 4.0 };
+        let strength = if method == WindMethod::Blast {
+            8.0
+        } else {
+            4.0
+        };
         let mut best = (0.0f32, x);
         for k in 1..=lmax {
             let s = x - d * k;

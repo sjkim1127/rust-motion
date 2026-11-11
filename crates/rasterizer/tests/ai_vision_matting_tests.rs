@@ -1,8 +1,6 @@
 //! Comprehensive tests for LightCraft AI Segmentation, Inpainting, and Video Matting (#101).
 
-use rust_motion_rasterizer::ai_vision::{
-    FaceDetector, Inpainter, TemporalDenoiser, VideoMatting,
-};
+use rust_motion_rasterizer::ai_vision::{FaceDetector, Inpainter, TemporalDenoiser, VideoMatting};
 use rust_motion_rasterizer::backend::{FrameConfig, RasterizerBackend};
 use rust_motion_rasterizer::scene::{Color, Scene, SceneFilter, SceneNode};
 use rust_motion_rasterizer::TinySkiaBackend;
@@ -42,7 +40,10 @@ fn test_face_detection_and_tracking() {
     assert!(!detected_frame2.is_empty());
     let tracked_frame2 = detector.track_faces(detected_frame2);
     // Face ID must persist across frames due to IoU temporal association
-    assert_eq!(tracked_frame2[0].id, face_id, "persistent face ID across frames");
+    assert_eq!(
+        tracked_frame2[0].id, face_id,
+        "persistent face ID across frames"
+    );
 }
 
 #[test]
@@ -107,7 +108,10 @@ fn test_content_aware_inpainting() {
     // Check that hole pixels have been reconstructed
     let inpainted_px = pixmap.pixel(32, 32).unwrap();
     assert_eq!(inpainted_px.alpha(), 255, "hole is filled");
-    assert!(inpainted_px.red() > 0, "pixel filled from surrounding texture");
+    assert!(
+        inpainted_px.red() > 0,
+        "pixel filled from surrounding texture"
+    );
 }
 
 #[test]
@@ -143,12 +147,10 @@ fn test_rasterizer_inpaint_and_matte_filters() {
         clip: None,
         mask: None,
         mask_mode: rust_motion_rasterizer::scene::MaskMode::Alpha,
-        filters: vec![
-            SceneFilter::Inpaint {
-                hole_rect: [0.45, 0.45, 0.1, 0.1],
-                patch_radius: 2,
-            },
-        ],
+        filters: vec![SceneFilter::Inpaint {
+            hole_rect: [0.45, 0.45, 0.1, 0.1],
+            patch_radius: 2,
+        }],
         shadow: None,
         children: vec![SceneNode::Rect {
             x: 0.0,

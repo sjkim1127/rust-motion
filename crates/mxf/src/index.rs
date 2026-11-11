@@ -1,7 +1,7 @@
 //! Index table segments (ST 377-1 §11).
 
+use crate::klv::{int_of, rational_of, Cur};
 use crate::Rational;
-use crate::klv::{Cur, int_of, rational_of};
 
 /// One index entry (ST 377-1 §11.2.4), for one edit unit in stored order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -51,8 +51,12 @@ impl IndexSegment {
         let mut c = Cur::new(v);
         let mut entry_array: Option<&[u8]> = None;
         while c.remaining() >= 4 {
-            let (Some(tag), Some(len)) = (c.u16(), c.u16()) else { break };
-            let Some(val) = c.bytes(len as usize) else { break };
+            let (Some(tag), Some(len)) = (c.u16(), c.u16()) else {
+                break;
+            };
+            let Some(val) = c.bytes(len as usize) else {
+                break;
+            };
             match tag {
                 0x3F0B => s.edit_rate = rational_of(val).unwrap_or_default(),
                 0x3F0C => s.start_position = int_of(val, true).unwrap_or(0),
@@ -65,7 +69,11 @@ impl IndexSegment {
                 0x3F09 => {
                     for d in crate::klv::batch_of(val) {
                         if d.len() >= 6 {
-                            s.delta_entries.push((d[0] as i8, d[1], u32::from_be_bytes([d[2], d[3], d[4], d[5]])));
+                            s.delta_entries.push((
+                                d[0] as i8,
+                                d[1],
+                                u32::from_be_bytes([d[2], d[3], d[4], d[5]]),
+                            ));
                         }
                     }
                 }

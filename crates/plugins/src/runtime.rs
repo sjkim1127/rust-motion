@@ -3,8 +3,8 @@
 use std::sync::{Arc, Mutex};
 
 use wasmi::{
-    Config, EnforcedLimits, Engine, Instance, Linker, Memory, Module, Store, StoreLimits, StoreLimitsBuilder, TypedFunc, TypedResumableCall, WasmParams,
-    WasmResults,
+    Config, EnforcedLimits, Engine, Instance, Linker, Memory, Module, Store, StoreLimits,
+    StoreLimitsBuilder, TypedFunc, TypedResumableCall, WasmParams, WasmResults,
 };
 
 use crate::manifest::Manifest;
@@ -63,7 +63,11 @@ pub struct Plugin {
 
 impl std::fmt::Debug for Plugin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Plugin").field("manifest", &self.manifest).field("size", &self.size).field("source", &self.source).finish()
+        f.debug_struct("Plugin")
+            .field("manifest", &self.manifest)
+            .field("size", &self.size)
+            .field("source", &self.source)
+            .finish()
     }
 }
 
@@ -88,10 +92,18 @@ impl Deadline {
     pub(crate) fn abort(&self, error: Error) {
         // Publish the cause with the cancellation state so siblings cannot replace it with a
         // generic cancellation error, even when results are collected in a different order.
-        self.abort.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get_or_insert(error);
+        self.abort
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get_or_insert(error);
     }
     fn check(&self) -> Result<()> {
-        if let Some(error) = self.abort.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone() {
+        if let Some(error) = self
+            .abort
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+        {
             return Err(error);
         }
         #[cfg(not(target_arch = "wasm32"))]
@@ -112,20 +124,33 @@ pub(crate) struct Live {
 }
 
 fn wasm_err(e: wasmi::Error) -> Error {
-    if e.as_trap_code() == Some(wasmi::TrapCode::OutOfFuel) { Error::Limit("instruction budget".into()) } else { Error::Trap(e.to_string()) }
+    if e.as_trap_code() == Some(wasmi::TrapCode::OutOfFuel) {
+        Error::Limit("instruction budget".into())
+    } else {
+        Error::Trap(e.to_string())
+    }
 }
 
 impl Plugin {
     /// Validates and loads a module: checks the ABI version and reads the manifest.
     pub fn load(bytes: &[u8], limits: Limits) -> Result<Plugin> {
         if bytes.len() > limits.max_module_bytes {
-            return Err(Error::Module(format!("module is {} bytes (limit {})", bytes.len(), limits.max_module_bytes)));
+            return Err(Error::Module(format!(
+                "module is {} bytes (limit {})",
+                bytes.len(),
+                limits.max_module_bytes
+            )));
         }
         if !bytes.starts_with(b"\0asm") {
-            return Err(Error::Module("not a WebAssembly binary (missing \\0asm header)".into()));
+            return Err(Error::Module(
+                "not a WebAssembly binary (missing \\0asm header)".into(),
+            ));
         }
         let mut config = Config::default();
-        config.consume_fuel(true).enforced_limits(EnforcedLimits::strict()).set_max_recursion_depth(limits.max_recursion_depth.max(16));
+        config
+            .consume_fuel(true)
+            .enforced_limits(EnforcedLimits::strict())
+            .set_max_recursion_depth(limits.max_recursion_depth.max(16));
         let engine = Engine::new(&config);
         let module = Module::new(&engine, bytes).map_err(|e| Error::Module(e.to_string()))?;
         if let Some(imp) = module.imports().next() {
@@ -135,21 +160,37 @@ impl Plugin {
                 imp.name()
             )));
         }
-        let mut p = Plugin { manifest: placeholder_manifest(), engine, module, limits, size: bytes.len(), source: None };
+        let mut p = Plugin {
+            manifest: placeholder_manifest(),
+            engine,
+            module,
+            limits,
+            size: bytes.len(),
+            source: None,
+        };
         let deadline = Deadline::new(&p.limits);
         let mut live = p.instantiate(&deadline)?;
         let version: TypedFunc<(), i32> = live.func("pc_abi_version")?;
         let v = p.call(&mut live, &version, (), p.limits.fuel_base, &deadline)?;
         if v != ABI_VERSION {
-            return Err(Error::Abi(format!("pc_abi_version returned {v}; this host implements version {ABI_VERSION}")));
+            return Err(Error::Abi(format!(
+                "pc_abi_version returned {v}; this host implements version {ABI_VERSION}"
+            )));
         }
         let manifest: TypedFunc<(), i64> = live.func("pc_manifest")?;
         let packed = p.call(&mut live, &manifest, (), p.limits.fuel_base, &deadline)? as u64;
         let (ptr, len) = ((packed & 0xffff_ffff) as usize, (packed >> 32) as usize);
         if len > crate::manifest::MAX_MANIFEST_BYTES {
-            return Err(Error::Manifest(format!("manifest is {len} bytes (limit {})", crate::manifest::MAX_MANIFEST_BYTES)));
+            return Err(Error::Manifest(format!(
+                "manifest is {len} bytes (limit {})",
+                crate::manifest::MAX_MANIFEST_BYTES
+            )));
         }
-        let text = live.memory.data(&live.store).get(ptr..ptr.saturating_add(len)).ok_or_else(|| Error::Abi("pc_manifest points outside memory".into()))?;
+        let text = live
+            .memory
+            .data(&live.store)
+            .get(ptr..ptr.saturating_add(len))
+            .ok_or_else(|| Error::Abi("pc_manifest points outside memory".into()))?;
         p.manifest = Manifest::parse(text)?;
         // The other exports must exist with the right types.
         live.func::<i32, i32>("pc_alloc")?;
@@ -181,28 +222,53 @@ impl Plugin {
 
     pub(crate) fn instantiate(&self, deadline: &Deadline) -> Result<Live> {
         deadline.check()?;
-        let limits = StoreLimitsBuilder::new().memory_size(self.limits.max_memory_bytes).memories(1).tables(4).table_elements(100_000).instances(1).build();
+        let limits = StoreLimitsBuilder::new()
+            .memory_size(self.limits.max_memory_bytes)
+            .memories(1)
+            .tables(4)
+            .table_elements(100_000)
+            .instances(1)
+            .build();
         let mut store = Store::new(&self.engine, limits);
         store.limiter(|l| l);
         // The start function (if any) runs on this fuel.
         store.set_fuel(self.limits.fuel_base).map_err(wasm_err)?;
         let linker = Linker::<StoreLimits>::new(&self.engine);
-        let instance = linker.instantiate_and_start(&mut store, &self.module).map_err(wasm_err)?;
-        let memory = instance.get_memory(&store, "memory").ok_or_else(|| Error::Abi("the module must export its linear memory as `memory`".into()))?;
-        Ok(Live { store, instance, memory })
+        let instance = linker
+            .instantiate_and_start(&mut store, &self.module)
+            .map_err(wasm_err)?;
+        let memory = instance.get_memory(&store, "memory").ok_or_else(|| {
+            Error::Abi("the module must export its linear memory as `memory`".into())
+        })?;
+        Ok(Live {
+            store,
+            instance,
+            memory,
+        })
     }
 
     /// Calls `f` with at most `fuel` instructions, in slices, checking the deadline between them.
-    pub(crate) fn call<P: WasmParams, R: WasmResults>(&self, live: &mut Live, f: &TypedFunc<P, R>, params: P, fuel: u64, deadline: &Deadline) -> Result<R> {
+    pub(crate) fn call<P: WasmParams, R: WasmResults>(
+        &self,
+        live: &mut Live,
+        f: &TypedFunc<P, R>,
+        params: P,
+        fuel: u64,
+        deadline: &Deadline,
+    ) -> Result<R> {
         let mut left = fuel;
         let give = left.min(FUEL_SLICE);
         left -= give;
         live.store.set_fuel(give).map_err(wasm_err)?;
-        let mut call = f.call_resumable(&mut live.store, params).map_err(wasm_err)?;
+        let mut call = f
+            .call_resumable(&mut live.store, params)
+            .map_err(wasm_err)?;
         loop {
             match call {
                 TypedResumableCall::Finished(r) => return Ok(r),
-                TypedResumableCall::HostTrap(_) => return Err(Error::Trap("unexpected host trap".into())),
+                TypedResumableCall::HostTrap(_) => {
+                    return Err(Error::Trap("unexpected host trap".into()))
+                }
                 TypedResumableCall::OutOfFuel(inv) => {
                     let need = inv.required_fuel();
                     if left == 0 || need > left {
@@ -220,14 +286,37 @@ impl Plugin {
 
     /// Runs `pc_filter` on `data` (interleaved `f32`, `w × h × channels`) in a fresh instance.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn filter_buffer(&self, data: &mut [f32], w: u32, h: u32, channels: u32, format: u32, params: &[u8], deadline: &Deadline) -> Result<()> {
-        let bytes = data.len().checked_mul(4).filter(|b| *b <= i32::MAX as usize && *b + params.len() <= self.limits.max_memory_bytes);
+    pub(crate) fn filter_buffer(
+        &self,
+        data: &mut [f32],
+        w: u32,
+        h: u32,
+        channels: u32,
+        format: u32,
+        params: &[u8],
+        deadline: &Deadline,
+    ) -> Result<()> {
+        let bytes = data.len().checked_mul(4).filter(|b| {
+            *b <= i32::MAX as usize && *b + params.len() <= self.limits.max_memory_bytes
+        });
         let bytes = bytes.ok_or_else(|| Error::Limit("memory budget (band too large)".into()))?;
         let mut live = self.instantiate(deadline)?;
         let alloc: TypedFunc<i32, i32> = live.func("pc_alloc")?;
         let filter: TypedFunc<FilterArgs, i32> = live.func("pc_filter")?;
-        let ptr = self.call(&mut live, &alloc, bytes as i32, self.limits.fuel_base, deadline)? as u32 as usize;
-        let pptr = self.call(&mut live, &alloc, params.len().max(1) as i32, self.limits.fuel_base, deadline)? as u32 as usize;
+        let ptr = self.call(
+            &mut live,
+            &alloc,
+            bytes as i32,
+            self.limits.fuel_base,
+            deadline,
+        )? as u32 as usize;
+        let pptr = self.call(
+            &mut live,
+            &alloc,
+            params.len().max(1) as i32,
+            self.limits.fuel_base,
+            deadline,
+        )? as u32 as usize;
         if ptr == 0 || pptr == 0 {
             return Err(Error::Failed("pc_alloc returned 0 (out of memory)".into()));
         }
@@ -243,14 +332,28 @@ impl Plugin {
             let pdst = mem.get_mut(pptr..pend).ok_or_else(outside)?;
             pdst.copy_from_slice(params);
         }
-        let fuel = self.limits.fuel_base.saturating_add((data.len() as u64).saturating_mul(self.limits.fuel_per_sample));
-        let args = (ptr as i32, bytes as i32, w as i32, h as i32, channels as i32, format as i32, pptr as i32, params.len() as i32);
+        let fuel = self
+            .limits
+            .fuel_base
+            .saturating_add((data.len() as u64).saturating_mul(self.limits.fuel_per_sample));
+        let args = (
+            ptr as i32,
+            bytes as i32,
+            w as i32,
+            h as i32,
+            channels as i32,
+            format as i32,
+            pptr as i32,
+            params.len() as i32,
+        );
         let rc = self.call(&mut live, &filter, args, fuel, deadline)?;
         if rc != 0 {
             return Err(Error::Failed(format!("pc_filter returned error code {rc}")));
         }
         let mem = live.memory.data(&live.store);
-        let src = mem.get(ptr..end).ok_or_else(|| Error::Abi("pixel buffer no longer in memory".into()))?;
+        let src = mem
+            .get(ptr..end)
+            .ok_or_else(|| Error::Abi("pixel buffer no longer in memory".into()))?;
         for (v, s) in data.iter_mut().zip(src.as_chunks::<4>().0) {
             *v = f32::from_le_bytes(*s);
         }
@@ -263,7 +366,9 @@ type FilterArgs = (i32, i32, i32, i32, i32, i32, i32, i32);
 
 impl Live {
     fn func<P: WasmParams, R: WasmResults>(&self, name: &str) -> Result<TypedFunc<P, R>> {
-        self.instance.get_typed_func::<P, R>(&self.store, name).map_err(|e| Error::Abi(format!("export `{name}`: {e}")))
+        self.instance
+            .get_typed_func::<P, R>(&self.store, name)
+            .map_err(|e| Error::Abi(format!("export `{name}`: {e}")))
     }
 }
 

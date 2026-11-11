@@ -96,7 +96,12 @@ pub enum Mixdown {
 }
 
 impl Mixdown {
-    pub const ALL: [Mixdown; 4] = [Mixdown::Front, Mixdown::FrontRear, Mixdown::FrontLfe, Mixdown::FrontRearLfe];
+    pub const ALL: [Mixdown; 4] = [
+        Mixdown::Front,
+        Mixdown::FrontRear,
+        Mixdown::FrontLfe,
+        Mixdown::FrontRearLfe,
+    ];
     /// Preference value (`front`, `frontRear`, `frontLfe`, `frontRearLfe`).
     pub fn id(self) -> &'static str {
         match self {
@@ -107,7 +112,9 @@ impl Mixdown {
         }
     }
     pub fn from_id(s: &str) -> Option<Mixdown> {
-        Self::ALL.into_iter().find(|m| m.id().eq_ignore_ascii_case(s))
+        Self::ALL
+            .into_iter()
+            .find(|m| m.id().eq_ignore_ascii_case(s))
     }
     fn rear(self) -> bool {
         matches!(self, Mixdown::FrontRear | Mixdown::FrontRearLfe)
@@ -123,7 +130,9 @@ pub fn matrix(from: Layout, to: Layout, mixdown: Mixdown) -> Vec<Vec<f32>> {
     let (ni, no) = (from.channels(), to.channels());
     let mut m = vec![vec![0.0f32; ni]; no];
     match (from, to) {
-        (Layout::Mono, Layout::Mono) | (Layout::Stereo, Layout::Stereo) | (Layout::Surround51, Layout::Surround51) => {
+        (Layout::Mono, Layout::Mono)
+        | (Layout::Stereo, Layout::Stereo)
+        | (Layout::Surround51, Layout::Surround51) => {
             for (i, row) in m.iter_mut().enumerate() {
                 row[i] = 1.0;
             }
@@ -225,7 +234,12 @@ pub struct Pan51 {
 impl Default for Pan51 {
     /// Front centre, 100 % centre, LFE at unity.
     fn default() -> Self {
-        Pan51 { x: 0.0, y: 1.0, center: 1.0, lfe: 1.0 }
+        Pan51 {
+            x: 0.0,
+            y: 1.0,
+            center: 1.0,
+            lfe: 1.0,
+        }
     }
 }
 
@@ -263,7 +277,14 @@ fn offsets(from: Layout) -> &'static [(f32, f32)] {
         Layout::Mono => &[(0.0, 0.0)],
         Layout::Stereo => &[(-1.0, 0.0), (1.0, 0.0)],
         // L, R, C, LFE (not positioned), Ls, Rs
-        Layout::Surround51 => &[(-1.0, 0.0), (1.0, 0.0), (0.0, 0.0), (0.0, 0.0), (-1.0, -2.0), (1.0, -2.0)],
+        Layout::Surround51 => &[
+            (-1.0, 0.0),
+            (1.0, 0.0),
+            (0.0, 0.0),
+            (0.0, 0.0),
+            (-1.0, -2.0),
+            (1.0, -2.0),
+        ],
     }
 }
 
@@ -289,7 +310,10 @@ pub fn pan51_matrix(from: Layout, p: Pan51) -> Vec<Vec<f32>> {
 
 /// Peak level (linear) per channel.
 pub fn peaks(input: &[&[f32]]) -> Vec<f32> {
-    input.iter().map(|c| c.iter().fold(0f32, |a, x| a.max(x.abs()))).collect()
+    input
+        .iter()
+        .map(|c| c.iter().fold(0f32, |a, x| a.max(x.abs())))
+        .collect()
 }
 
 #[cfg(test)]
@@ -311,7 +335,10 @@ mod tests {
         let m = matrix(Layout::Surround51, Layout::Mono, Mixdown::FrontRear);
         assert_eq!(m[0], vec![k, k, 1.0, 0.0, 0.5, 0.5]);
         // 2.0 → 1.0
-        assert_eq!(matrix(Layout::Stereo, Layout::Mono, Mixdown::FrontRear)[0], vec![k, k]);
+        assert_eq!(
+            matrix(Layout::Stereo, Layout::Mono, Mixdown::FrontRear)[0],
+            vec![k, k]
+        );
         // mixdown types
         let f = matrix(Layout::Surround51, Layout::Stereo, Mixdown::Front);
         assert_eq!(f[0], vec![1.0, 0.0, k, 0.0, 0.0, 0.0]);
@@ -319,18 +346,34 @@ mod tests {
         assert_eq!(fl[1], vec![0.0, 1.0, k, k, 0.0, 0.0]);
         let all = matrix(Layout::Surround51, Layout::Stereo, Mixdown::FrontRearLfe);
         assert_eq!(all[0], vec![1.0, 0.0, k, k, k, 0.0]);
-        assert_eq!(Mixdown::from_id("frontRearLfe"), Some(Mixdown::FrontRearLfe));
+        assert_eq!(
+            Mixdown::from_id("frontRearLfe"),
+            Some(Mixdown::FrontRearLfe)
+        );
         assert_eq!(Mixdown::default().id(), "frontRear");
     }
 
     #[test]
     fn upmix_places_on_front_speakers() {
-        assert_eq!(matrix(Layout::Mono, Layout::Surround51, Mixdown::FrontRear), vec![vec![0.0], vec![0.0], vec![1.0], vec![0.0], vec![0.0], vec![0.0]]);
+        assert_eq!(
+            matrix(Layout::Mono, Layout::Surround51, Mixdown::FrontRear),
+            vec![
+                vec![0.0],
+                vec![0.0],
+                vec![1.0],
+                vec![0.0],
+                vec![0.0],
+                vec![0.0]
+            ]
+        );
         let s = matrix(Layout::Stereo, Layout::Surround51, Mixdown::FrontRear);
         assert_eq!(s[L], vec![1.0, 0.0]);
         assert_eq!(s[R], vec![0.0, 1.0]);
         assert!(s[C..].iter().all(|r| r.iter().all(|g| *g == 0.0)));
-        assert_eq!(matrix(Layout::Mono, Layout::Stereo, Mixdown::FrontRear), vec![vec![1.0], vec![1.0]]);
+        assert_eq!(
+            matrix(Layout::Mono, Layout::Stereo, Mixdown::FrontRear),
+            vec![vec![1.0], vec![1.0]]
+        );
         // identity
         for l in [Layout::Mono, Layout::Stereo, Layout::Surround51] {
             let m = matrix(l, l, Mixdown::Front);
@@ -346,7 +389,12 @@ mod tests {
     fn convert_applies_the_matrix_per_sample() {
         let ch: Vec<Vec<f32>> = (0..6).map(|c| vec![(c + 1) as f32 * 0.1; 4]).collect();
         let refs: Vec<&[f32]> = ch.iter().map(Vec::as_slice).collect();
-        let st = convert(&refs, Layout::Surround51, Layout::Stereo, Mixdown::FrontRear);
+        let st = convert(
+            &refs,
+            Layout::Surround51,
+            Layout::Stereo,
+            Mixdown::FrontRear,
+        );
         let k = K;
         assert!(close(st[0][3], 0.1 + k * 0.3 + k * 0.5));
         assert!(close(st[1][0], 0.2 + k * 0.3 + k * 0.6));
@@ -396,20 +444,48 @@ mod tests {
         let m = pan51_matrix(Layout::Surround51, Pan51::default());
         for (o, row) in m.iter().enumerate() {
             for (i, g) in row.iter().enumerate() {
-                assert!(close(*g, if o == i { 1.0 } else { 0.0 }), "out {o} in {i} = {g}");
+                assert!(
+                    close(*g, if o == i { 1.0 } else { 0.0 }),
+                    "out {o} in {i} = {g}"
+                );
             }
         }
         // stereo at front centre: L → L, R → R
-        let m = pan51_matrix(Layout::Stereo, Pan51 { lfe: 0.0, ..Pan51::default() });
-        assert!(close(m[L][0], 1.0) && close(m[R][1], 1.0) && m[C][0].abs() < 1e-6 && m[LFE][0] == 0.0);
+        let m = pan51_matrix(
+            Layout::Stereo,
+            Pan51 {
+                lfe: 0.0,
+                ..Pan51::default()
+            },
+        );
+        assert!(
+            close(m[L][0], 1.0) && close(m[R][1], 1.0) && m[C][0].abs() < 1e-6 && m[LFE][0] == 0.0
+        );
         // mono at the default puck: centre only; LFE gain = mean of inputs
-        let m = pan51_matrix(Layout::Mono, Pan51 { lfe: 0.5, ..Pan51::default() });
+        let m = pan51_matrix(
+            Layout::Mono,
+            Pan51 {
+                lfe: 0.5,
+                ..Pan51::default()
+            },
+        );
         assert!(close(m[C][0], 1.0) && close(m[LFE][0], 0.5));
-        let m = pan51_matrix(Layout::Stereo, Pan51 { lfe: 0.5, ..Pan51::default() });
+        let m = pan51_matrix(
+            Layout::Stereo,
+            Pan51 {
+                lfe: 0.5,
+                ..Pan51::default()
+            },
+        );
         assert!(close(m[LFE][0], 0.25) && close(m[LFE][1], 0.25));
         // every source channel keeps unit power (LFE aside)
         for l in [Layout::Mono, Layout::Stereo, Layout::Surround51] {
-            let p = Pan51 { x: 0.37, y: -0.21, center: 0.6, lfe: 0.0 };
+            let p = Pan51 {
+                x: 0.37,
+                y: -0.21,
+                center: 0.6,
+                lfe: 0.0,
+            };
             let m = pan51_matrix(l, p);
             for i in 0..l.channels() {
                 if l == Layout::Surround51 && i == LFE {
@@ -420,7 +496,15 @@ mod tests {
             }
         }
         // puck hard rear-left: 5.1 front channels collapse towards the rear left
-        let m = pan51_matrix(Layout::Surround51, Pan51 { x: -1.0, y: -1.0, center: 1.0, lfe: 1.0 });
+        let m = pan51_matrix(
+            Layout::Surround51,
+            Pan51 {
+                x: -1.0,
+                y: -1.0,
+                center: 1.0,
+                lfe: 1.0,
+            },
+        );
         assert!(close(m[LS][L], 1.0) && close(m[LS][C], 1.0) && close(m[LS][LS], 1.0));
     }
 }

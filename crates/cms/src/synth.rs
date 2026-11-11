@@ -22,12 +22,12 @@
 //! The model is plausible for coated offset, not a measured characterisation: use a real
 //! profile from your print provider for production print.
 
-use crate::Intent;
 use crate::clut::Clut;
 use crate::curve::Curve;
 use crate::math;
 use crate::pipeline::Stage;
 use crate::profile::{ColorSpace, Lut, LutKind, Pcs, Profile, ProfileClass};
+use crate::Intent;
 
 pub const DESCRIPTION: &str = "PhotoCraft Coated CMYK (synthetic, 300% TAC, medium GCR)";
 
@@ -109,7 +109,11 @@ impl CmykModel {
             };
         }
         let prim_n = prim.map(|p| p.map(|v| v.max(0.0).powf(1.0 / YN)));
-        CmykModel { prim_n, paper: w, tvi }
+        CmykModel {
+            prim_n,
+            paper: w,
+            tvi,
+        }
     }
 
     /// Absolute XYZ of an ink combination (each coverage in `[0, 1]`).
@@ -137,14 +141,24 @@ impl CmykModel {
     /// ICC-relative Lab (paper = L* 100).
     pub fn lab(&self, cmyk: [f64; 4]) -> [f64; 3] {
         let x = self.xyz(cmyk);
-        let rel = [x[0] * math::D50[0] / self.paper[0], x[1] * math::D50[1] / self.paper[1], x[2] * math::D50[2] / self.paper[2]];
+        let rel = [
+            x[0] * math::D50[0] / self.paper[0],
+            x[1] * math::D50[1] / self.paper[1],
+            x[2] * math::D50[2] / self.paper[2],
+        ];
         math::xyz_to_lab(rel, math::D50)
     }
 }
 
 /// Bounded least-squares solve for C, M, Y given K, minimising ΔE76 to `target`, subject to
 /// `C + M + Y ≤ limit` (projected Levenberg–Marquardt with a numerical Jacobian).
-fn solve_cmy(model: &CmykModel, target: [f64; 3], k: f64, limit: f64, seeds: &[[f64; 3]]) -> ([f64; 3], f64) {
+fn solve_cmy(
+    model: &CmykModel,
+    target: [f64; 3],
+    k: f64,
+    limit: f64,
+    seeds: &[[f64; 3]],
+) -> ([f64; 3], f64) {
     let project = |mut x: [f64; 3]| {
         for _ in 0..4 {
             for v in &mut x {
@@ -235,16 +249,38 @@ fn solve_cmy(model: &CmykModel, target: [f64; 3], k: f64, limit: f64, seeds: &[[
     (best.0, best.1.sqrt())
 }
 
-const SEEDS: [[f64; 3]; 5] = [[0.3, 0.3, 0.3], [0.05, 0.05, 0.05], [0.8, 0.8, 0.8], [0.9, 0.2, 0.2], [0.2, 0.9, 0.9]];
+const SEEDS: [[f64; 3]; 5] = [
+    [0.3, 0.3, 0.3],
+    [0.05, 0.05, 0.05],
+    [0.8, 0.8, 0.8],
+    [0.9, 0.2, 0.2],
+    [0.2, 0.9, 0.9],
+];
 
 /// Colorimetric separation of a relative Lab target: GCR black generation then a CMY solve.
-pub fn separate(model: &CmykModel, p: &CmykParams, target: [f64; 3], warm: Option<[f64; 4]>) -> ([f64; 4], f64) {
+pub fn separate(
+    model: &CmykModel,
+    p: &CmykParams,
+    target: [f64; 3],
+    warm: Option<[f64; 4]>,
+) -> ([f64; 4], f64) {
     let mut seeds: Vec<[f64; 3]> = warm.map(|w| vec![[w[0], w[1], w[2]]]).unwrap_or_default();
     seeds.extend_from_slice(&SEEDS);
     let (cmy0, _) = solve_cmy(model, target, 0.0, 3.0, &seeds);
     let g = cmy0[0].min(cmy0[1]).min(cmy0[2]);
-    let k = if g <= p.gcr_start { 0.0 } else { p.k_max * ((g - p.gcr_start) / (1.0 - p.gcr_start)).powf(p.gcr_gamma) };
-    let mut seeds2 = vec![[(cmy0[0] - k).max(0.0), (cmy0[1] - k).max(0.0), (cmy0[2] - k).max(0.0)], cmy0];
+    let k = if g <= p.gcr_start {
+        0.0
+    } else {
+        p.k_max * ((g - p.gcr_start) / (1.0 - p.gcr_start)).powf(p.gcr_gamma)
+    };
+    let mut seeds2 = vec![
+        [
+            (cmy0[0] - k).max(0.0),
+            (cmy0[1] - k).max(0.0),
+            (cmy0[2] - k).max(0.0),
+        ],
+        cmy0,
+    ];
     seeds2.extend_from_slice(&seeds);
     let (cmy, de) = solve_cmy(model, target, k, (p.tac - k).max(0.0), &seeds2);
     ([cmy[0], cmy[1], cmy[2], k], de)
@@ -268,7 +304,12 @@ impl Gbd {
             for mi in 0..n {
                 for yi in 0..n {
                     for ki in 0..11 {
-                        let v = [ci as f64 / (n - 1) as f64, mi as f64 / (n - 1) as f64, yi as f64 / (n - 1) as f64, ki as f64 / 10.0];
+                        let v = [
+                            ci as f64 / (n - 1) as f64,
+                            mi as f64 / (n - 1) as f64,
+                            yi as f64 / (n - 1) as f64,
+                            ki as f64 / 10.0,
+                        ];
                         if v.iter().sum::<f64>() > p.tac + 1e-9 {
                             continue;
                         }
@@ -276,8 +317,12 @@ impl Gbd {
                         black_l = black_l.min(lab[0]);
                         let c = lab[1].hypot(lab[2]);
                         let h = lab[2].atan2(lab[1]).rem_euclid(std::f64::consts::TAU);
-                        let li = ((lab[0] / 100.0) * (l_bins - 1) as f64).round().clamp(0.0, (l_bins - 1) as f64) as usize;
-                        let hi = ((h / std::f64::consts::TAU) * h_bins as f64).round() as usize % h_bins;
+                        let li = ((lab[0] / 100.0) * (l_bins - 1) as f64)
+                            .round()
+                            .clamp(0.0, (l_bins - 1) as f64)
+                            as usize;
+                        let hi =
+                            ((h / std::f64::consts::TAU) * h_bins as f64).round() as usize % h_bins;
                         let e = &mut cmax[li * h_bins + hi];
                         *e = e.max(c);
                     }
@@ -314,7 +359,12 @@ impl Gbd {
                 smooth[l as usize * h_bins + h as usize] = s / 9.0;
             }
         }
-        Gbd { l_bins, h_bins, cmax: smooth, black_l }
+        Gbd {
+            l_bins,
+            h_bins,
+            cmax: smooth,
+            black_l,
+        }
     }
 
     fn max_chroma(&self, l: f64, h: f64) -> f64 {
@@ -340,7 +390,11 @@ impl Gbd {
         let h = lab[2].atan2(lab[1]);
         let cm = self.max_chroma(l, h).max(1e-3);
         let knee = 0.8 * cm;
-        let c2 = if c <= knee { c } else { knee + (cm - knee) * ((c - knee) / (cm - knee)).tanh() };
+        let c2 = if c <= knee {
+            c
+        } else {
+            knee + (cm - knee) * ((c - knee) / (cm - knee)).tanh()
+        };
         [l, c2 * h.cos(), c2 * h.sin()]
     }
 }
@@ -351,7 +405,11 @@ fn lab_node_legacy(i: usize, n: usize) -> f64 {
 
 /// Decodes a legacy (lut16) Lab node coordinate triple.
 fn decode_v2(v: [f64; 3]) -> [f64; 3] {
-    [v[0] * 100.0 * 65535.0 / 65280.0, v[1] * 65535.0 / 256.0 - 128.0, v[2] * 65535.0 / 256.0 - 128.0]
+    [
+        v[0] * 100.0 * 65535.0 / 65280.0,
+        v[1] * 65535.0 / 256.0 - 128.0,
+        v[2] * 65535.0 / 256.0 - 128.0,
+    ]
 }
 
 fn encode_v2(lab: [f64; 3]) -> [f32; 3] {
@@ -382,7 +440,11 @@ fn b2a_table(model: &CmykModel, p: &CmykParams, gbd: Option<&Gbd>) -> Clut {
         let mut warm = None;
         let mut out = Vec::with_capacity(n * 4);
         for bi in 0..n {
-            let lab = decode_v2([lab_node_legacy(li, n), lab_node_legacy(ai, n), lab_node_legacy(bi, n)]);
+            let lab = decode_v2([
+                lab_node_legacy(li, n),
+                lab_node_legacy(ai, n),
+                lab_node_legacy(bi, n),
+            ]);
             let target = match gbd {
                 Some(g) => g.compress(lab),
                 None => lab,
@@ -404,7 +466,11 @@ fn lut16(clut: Clut) -> Lut {
         kind: LutKind::Lut16,
         inputs: i,
         outputs: o,
-        stages: vec![Stage::Curves(vec![Curve::Table(vec![0.0, 1.0]); i]), Stage::Clut(clut), Stage::Curves(vec![Curve::Table(vec![0.0, 1.0]); o])],
+        stages: vec![
+            Stage::Curves(vec![Curve::Table(vec![0.0, 1.0]); i]),
+            Stage::Clut(clut),
+            Stage::Curves(vec![Curve::Table(vec![0.0, 1.0]); o]),
+        ],
     }
 }
 
@@ -456,7 +522,10 @@ mod tests {
     fn model_anchors() {
         let m = CmykModel::coated(CmykParams::default().tvi);
         let w = m.lab([0.0; 4]);
-        assert!((w[0] - 100.0).abs() < 1e-9 && w[1].abs() < 1e-9 && w[2].abs() < 1e-9, "{w:?}");
+        assert!(
+            (w[0] - 100.0).abs() < 1e-9 && w[1].abs() < 1e-9 && w[2].abs() < 1e-9,
+            "{w:?}"
+        );
         let k = m.lab([0.0, 0.0, 0.0, 1.0]);
         assert!(k[0] > 12.0 && k[0] < 22.0, "{k:?}");
         let rich = m.lab([0.75, 0.65, 0.6, 0.9]);
@@ -478,7 +547,13 @@ mod tests {
     fn separation_hits_in_gamut_targets() {
         let m = CmykModel::coated(CmykParams::default().tvi);
         let p = CmykParams::default();
-        let reachable = [[0.3, 0.4, 0.1, 0.1], [0.6, 0.1, 0.5, 0.0], [0.05, 0.1, 0.7, 0.0], [0.5, 0.45, 0.45, 0.4]].map(|v| m.lab(v));
+        let reachable = [
+            [0.3, 0.4, 0.1, 0.1],
+            [0.6, 0.1, 0.5, 0.0],
+            [0.05, 0.1, 0.7, 0.0],
+            [0.5, 0.45, 0.45, 0.4],
+        ]
+        .map(|v| m.lab(v));
         for target in [[50.0, 0.0, 0.0]].into_iter().chain(reachable) {
             let (cmyk, de) = separate(&m, &p, target, None);
             assert!(de < 1.5, "{target:?} -> {cmyk:?} ΔE {de}");

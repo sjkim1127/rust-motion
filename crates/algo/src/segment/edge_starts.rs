@@ -11,7 +11,12 @@ pub(super) struct Starts<'a> {
 
 impl<'a> Starts<'a> {
     pub(super) fn new(free: &'a [usize], w: usize) -> Self {
-        let mut this = Self { free, w, at: [0; 5], peek: [None; 5] };
+        let mut this = Self {
+            free,
+            w,
+            at: [0; 5],
+            peek: [None; 5],
+        };
         for k in 0..5 {
             this.advance(k)
         }

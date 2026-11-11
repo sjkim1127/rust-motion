@@ -7,9 +7,20 @@ fn matches_scalar_blur_bit_for_bit_across_layouts_edges_and_hdr() {
         for ch in 1..=5 {
             for alpha in std::iter::once(None).chain((0..ch).map(Some)) {
                 let data: Vec<f32> = (0..w * h * ch)
-                    .map(|i| if Some(i % ch) == alpha { [0.0, 1e-8, 0.25, 0.75, 1.0][(i / ch) % 5] } else { ((i * 73 + 19) % 113) as f32 / 17.0 - 2.0 })
+                    .map(|i| {
+                        if Some(i % ch) == alpha {
+                            [0.0, 1e-8, 0.25, 0.75, 1.0][(i / ch) % 5]
+                        } else {
+                            ((i * 73 + 19) % 113) as f32 / 17.0 - 2.0
+                        }
+                    })
                     .collect();
-                for win in [(0, 0, w, h), (w / 2, h / 2, w, h), (0, 0, 1, 1), (0, 0, 0, h)] {
+                for win in [
+                    (0, 0, w, h),
+                    (w / 2, h / 2, w, h),
+                    (0, 0, 1, 1),
+                    (0, 0, 0, h),
+                ] {
                     for sigma in [0.0, 0.25, 1.0, 3.0, 4.0, 12.0] {
                         let expected = scalar_local_blur(&data, w, h, ch, alpha, win, sigma);
                         let actual = local_blur(&data, w, h, ch, alpha, win, sigma);
@@ -30,15 +41,28 @@ fn empty_channel_layout_remains_empty() {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn scalar_local_blur(data: &[f32], w: usize, h: usize, ch: usize, alpha: Option<usize>, win: (usize, usize, usize, usize), sigma: f32) -> Vec<f32> {
+fn scalar_local_blur(
+    data: &[f32],
+    w: usize,
+    h: usize,
+    ch: usize,
+    alpha: Option<usize>,
+    win: (usize, usize, usize, usize),
+    sigma: f32,
+) -> Vec<f32> {
     let (x0, y0, x1, y1) = win;
     let (ow, oh) = (x1 - x0, y1 - y0);
     let r = (sigma * 3.0).ceil().max(1.0) as i32;
-    let k: Vec<f32> = (-r..=r).map(|i| (-((i * i) as f32) / (2.0 * sigma * sigma).max(1e-6)).exp()).collect();
+    let k: Vec<f32> = (-r..=r)
+        .map(|i| (-((i * i) as f32) / (2.0 * sigma * sigma).max(1e-6)).exp())
+        .collect();
     let ks: f32 = k.iter().sum();
     let k: Vec<f32> = k.into_iter().map(|v| v / ks).collect();
     let get = |x: i32, y: i32, out: &mut [f32]| {
-        let (xx, yy) = (x.clamp(0, w as i32 - 1) as usize, y.clamp(0, h as i32 - 1) as usize);
+        let (xx, yy) = (
+            x.clamp(0, w as i32 - 1) as usize,
+            y.clamp(0, h as i32 - 1) as usize,
+        );
         let i = (yy * w + xx) * ch;
         out.copy_from_slice(&data[i..i + ch]);
         if let Some(a) = alpha {
@@ -80,7 +104,11 @@ fn scalar_local_blur(data: &[f32], w: usize, h: usize, ch: usize, alpha: Option<
                 let av = out[o + a];
                 for c in 0..ch {
                     if c != a {
-                        out[o + c] = if av > 1e-6 { out[o + c] / av } else { data[((y0 + oy) * w + x0 + ox) * ch + c] };
+                        out[o + c] = if av > 1e-6 {
+                            out[o + c] / av
+                        } else {
+                            data[((y0 + oy) * w + x0 + ox) * ch + c]
+                        };
                     }
                 }
             }

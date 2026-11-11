@@ -23,7 +23,10 @@ fn preflow_matches_bk_on_integer_graphs_and_returns_unused_source() {
             }
             let mut old = g.clone();
             assert_eq!(g.maxflow_push_relabel(), old.maxflow_bk());
-            assert_eq!((0..n).map(|i| g.in_source(i)).collect::<Vec<_>>(), (0..n).map(|i| old.in_source(i)).collect::<Vec<_>>());
+            assert_eq!(
+                (0..n).map(|i| g.in_source(i)).collect::<Vec<_>>(),
+                (0..n).map(|i| old.in_source(i)).collect::<Vec<_>>()
+            );
             assert_eq!(g.residual_out_of_source_side(), 0.0);
             let flow = g.flow();
             assert_eq!(g.maxflow_push_relabel(), flow);
@@ -34,7 +37,11 @@ fn preflow_matches_bk_on_integer_graphs_and_returns_unused_source() {
 fn energy(g: &Graph, labels: &[bool]) -> f64 {
     let mut sum = g.flow;
     for (i, &source) in labels.iter().enumerate() {
-        sum += f64::from(if source { (-g.tr_cap[i]).max(0.0) } else { g.tr_cap[i].max(0.0) });
+        sum += f64::from(if source {
+            (-g.tr_cap[i]).max(0.0)
+        } else {
+            g.tr_cap[i].max(0.0)
+        });
         for (j, capacity, _) in g.arcs(i) {
             if source && !labels[j] {
                 sum += f64::from(capacity);
@@ -51,10 +58,19 @@ fn fractional_flows_match_brute_force_minimum_cuts() {
         for _ in 0..20 {
             let mut g = Graph::with_capacity(n, n * n);
             for i in 0..n {
-                g.add_tweights(i, (rng.next_u64() % 31) as f32 / 32.0, (rng.next_u64() % 31) as f32 / 32.0);
+                g.add_tweights(
+                    i,
+                    (rng.next_u64() % 31) as f32 / 32.0,
+                    (rng.next_u64() % 31) as f32 / 32.0,
+                );
                 for j in 0..i {
                     if rng.next_u64().is_multiple_of(5) {
-                        g.add_edge(i, j, (rng.next_u64() % 31) as f32 / 32.0, (rng.next_u64() % 31) as f32 / 32.0);
+                        g.add_edge(
+                            i,
+                            j,
+                            (rng.next_u64() % 31) as f32 / 32.0,
+                            (rng.next_u64() % 31) as f32 / 32.0,
+                        );
                     }
                 }
             }
@@ -88,10 +104,19 @@ fn float_capacity_graphs_match_bk() {
         for case in 0..100 {
             let mut g = Graph::with_capacity(n, n * 4);
             for i in 0..n {
-                g.add_tweights(i, (rng.next_u64() % 1001) as f32 / 97.0, (rng.next_u64() % 1001) as f32 / 97.0);
+                g.add_tweights(
+                    i,
+                    (rng.next_u64() % 1001) as f32 / 97.0,
+                    (rng.next_u64() % 1001) as f32 / 97.0,
+                );
                 for j in 0..i {
                     if rng.next_u64().is_multiple_of(7) {
-                        g.add_edge(i, j, (rng.next_u64() % 1001) as f32 / 113.0, (rng.next_u64() % 1001) as f32 / 113.0);
+                        g.add_edge(
+                            i,
+                            j,
+                            (rng.next_u64() % 1001) as f32 / 113.0,
+                            (rng.next_u64() % 1001) as f32 / 113.0,
+                        );
                     }
                 }
             }
@@ -102,7 +127,13 @@ fn float_capacity_graphs_match_bk() {
             assert!((a - b).abs() < 0.001, "n={n} case={case}: flow {a} vs {b}");
             let labels: Vec<_> = (0..n).map(|i| g.in_source(i)).collect();
             let expected: Vec<_> = (0..n).map(|i| old.in_source(i)).collect();
-            assert_eq!(labels, expected, "n={n} case={case}: energy {} vs {}", energy(&input, &labels), energy(&input, &expected));
+            assert_eq!(
+                labels,
+                expected,
+                "n={n} case={case}: energy {} vs {}",
+                energy(&input, &labels),
+                energy(&input, &expected)
+            );
         }
     }
 }
@@ -147,7 +178,11 @@ fn solver_workload_release_comparison() {
                         if kind == "all-source" {
                             input.add_tweights(i, 1.0, 0.0);
                         } else {
-                            input.add_tweights(i, if x < width / 4 { 3.0 } else { 0.0 }, 0.01 + (i % 17) as f32 * 0.001);
+                            input.add_tweights(
+                                i,
+                                if x < width / 4 { 3.0 } else { 0.0 },
+                                0.01 + (i % 17) as f32 * 0.001,
+                            );
                         }
                         if x > 0 {
                             input.add_edge(i, i - 1, 1.0, 1.0);
@@ -169,8 +204,15 @@ fn solver_workload_release_comparison() {
                     black_box(value);
                     let ms = start.elapsed().as_secs_f64() * 1000.0;
                     assert!((value - flow).abs() < 0.01);
-                    assert_eq!((0..n).map(|i| g.in_source(i)).collect::<Vec<_>>(), (0..n).map(|i| reference.in_source(i)).collect::<Vec<_>>());
-                    if fast { new_ms.push(ms) } else { old_ms.push(ms) }
+                    assert_eq!(
+                        (0..n).map(|i| g.in_source(i)).collect::<Vec<_>>(),
+                        (0..n).map(|i| reference.in_source(i)).collect::<Vec<_>>()
+                    );
+                    if fast {
+                        new_ms.push(ms)
+                    } else {
+                        old_ms.push(ms)
+                    }
                 }
             }
             old_ms.sort_by(f64::total_cmp);
@@ -187,10 +229,28 @@ fn stranded_excess_terminates_and_matches_bk() {
     // nodes (height u32::MAX) used to count as admissible for each other and pushed the excess
     // back and forth forever (Remove Background never finished on some photos).
     let mut g = Graph::with_capacity(6, 7);
-    for (i, &(s, t)) in [(33123824.0, 0.0), (347622050.0, 0.0), (0.0, 5539047.5), (76592.22, 0.0), (3514.0022, 0.0), (0.0, 13670.268)].iter().enumerate() {
+    for (i, &(s, t)) in [
+        (33123824.0, 0.0),
+        (347622050.0, 0.0),
+        (0.0, 5539047.5),
+        (76592.22, 0.0),
+        (3514.0022, 0.0),
+        (0.0, 13670.268),
+    ]
+    .iter()
+    .enumerate()
+    {
         g.add_tweights(i, s, t);
     }
-    for (i, j, c) in [(0, 1, 0.0), (0, 3, 0.0007301044), (1, 2, 2.803e-42), (1, 4, 8.160078), (2, 5, 3.1224866e-7), (3, 4, 28.512966), (4, 5, 4.099367)] {
+    for (i, j, c) in [
+        (0, 1, 0.0),
+        (0, 3, 0.0007301044),
+        (1, 2, 2.803e-42),
+        (1, 4, 8.160078),
+        (2, 5, 3.1224866e-7),
+        (3, 4, 28.512966),
+        (4, 5, 4.099367),
+    ] {
         g.add_edge(i, j, c, c);
     }
     let mut bk = g.clone();
@@ -199,8 +259,16 @@ fn stranded_excess_terminates_and_matches_bk() {
         checks.set(checks.get() + 1);
         checks.get() > 1000
     };
-    let flow = g.push_relabel(&cancel).expect("push/relabel did not terminate");
+    let flow = g
+        .push_relabel(&cancel)
+        .expect("push/relabel did not terminate");
     let bk_flow = bk.maxflow_bk();
-    assert!((flow - bk_flow).abs() <= 1e-6 * bk_flow, "{flow} vs {bk_flow}");
-    assert_eq!((0..6).map(|i| g.in_source(i)).collect::<Vec<_>>(), (0..6).map(|i| bk.in_source(i)).collect::<Vec<_>>());
+    assert!(
+        (flow - bk_flow).abs() <= 1e-6 * bk_flow,
+        "{flow} vs {bk_flow}"
+    );
+    assert_eq!(
+        (0..6).map(|i| g.in_source(i)).collect::<Vec<_>>(),
+        (0..6).map(|i| bk.in_source(i)).collect::<Vec<_>>()
+    );
 }

@@ -1,50 +1,10 @@
-//! `<RoundedTextBox>` shape component and multi-corner parametric rounded text box helpers.
+//! Parametric rounded text box helpers.
 
-#[cfg(feature = "dioxus")]
-use crate::render_svg::RenderSvg;
 use crate::shape_output::ShapeOutput;
-#[cfg(feature = "dioxus")]
-use dioxus::prelude::*;
 pub use rust_motion_rasterizer::font::{
     create_rounded_text_box, create_rounded_text_box_from_measurements, RoundedTextBoxOptions,
     TextAlign, TextLineDimension,
 };
-
-/// Props for the `<RoundedTextBox>` shape component.
-#[cfg(feature = "dioxus")]
-#[derive(Props, Clone, PartialEq)]
-pub struct RoundedTextBoxProps {
-    /// Line width and height measurements.
-    #[props(default = Vec::new())]
-    pub measurements: Vec<TextLineDimension>,
-    /// Horizontal padding in pixels.
-    #[props(default = 16.0)]
-    pub padding_x: f32,
-    /// Vertical padding in pixels.
-    #[props(default = 12.0)]
-    pub padding_y: f32,
-    /// Maximum corner radius.
-    #[props(default = 8.0)]
-    pub border_radius: f32,
-    /// Alignment of lines.
-    #[props(default = TextAlign::Left)]
-    pub align: TextAlign,
-    /// Fill color.
-    #[props(default = "#ffffff".to_string())]
-    pub fill: String,
-    /// Stroke color.
-    #[props(default = "none".to_string())]
-    pub stroke: String,
-    /// Stroke width.
-    #[props(default = 0.0)]
-    pub stroke_width: f64,
-    /// Opacity.
-    #[props(default = 1.0)]
-    pub opacity: f64,
-    /// Custom CSS styles.
-    #[props(default)]
-    pub style: String,
-}
 
 /// Generates a `ShapeOutput` for a multi-corner rounded text box.
 pub fn make_rounded_text_box(
@@ -60,32 +20,6 @@ pub fn make_rounded_text_box(
     let transform_origin = format!("{} {}", width / 2.0, height / 2.0);
 
     ShapeOutput::new(path, width, height, transform_origin)
-}
-
-/// Renders a procedural SVG multi-corner rounded text box.
-#[cfg(feature = "dioxus")]
-#[component]
-pub fn RoundedTextBox(props: RoundedTextBoxProps) -> Element {
-    let options = RoundedTextBoxOptions {
-        padding_x: props.padding_x,
-        padding_y: props.padding_y,
-        border_radius: props.border_radius,
-        align: props.align,
-    };
-    let shape = make_rounded_text_box(&props.measurements, &options);
-
-    rsx! {
-        RenderSvg {
-            path: shape.path,
-            width: shape.width,
-            height: shape.height,
-            fill: props.fill,
-            stroke: props.stroke,
-            stroke_width: props.stroke_width,
-            opacity: props.opacity,
-            style: props.style,
-        }
-    }
 }
 
 #[cfg(test)]

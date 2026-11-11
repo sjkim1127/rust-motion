@@ -9,7 +9,6 @@ repository.workspace  = true
 readme.workspace      = true
 
 [dependencies]
-dioxus              = { workspace = true, optional = true }
 rust-motion-animation = { workspace = true }
 rust-motion-composition = { workspace = true }
 rust-motion-rasterizer  = { workspace = true }
@@ -18,7 +17,3 @@ serde_json          = { workspace = true }
 
 [dev-dependencies]
 rust-motion-paths     = { workspace = true }
-
-[features]
-default = ["dioxus"]
-dioxus = ["dep:dioxus"]

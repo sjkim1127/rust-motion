@@ -105,7 +105,10 @@ mod preview {
         for at in [130, b.len() - 1] {
             let mut damaged = b.clone();
             damaged[at] ^= 1;
-            assert_eq!(preview(&damaged).unwrap_err(), Error::Malformed("PNG chunk checksum"));
+            assert_eq!(
+                preview(&damaged).unwrap_err(),
+                Error::Malformed("PNG chunk checksum")
+            );
         }
         let mut ancillary = vec![0; 4];
         ancillary.extend(b"tEXt");
@@ -118,7 +121,10 @@ mod preview {
         with_ancillary[96..100].copy_from_slice(&png_length.to_le_bytes());
         assert!(preview(&with_ancillary).is_ok());
         with_ancillary[at + 8] ^= 1;
-        assert_eq!(preview(&with_ancillary).unwrap_err(), Error::Malformed("PNG chunk checksum"));
+        assert_eq!(
+            preview(&with_ancillary).unwrap_err(),
+            Error::Malformed("PNG chunk checksum")
+        );
     }
 
     #[test]
@@ -186,10 +192,10 @@ mod preview {
 }
 
 mod archive {
-    use crate::Error;
     use crate::container::{Archive, Limits};
     use crate::stream::{self, Kind, Tag, Value};
-    use crate::synth::{self, F, Method, tag};
+    use crate::synth::{self, tag, Method, F};
+    use crate::Error;
     use proptest::prelude::*;
 
     fn doc() -> Vec<u8> {
@@ -197,11 +203,42 @@ mod archive {
             (tag(b"Desc"), F::Str("Document".into())),
             (tag(b"Visi"), F::Bool(true)),
             (tag(b"Xfrm"), F::F64s(vec![1.0, 0.0, 5.0, 0.0, 1.0, -2.0])),
-            (tag(b"Colr"), F::Def(7, vec![tag(b"RGBA")], vec![(tag(b"_col"), F::Struct([0u8; 16].to_vec()))])),
+            (
+                tag(b"Colr"),
+                F::Def(
+                    7,
+                    vec![tag(b"RGBA")],
+                    vec![(tag(b"_col"), F::Struct([0u8; 16].to_vec()))],
+                ),
+            ),
             (tag(b"Same"), F::Ref(7)),
             (tag(b"Null"), F::Null),
-            (tag(b"Kids"), F::Shared(vec![F::Def(8, vec![tag(b"Grup"), tag(b"Node")], vec![(tag(b"Desc"), F::Str("g".into()))]), F::Ref(8)])),
-            (tag(b"Crvs"), F::Obj(tag(b"PCvD"), vec![(tag(b"Data"), F::Pos(vec![F::U8(0), F::U32(1), F::Bool(true), F::Records(18, vec![vec![0; 18]; 4])]))])),
+            (
+                tag(b"Kids"),
+                F::Shared(vec![
+                    F::Def(
+                        8,
+                        vec![tag(b"Grup"), tag(b"Node")],
+                        vec![(tag(b"Desc"), F::Str("g".into()))],
+                    ),
+                    F::Ref(8),
+                ]),
+            ),
+            (
+                tag(b"Crvs"),
+                F::Obj(
+                    tag(b"PCvD"),
+                    vec![(
+                        tag(b"Data"),
+                        F::Pos(vec![
+                            F::U8(0),
+                            F::U32(1),
+                            F::Bool(true),
+                            F::Records(18, vec![vec![0; 18]; 4]),
+                        ]),
+                    )],
+                ),
+            ),
             (tag(b"Enum"), F::Enum(2, 1)),
             (tag(b"Tile"), F::Entry("d/3".into())),
             (tag(b"Stat"), F::U8s(vec![4, 0, 2])),
@@ -227,18 +264,38 @@ mod archive {
         let s = stream::parse(&doc()).unwrap();
         let root = &s.objects[s.root];
         assert_eq!(root.class, Tag::of(b"Pers"));
-        assert_eq!(root.get(Tag::of(b"Desc")), Some(&Value::Str("Document".into())));
-        assert_eq!(root.get(Tag::of(b"Xfrm")), Some(&Value::Floats(vec![1.0, 0.0, 5.0, 0.0, 1.0, -2.0])));
-        let (Some(Value::Obj(Some(a))), Some(Value::Obj(Some(b)))) = (root.get(Tag::of(b"Colr")), root.get(Tag::of(b"Same"))) else { panic!() };
+        assert_eq!(
+            root.get(Tag::of(b"Desc")),
+            Some(&Value::Str("Document".into()))
+        );
+        assert_eq!(
+            root.get(Tag::of(b"Xfrm")),
+            Some(&Value::Floats(vec![1.0, 0.0, 5.0, 0.0, 1.0, -2.0]))
+        );
+        let (Some(Value::Obj(Some(a))), Some(Value::Obj(Some(b)))) =
+            (root.get(Tag::of(b"Colr")), root.get(Tag::of(b"Same")))
+        else {
+            panic!()
+        };
         assert_eq!(a, b);
         assert_eq!(s.objects[*a].class, Tag::of(b"RGBA"));
         assert_eq!(s.objects[*a].kind, Kind::Shared);
-        let Some(Value::Array(kids)) = root.get(Tag::of(b"Kids")) else { panic!() };
+        let Some(Value::Array(kids)) = root.get(Tag::of(b"Kids")) else {
+            panic!()
+        };
         assert_eq!(kids[0], kids[1]);
-        let Value::Obj(Some(g)) = kids[0] else { panic!() };
+        let Value::Obj(Some(g)) = kids[0] else {
+            panic!()
+        };
         assert_eq!(s.objects[g].chain, vec![Tag::of(b"Grup"), Tag::of(b"Node")]);
-        assert_eq!(root.get(Tag::of(b"Enum")), Some(&Value::Enum { id: 2, version: 1 }));
-        assert_eq!(root.get(Tag::of(b"Tile")), Some(&Value::Entry("d/3".into())));
+        assert_eq!(
+            root.get(Tag::of(b"Enum")),
+            Some(&Value::Enum { id: 2, version: 1 })
+        );
+        assert_eq!(
+            root.get(Tag::of(b"Tile")),
+            Some(&Value::Entry("d/3".into()))
+        );
         assert_eq!(root.get(Tag::of(b"Null")), Some(&Value::Obj(None)));
     }
 
@@ -251,9 +308,25 @@ mod archive {
         broken[90] ^= 0x55;
         let mut a = Archive::open(&broken, Limits::default()).unwrap();
         assert!(a.read("doc.dat").is_err());
-        let mut a = Archive::open(&file, Limits { max_entry: d.len() - 1, max_total: usize::MAX, ..Limits::default() }).unwrap();
+        let mut a = Archive::open(
+            &file,
+            Limits {
+                max_entry: d.len() - 1,
+                max_total: usize::MAX,
+                ..Limits::default()
+            },
+        )
+        .unwrap();
         assert!(matches!(a.read("doc.dat"), Err(Error::Limit(_))));
-        let mut a = Archive::open(&file, Limits { max_entry: usize::MAX, max_total: d.len() + 1, ..Limits::default() }).unwrap();
+        let mut a = Archive::open(
+            &file,
+            Limits {
+                max_entry: usize::MAX,
+                max_total: d.len() + 1,
+                ..Limits::default()
+            },
+        )
+        .unwrap();
         a.read("doc.dat").unwrap();
         assert!(matches!(a.read("doc.dat"), Err(Error::Limit(_))));
     }
@@ -267,7 +340,10 @@ mod archive {
         let size_at = fat + 59 + 5 + 8;
         file[size_at..size_at + 8].copy_from_slice(&1024u64.to_le_bytes());
         let mut a = Archive::open(&file, Limits::default()).unwrap();
-        assert_eq!(a.read("doc.dat").unwrap_err(), Error::Malformed("archive entry size mismatch"));
+        assert_eq!(
+            a.read("doc.dat").unwrap_err(),
+            Error::Malformed("archive entry size mismatch")
+        );
     }
 
     #[test]
@@ -276,26 +352,51 @@ mod archive {
         let mut file = synth::container(&[("doc.dat", &d, Method::Stored)], None);
         let mut library = file.clone();
         library[8..12].copy_from_slice(b"rAsA");
-        assert!(matches!(Archive::open(&library, Limits::default()), Err(Error::Unsupported(_))));
+        assert!(matches!(
+            Archive::open(&library, Limits::default()),
+            Err(Error::Unsupported(_))
+        ));
         let fat = u64::from_le_bytes(file[16..24].try_into().unwrap());
         let at = fat as usize + 4;
         file[at..at + 8].copy_from_slice(&fat.to_le_bytes());
-        assert_eq!(Archive::open(&file, Limits::default()).unwrap_err(), Error::Malformed("allocation tables form a cycle"));
+        assert_eq!(
+            Archive::open(&file, Limits::default()).unwrap_err(),
+            Error::Malformed("allocation tables form a cycle")
+        );
     }
 
     #[test]
     fn hostile_streams_fail_cleanly() {
-        let deep = (0..2000).fold(Vec::new(), |inner, _| vec![(tag(b"Chld"), F::Obj(tag(b"Grup"), inner))]);
-        assert_eq!(stream::parse(&synth::stream(&deep)).unwrap_err(), Error::Limit("objects nested too deeply"));
+        let deep = (0..2000).fold(Vec::new(), |inner, _| {
+            vec![(tag(b"Chld"), F::Obj(tag(b"Grup"), inner))]
+        });
+        assert_eq!(
+            stream::parse(&synth::stream(&deep)).unwrap_err(),
+            Error::Limit("objects nested too deeply")
+        );
         // An array claiming four billion elements in a few bytes.
-        let huge = synth::stream(&[(tag(b"Big_"), F::Raw(vec![0x81, b'_', b'g', b'i', b'B', 0xff, 0xff, 0xff, 0xff, 0]))]);
-        assert_eq!(stream::parse(&huge).unwrap_err(), Error::Malformed("array longer than its data"));
+        let huge = synth::stream(&[(
+            tag(b"Big_"),
+            F::Raw(vec![
+                0x81, b'_', b'g', b'i', b'B', 0xff, 0xff, 0xff, 0xff, 0,
+            ]),
+        )]);
+        assert_eq!(
+            stream::parse(&huge).unwrap_err(),
+            Error::Malformed("array longer than its data")
+        );
         let forward = synth::stream(&[(tag(b"Link"), F::Ref(99))]);
         assert!(stream::parse(&forward).is_err());
-        let twice = synth::stream(&[(tag(b"A___"), F::Def(1, vec![tag(b"RGBA")], vec![])), (tag(b"B___"), F::Def(1, vec![tag(b"RGBA")], vec![]))]);
+        let twice = synth::stream(&[
+            (tag(b"A___"), F::Def(1, vec![tag(b"RGBA")], vec![])),
+            (tag(b"B___"), F::Def(1, vec![tag(b"RGBA")], vec![])),
+        ]);
         assert!(stream::parse(&twice).is_err());
         let unknown = synth::stream(&[(tag(b"X___"), F::Raw(vec![0x0b, 1, 2, 3, 4]))]);
-        assert!(matches!(stream::parse(&unknown), Err(Error::Unsupported(_))));
+        assert!(matches!(
+            stream::parse(&unknown),
+            Err(Error::Unsupported(_))
+        ));
         let d = doc();
         for end in 0..d.len() {
             assert!(stream::parse(&d[..end]).is_err(), "{end}");
@@ -316,12 +417,21 @@ mod archive {
         };
         let bools = 1u32 << 27;
         let bytes = u32::try_from(stream::MAX_VALUES).unwrap() + 1;
-        for f in [field(0x29, bools, (bools / 8) as usize), field(0x01, bytes, bytes as usize)] {
+        for f in [
+            field(0x29, bools, (bools / 8) as usize),
+            field(0x01, bytes, bytes as usize),
+        ] {
             let d = synth::stream(&[(tag(b"Big_"), f)]);
             let file = synth::container(&[("doc.dat", &d, Method::Zstd)], None);
             assert!(file.len() < d.len() / 100, "{} of {}", file.len(), d.len());
-            let entry = Archive::open(&file, Limits::default()).unwrap().read("doc.dat").unwrap();
-            assert_eq!(stream::parse(&entry).unwrap_err(), Error::Limit("too many values in the document stream"));
+            let entry = Archive::open(&file, Limits::default())
+                .unwrap()
+                .read("doc.dat")
+                .unwrap();
+            assert_eq!(
+                stream::parse(&entry).unwrap_err(),
+                Error::Limit("too many values in the document stream")
+            );
         }
     }
 
@@ -354,13 +464,19 @@ mod shapes {
     use crate::container::Limits;
     use crate::model::{Document, Kind, Path, Point, SubPath};
     use crate::stream::Tag;
-    use crate::synth::{self, F, Method, tag};
+    use crate::synth::{self, tag, Method, F};
 
     fn shape(id: u32, class: &[u8; 4], parameters: Vec<(Tag, F)>) -> F {
         F::Def(
             id,
             vec![tag(b"ShpN")],
-            vec![(tag(b"ShpB"), F::F64s(vec![0.0, 0.0, 10.0, 20.0])), (tag(b"Shpe"), F::Def(id + 10_000, vec![tag(class)], parameters))],
+            vec![
+                (tag(b"ShpB"), F::F64s(vec![0.0, 0.0, 10.0, 20.0])),
+                (
+                    tag(b"Shpe"),
+                    F::Def(id + 10_000, vec![tag(class)], parameters),
+                ),
+            ],
         )
     }
 
@@ -379,7 +495,10 @@ mod shapes {
                         F::Shared(vec![F::Def(
                             2,
                             vec![tag(b"Sprd")],
-                            vec![(tag(b"SprB"), F::F64s(vec![0.0, 0.0, 400.0, 300.0])), (tag(b"Chld"), F::Shared(vec![F::Ref(top)]))],
+                            vec![
+                                (tag(b"SprB"), F::F64s(vec![0.0, 0.0, 400.0, 300.0])),
+                                (tag(b"Chld"), F::Shared(vec![F::Ref(top)])),
+                            ],
                         )]),
                     )],
                 ),
@@ -388,7 +507,9 @@ mod shapes {
         let bytes = synth::container(&[("doc.dat", &data, Method::Zlib)], None);
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || tx.send(crate::model::read(&bytes, Limits::default())).ok());
-        rx.recv_timeout(std::time::Duration::from_secs(20)).unwrap_or_else(|_| panic!("reading the document did not finish")).unwrap()
+        rx.recv_timeout(std::time::Duration::from_secs(20))
+            .unwrap_or_else(|_| panic!("reading the document did not finish"))
+            .unwrap()
     }
 
     fn path(document: &Document) -> &Path {
@@ -400,28 +521,80 @@ mod shapes {
 
     #[test]
     fn pie_angles_with_huge_finite_values_do_not_loop_or_emit_nonfinite_points() {
-        let document = read(vec![shape(100, b"ShPi", vec![(tag(b"AngS"), F::F64(1.0e308)), (tag(b"AngE"), F::F64(-1.0e308))])], 100);
+        let document = read(
+            vec![shape(
+                100,
+                b"ShPi",
+                vec![
+                    (tag(b"AngS"), F::F64(1.0e308)),
+                    (tag(b"AngE"), F::F64(-1.0e308)),
+                ],
+            )],
+            100,
+        );
         for subpath in &path(&document).subpaths {
             assert!(subpath.start.x.is_finite() && subpath.start.y.is_finite());
             assert!(subpath.segments.len() <= 20);
-            assert!(subpath.segments.iter().flatten().all(|point| point.x.is_finite() && point.y.is_finite()));
+            assert!(subpath
+                .segments
+                .iter()
+                .flatten()
+                .all(|point| point.x.is_finite() && point.y.is_finite()));
         }
     }
 
     #[test]
     fn wrapped_pie_angles_keep_the_same_geometry_as_the_positive_span() {
-        let make = |end| read(vec![shape(100, b"ShPi", vec![(tag(b"AngS"), F::F64(0.0)), (tag(b"AngE"), F::F64(end))])], 100);
-        assert_eq!(path(&make(-std::f64::consts::FRAC_PI_2)), path(&make(3.0 * std::f64::consts::FRAC_PI_2)));
+        let make = |end| {
+            read(
+                vec![shape(
+                    100,
+                    b"ShPi",
+                    vec![(tag(b"AngS"), F::F64(0.0)), (tag(b"AngE"), F::F64(end))],
+                )],
+                100,
+            )
+        };
+        assert_eq!(
+            path(&make(-std::f64::consts::FRAC_PI_2)),
+            path(&make(3.0 * std::f64::consts::FRAC_PI_2))
+        );
     }
 
     /// A 10×20 rectangle (`ShNR`) with the given parameters, read back as its outline.
     fn rectangle(parameters: Vec<(Tag, F)>) -> (SubPath, Vec<String>) {
-        let node =
-            F::Def(3, vec![tag(b"ShpN")], vec![(tag(b"ShpB"), F::F64s(vec![0.0, 0.0, 10.0, 20.0])), (tag(b"Shpe"), F::Def(4, vec![tag(b"ShNR")], parameters))]);
-        let spread = F::Def(2, vec![tag(b"Sprd")], vec![(tag(b"SprB"), F::F64s(vec![0.0, 0.0, 400.0, 300.0])), (tag(b"Chld"), F::Shared(vec![node]))]);
-        let data = synth::stream(&[(tag(b"DocR"), F::Def(1, vec![tag(b"DocN")], vec![(tag(b"Chld"), F::Shared(vec![spread]))]))]);
-        let doc = crate::read(&synth::container(&[("doc.dat", &data, Method::Zlib)], None), Limits::default()).unwrap();
-        let Kind::Shape { path, .. } = &doc.spreads[0].nodes[0].kind else { panic!("expected a shape") };
+        let node = F::Def(
+            3,
+            vec![tag(b"ShpN")],
+            vec![
+                (tag(b"ShpB"), F::F64s(vec![0.0, 0.0, 10.0, 20.0])),
+                (tag(b"Shpe"), F::Def(4, vec![tag(b"ShNR")], parameters)),
+            ],
+        );
+        let spread = F::Def(
+            2,
+            vec![tag(b"Sprd")],
+            vec![
+                (tag(b"SprB"), F::F64s(vec![0.0, 0.0, 400.0, 300.0])),
+                (tag(b"Chld"), F::Shared(vec![node])),
+            ],
+        );
+        let data = synth::stream(&[(
+            tag(b"DocR"),
+            F::Def(
+                1,
+                vec![tag(b"DocN")],
+                vec![(tag(b"Chld"), F::Shared(vec![spread]))],
+            ),
+        )]);
+        let doc = crate::read(
+            &synth::container(&[("doc.dat", &data, Method::Zlib)], None),
+            Limits::default(),
+        )
+        .unwrap();
+        let Kind::Shape { path, .. } = &doc.spreads[0].nodes[0].kind else {
+            panic!("expected a shape")
+        };
         (path.subpaths[0].clone(), doc.warnings)
     }
 
@@ -440,7 +613,10 @@ mod shapes {
         let p = |x: f64, y: f64| Point { x, y };
         // Relative radii scale by 10. Round 5, round 1, straight 3, none.
         let corners = |lock: Option<bool>| {
-            let mut fields = vec![(tag(b"ShCR"), F::F64s(vec![0.5, 0.1, 0.3, 0.0])), (tag(b"CTyp"), corner_types([0, 0, 1, 4]))];
+            let mut fields = vec![
+                (tag(b"ShCR"), F::F64s(vec![0.5, 0.1, 0.3, 0.0])),
+                (tag(b"CTyp"), corner_types([0, 0, 1, 4])),
+            ];
             fields.extend(lock.map(|l| (tag(b"Lock"), F::Bool(l))));
             rectangle(fields)
         };
@@ -449,9 +625,28 @@ mod shapes {
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(sub.start, p(5.0, 0.0));
         let ends: Vec<Point> = sub.segments.iter().map(|s| s[2]).collect();
-        assert_eq!(ends, [p(9.0, 0.0), p(10.0, 1.0), p(10.0, 17.0), p(7.0, 20.0), p(0.0, 20.0), p(0.0, 5.0), p(5.0, 0.0)]);
-        assert_eq!(sub.segments[3], [p(7.0, 20.0); 3], "the straight corner is a line");
-        assert_ne!(sub.segments[1][0], p(9.0, 0.0), "the round corner is a curve");
+        assert_eq!(
+            ends,
+            [
+                p(9.0, 0.0),
+                p(10.0, 1.0),
+                p(10.0, 17.0),
+                p(7.0, 20.0),
+                p(0.0, 20.0),
+                p(0.0, 5.0),
+                p(5.0, 0.0)
+            ]
+        );
+        assert_eq!(
+            sub.segments[3],
+            [p(7.0, 20.0); 3],
+            "the straight corner is a line"
+        );
+        assert_ne!(
+            sub.segments[1][0],
+            p(9.0, 0.0),
+            "the round corner is a curve"
+        );
 
         // Locked (the default): every corner follows the top left one.
         let (sub, _) = corners(None);
@@ -464,10 +659,10 @@ mod shapes {
 /// extracts; these cover what the decoded layers and their working planes cost, which is declared
 /// by each bitmap's `BmpW`/`BmpH` and needs no tile data at all.
 mod pixels {
-    use crate::Error;
     use crate::container::Limits;
     use crate::model::{Document, Kind};
-    use crate::synth::{self, F, Method, tag};
+    use crate::synth::{self, tag, Method, F};
+    use crate::Error;
 
     /// A `Rstr` pixel layer whose bitmap declares `w`×`h` pixels and holds no tiles.
     fn layer(id: u32, w: i32, h: i32) -> F {
@@ -476,14 +671,29 @@ mod pixels {
             vec![tag(b"Rstr")],
             vec![
                 (tag(b"Desc"), F::Str(format!("Layer {id}"))),
-                (tag(b"Bitm"), F::Def(id + 1, vec![tag(b"DyBm")], vec![(tag(b"BmpW"), F::I32(w)), (tag(b"BmpH"), F::I32(h)), (tag(b"Frmt"), F::Enum(0, 0))])),
+                (
+                    tag(b"Bitm"),
+                    F::Def(
+                        id + 1,
+                        vec![tag(b"DyBm")],
+                        vec![
+                            (tag(b"BmpW"), F::I32(w)),
+                            (tag(b"BmpH"), F::I32(h)),
+                            (tag(b"Frmt"), F::Enum(0, 0)),
+                        ],
+                    ),
+                ),
             ],
         )
     }
 
     /// A document whose one page holds a pixel layer per `sizes` entry.
     fn document(sizes: &[(i32, i32)]) -> Vec<u8> {
-        let children: Vec<F> = sizes.iter().enumerate().map(|(i, &(w, h))| layer(10 + 2 * i as u32, w, h)).collect();
+        let children: Vec<F> = sizes
+            .iter()
+            .enumerate()
+            .map(|(i, &(w, h))| layer(10 + 2 * i as u32, w, h))
+            .collect();
         let data = synth::stream(&[(
             tag(b"DocR"),
             F::Def(
@@ -494,7 +704,10 @@ mod pixels {
                     F::Shared(vec![F::Def(
                         2,
                         vec![tag(b"Sprd")],
-                        vec![(tag(b"SprB"), F::F64s(vec![0.0, 0.0, 256.0, 256.0])), (tag(b"Chld"), F::Shared(children))],
+                        vec![
+                            (tag(b"SprB"), F::F64s(vec![0.0, 0.0, 256.0, 256.0])),
+                            (tag(b"Chld"), F::Shared(children)),
+                        ],
                     )]),
                 )],
             ),
@@ -503,7 +716,11 @@ mod pixels {
     }
 
     fn imported_layers(d: &Document) -> usize {
-        d.spreads[0].nodes.iter().filter(|n| matches!(n.kind, Kind::Image(_))).count()
+        d.spreads[0]
+            .nodes
+            .iter()
+            .filter(|n| matches!(n.kind, Kind::Image(_)))
+            .count()
     }
 
     /// A 64×64 layer costs 16 KiB of RGBA and 16 KiB of planes, so 40 KiB admits one and not two.
@@ -511,29 +728,50 @@ mod pixels {
 
     #[test]
     fn a_pixel_layer_within_the_budget_imports() {
-        let limits = Limits { max_pixel_bytes: ONE_LAYER, ..Limits::default() };
+        let limits = Limits {
+            max_pixel_bytes: ONE_LAYER,
+            ..Limits::default()
+        };
         let d = crate::model::read(&document(&[(64, 64)]), limits).unwrap();
         assert_eq!(imported_layers(&d), 1, "{:?}", d.warnings);
     }
 
     #[test]
     fn layers_past_the_pixel_budget_are_rejected_before_they_are_allocated() {
-        let limits = Limits { max_pixel_bytes: ONE_LAYER, ..Limits::default() };
+        let limits = Limits {
+            max_pixel_bytes: ONE_LAYER,
+            ..Limits::default()
+        };
         // The document is a few hundred bytes: the sizes are in the headers, not the entries.
         let bytes = document(&[(64, 64), (64, 64)]);
         assert!(bytes.len() < 4096, "the fixture is {} bytes", bytes.len());
-        assert!(matches!(crate::model::read(&bytes, limits), Err(Error::Limit(_))), "the second layer materialized");
+        assert!(
+            matches!(crate::model::read(&bytes, limits), Err(Error::Limit(_))),
+            "the second layer materialized"
+        );
         // Two layers fit once the budget covers their pixels together.
-        let room = Limits { max_pixel_bytes: ONE_LAYER + (32 << 10), ..Limits::default() };
-        assert_eq!(imported_layers(&crate::model::read(&bytes, room).unwrap()), 2);
+        let room = Limits {
+            max_pixel_bytes: ONE_LAYER + (32 << 10),
+            ..Limits::default()
+        };
+        assert_eq!(
+            imported_layers(&crate::model::read(&bytes, room).unwrap()),
+            2
+        );
     }
 
     #[test]
     fn a_declared_size_larger_than_the_budget_is_rejected_on_its_own() {
         // 2048×2048 is 16 MiB of RGBA and 16 MiB of planes, past a 1 MiB budget.
-        let limits = Limits { max_pixel_bytes: 1 << 20, ..Limits::default() };
+        let limits = Limits {
+            max_pixel_bytes: 1 << 20,
+            ..Limits::default()
+        };
         assert!(
-            matches!(crate::model::read(&document(&[(2048, 2048)]), limits), Err(Error::Limit(_))),
+            matches!(
+                crate::model::read(&document(&[(2048, 2048)]), limits),
+                Err(Error::Limit(_))
+            ),
             "16 MiB of declared pixels materialized under a 1 MiB budget"
         );
     }

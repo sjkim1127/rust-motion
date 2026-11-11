@@ -7,8 +7,12 @@ fn global_layer_block_roundtrips_with_opaque_neighbors() {
         for depth in [16, 32] {
             for index in 0..=2 {
                 for signature in [*b"8BIM", *b"8B64"] {
-                    let mut file = testgen::layered(version, ColorMode::Rgb, depth, Compression::Raw);
-                    file.global_blocks = vec![TaggedBlock::new(*b"zz01", vec![7, 8, 9]), TaggedBlock::new(*b"zz02", vec![10, 11])];
+                    let mut file =
+                        testgen::layered(version, ColorMode::Rgb, depth, Compression::Raw);
+                    file.global_blocks = vec![
+                        TaggedBlock::new(*b"zz01", vec![7, 8, 9]),
+                        TaggedBlock::new(*b"zz02", vec![10, 11]),
+                    ];
                     file.layer_info_placement = LayerInfoPlacement::GlobalBlock {
                         index,
                         signature,

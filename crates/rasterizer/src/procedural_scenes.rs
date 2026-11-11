@@ -124,8 +124,8 @@ pub fn render_procedural_hdr_scene(
                             seed,
                         );
                         let dx = (ux - sun_x) + (wave - 0.5) * 0.12;
-                        let glitter = (-dx * dx / (0.004 + water_t * 0.02)).exp()
-                            * (wave.powi(3) * 4.5);
+                        let glitter =
+                            (-dx * dx / (0.004 + water_t * 0.02)).exp() * (wave.powi(3) * 4.5);
 
                         let base_r = 0.12 * (1.0 - water_t * 0.5) + glitter * 1.3;
                         let base_g = 0.08 * (1.0 - water_t * 0.4) + glitter * 0.75;
@@ -144,14 +144,8 @@ pub fn render_procedural_hdr_scene(
                         (lake_line - depth + ripple).clamp(0.0, lake_line)
                     };
 
-                    let ridge_h = 0.32
-                        + 0.22
-                            * fbm2d(
-                                ux * 2.4 + 1.7,
-                                0.5,
-                                5,
-                                seed.wrapping_add(77),
-                            );
+                    let ridge_h =
+                        0.32 + 0.22 * fbm2d(ux * 2.4 + 1.7, 0.5, 5, seed.wrapping_add(77));
                     let mut col = if sample_y < ridge_h {
                         // Crisp alpine sky with golden cloud wisps
                         let sky_t = (sample_y / lake_line).clamp(0.0, 1.0);

@@ -86,10 +86,21 @@ pub struct PositionedMathElement {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MathElementKind {
-    Text { text: String, font_size: f32 },
-    HorizontalRule { thickness: f32 },
-    RadicalSign { thickness: f32 },
-    Bracket { is_left: bool, bracket: MatrixBracket, thickness: f32 },
+    Text {
+        text: String,
+        font_size: f32,
+    },
+    HorizontalRule {
+        thickness: f32,
+    },
+    RadicalSign {
+        thickness: f32,
+    },
+    Bracket {
+        is_left: bool,
+        bracket: MatrixBracket,
+        thickness: f32,
+    },
 }
 
 /// Complete typeset layout of a mathematical formula.

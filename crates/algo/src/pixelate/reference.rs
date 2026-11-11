@@ -1,6 +1,12 @@
 //! Original scalar kernels, kept as independent test oracles.
 use super::*;
-pub(crate) fn halftone(src: &Image, out: Rect, ctx: &Ctx, max_radius: f32, angles: [f32; 4]) -> Vec<f32> {
+pub(crate) fn halftone(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    max_radius: f32,
+    angles: [f32; 4],
+) -> Vec<f32> {
     let n = src.ch;
     let cc = ncol(ctx, n);
     let rmax = max_radius.max(1.0);
@@ -11,7 +17,9 @@ pub(crate) fn halftone(src: &Image, out: Rect, ctx: &Ctx, max_radius: f32, angle
     let mut res = src.crop(out);
     let b = ctx.bounds;
     let (ox, oy) = (b.x0 as f32, b.y0 as f32);
-    let rot: Vec<(f32, f32)> = (0..cc.max(3)).map(|c| angles[c.min(3)].to_radians().sin_cos()).collect();
+    let rot: Vec<(f32, f32)> = (0..cc.max(3))
+        .map(|c| angles[c.min(3)].to_radians().sin_cos())
+        .collect();
     let clip = b.intersect(&src.rect);
     if clip.is_empty() {
         return res;
@@ -23,7 +31,10 @@ pub(crate) fn halftone(src: &Image, out: Rect, ctx: &Ctx, max_radius: f32, angle
         let mut px = [0.0f32; MAXC];
         for (dx, dy) in [(0.0, 0.0), (-d, -d), (d, -d), (-d, d), (d, d)] {
             // Clamp to the bounds so cells straddling the edge read real pixels.
-            let (ix, iy) = (((x + dx).floor() as i32).clamp(clip.x0, clip.x1 - 1), ((y + dy).floor() as i32).clamp(clip.y0, clip.y1 - 1));
+            let (ix, iy) = (
+                ((x + dx).floor() as i32).clamp(clip.x0, clip.x1 - 1),
+                ((y + dy).floor() as i32).clamp(clip.y0, clip.y1 - 1),
+            );
             if rgb {
                 for (k, p) in px.iter_mut().enumerate().take(n) {
                     *p = src.get(ix, iy, k);
@@ -63,10 +74,16 @@ pub(crate) fn halftone(src: &Image, out: Rect, ctx: &Ctx, max_radius: f32, angle
                     let r = if ink <= touch {
                         cell * (ink / std::f32::consts::PI).sqrt()
                     } else {
-                        cell * (0.5 + (ink - touch) / (1.0 - touch) * (std::f32::consts::FRAC_1_SQRT_2 - 0.5))
+                        cell * (0.5
+                            + (ink - touch) / (1.0 - touch)
+                                * (std::f32::consts::FRAC_1_SQRT_2 - 0.5))
                     };
                     // Tiny dots cannot cover more than their own area.
-                    cov = cov.max((r - d + 0.5).clamp(0.0, 1.0).min(std::f32::consts::PI * r * r));
+                    cov = cov.max(
+                        (r - d + 0.5)
+                            .clamp(0.0, 1.0)
+                            .min(std::f32::consts::PI * r * r),
+                    );
                 }
             }
             *v = if sub && !rgb { cov } else { 1.0 - cov };

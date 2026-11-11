@@ -12,7 +12,17 @@
 //! Every number in the file is hostile: offsets, counts and sizes are checked, allocations are
 //! capped by [`raw::MAX_SAMPLES`] and by the amount of data present, and the IFD walk is bounded.
 
-#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
 
 pub mod color;
 pub mod demosaic;
@@ -26,8 +36,8 @@ pub mod writer;
 use color::{Calibration, M3, V3};
 use demosaic::Pattern;
 use process::Params;
-use raw::{PHOTOMETRIC_CFA, RawImage};
-use tiff::{Entry, Ifd, Tiff, tags};
+use raw::{RawImage, PHOTOMETRIC_CFA};
+use tiff::{tags, Entry, Ifd, Tiff};
 
 /// DNG decoding errors.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -48,8 +58,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Whether `b` is a DNG: a TIFF file whose first IFD has a DNGVersion tag.
 pub fn sniff(b: &[u8]) -> bool {
-    let Ok((t, first)) = Tiff::new(b) else { return false };
-    t.read_ifd(first, 0).is_ok_and(|(ifd, _)| ifd.get(tags::DNG_VERSION).is_some())
+    let Ok((t, first)) = Tiff::new(b) else {
+        return false;
+    };
+    t.read_ifd(first, 0)
+        .is_ok_and(|(ifd, _)| ifd.get(tags::DNG_VERSION).is_some())
 }
 
 /// SMPTE ST 12-1 time code of a CinemaDNG frame.
@@ -71,7 +84,13 @@ impl Timecode {
             (u <= 9).then_some(t * 10 + u)
         };
         let [f, s, m, h, ..] = *b else { return None };
-        let tc = Timecode { frames: bcd(f, 0x3)?, seconds: bcd(s, 0x7)?, minutes: bcd(m, 0x7)?, hours: bcd(h, 0x3)?, drop_frame: f & 0x40 != 0 };
+        let tc = Timecode {
+            frames: bcd(f, 0x3)?,
+            seconds: bcd(s, 0x7)?,
+            minutes: bcd(m, 0x7)?,
+            hours: bcd(h, 0x3)?,
+            drop_frame: f & 0x40 != 0,
+        };
         (tc.seconds < 60 && tc.minutes < 60 && tc.hours < 24).then_some(tc)
     }
 }
@@ -124,16 +143,27 @@ impl<'a> Dng<'a> {
     pub fn parse(bytes: &'a [u8]) -> Result<Dng<'a>> {
         let (tiff, first) = Tiff::new(bytes)?;
         let ifds = tiff.all_ifds(first)?;
-        if ifds.first().and_then(|i| i.get(tags::DNG_VERSION)).is_none() {
+        if ifds
+            .first()
+            .and_then(|i| i.get(tags::DNG_VERSION))
+            .is_none()
+        {
             return Err(Error::NotDng);
         }
         let main = raw::find_raw_ifd(&tiff, &ifds)?;
-        let raw = ifds.iter().position(|i| i.offset == main.offset).ok_or(Error::Malformed("raw IFD"))?;
+        let raw = ifds
+            .iter()
+            .position(|i| i.offset == main.offset)
+            .ok_or(Error::Malformed("raw IFD"))?;
         Ok(Dng { tiff, ifds, raw })
     }
 
     fn ifd0(&self) -> &Ifd {
-        static EMPTY: Ifd = Ifd { offset: 0, entries: Vec::new(), depth: 0 };
+        static EMPTY: Ifd = Ifd {
+            offset: 0,
+            entries: Vec::new(),
+            depth: 0,
+        };
         self.ifds.first().unwrap_or(&EMPTY)
     }
 
@@ -159,17 +189,29 @@ impl<'a> Dng<'a> {
 
     /// A 3 × 3 matrix tag (`None` when absent or not 3 × 3, e.g. for other colour counts).
     fn matrix(&self, tag: u16) -> Result<Option<M3>> {
-        let Some(v) = self.floats(self.main_tag(tag))? else { return Ok(None) };
-        let Ok(v) = <[f64; 9]>::try_from(v.as_slice()) else { return Ok(None) };
-        Ok(Some([[v[0], v[1], v[2]], [v[3], v[4], v[5]], [v[6], v[7], v[8]]]))
+        let Some(v) = self.floats(self.main_tag(tag))? else {
+            return Ok(None);
+        };
+        let Ok(v) = <[f64; 9]>::try_from(v.as_slice()) else {
+            return Ok(None);
+        };
+        Ok(Some([
+            [v[0], v[1], v[2]],
+            [v[3], v[4], v[5]],
+            [v[6], v[7], v[8]],
+        ]))
     }
 
     fn vec3(&self, tag: u16) -> Result<Option<V3>> {
-        Ok(self.floats(self.main_tag(tag))?.and_then(|v| <[f64; 3]>::try_from(v.as_slice()).ok()))
+        Ok(self
+            .floats(self.main_tag(tag))?
+            .and_then(|v| <[f64; 3]>::try_from(v.as_slice()).ok()))
     }
 
     fn text(&self, tag: u16) -> Option<String> {
-        self.main_tag(tag).and_then(|e| self.tiff.ascii(e).ok()).filter(|s| !s.is_empty())
+        self.main_tag(tag)
+            .and_then(|e| self.tiff.ascii(e).ok())
+            .filter(|s| !s.is_empty())
     }
 
     /// The CFA pattern in camera planes (`None` for LinearRaw).
@@ -178,7 +220,11 @@ impl<'a> Dng<'a> {
         if l.photometric != PHOTOMETRIC_CFA {
             return Ok(None);
         }
-        let dims = self.raw_tag(tags::CFA_REPEAT_PATTERN_DIM).map(|e| self.tiff.uints(e)).transpose()?.unwrap_or_else(|| vec![2, 2]);
+        let dims = self
+            .raw_tag(tags::CFA_REPEAT_PATTERN_DIM)
+            .map(|e| self.tiff.uints(e))
+            .transpose()?
+            .unwrap_or_else(|| vec![2, 2]);
         let (rows, cols) = match dims[..] {
             [r, c, ..] => (r as usize, c as usize),
             _ => return Err(Error::Malformed("CFARepeatPatternDim")),
@@ -186,7 +232,10 @@ impl<'a> Dng<'a> {
         if !(1..=8).contains(&rows) || !(1..=8).contains(&cols) {
             return Err(Error::Unsupported(format!("{rows} × {cols} CFA pattern")));
         }
-        let pattern = self.tiff.uints(self.raw_tag(tags::CFA_PATTERN).ok_or(Error::Malformed("no CFAPattern"))?)?;
+        let pattern = self.tiff.uints(
+            self.raw_tag(tags::CFA_PATTERN)
+                .ok_or(Error::Malformed("no CFAPattern"))?,
+        )?;
         if pattern.len() < rows * cols {
             return Err(Error::Malformed("CFAPattern shorter than its repeat"));
         }
@@ -197,7 +246,9 @@ impl<'a> Dng<'a> {
         let mut sorted = planes.clone();
         sorted.sort_unstable();
         if sorted != [0, 1, 2] {
-            return Err(Error::Unsupported("CFA colours other than red, green and blue".into()));
+            return Err(Error::Unsupported(
+                "CFA colours other than red, green and blue".into(),
+            ));
         }
         if let Some(e) = self.raw_tag(tags::CFA_LAYOUT) {
             if self.tiff.uint(e)? != 1 {
@@ -206,7 +257,13 @@ impl<'a> Dng<'a> {
         }
         let colors = pattern[..rows * cols]
             .iter()
-            .map(|&v| planes.iter().position(|&p| p == v).map(|i| i as u8).ok_or(Error::Malformed("CFAPattern colour not in CFAPlaneColor")))
+            .map(|&v| {
+                planes
+                    .iter()
+                    .position(|&p| p == v)
+                    .map(|i| i as u8)
+                    .ok_or(Error::Malformed("CFAPattern colour not in CFAPlaneColor"))
+            })
             .collect::<Result<Vec<u8>>>()?;
         Ok(Some(Pattern { rows, cols, colors }))
     }
@@ -224,7 +281,9 @@ impl<'a> Dng<'a> {
         };
         let active_area = match self.raw_tag(tags::ACTIVE_AREA) {
             Some(e) => match self.tiff.uints(e)?[..] {
-                [t, l, b, r, ..] => Some([t, l, b, r].map(|v| usize::try_from(v).unwrap_or(usize::MAX))),
+                [t, l, b, r, ..] => {
+                    Some([t, l, b, r].map(|v| usize::try_from(v).unwrap_or(usize::MAX)))
+                }
                 _ => return Err(Error::Malformed("ActiveArea")),
             },
             None => None,
@@ -248,7 +307,12 @@ impl<'a> Dng<'a> {
                 None => Ok(None),
             }
         };
-        let list = |tag| -> Result<Vec<f64>> { self.raw_tag(tag).map(|e| self.tiff.floats(e)).transpose().map(Option::unwrap_or_default) };
+        let list = |tag| -> Result<Vec<f64>> {
+            self.raw_tag(tag)
+                .map(|e| self.tiff.floats(e))
+                .transpose()
+                .map(Option::unwrap_or_default)
+        };
         Ok(Params {
             active_area,
             linearization,
@@ -266,19 +330,36 @@ impl<'a> Dng<'a> {
     /// The colour tags.
     pub fn calibration(&self) -> Result<Calibration> {
         let illum = |tag| self.main_tag(tag).map(|e| self.tiff.uint(e)).transpose();
-        let white_xy = self.floats(self.main_tag(tags::AS_SHOT_WHITE_XY))?.and_then(|v| match v[..] {
-            [x, y] => Some((x, y)),
-            _ => None,
-        });
+        let white_xy = self
+            .floats(self.main_tag(tags::AS_SHOT_WHITE_XY))?
+            .and_then(|v| match v[..] {
+                [x, y] => Some((x, y)),
+                _ => None,
+            });
         Ok(Calibration {
-            color_matrix: [self.matrix(tags::COLOR_MATRIX_1)?, self.matrix(tags::COLOR_MATRIX_2)?],
-            camera_calibration: [self.matrix(tags::CAMERA_CALIBRATION_1)?, self.matrix(tags::CAMERA_CALIBRATION_2)?],
-            forward_matrix: [self.matrix(tags::FORWARD_MATRIX_1)?, self.matrix(tags::FORWARD_MATRIX_2)?],
-            illuminant: [illum(tags::CALIBRATION_ILLUMINANT_1)?, illum(tags::CALIBRATION_ILLUMINANT_2)?],
+            color_matrix: [
+                self.matrix(tags::COLOR_MATRIX_1)?,
+                self.matrix(tags::COLOR_MATRIX_2)?,
+            ],
+            camera_calibration: [
+                self.matrix(tags::CAMERA_CALIBRATION_1)?,
+                self.matrix(tags::CAMERA_CALIBRATION_2)?,
+            ],
+            forward_matrix: [
+                self.matrix(tags::FORWARD_MATRIX_1)?,
+                self.matrix(tags::FORWARD_MATRIX_2)?,
+            ],
+            illuminant: [
+                illum(tags::CALIBRATION_ILLUMINANT_1)?,
+                illum(tags::CALIBRATION_ILLUMINANT_2)?,
+            ],
             analog_balance: self.vec3(tags::ANALOG_BALANCE)?,
             as_shot_neutral: self.vec3(tags::AS_SHOT_NEUTRAL)?,
             as_shot_white_xy: white_xy,
-            baseline_exposure: self.floats(self.main_tag(tags::BASELINE_EXPOSURE))?.and_then(|v| v.first().copied()).unwrap_or(0.0),
+            baseline_exposure: self
+                .floats(self.main_tag(tags::BASELINE_EXPOSURE))?
+                .and_then(|v| v.first().copied())
+                .unwrap_or(0.0),
         })
     }
 
@@ -302,9 +383,16 @@ impl<'a> Dng<'a> {
             let d = i64::from(self.tiff.u32_of(b.get(4..8)?.try_into().ok()?) as i32);
             (n > 0 && d > 0 && n <= 1000 * d && n * 1000 >= d).then_some((n, d))
         });
-        let timecode = self.main_tag(tags::TIME_CODES).and_then(|e| self.tiff.value_bytes(e).ok()).and_then(Timecode::from_bytes);
+        let timecode = self
+            .main_tag(tags::TIME_CODES)
+            .and_then(|e| self.tiff.value_bytes(e).ok())
+            .and_then(Timecode::from_bytes);
         let camera = self.text(tags::UNIQUE_CAMERA_MODEL).or_else(|| {
-            let mm = [self.text(tags::MAKE), self.text(tags::MODEL)].into_iter().flatten().collect::<Vec<_>>().join(" ");
+            let mm = [self.text(tags::MAKE), self.text(tags::MODEL)]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" ");
             (!mm.is_empty()).then_some(mm)
         });
         Ok(Info {
@@ -315,7 +403,11 @@ impl<'a> Dng<'a> {
             bits: l.bits,
             samples_per_pixel: l.samples_per_pixel,
             cfa: p.cfa.is_some(),
-            compression: if l.compression == 7 { "lossless JPEG" } else { "uncompressed" },
+            compression: if l.compression == 7 {
+                "lossless JPEG"
+            } else {
+                "uncompressed"
+            },
             dng_version,
             frame_rate,
             timecode,
@@ -338,12 +430,21 @@ impl<'a> Dng<'a> {
         let solved = if p.cfa.is_none() && raw.samples_per_pixel == 1 {
             // monochrome: no colour, only the exposure
             let e = 2f64.powf(calibration.baseline_exposure.clamp(-16.0, 16.0));
-            color::Solved { neutral: [1.0; 3], matrix: color::scale(&color::IDENTITY, e), white_xy: color::D65 }
+            color::Solved {
+                neutral: [1.0; 3],
+                matrix: color::scale(&color::IDENTITY, e),
+                white_xy: color::D65,
+            }
         } else {
             calibration.solve()?
         };
         let d = process::develop(&raw, &p, &solved.neutral, &solved.matrix)?;
-        Ok(Image { info, width: d.width, height: d.height, rgba: d.rgba })
+        Ok(Image {
+            info,
+            width: d.width,
+            height: d.height,
+            rgba: d.rgba,
+        })
     }
 }
 

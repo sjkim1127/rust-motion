@@ -1,8 +1,8 @@
+use rust_motion_rasterizer::paint::{BrushSettings, Stroke, StrokePoint};
+use rust_motion_rasterizer::tablet::{Sample, StrokeRecorder};
 use rust_motion_rasterizer::{
     Color, FrameConfig, RasterizerBackend, Scene, SceneNode, TinySkiaBackend,
 };
-use rust_motion_rasterizer::paint::{BrushSettings, Stroke, StrokePoint};
-use rust_motion_rasterizer::tablet::{Sample, StrokeRecorder};
 
 #[test]
 fn test_animated_stroke_monotonic_write_on_progress() {
@@ -33,7 +33,9 @@ fn test_animated_stroke_monotonic_write_on_progress() {
                 opacity: 1.0,
             }],
         };
-        let frame = backend.render_frame(&scene, &config).expect("render frame failed");
+        let frame = backend
+            .render_frame(&scene, &config)
+            .expect("render frame failed");
         frame
             .chunks_exact(4)
             .filter(|px| px[3] > 0) // check alpha
@@ -50,7 +52,10 @@ fn test_animated_stroke_monotonic_write_on_progress() {
     assert!(p25 > 0, "Progress 0.25 should paint some pixels");
     assert!(p50 > p25, "Progress 0.5 should paint more pixels than 0.25");
     assert!(p75 > p50, "Progress 0.75 should paint more pixels than 0.5");
-    assert!(p100 >= p75, "Progress 1.0 should paint at least as many as 0.75");
+    assert!(
+        p100 >= p75,
+        "Progress 1.0 should paint at least as many as 0.75"
+    );
 }
 
 #[test]
@@ -91,7 +96,9 @@ fn test_tablet_recorder_to_animated_stroke_rendering() {
         }],
     };
 
-    let frame = backend.render_frame(&scene, &config).expect("render failed");
+    let frame = backend
+        .render_frame(&scene, &config)
+        .expect("render failed");
     let has_cyan = frame
         .chunks_exact(4)
         .any(|px| px[0] == 0 && px[1] > 100 && px[2] > 150 && px[3] > 0);
@@ -121,7 +128,12 @@ fn test_animated_stroke_serde_roundtrip() {
     let deserialized: SceneNode = serde_json::from_str(&json).expect("deserialize failed");
 
     match deserialized {
-        SceneNode::AnimatedStroke { progress, color, opacity, .. } => {
+        SceneNode::AnimatedStroke {
+            progress,
+            color,
+            opacity,
+            ..
+        } => {
             assert!((progress - 0.65).abs() < 1e-4);
             assert_eq!(color, Some(Color::rgb(255, 128, 0)));
             assert!((opacity - 0.8).abs() < 1e-4);

@@ -1,7 +1,4 @@
-//! Dioxus component and utilities for procedural organic noise background and SVG pattern rendering.
-
-use dioxus::prelude::*;
-use rust_motion_core::hooks::use_current_frame;
+//! Procedural utilities for organic noise backgrounds and SVG pattern rendering.
 
 use crate::fbm::{fbm_3d, FbmOptions};
 use crate::seed::NoiseSeed;
@@ -62,33 +59,47 @@ impl WavePathOptions {
     }
 }
 
-/// Props for the `<NoiseBackground>` component.
-#[derive(Props, Clone, PartialEq)]
-pub struct NoiseBackgroundProps {
+/// Configuration for procedural noise backgrounds.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NoiseBackgroundConfig {
     /// Seed identifier for deterministic noise generation.
-    #[props(default = "default-noise-seed".to_string())]
     pub seed: String,
     /// Primary background color (e.g. `"#0b0d19"`).
-    #[props(default = "#0b0d19".to_string())]
     pub base_color: String,
     /// Primary accent color (e.g. `"#6c63ff"`).
-    #[props(default = "#6c63ff".to_string())]
     pub accent_color: String,
     /// Additional color palette for multi-tone gradient layers.
-    #[props(default = vec!["#0b0d19".to_string(), "#3b82f6".to_string(), "#8b5cf6".to_string(), "#ec4899".to_string()])]
     pub palette: Vec<String>,
     /// Evolution speed over animation frames.
-    #[props(default = 0.03)]
     pub speed: f64,
     /// Spatial frequency of the procedural noise.
-    #[props(default = 0.02)]
     pub frequency: f64,
     /// Number of noise octaves in multi-harmonic synthesis.
-    #[props(default = 3)]
     pub octaves: usize,
     /// Additional inline CSS styles.
-    #[props(default)]
     pub style: String,
+}
+
+pub type NoiseBackgroundProps = NoiseBackgroundConfig;
+
+impl Default for NoiseBackgroundConfig {
+    fn default() -> Self {
+        Self {
+            seed: "default-noise-seed".to_string(),
+            base_color: "#0b0d19".to_string(),
+            accent_color: "#6c63ff".to_string(),
+            palette: vec![
+                "#0b0d19".to_string(),
+                "#3b82f6".to_string(),
+                "#8b5cf6".to_string(),
+                "#ec4899".to_string(),
+            ],
+            speed: 0.03,
+            frequency: 0.02,
+            octaves: 3,
+            style: String::new(),
+        }
+    }
 }
 
 /// Generates an SVG path string `d` representing an organic noise wave contour.
@@ -149,80 +160,6 @@ pub fn generate_noise_svg_data_url(
     );
 
     format!("data:image/svg+xml;utf8,{}", svg)
-}
-
-/// Dioxus component rendering animated procedural SVG patterns and organic shader backgrounds.
-#[component]
-pub fn NoiseBackground(props: NoiseBackgroundProps) -> Element {
-    let frame = use_current_frame();
-    let time = frame as f64 * props.speed;
-
-    // Evaluate dynamic procedural coordinates
-    let fbm_opts = FbmOptions::new(props.octaves, 2.0, 0.5);
-    let n1 = fbm_3d(&props.seed, 0.5, 0.5, time, &fbm_opts);
-    let n2 = fbm_3d(&props.seed, 1.5, 1.5, time * 0.85, &fbm_opts);
-
-    let opt1 = WavePathOptions::new(0.5 + n1 * 0.1, 180.0, time, props.frequency, props.octaves);
-    let wave_d1 = generate_noise_wave_path(&props.seed, 1000.0, 1000.0, &opt1);
-
-    let opt2 = WavePathOptions::new(
-        0.7 + n2 * 0.08,
-        140.0,
-        time * 1.2,
-        props.frequency * 1.4,
-        props.octaves,
-    );
-    let wave_d2 = generate_noise_wave_path(format!("{}-layer2", props.seed), 1000.0, 1000.0, &opt2);
-
-    let opacity = ((n1 + 1.0) / 2.0 * 0.4 + 0.3).clamp(0.1, 0.9);
-    let blur_radius = (25.0 + n2 * 12.0).max(5.0);
-
-    let container_style = format!(
-        "position: absolute; top: 0; left: 0; width: 100%; height: 100%; \
-         background-color: {}; overflow: hidden; {};",
-        props.base_color, props.style
-    );
-
-    let glow_style = format!(
-        "position: absolute; width: 120%; height: 120%; top: -10%; left: -10%; \
-         background: radial-gradient(circle at {:.1}% {:.1}%, {} 0%, transparent 65%); \
-         opacity: {:.3}; filter: blur({:.1}px); pointer-events: none;",
-        50.0 + n1 * 25.0,
-        50.0 + n2 * 25.0,
-        props.accent_color,
-        opacity,
-        blur_radius
-    );
-
-    let secondary_color = props
-        .palette
-        .get(1)
-        .cloned()
-        .unwrap_or_else(|| props.accent_color.clone());
-
-    rsx! {
-        div {
-            style: "{container_style}",
-            div {
-                style: "{glow_style}",
-            }
-            svg {
-                style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;",
-                view_box: "0 0 1000 1000",
-                preserve_aspect_ratio: "none",
-                path {
-                    d: "{wave_d1}",
-                    fill: "{props.accent_color}",
-                    opacity: "0.4"
-                }
-                path {
-                    d: "{wave_d2}",
-                    fill: "{secondary_color}",
-                    opacity: "0.55"
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]

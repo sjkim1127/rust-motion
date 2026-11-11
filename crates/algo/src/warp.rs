@@ -17,7 +17,7 @@ use rust_motion_color::PixelFormat;
 use rust_motion_geom::Rect;
 use rust_motion_raster::Surface;
 
-use crate::transform::{Interp, bicubic};
+use crate::transform::{bicubic, Interp};
 
 /// Grid cell size (source px) used to approximate the map.
 const CELL: f64 = 4.0;
@@ -46,10 +46,25 @@ pub fn place_source(
         return Ok(warp_mesh_surface(src, src_rect, &map, Interp::Bicubic));
     }
     let near = |x: f64, y: f64| (x - y).abs() < 1e-9;
-    if near(a, 1.0) && near(b, 0.0) && near(c, 0.0) && near(d, 1.0) && near(e, e.round()) && near(f, f.round()) {
-        return Ok(crate::resample::translate_surface(src, e.round() as i32, f.round() as i32));
+    if near(a, 1.0)
+        && near(b, 0.0)
+        && near(c, 0.0)
+        && near(d, 1.0)
+        && near(e, e.round())
+        && near(f, f.round())
+    {
+        return Ok(crate::resample::translate_surface(
+            src,
+            e.round() as i32,
+            f.round() as i32,
+        ));
     }
-    crate::transform::warp_surface(src, src_rect, &crate::transform::Homography([a, c, e, b, d, f, 0.0, 0.0, 1.0]), Interp::Bicubic)
+    crate::transform::warp_surface(
+        src,
+        src_rect,
+        &crate::transform::Homography([a, c, e, b, d, f, 0.0, 0.0, 1.0]),
+        Interp::Bicubic,
+    )
 }
 
 /// [`place_source`] through a projective map `h` (source → document; Distort, Perspective): the
@@ -73,7 +88,12 @@ pub fn place_source_projective(
 /// Warps the content of `src` inside `src_rect` through the forward map `f` (source document
 /// coordinates → destination document coordinates). Output has `src`'s format with alpha
 /// added; pixels outside the warped area are transparent.
-pub fn warp_mesh_surface(src: &Surface, src_rect: Rect, f: &(dyn Fn(f64, f64) -> (f64, f64) + Sync), interp: Interp) -> Surface {
+pub fn warp_mesh_surface(
+    src: &Surface,
+    src_rect: Rect,
+    f: &(dyn Fn(f64, f64) -> (f64, f64) + Sync),
+    interp: Interp,
+) -> Surface {
     if src_rect.is_empty() {
         let fmt = src.format();
         return Surface::new(PixelFormat::new(fmt.mode, fmt.sample, true));
@@ -118,13 +138,20 @@ fn mapped_lengths(src_rect: Rect, f: &(dyn Fn(f64, f64) -> (f64, f64) + Sync)) -
     let mut pts = Vec::with_capacity(n * n);
     for j in 0..n {
         for i in 0..n {
-            let (dx, dy) = f(x0 + sw * i as f64 / PROBE as f64, y0 + sh * j as f64 / PROBE as f64);
+            let (dx, dy) = f(
+                x0 + sw * i as f64 / PROBE as f64,
+                y0 + sh * j as f64 / PROBE as f64,
+            );
             pts.push([dx, dy]);
         }
     }
     let step = |a: [f64; 2], b: [f64; 2]| {
         let d = (b[0] - a[0]).hypot(b[1] - a[1]);
-        if d.is_finite() { d } else { 0.0 }
+        if d.is_finite() {
+            d
+        } else {
+            0.0
+        }
     };
     let (mut lu, mut lv) = (0.0f64, 0.0f64);
     for k in 0..n {
@@ -147,7 +174,13 @@ fn mapped_lengths(src_rect: Rect, f: &(dyn Fn(f64, f64) -> (f64, f64) + Sync)) -
 /// each triangle samples `src` (restricted to `src_rect`) through the barycentric
 /// interpolation of its source positions. Later triangles in `tris` draw over earlier ones (the
 /// order is the depth order). Output has `src`'s format with alpha added.
-pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2])], tris: &[[usize; 3]], interp: Interp) -> Surface {
+pub fn warp_triangles(
+    src: &Surface,
+    src_rect: Rect,
+    verts: &[([f64; 2], [f64; 2])],
+    tris: &[[usize; 3]],
+    interp: Interp,
+) -> Surface {
     let mut fmt = src.format();
     let converted;
     let src = if fmt.alpha {
@@ -161,7 +194,10 @@ pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2
     if src_rect.is_empty() || tris.is_empty() {
         return out;
     }
-    if verts.iter().any(|v| !v.0[0].is_finite() || !v.0[1].is_finite()) {
+    if verts
+        .iter()
+        .any(|v| !v.0[0].is_finite() || !v.0[1].is_finite())
+    {
         return out;
     }
     let lim = f64::from(1 << 20);
@@ -172,9 +208,18 @@ pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2
         x1 = x1.max(v.0[0]);
         y1 = y1.max(v.0[1]);
     }
-    let dst = Rect::new(x0.max(-lim).floor() as i32 - 1, y0.max(-lim).floor() as i32 - 1, x1.min(lim).ceil() as i32 + 1, y1.min(lim).ceil() as i32 + 1);
+    let dst = Rect::new(
+        x0.max(-lim).floor() as i32 - 1,
+        y0.max(-lim).floor() as i32 - 1,
+        x1.min(lim).ceil() as i32 + 1,
+        y1.min(lim).ceil() as i32 + 1,
+    );
     // Triangles: (vertex indices), binned per destination tile.
-    let tiles: Vec<Rect> = dst.tiles().map(|tc| tc.rect().intersect(&dst)).filter(|r| !r.is_empty()).collect();
+    let tiles: Vec<Rect> = dst
+        .tiles()
+        .map(|tc| tc.rect().intersect(&dst))
+        .filter(|r| !r.is_empty())
+        .collect();
     let mut bins: Vec<Vec<[usize; 3]>> = vec![Vec::new(); tiles.len()];
     let ts = rust_motion_geom::TILE_SIZE;
     // Bin origin on the tile grid (the first tile is clipped to `dst`, so its x0/y0 may not be).
@@ -182,7 +227,11 @@ pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2
     let ty0 = tiles.iter().map(|t| t.y0).min().unwrap_or(0).div_euclid(ts) * ts;
     let cols = tiles.iter().map(|t| (t.x0 - tx0) / ts).max().unwrap_or(0) as usize + 1;
     let grid_of = |t: &Rect| ((t.y0 - ty0) / ts) as usize * cols + ((t.x0 - tx0) / ts) as usize;
-    let mut lookup = vec![usize::MAX; cols * (tiles.iter().map(|t| (t.y0 - ty0) / ts).max().unwrap_or(0) as usize + 1)];
+    let mut lookup =
+        vec![
+            usize::MAX;
+            cols * (tiles.iter().map(|t| (t.y0 - ty0) / ts).max().unwrap_or(0) as usize + 1)
+        ];
     for (k, t) in tiles.iter().enumerate() {
         lookup[grid_of(t)] = k;
     }
@@ -192,8 +241,14 @@ pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2
         let by0 = ps.iter().map(|p| p[1]).fold(f64::MAX, f64::min).floor() as i32;
         let bx1 = ps.iter().map(|p| p[0]).fold(f64::MIN, f64::max).ceil() as i32;
         let by1 = ps.iter().map(|p| p[1]).fold(f64::MIN, f64::max).ceil() as i32;
-        let (cx0, cy0) = ((bx0.max(dst.x0) - tx0).div_euclid(ts), (by0.max(dst.y0) - ty0).div_euclid(ts));
-        let (cx1, cy1) = ((bx1.min(dst.x1 - 1) - tx0).div_euclid(ts), (by1.min(dst.y1 - 1) - ty0).div_euclid(ts));
+        let (cx0, cy0) = (
+            (bx0.max(dst.x0) - tx0).div_euclid(ts),
+            (by0.max(dst.y0) - ty0).div_euclid(ts),
+        );
+        let (cx1, cy1) = (
+            (bx1.min(dst.x1 - 1) - tx0).div_euclid(ts),
+            (by1.min(dst.y1 - 1) - ty0).div_euclid(ts),
+        );
         for cy in cy0.max(0)..=cy1 {
             for cx in cx0.max(0)..=cx1 {
                 let g = cy as usize * cols + cx as usize;
@@ -218,7 +273,13 @@ pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2
         // spans (an area average, as the transform path gets from its pre-reduction; a single
         // bicubic sample aliases thin lines when shrinking). The subsamples are bilinear: the
         // box does the filtering, and it is ~4x cheaper than bicubic at no loss.
-        let count = |j: [f64; 2]| if interp == Interp::Nearest { 1 } else { j[0].hypot(j[1]).round().clamp(1.0, MAX_SS) as usize };
+        let count = |j: [f64; 2]| {
+            if interp == Interp::Nearest {
+                1
+            } else {
+                j[0].hypot(j[1]).round().clamp(1.0, MAX_SS) as usize
+            }
+        };
         // Source position per destination pixel (NaN = not covered) and the triangle it came
         // from. Per triangle: its source step per destination pixel along x and y (`[dx_u, dx_v,
         // dy_u, dy_v]`, the inverse map's Jacobian, constant over a triangle; zero when
@@ -233,42 +294,79 @@ pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2
                 jac.push(([0.0; 4], 1, 1));
                 continue;
             }
-            let (d1, d2) = ([s1[0] - s0[0], s1[1] - s0[1]], [s2[0] - s0[0], s2[1] - s0[1]]);
-            let (l1x, l1y, l2x, l2y) = ((p2[1] - p0[1]) / det, (p0[0] - p2[0]) / det, (p0[1] - p1[1]) / det, (p1[0] - p0[0]) / det);
+            let (d1, d2) = (
+                [s1[0] - s0[0], s1[1] - s0[1]],
+                [s2[0] - s0[0], s2[1] - s0[1]],
+            );
+            let (l1x, l1y, l2x, l2y) = (
+                (p2[1] - p0[1]) / det,
+                (p0[0] - p2[0]) / det,
+                (p0[1] - p1[1]) / det,
+                (p1[0] - p0[0]) / det,
+            );
             // Capped, so a sliver triangle can't ask for an unbounded footprint.
             let cap = |j: [f64; 2]| {
                 let l = j[0].hypot(j[1]);
-                if l > MAX_SS { [j[0] * MAX_SS / l, j[1] * MAX_SS / l] } else { j }
+                if l > MAX_SS {
+                    [j[0] * MAX_SS / l, j[1] * MAX_SS / l]
+                } else {
+                    j
+                }
             };
             let jx = cap([l1x * d1[0] + l2x * d2[0], l1x * d1[1] + l2x * d2[1]]);
             let jy = cap([l1y * d1[0] + l2y * d2[0], l1y * d1[1] + l2y * d2[1]]);
             let (nx, ny) = (count(jx), count(jy));
-            jac.push(if nx * ny == 1 { ([0.0; 4], 1, 1) } else { ([jx[0], jx[1], jy[0], jy[1]], nx, ny) });
-            let bx0 = (p0[0].min(p1[0]).min(p2[0]) - 0.5).floor().max(f64::from(t.x0)) as i32;
-            let by0 = (p0[1].min(p1[1]).min(p2[1]) - 0.5).floor().max(f64::from(t.y0)) as i32;
-            let bx1 = (p0[0].max(p1[0]).max(p2[0]) + 0.5).ceil().min(f64::from(t.x1)) as i32;
-            let by1 = (p0[1].max(p1[1]).max(p2[1]) + 0.5).ceil().min(f64::from(t.y1)) as i32;
+            jac.push(if nx * ny == 1 {
+                ([0.0; 4], 1, 1)
+            } else {
+                ([jx[0], jx[1], jy[0], jy[1]], nx, ny)
+            });
+            let bx0 = (p0[0].min(p1[0]).min(p2[0]) - 0.5)
+                .floor()
+                .max(f64::from(t.x0)) as i32;
+            let by0 = (p0[1].min(p1[1]).min(p2[1]) - 0.5)
+                .floor()
+                .max(f64::from(t.y0)) as i32;
+            let bx1 = (p0[0].max(p1[0]).max(p2[0]) + 0.5)
+                .ceil()
+                .min(f64::from(t.x1)) as i32;
+            let by1 = (p0[1].max(p1[1]).max(p2[1]) + 0.5)
+                .ceil()
+                .min(f64::from(t.y1)) as i32;
             let eps = -1e-9;
             for y in by0..by1 {
                 let py = f64::from(y) + 0.5;
                 for x in bx0..bx1 {
                     let px = f64::from(x) + 0.5;
-                    let l1 = ((px - p0[0]) * (p2[1] - p0[1]) - (p2[0] - p0[0]) * (py - p0[1])) / det;
-                    let l2 = ((p1[0] - p0[0]) * (py - p0[1]) - (px - p0[0]) * (p1[1] - p0[1])) / det;
+                    let l1 =
+                        ((px - p0[0]) * (p2[1] - p0[1]) - (p2[0] - p0[0]) * (py - p0[1])) / det;
+                    let l2 =
+                        ((p1[0] - p0[0]) * (py - p0[1]) - (px - p0[0]) * (p1[1] - p0[1])) / det;
                     let l0 = 1.0 - l1 - l2;
                     if l0 < eps || l1 < eps || l2 < eps {
                         continue;
                     }
                     let o = (y - t.y0) as usize * w + (x - t.x0) as usize;
-                    uv[o] = [l0 * s0[0] + l1 * s1[0] + l2 * s2[0], l0 * s0[1] + l1 * s1[1] + l2 * s2[1]];
+                    uv[o] = [
+                        l0 * s0[0] + l1 * s1[0] + l2 * s2[0],
+                        l0 * s0[1] + l1 * s1[1] + l2 * s2[1],
+                    ];
                     owner[o] = k as u32;
                 }
             }
         }
         // Source footprint of the covered pixels, including the spread of their subsamples.
         let (mut fx0, mut fy0, mut fx1, mut fy1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
-        for (q, j) in uv.iter().zip(&owner).filter(|(q, _)| !q[0].is_nan()).map(|(q, &k)| (q, jac[k as usize].0)) {
-            let (ex, ey) = (0.5 * (j[0].abs() + j[2].abs()), 0.5 * (j[1].abs() + j[3].abs()));
+        for (q, j) in uv
+            .iter()
+            .zip(&owner)
+            .filter(|(q, _)| !q[0].is_nan())
+            .map(|(q, &k)| (q, jac[k as usize].0))
+        {
+            let (ex, ey) = (
+                0.5 * (j[0].abs() + j[2].abs()),
+                0.5 * (j[1].abs() + j[3].abs()),
+            );
             fx0 = fx0.min(q[0] - ex);
             fy0 = fy0.min(q[1] - ey);
             fx1 = fx1.max(q[0] + ex);
@@ -277,7 +375,13 @@ pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2
         if fx0 > fx1 {
             return None;
         }
-        let foot = Rect::new(fx0.floor() as i32 - 3, fy0.floor() as i32 - 3, fx1.ceil() as i32 + 3, fy1.ceil() as i32 + 3).intersect(&src_rect);
+        let foot = Rect::new(
+            fx0.floor() as i32 - 3,
+            fy0.floor() as i32 - 3,
+            fx1.ceil() as i32 + 3,
+            fy1.ceil() as i32 + 3,
+        )
+        .intersect(&src_rect);
         if foot.is_empty() || !src.has_tiles_in(foot) {
             return None;
         }
@@ -323,7 +427,13 @@ pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2
                 }
                 Interp::Bicubic => {
                     // Snap to the pixel grid when within float noise, so identity is exact.
-                    let snap = |t: f64| if (t - t.round()).abs() < 1e-7 { t.round() } else { t };
+                    let snap = |t: f64| {
+                        if (t - t.round()).abs() < 1e-7 {
+                            t.round()
+                        } else {
+                            t
+                        }
+                    };
                     let (u, v) = (snap(u), snap(v));
                     let (ix, iy) = (u.floor() as i32, v.floor() as i32);
                     let (wx, wy) = (bicubic(u - f64::from(ix)), bicubic(v - f64::from(iy)));
@@ -354,7 +464,12 @@ pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2
                     let t = (sy as f64 + 0.5) / ny as f64 - 0.5;
                     for sx in 0..nx {
                         let s = (sx as f64 + 0.5) / nx as f64 - 0.5;
-                        point(Interp::Bilinear, q[0] + s * j[0] + t * j[2] - 0.5, q[1] + s * j[1] + t * j[3] - 0.5, &mut one);
+                        point(
+                            Interp::Bilinear,
+                            q[0] + s * j[0] + t * j[2] - 0.5,
+                            q[1] + s * j[1] + t * j[3] - 0.5,
+                            &mut one,
+                        );
                         for (c, v) in acc.iter_mut().zip(&one).take(n) {
                             *c += v;
                         }
@@ -383,7 +498,11 @@ pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2
     #[cfg(not(target_arch = "wasm32"))]
     let done: Vec<(Rect, Vec<f32>)> = {
         use rayon::prelude::*;
-        tiles.par_iter().zip(bins.par_iter()).filter_map(work).collect()
+        tiles
+            .par_iter()
+            .zip(bins.par_iter())
+            .filter_map(work)
+            .collect()
     };
     #[cfg(target_arch = "wasm32")]
     let done: Vec<(Rect, Vec<f32>)> = tiles.iter().zip(bins.iter()).filter_map(work).collect();
@@ -397,7 +516,11 @@ pub fn warp_triangles(src: &Surface, src_rect: Rect, verts: &[([f64; 2], [f64; 2
 /// [`warp_mesh_surface`] for single-channel surfaces whose outside reads as their default value
 /// (layer masks, selections): the content is warped with alpha and flattened back onto the
 /// default.
-pub fn warp_mesh_gray(s: &Surface, f: &(dyn Fn(f64, f64) -> (f64, f64) + Sync), interp: Interp) -> Surface {
+pub fn warp_mesh_gray(
+    s: &Surface,
+    f: &(dyn Fn(f64, f64) -> (f64, f64) + Sync),
+    interp: Interp,
+) -> Surface {
     let default = s.default_pixel().first().copied().unwrap_or(0.0);
     let fmt = s.format();
     let src = s.content_bounds();
@@ -413,11 +536,19 @@ pub fn warp_mesh_gray(s: &Surface, f: &(dyn Fn(f64, f64) -> (f64, f64) + Sync), 
     // Clear the old region and write the warped one separately, as `warp_gray` does: one dense
     // `src ∪ warped` buffer grows with the square of how far a mesh moves the content (#995).
     // `Surface` is tile-sparse, so a distant region costs only its own tiles.
-    out.write_region(src, &vec![default; src.width() as usize * src.height() as usize]);
+    out.write_region(
+        src,
+        &vec![default; src.width() as usize * src.height() as usize],
+    );
     let b = w.content_bounds();
     if !b.is_empty() {
         let px = w.read_region(b);
-        let flat: Vec<f32> = px.as_chunks::<2>().0.iter().map(|p| p[0] * p[1] + default * (1.0 - p[1])).collect();
+        let flat: Vec<f32> = px
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|p| p[0] * p[1] + default * (1.0 - p[1]))
+            .collect();
         out.write_region(b, &flat);
     }
     out.prune();
@@ -459,8 +590,18 @@ mod tests {
             p[3]
         };
         // The band follows the arch: 40 px lower in the middle, about 36 px a third of the way in.
-        assert!(alpha(150, 60) > 0.99 && alpha(150, 20) < 0.01, "mid {} {}", alpha(150, 60), alpha(150, 20));
-        assert!(alpha(100, 55) > 0.99 && alpha(100, 20) < 0.01, "third {} {}", alpha(100, 55), alpha(100, 20));
+        assert!(
+            alpha(150, 60) > 0.99 && alpha(150, 20) < 0.01,
+            "mid {} {}",
+            alpha(150, 60),
+            alpha(150, 20)
+        );
+        assert!(
+            alpha(100, 55) > 0.99 && alpha(100, 20) < 0.01,
+            "third {} {}",
+            alpha(100, 55),
+            alpha(100, 20)
+        );
     }
 
     #[test]
@@ -473,9 +614,21 @@ mod tests {
             for d in [100_000.0, -100_000.0, 300.0] {
                 let out = warp_mesh_gray(&sel, &|x, y| (x + d, y + d), Interp::Bilinear);
                 let k = d as i32;
-                assert_eq!(out.content_bounds(), Rect::new(8 + k, 8 + k, 56 + k, 56 + k), "{sample:?} {d}");
-                assert_eq!(out.sample_channel(30 + k, 30 + k, 0), 1.0, "{sample:?} {d}: moved");
-                assert_eq!(out.sample_channel(30, 30, 0), 0.0, "{sample:?} {d}: old region cleared");
+                assert_eq!(
+                    out.content_bounds(),
+                    Rect::new(8 + k, 8 + k, 56 + k, 56 + k),
+                    "{sample:?} {d}"
+                );
+                assert_eq!(
+                    out.sample_channel(30 + k, 30 + k, 0),
+                    1.0,
+                    "{sample:?} {d}: moved"
+                );
+                assert_eq!(
+                    out.sample_channel(30, 30, 0),
+                    0.0,
+                    "{sample:?} {d}: old region cleared"
+                );
             }
         }
     }
@@ -485,13 +638,26 @@ mod tests {
         for s in [SampleType::U8, SampleType::U16, SampleType::F32] {
             let src = sample(s);
             let r = src.content_bounds();
-            let b = [f64::from(r.x0), f64::from(r.y0), f64::from(r.x1), f64::from(r.y1)];
-            for w in [Warp::none(b), Warp::custom(BezierMesh::identity(b, 1, 1), b), Warp::preset(WarpStyle::Arc, 0.0, b)] {
+            let b = [
+                f64::from(r.x0),
+                f64::from(r.y0),
+                f64::from(r.x1),
+                f64::from(r.y1),
+            ];
+            for w in [
+                Warp::none(b),
+                Warp::custom(BezierMesh::identity(b, 1, 1), b),
+                Warp::preset(WarpStyle::Arc, 0.0, b),
+            ] {
                 for interp in [Interp::Nearest, Interp::Bilinear, Interp::Bicubic] {
                     let out = warp_mesh_surface(&src, r, &|x, y| w.map(x, y), interp);
                     assert_eq!(out.content_bounds(), r, "{s:?} {interp:?}");
                     let (a, o) = (src.read_region(r), out.read_region(r));
-                    let worst = a.iter().zip(&o).map(|(x, y)| (x - y).abs()).fold(0.0f32, f32::max);
+                    let worst = a
+                        .iter()
+                        .zip(&o)
+                        .map(|(x, y)| (x - y).abs())
+                        .fold(0.0f32, f32::max);
                     assert!(worst <= 1.0 / 255.0, "{s:?} {interp:?}: {worst}");
                 }
             }
@@ -506,16 +672,30 @@ mod tests {
         assert_eq!(out.content_bounds(), r.translate(10, -2));
         assert_eq!(out.pixel(20, 10), src.pixel(10, 12));
         // Arc 50 % (Photoshop): the bottom corners keep their pixels, the top rises and spreads.
-        let b = [f64::from(r.x0), f64::from(r.y0), f64::from(r.x1), f64::from(r.y1)];
+        let b = [
+            f64::from(r.x0),
+            f64::from(r.y0),
+            f64::from(r.x1),
+            f64::from(r.y1),
+        ];
         let w = Warp::preset(WarpStyle::Arc, 50.0, b);
         let arc = warp_mesh_surface(&src, r, &|x, y| w.map(x, y), Interp::Bilinear);
         let corner = w.map(f64::from(r.x0), f64::from(r.y1));
-        assert!((corner.0 - f64::from(r.x0)).abs() < 1e-9 && (corner.1 - f64::from(r.y1)).abs() < 1e-9, "{corner:?}");
+        assert!(
+            (corner.0 - f64::from(r.x0)).abs() < 1e-9 && (corner.1 - f64::from(r.y1)).abs() < 1e-9,
+            "{corner:?}"
+        );
         let (ex, ey) = w.map(f64::from(r.x0) + 2.5, f64::from(r.y0) + 2.5);
         let e = arc.pixel(ex.floor() as i32, ey.floor() as i32);
-        assert!(e[3] > 0.2, "a point near the top-left corner lands at its mapped position: {e:?}");
+        assert!(
+            e[3] > 0.2,
+            "a point near the top-left corner lands at its mapped position: {e:?}"
+        );
         let c = arc.content_bounds();
-        assert!(c.y0 < r.y0 - 2 && c.x0 < r.x0 && c.x1 > r.x1, "the top rises and spreads past the box: {c:?}");
+        assert!(
+            c.y0 < r.y0 - 2 && c.x0 < r.x0 && c.x1 > r.x1,
+            "the top rises and spreads past the box: {c:?}"
+        );
     }
 
     #[test]
@@ -526,21 +706,37 @@ mod tests {
         for s in [SampleType::U8, SampleType::U16, SampleType::F32] {
             let (w, h) = (400, 320);
             let mut src = Surface::new(PixelFormat::new(ColorMode::Rgb, s, true));
-            let px: Vec<f32> =
-                (0..h).flat_map(|y| (0..w).map(move |x| if x % 4 == 0 || y % 4 == 0 { 0.0 } else { 1.0 })).flat_map(|v| [v, v, v, 1.0]).collect();
+            let px: Vec<f32> = (0..h)
+                .flat_map(|y| (0..w).map(move |x| if x % 4 == 0 || y % 4 == 0 { 0.0 } else { 1.0 }))
+                .flat_map(|v| [v, v, v, 1.0])
+                .collect();
             let r = Rect::new(0, 0, w, h);
             src.write_region(r, &px);
             let warp = Warp::preset(WarpStyle::Arc, 15.0, [0.0, 0.0, f64::from(w), f64::from(h)]);
-            let t = rust_motion_geom::Affine { m: [0.2, 0.0, 0.0, 0.2, 7.0, 5.0] };
+            let t = rust_motion_geom::Affine {
+                m: [0.2, 0.0, 0.0, 0.2, 7.0, 5.0],
+            };
             let out = place_source(&src, r, &t, Some(&warp)).unwrap();
             let b = out.content_bounds();
             let o = out.read_region(b);
-            let opaque: Vec<f32> = o.as_chunks::<4>().0.iter().filter(|p| p[3] >= 0.999).map(|p| p[0]).collect();
+            let opaque: Vec<f32> = o
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|p| p[3] >= 0.999)
+                .map(|p| p[0])
+                .collect();
             assert!(opaque.len() > 2000, "{s:?}: {} opaque pixels", opaque.len());
-            let worst = opaque.iter().map(|v| (v - 0.5625).abs()).fold(0.0f32, f32::max);
+            let worst = opaque
+                .iter()
+                .map(|v| (v - 0.5625).abs())
+                .fold(0.0f32, f32::max);
             // An area average over the ~5 px footprint still covers one or two lines per axis
             // (up to 0.2 off); point sampling lands wholly on or off a line (up to 0.56 off).
-            assert!(worst < 0.25, "{s:?}: worst deviation from the area average {worst}");
+            assert!(
+                worst < 0.25,
+                "{s:?}: worst deviation from the area average {worst}"
+            );
         }
     }
 

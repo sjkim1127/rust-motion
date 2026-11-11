@@ -38,14 +38,29 @@ impl Knot {
     /// A corner knot with retracted handles.
     pub fn corner(x: f64, y: f64) -> Self {
         let p = Point::new(x, y);
-        Knot { anchor: p, in_ctrl: p, out_ctrl: p, smooth: false }
+        Knot {
+            anchor: p,
+            in_ctrl: p,
+            out_ctrl: p,
+            smooth: false,
+        }
     }
     /// A smooth knot with explicit handles.
     pub fn smooth(anchor: Point, in_ctrl: Point, out_ctrl: Point) -> Self {
-        Knot { anchor, in_ctrl, out_ctrl, smooth: true }
+        Knot {
+            anchor,
+            in_ctrl,
+            out_ctrl,
+            smooth: true,
+        }
     }
     pub fn transform(&self, a: &Affine) -> Knot {
-        Knot { anchor: a.apply(self.anchor), in_ctrl: a.apply(self.in_ctrl), out_ctrl: a.apply(self.out_ctrl), smooth: self.smooth }
+        Knot {
+            anchor: a.apply(self.anchor),
+            in_ctrl: a.apply(self.in_ctrl),
+            out_ctrl: a.apply(self.out_ctrl),
+            smooth: self.smooth,
+        }
     }
 }
 
@@ -86,11 +101,18 @@ pub struct Subpath {
 impl Subpath {
     /// Closed polygon through `pts` (corner knots).
     pub fn polygon(pts: &[(f64, f64)]) -> Self {
-        Subpath { closed: true, knots: pts.iter().map(|&(x, y)| Knot::corner(x, y)).collect(), op: PathOp::Combine }
+        Subpath {
+            closed: true,
+            knots: pts.iter().map(|&(x, y)| Knot::corner(x, y)).collect(),
+            op: PathOp::Combine,
+        }
     }
     /// Open polyline through `pts`.
     pub fn polyline(pts: &[(f64, f64)]) -> Self {
-        Subpath { closed: false, ..Self::polygon(pts) }
+        Subpath {
+            closed: false,
+            ..Self::polygon(pts)
+        }
     }
     pub fn with_op(mut self, op: PathOp) -> Self {
         self.op = op;
@@ -126,7 +148,11 @@ pub struct Path {
 
 impl Path {
     pub fn new(subpaths: Vec<Subpath>) -> Self {
-        Path { subpaths, fill_rule: FillRule::NonZero, inverted: false }
+        Path {
+            subpaths,
+            fill_rule: FillRule::NonZero,
+            inverted: false,
+        }
     }
     pub fn is_empty(&self) -> bool {
         self.subpaths.iter().all(|s| s.knots.is_empty())
@@ -134,7 +160,11 @@ impl Path {
     /// The operation actually applied for subpath `i`: Photoshop applies the first subpath as
     /// "combine" whatever its stored operation (a lone "intersect" shape still draws).
     pub fn effective_op(&self, i: usize) -> PathOp {
-        if i == 0 { PathOp::Combine } else { self.subpaths[i].op }
+        if i == 0 {
+            PathOp::Combine
+        } else {
+            self.subpaths[i].op
+        }
     }
     /// Shape components: ranges of subpaths filled together (a subpath starts a new component
     /// unless it is a [`PathOp::Join`]), each folded in with its first subpath's
@@ -160,9 +190,15 @@ impl Path {
     }
     /// Bounds of all anchors and control points `(x0, y0, x1, y1)` (a superset of the curve).
     pub fn control_bounds(&self) -> Option<(f64, f64, f64, f64)> {
-        let mut it = self.subpaths.iter().flat_map(|s| s.knots.iter()).flat_map(|k| [k.anchor, k.in_ctrl, k.out_ctrl]);
+        let mut it = self
+            .subpaths
+            .iter()
+            .flat_map(|s| s.knots.iter())
+            .flat_map(|k| [k.anchor, k.in_ctrl, k.out_ctrl]);
         let first = it.next()?;
-        Some(it.fold((first.x, first.y, first.x, first.y), |b, p| (b.0.min(p.x), b.1.min(p.y), b.2.max(p.x), b.3.max(p.y))))
+        Some(it.fold((first.x, first.y, first.x, first.y), |b, p| {
+            (b.0.min(p.x), b.1.min(p.y), b.2.max(p.x), b.3.max(p.y))
+        }))
     }
 }
 
@@ -198,7 +234,13 @@ pub struct VectorMask {
 
 impl VectorMask {
     pub fn new(path: Path) -> Self {
-        VectorMask { path, enabled: true, linked: true, density: 1.0, feather: 0.0 }
+        VectorMask {
+            path,
+            enabled: true,
+            linked: true,
+            density: 1.0,
+            feather: 0.0,
+        }
     }
 }
 
@@ -279,8 +321,15 @@ impl ShapeStroke {
         if !self.dash_offset.is_finite() || self.dash_offset.abs() > 1_000_000.0 {
             return Err("dash offset must be finite and within ±1000000 widths");
         }
-        if self.dashes.len() > 32 || self.dashes.iter().any(|d| !d.is_finite() || !(0.0..=10000.0).contains(d)) {
-            return Err("dash pattern must contain at most 32 finite lengths between 0 and 10000 widths");
+        if self.dashes.len() > 32
+            || self
+                .dashes
+                .iter()
+                .any(|d| !d.is_finite() || !(0.0..=10000.0).contains(d))
+        {
+            return Err(
+                "dash pattern must contain at most 32 finite lengths between 0 and 10000 widths",
+            );
         }
         if !self.dashes.is_empty() && self.dashes.iter().sum::<f32>() < 0.01 {
             return Err("dash pattern total must be at least 0.01 widths");
@@ -345,7 +394,12 @@ mod tests {
 
     #[test]
     fn first_op_is_combine_and_bounds() {
-        let p = Path::new(vec![Subpath::polygon(&[(1.0, 2.0), (5.0, 2.0), (5.0, 9.0)]).with_op(PathOp::Intersect)]);
+        let p = Path::new(vec![Subpath::polygon(&[
+            (1.0, 2.0),
+            (5.0, 2.0),
+            (5.0, 9.0),
+        ])
+        .with_op(PathOp::Intersect)]);
         assert_eq!(p.effective_op(0), PathOp::Combine);
         assert_eq!(p.control_bounds(), Some((1.0, 2.0, 5.0, 9.0)));
         let t = p.transform(&Affine::translate(1.0, 1.0));
@@ -354,9 +408,22 @@ mod tests {
 
     #[test]
     fn serde_roundtrip() {
-        let p = Path::new(vec![Subpath::polygon(&[(0.0, 0.0), (3.0, 4.0)]).with_op(PathOp::Exclude)]);
-        let s = ShapeStroke { dashes: vec![2.0, 1.0], ..Default::default() };
-        let j = serde_json::to_string(&(&p, &s, &LiveShape::Rect { rect: [0.0; 4], radii: [1.0; 4] })).unwrap();
+        let p = Path::new(vec![
+            Subpath::polygon(&[(0.0, 0.0), (3.0, 4.0)]).with_op(PathOp::Exclude)
+        ]);
+        let s = ShapeStroke {
+            dashes: vec![2.0, 1.0],
+            ..Default::default()
+        };
+        let j = serde_json::to_string(&(
+            &p,
+            &s,
+            &LiveShape::Rect {
+                rect: [0.0; 4],
+                radii: [1.0; 4],
+            },
+        ))
+        .unwrap();
         let back: (Path, ShapeStroke, LiveShape) = serde_json::from_str(&j).unwrap();
         assert_eq!(back.0, p);
         assert_eq!(back.1, s);

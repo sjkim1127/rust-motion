@@ -66,7 +66,11 @@ impl Stop {
     pub fn half_point(&self) -> f64 {
         let k = 1.0 + 8.0 * (self.bias - 0.5).abs();
         let h = 0.5f64.powf(1.0 / k);
-        if self.bias >= 0.5 { h } else { 1.0 - h }
+        if self.bias >= 0.5 {
+            h
+        } else {
+            1.0 - h
+        }
     }
 }
 
@@ -129,7 +133,13 @@ const MAX_STOPS: usize = 1024;
 fn floats(v: &Value) -> Option<Vec<f64>> {
     match v {
         Value::Floats(f) => Some(f.clone()),
-        Value::Bytes(b) if b.len() % 4 == 0 => Some(b.as_chunks::<4>().0.iter().map(|c| f64::from(f32::from_le_bytes(*c))).collect()),
+        Value::Bytes(b) if b.len() % 4 == 0 => Some(
+            b.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| f64::from(f32::from_le_bytes(*c)))
+                .collect(),
+        ),
         _ => None,
     }
 }
@@ -145,31 +155,66 @@ pub(crate) fn color(r: &mut Reader, id: ObjId) -> Option<Color> {
     Some(match &class.0.to_be_bytes() {
         b"RGBA" => {
             let v = col()?;
-            Color::Rgb { r: *v.first()?, g: *v.get(1)?, b: *v.get(2)?, a: v.get(3)?.clamp(0.0, 1.0) }
+            Color::Rgb {
+                r: *v.first()?,
+                g: *v.get(1)?,
+                b: *v.get(2)?,
+                a: v.get(3)?.clamp(0.0, 1.0),
+            }
         }
         b"HSLA" => {
             let v = col()?;
             let (r2, g, b) = hsl(*v.first()?, *v.get(1)?, *v.get(2)?);
-            Color::Rgb { r: r2, g, b, a: v.get(3)?.clamp(0.0, 1.0) }
+            Color::Rgb {
+                r: r2,
+                g,
+                b,
+                a: v.get(3)?.clamp(0.0, 1.0),
+            }
         }
         b"CMYK" => {
             let v = col()?;
-            Color::Cmyk { c: *v.first()?, m: *v.get(1)?, y: *v.get(2)?, k: *v.get(3)?, a: v.get(4)?.clamp(0.0, 1.0) }
+            Color::Cmyk {
+                c: *v.first()?,
+                m: *v.get(1)?,
+                y: *v.get(2)?,
+                k: *v.get(3)?,
+                a: v.get(4)?.clamp(0.0, 1.0),
+            }
         }
         b"GRAY" => {
             let v = col()?;
-            Color::Gray { v: *v.first()?, a: v.get(1)?.clamp(0.0, 1.0) }
+            Color::Gray {
+                v: *v.first()?,
+                a: v.get(1)?.clamp(0.0, 1.0),
+            }
         }
         b"LABA" => {
             let b = s.bytes(id, b"_col")?;
-            let u = |i: usize| -> Option<f64> { Some(f64::from(u16::from_le_bytes([*b.get(2 * i)?, *b.get(2 * i + 1)?])) / 65535.0) };
-            Color::Lab { l: 100.0 * u(0)?, a: 255.0 * u(1)? - 128.0, b: 255.0 * u(2)? - 128.0, alpha: u(3)? }
+            let u = |i: usize| -> Option<f64> {
+                Some(f64::from(u16::from_le_bytes([*b.get(2 * i)?, *b.get(2 * i + 1)?])) / 65535.0)
+            };
+            Color::Lab {
+                l: 100.0 * u(0)?,
+                a: 255.0 * u(1)? - 128.0,
+                b: 255.0 * u(2)? - 128.0,
+                alpha: u(3)?,
+            }
         }
         b"Pant" => {
             r.warn("spot colours (imported as their RGB equivalent)");
-            return s.obj(id, b"srgb").and_then(|c| color(r, c)).or_else(|| s.obj(id, b"base").and_then(|c| color(r, c)));
+            return s
+                .obj(id, b"srgb")
+                .and_then(|c| color(r, c))
+                .or_else(|| s.obj(id, b"base").and_then(|c| color(r, c)));
         }
-        b"RegC" => Color::Cmyk { c: 1.0, m: 1.0, y: 1.0, k: 1.0, a: 1.0 },
+        b"RegC" => Color::Cmyk {
+            c: 1.0,
+            m: 1.0,
+            y: 1.0,
+            k: 1.0,
+            a: 1.0,
+        },
         _ => {
             r.warn("colours in an unknown model");
             return None;
@@ -198,7 +243,10 @@ fn hsl(h: f64, s: f64, l: f64) -> (f64, f64, f64) {
 pub(crate) fn descriptor(r: &mut Reader, id: ObjId, local: Affine) -> Option<Paint> {
     let s = r.s;
     let (fill, unit) = if s.is(id, b"FDsc") {
-        let unit = s.floats::<6>(id, b"FDeX").map(Affine::from_xfrm).unwrap_or(Affine::IDENTITY);
+        let unit = s
+            .floats::<6>(id, b"FDeX")
+            .map(Affine::from_xfrm)
+            .unwrap_or(Affine::IDENTITY);
         (s.obj(id, b"FDeF")?, unit)
     } else {
         (id, Affine::IDENTITY)
@@ -225,14 +273,32 @@ pub(crate) fn descriptor(r: &mut Reader, id: ObjId, local: Affine) -> Option<Pai
             let mut stops = Vec::new();
             for (c, p) in cols.iter().zip(&posn).take(MAX_STOPS) {
                 let color = color(r, *c)?;
-                let offset = p.first().copied().filter(|v| v.is_finite()).unwrap_or(0.0).clamp(0.0, 1.0);
-                let bias = p.get(1).copied().filter(|v| v.is_finite()).unwrap_or(0.5).clamp(0.0, 1.0);
-                stops.push(Stop { offset, color, bias });
+                let offset = p
+                    .first()
+                    .copied()
+                    .filter(|v| v.is_finite())
+                    .unwrap_or(0.0)
+                    .clamp(0.0, 1.0);
+                let bias = p
+                    .get(1)
+                    .copied()
+                    .filter(|v| v.is_finite())
+                    .unwrap_or(0.5)
+                    .clamp(0.0, 1.0);
+                stops.push(Stop {
+                    offset,
+                    color,
+                    bias,
+                });
             }
             if stops.is_empty() {
                 return Some(Paint::None);
             }
-            Some(Paint::Gradient(Gradient { kind, stops, transform: unit.then(local) }))
+            Some(Paint::Gradient(Gradient {
+                kind,
+                stops,
+                transform: unit.then(local),
+            }))
         }
         b"FilB" => {
             r.warn("bitmap and pattern fills (left empty)");
@@ -247,14 +313,25 @@ pub(crate) fn descriptor(r: &mut Reader, id: ObjId, local: Affine) -> Option<Pai
 
 fn current(r: &Reader, id: ObjId, list: &[u8; 4], index: &[u8; 4]) -> Option<ObjId> {
     let items = r.s.objs(id, list);
-    let i = r.s.int(id, index).and_then(|i| usize::try_from(i).ok()).unwrap_or(0);
+    let i =
+        r.s.int(id, index)
+            .and_then(|i| usize::try_from(i).ok())
+            .unwrap_or(0);
     items.get(i).or_else(|| items.first()).copied()
 }
 
 /// The fills of `list` (artboard backgrounds use `BFFl`).
-pub(crate) fn fills(r: &mut Reader, id: ObjId, local: Affine, list: &[u8; 4]) -> Vec<crate::paint::Paint> {
+pub(crate) fn fills(
+    r: &mut Reader,
+    id: ObjId,
+    local: Affine,
+    list: &[u8; 4],
+) -> Vec<crate::paint::Paint> {
     let d = current(r, id, list, b"BFCr").or_else(|| r.s.obj(id, b"BFil"));
-    d.and_then(|d| descriptor(r, d, local)).filter(|p| *p != Paint::None).into_iter().collect()
+    d.and_then(|d| descriptor(r, d, local))
+        .filter(|p| *p != Paint::None)
+        .into_iter()
+        .collect()
 }
 
 /// A node's fill and stroke. `local` maps the node's space to document pixels.
@@ -271,7 +348,10 @@ pub(crate) fn node_paint(r: &mut Reader, id: ObjId, local: Affine) -> (Vec<Paint
         r.warn("transparency gradients (imported without them)");
     }
     let (pen, style) = if s.field(id, b"LIFl").is_some() {
-        (current(r, id, b"LIFl", b"LICr"), current(r, id, b"LILn", b"LICr"))
+        (
+            current(r, id, b"LIFl", b"LICr"),
+            current(r, id, b"LILn", b"LICr"),
+        )
     } else {
         (s.obj(id, b"PFil"), s.obj(id, b"LSty"))
     };
@@ -289,17 +369,34 @@ fn stroke(r: &mut Reader, pen: ObjId, ldsc: ObjId, local: Affine, behind: bool) 
     if paint == Paint::None {
         return None;
     }
-    let lsty = if s.is(ldsc, b"LDsc") { s.obj(ldsc, b"LDeL")? } else { ldsc };
+    let lsty = if s.is(ldsc, b"LDsc") {
+        s.obj(ldsc, b"LDeL")?
+    } else {
+        ldsc
+    };
     let weight = s.f64(lsty, b"Wght").filter(|w| *w > 0.0 && *w < 1e7)?;
     // "Scale with object": the weight follows the object's transform; otherwise it is absolute.
     let scales = s.bool(ldsc, b"LDSc").unwrap_or(true);
-    let width = if scales { weight * local.scale() } else { weight };
+    let width = if scales {
+        weight * local.scale()
+    } else {
+        weight
+    };
     let data = s.bytes(lsty, b"Data").unwrap_or_default();
-    let miter_limit = data.get(0..8).and_then(|b| b.try_into().ok()).map(f64::from_le_bytes).filter(|m| m.is_finite() && *m >= 1.0).unwrap_or(4.0);
+    let miter_limit = data
+        .get(0..8)
+        .and_then(|b| b.try_into().ok())
+        .map(f64::from_le_bytes)
+        .filter(|m| m.is_finite() && *m >= 1.0)
+        .unwrap_or(4.0);
     // Cap and join bytes are only partly understood: (0, 0) is butt/miter in every clean sample;
     // (2, 2) ends plain lines square and brush lines round; joins import round, which never
     // looks wrong.
-    let (cap, join) = match (data.get(8).copied(), data.get(9).copied(), data.get(10).copied()) {
+    let (cap, join) = match (
+        data.get(8).copied(),
+        data.get(9).copied(),
+        data.get(10).copied(),
+    ) {
         (Some(0), Some(0), _) => (Cap::Butt, Join::Miter),
         (Some(0), Some(_), _) => (Cap::Butt, Join::Round),
         (Some(2), Some(2), Some(3)) => (Cap::Round, Join::Round),
@@ -313,17 +410,42 @@ fn stroke(r: &mut Reader, pen: ObjId, ldsc: ObjId, local: Affine, behind: bool) 
     };
     let dash = match s.field(lsty, b"Patn") {
         Some(Value::Array(a)) if data.get(10) == Some(&2) || !a.is_empty() => {
-            let mut v: Vec<f64> = a.iter().filter_map(|x| if let Value::Float(f) = x { Some(*f) } else { None }).collect();
+            let mut v: Vec<f64> = a
+                .iter()
+                .filter_map(|x| {
+                    if let Value::Float(f) = x {
+                        Some(*f)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             while v.len() >= 2 && v.iter().rev().take(2).all(|x| *x == 0.0) {
                 v.truncate(v.len() - 2);
             }
-            let valid = !v.is_empty() && v.iter().all(|x| x.is_finite() && *x >= 0.0) && v.iter().any(|x| *x > 0.0);
-            valid.then(|| (v.iter().map(|x| x * width).collect(), s.f64(lsty, b"Phse").unwrap_or(0.0) * width))
+            let valid = !v.is_empty()
+                && v.iter().all(|x| x.is_finite() && *x >= 0.0)
+                && v.iter().any(|x| *x > 0.0);
+            valid.then(|| {
+                (
+                    v.iter().map(|x| x * width).collect(),
+                    s.f64(lsty, b"Phse").unwrap_or(0.0) * width,
+                )
+            })
         }
         _ => None,
     };
     if s.obj(lsty, b"Brus").is_some() || s.obj(ldsc, b"LDeP").is_some() {
         r.warn("brush and pressure strokes (imported as plain strokes)");
     }
-    Some(Stroke { paint, width, cap, join, miter_limit, align, dash, behind })
+    Some(Stroke {
+        paint,
+        width,
+        cap,
+        join,
+        miter_limit,
+        align,
+        dash,
+        behind,
+    })
 }

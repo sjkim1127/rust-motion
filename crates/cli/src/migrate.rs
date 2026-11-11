@@ -1,7 +1,7 @@
 //! Remotion TSX to Rust Motion Migration Engine (`rust-motion migrate`).
 //!
 //! Automatically transpiles Remotion React components (.tsx) into native Rust Motion code:
-//! - Rust RSX components (`.rs`)
+//! - Rust SceneEmitter components (`.rs`)
 //! - Sandboxed dynamic Rhai scripts (`.rhai`)
 //! - Python SDK scripts (`.py`)
 
@@ -21,7 +21,7 @@ impl std::str::FromStr for MigrationTarget {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
-            "rust" | "rs" | "dioxus" => Ok(Self::Rust),
+            "rust" | "rs" => Ok(Self::Rust),
             "rhai" => Ok(Self::Rhai),
             "python" | "py" => Ok(Self::Python),
             other => Err(format!(
@@ -93,19 +93,26 @@ fn transpile_to_rust(
     out.push_str(
         "//! ⚠️ EXPERIMENTAL SCAFFOLD: Automatically generated from Remotion component.\n",
     );
-    out.push_str("//! Please review and verify types, layout properties, and styling.\n\n");
-    out.push_str("use dioxus::prelude::*;\n");
-    out.push_str("use rust_motion_core::{\n");
-    out.push_str("    interpolate, interpolate_colors, random, spring, use_current_frame,\n");
-    out.push_str(
-        "    use_video_config, AbsoluteFill, ExtrapolateType, InterpolateOptions, Loop,\n",
-    );
-    out.push_str("    Sequence, Series, SeriesSequence, SpringConfig, SpringOptions,\n");
-    out.push_str("};\n\n");
+    out.push_str("//! Pure Rust SceneEmitter for high-performance headless rendering.\n\n");
+    out.push_str("use rust_motion_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};\n");
+    out.push_str("use rust_motion_animation::spring::{spring, SpringConfig};\n");
+    out.push_str("use rust_motion_composition::{\n");
+    out.push_str("    CompositionError, SceneEmitter, SceneFrameContext, SceneLoop, SceneSequence, SceneSeries,\n");
+    out.push_str("};\n");
+    out.push_str("use rust_motion_rasterizer::{Scene, SceneNode};\n");
+    out.push_str("use serde_json::Value;\n\n");
 
     writeln!(out, "/// Scaffolded from Remotion component `{comp_name}`.").unwrap();
-    out.push_str("#[component]\n");
-    writeln!(out, "pub fn {comp_name}() -> Element {{").unwrap();
+    writeln!(out, "#[derive(Default)]").unwrap();
+    writeln!(out, "pub struct {comp_name};").unwrap();
+    out.push_str("\n");
+    writeln!(out, "impl SceneEmitter for {comp_name} {{").unwrap();
+    out.push_str("    fn emit(\n");
+    out.push_str("        &self,\n");
+    out.push_str("        context: SceneFrameContext,\n");
+    out.push_str("        _props: &Value,\n");
+    out.push_str("        scene: &mut Scene,\n");
+    out.push_str("    ) -> Result<(), CompositionError> {\n");
 
     let mut inside_return = false;
     let mut return_body = Vec::new();
@@ -115,12 +122,12 @@ fn transpile_to_rust(
 
         // Detect hooks
         if trimmed.contains("useCurrentFrame()") {
-            out.push_str("    let frame = use_current_frame();\n");
+            out.push_str("        let frame = context.frame;\n");
             stats.hooks_converted += 1;
             continue;
         }
         if trimmed.contains("useVideoConfig()") {
-            out.push_str("    let config = use_video_config();\n");
+            out.push_str("        let config = &context.composition;\n");
             stats.hooks_converted += 1;
             continue;
         }
@@ -128,7 +135,7 @@ fn transpile_to_rust(
         // Detect interpolate(...)
         if trimmed.contains("interpolate(") {
             let rust_interpolate = convert_interpolate_call_to_rust(trimmed);
-            writeln!(out, "    {rust_interpolate}").unwrap();
+            writeln!(out, "        {rust_interpolate}").unwrap();
             stats.interpolations_converted += 1;
             continue;
         }
@@ -136,7 +143,7 @@ fn transpile_to_rust(
         // Detect spring(...)
         if trimmed.contains("spring(") {
             let rust_spring = convert_spring_call_to_rust(trimmed);
-            writeln!(out, "    {rust_spring}").unwrap();
+            writeln!(out, "        {rust_spring}").unwrap();
             stats.springs_converted += 1;
             continue;
         }
@@ -155,17 +162,16 @@ fn transpile_to_rust(
         }
     }
 
-    out.push_str("\n    rsx! {\n");
+    out.push_str("\n        // Render Scene Hierarchy\n");
     if return_body.is_empty() {
-        out.push_str("        AbsoluteFill {\n");
-        out.push_str("            div { \"Transpiled Video Composition\" }\n");
-        out.push_str("        }\n");
+        out.push_str("        // Scene nodes will be appended to `scene`\n");
     } else {
         for body_line in return_body {
-            let converted = convert_jsx_line_to_rsx(body_line, stats);
+            let converted = convert_jsx_line_to_scene(body_line, stats);
             writeln!(out, "        {converted}").unwrap();
         }
     }
+    out.push_str("        Ok(())\n");
     out.push_str("    }\n");
     out.push_str("}\n");
 
@@ -269,7 +275,7 @@ fn convert_interpolate_call_to_rust(line: &str) -> String {
     };
 
     let options = if trimmed.contains("clamp") {
-        "InterpolateOptions { extrapolate_left: ExtrapolateType::Clamp, extrapolate_right: ExtrapolateType::Clamp }"
+        "InterpolateOptions { extrapolate_left: ExtrapolateType::Clamp, extrapolate_right: ExtrapolateType::Clamp, ..Default::default() }"
     } else {
         "InterpolateOptions::default()"
     };
@@ -325,48 +331,44 @@ fn convert_spring_call_to_rust(line: &str) -> String {
     format!("let {var_name} = spring(frame, config.fps, SpringConfig::default());")
 }
 
-fn convert_jsx_line_to_rsx(line: &str, stats: &mut MigrationStats) -> String {
+fn convert_jsx_line_to_scene(line: &str, stats: &mut MigrationStats) -> String {
     let trimmed = line.trim();
     if trimmed.contains("<Sequence") {
         stats.sequences_converted += 1;
-        return trimmed.replace("<Sequence", "Sequence {").replace('>', "");
+        return format!("// Sequence block: {trimmed}");
     }
     if trimmed.contains("</Sequence>") {
-        return "}".to_string();
+        return "// End Sequence".to_string();
     }
     if trimmed.contains("<Loop") {
         stats.loops_converted += 1;
-        return trimmed.replace("<Loop", "Loop {").replace('>', "");
+        return format!("// Loop block: {trimmed}");
     }
     if trimmed.contains("</Loop>") {
-        return "}".to_string();
+        return "// End Loop".to_string();
     }
     if trimmed.contains("<Series.Sequence") || trimmed.contains("<SeriesSequence") {
         stats.series_converted += 1;
-        return trimmed
-            .replace("<Series.Sequence", "SeriesSequence {")
-            .replace('>', "");
+        return format!("// Series sequence: {trimmed}");
     }
     if trimmed.contains("</Series.Sequence>") || trimmed.contains("</SeriesSequence>") {
-        return "}".to_string();
+        return "// End Series sequence".to_string();
     }
     if trimmed.contains("<Series") {
         stats.series_converted += 1;
-        return trimmed.replace("<Series", "Series {").replace('>', "");
+        return format!("// Series block: {trimmed}");
     }
     if trimmed.contains("</Series>") {
-        return "}".to_string();
+        return "// End Series".to_string();
     }
     if trimmed.contains("<AbsoluteFill") {
-        return trimmed
-            .replace("<AbsoluteFill", "AbsoluteFill {")
-            .replace('>', "");
+        return "// AbsoluteFill layer".to_string();
     }
     if trimmed.contains("</AbsoluteFill>") {
-        return "}".to_string();
+        return "// End AbsoluteFill layer".to_string();
     }
 
-    trimmed.to_string()
+    format!("// {trimmed}")
 }
 
 #[cfg(test)]
@@ -399,11 +401,11 @@ mod tests {
         "#;
 
         let (rust_code, stats) = transpile_remotion(tsx, MigrationTarget::Rust).unwrap();
-        assert!(rust_code.contains("pub fn IntroVideo() -> Element"));
-        assert!(rust_code.contains("let frame = use_current_frame();"));
-        assert!(rust_code.contains("let config = use_video_config();"));
-        assert!(rust_code.contains("Sequence {"));
-        assert!(rust_code.contains("Loop {"));
+        assert!(rust_code.contains("impl SceneEmitter for IntroVideo"));
+        assert!(rust_code.contains("let frame = context.frame;"));
+        assert!(rust_code.contains("let config = &context.composition;"));
+        assert!(rust_code.contains("Sequence block"));
+        assert!(rust_code.contains("Loop block"));
         assert_eq!(stats.hooks_converted, 2);
         assert_eq!(stats.interpolations_converted, 1);
         assert_eq!(stats.springs_converted, 1);

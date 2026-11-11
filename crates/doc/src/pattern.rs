@@ -28,7 +28,9 @@ pub struct Pattern {
 
 /// 64-bit FNV-1a, used for deterministic pattern ids.
 fn fnv(h: u64, bytes: &[u8]) -> u64 {
-    bytes.iter().fold(h, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3))
+    bytes
+        .iter()
+        .fold(h, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3))
 }
 
 impl Pattern {
@@ -44,9 +46,25 @@ impl Pattern {
         for v in &px {
             h1 = fnv(h1, &v.to_bits().to_le_bytes());
         }
-        let h2 = fnv(h1 ^ 0x9e37_79b9_7f4a_7c15, format!("{:?}", surface.format()).as_bytes());
-        let id = format!("{:08x}-{:04x}-{:04x}-{:04x}-{:012x}", (h1 >> 32) as u32, (h1 >> 16) as u16, h1 as u16, (h2 >> 48) as u16, h2 & 0xffff_ffff_ffff);
-        Pattern { id, name, width, height, surface }
+        let h2 = fnv(
+            h1 ^ 0x9e37_79b9_7f4a_7c15,
+            format!("{:?}", surface.format()).as_bytes(),
+        );
+        let id = format!(
+            "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+            (h1 >> 32) as u32,
+            (h1 >> 16) as u16,
+            h1 as u16,
+            (h2 >> 48) as u16,
+            h2 & 0xffff_ffff_ffff
+        );
+        Pattern {
+            id,
+            name,
+            width,
+            height,
+            surface,
+        }
     }
 
     /// The name shown in UIs: Photoshop's localisation keys (`$$$/Patterns/…=Water`) show
@@ -95,7 +113,11 @@ pub fn find<'a>(patterns: &'a [Pattern], id: &str, name: &str) -> Option<&'a Pat
     if name.is_empty() {
         return None;
     }
-    patterns.iter().find(|p| p.name == name).or_else(|| patterns.iter().find(|p| p.display_name().eq_ignore_ascii_case(display_name(name))))
+    patterns.iter().find(|p| p.name == name).or_else(|| {
+        patterns
+            .iter()
+            .find(|p| p.display_name().eq_ignore_ascii_case(display_name(name)))
+    })
 }
 
 #[cfg(test)]

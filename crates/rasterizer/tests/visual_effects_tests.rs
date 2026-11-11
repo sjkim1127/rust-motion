@@ -507,7 +507,10 @@ fn test_optical_glow_filter_halo() {
     let img = backend.render_frame(&scene, &frame_cfg(64, 64)).unwrap();
     // Pixel outside core (e.g. at (16, 32)) should receive optical glow
     let halo = img.get_pixel(16, 32);
-    assert!(halo[0] > 0, "optical glow halo should extend outside core rect");
+    assert!(
+        halo[0] > 0,
+        "optical glow halo should extend outside core rect"
+    );
 }
 
 #[test]
@@ -576,4 +579,3 @@ fn test_fractal_noise_node_rendering() {
     let p0 = img.get_pixel(0, 0);
     assert_eq!(p0[3], 255);
 }
-

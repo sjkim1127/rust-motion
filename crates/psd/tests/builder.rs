@@ -6,7 +6,16 @@ fn rgba_pattern(w: usize, h: usize, seed: u8) -> Vec<u8> {
     let mut v = Vec::with_capacity(w * h * 4);
     for y in 0..h {
         for x in 0..w {
-            v.extend_from_slice(&[(x * 10) as u8 ^ seed, (y * 20) as u8, (x + y) as u8 ^ seed, if (x + y) % 3 == 0 { 0 } else { 200 + (x % 50) as u8 }]);
+            v.extend_from_slice(&[
+                (x * 10) as u8 ^ seed,
+                (y * 20) as u8,
+                (x + y) as u8 ^ seed,
+                if (x + y) % 3 == 0 {
+                    0
+                } else {
+                    200 + (x % 50) as u8
+                },
+            ]);
         }
     }
     v
@@ -26,7 +35,14 @@ macro_rules! rgba8_case {
         fn $name() {
             let px = rgba_pattern(7, 5, 3);
             let mut b = PsdBuilder::new(10, 8).version($ver).compression($comp);
-            b.push_layer(LayerSpec::new("L", -2, 1, 7, 5, PixelData::Rgba8(px.clone())));
+            b.push_layer(LayerSpec::new(
+                "L",
+                -2,
+                1,
+                7,
+                5,
+                PixelData::Rgba8(px.clone()),
+            ));
             let f = built(&b);
             let img = f.layer(0).unwrap().rgba8().unwrap();
             assert_eq!((img.left, img.top, img.width, img.height), (-2, 1, 7, 5));
@@ -50,12 +66,28 @@ fn rgba16_layers_scale_to_8bit() {
     let px: Vec<u16> = (0..n * 4).map(|i| (i as u16).wrapping_mul(5003)).collect();
     for comp in Compression::ALL {
         let mut b = PsdBuilder::new(4, 3).depth(16).compression(comp);
-        b.push_layer(LayerSpec::new("x", 0, 0, 4, 3, PixelData::Rgba16(px.clone())));
+        b.push_layer(LayerSpec::new(
+            "x",
+            0,
+            0,
+            4,
+            3,
+            PixelData::Rgba16(px.clone()),
+        ));
         let f = built(&b);
-        assert!(matches!(f.layer_info_placement, LayerInfoPlacement::GlobalBlock { key: [b'L', b'r', b'1', b'6'], .. }));
+        assert!(matches!(
+            f.layer_info_placement,
+            LayerInfoPlacement::GlobalBlock {
+                key: [b'L', b'r', b'1', b'6'],
+                ..
+            }
+        ));
         let l = f.layer(0).unwrap();
         let img = l.rgba8().unwrap();
-        let expect: Vec<u8> = px.iter().map(|&v| ((u32::from(v) * 255 + 32767) / 65535) as u8).collect();
+        let expect: Vec<u8> = px
+            .iter()
+            .map(|&v| ((u32::from(v) * 255 + 32767) / 65535) as u8)
+            .collect();
         assert_eq!(img.data, expect);
         // Raw 16-bit samples are exact.
         let red = pixels::samples_u16(&l.channel_bytes(0).unwrap());
@@ -67,13 +99,23 @@ fn rgba16_layers_scale_to_8bit() {
 fn grayscale_builder() {
     let px: Vec<u8> = (0..6).flat_map(|i| [i * 40, 255 - i]).collect();
     let mut b = PsdBuilder::new(3, 2).color_mode(ColorMode::Grayscale);
-    b.push_layer(LayerSpec::new("g", 0, 0, 3, 2, PixelData::GrayA8(px.clone())));
+    b.push_layer(LayerSpec::new(
+        "g",
+        0,
+        0,
+        3,
+        2,
+        PixelData::GrayA8(px.clone()),
+    ));
     b.composite(PixelData::GrayA8(px.clone()));
     let f = built(&b);
     assert_eq!(f.header.color_mode, ColorMode::Grayscale);
     let img = f.layer(0).unwrap().rgba8().unwrap();
     for i in 0..6 {
-        assert_eq!(&img.data[i * 4..i * 4 + 4], &[px[i * 2], px[i * 2], px[i * 2], px[i * 2 + 1]]);
+        assert_eq!(
+            &img.data[i * 4..i * 4 + 4],
+            &[px[i * 2], px[i * 2], px[i * 2], px[i * 2 + 1]]
+        );
     }
     let c = f.composite_rgba8().unwrap();
     assert_eq!(c.data, img.data);
@@ -83,10 +125,15 @@ fn grayscale_builder() {
 #[test]
 fn grayscale16_builder() {
     let px: Vec<u16> = vec![0, 65535, 32768, 65535];
-    let mut b = PsdBuilder::new(2, 1).color_mode(ColorMode::Grayscale).depth(16);
+    let mut b = PsdBuilder::new(2, 1)
+        .color_mode(ColorMode::Grayscale)
+        .depth(16);
     b.push_layer(LayerSpec::new("g", 0, 0, 2, 1, PixelData::GrayA16(px)));
     let f = built(&b);
-    assert_eq!(f.layer(0).unwrap().rgba8().unwrap().data, vec![0, 0, 0, 255, 128, 128, 128, 255]);
+    assert_eq!(
+        f.layer(0).unwrap().rgba8().unwrap().data,
+        vec![0, 0, 0, 255, 128, 128, 128, 255]
+    );
 }
 
 #[test]
@@ -94,15 +141,28 @@ fn cmyk_builder_inverts_ink() {
     // One pixel: C=0 M=0 Y=0 K=0 ink (white), one: K=255 (black).
     let px = vec![0, 0, 0, 0, 255, 0, 0, 0, 255, 255];
     let mut b = PsdBuilder::new(2, 1).color_mode(ColorMode::Cmyk);
-    b.push_layer(LayerSpec::new("c", 0, 0, 2, 1, PixelData::Cmyka8(px.clone())));
+    b.push_layer(LayerSpec::new(
+        "c",
+        0,
+        0,
+        2,
+        1,
+        PixelData::Cmyka8(px.clone()),
+    ));
     b.composite(PixelData::Cmyka8(px));
     let f = built(&b);
     assert_eq!(f.header.channels, 4);
     let l = f.layer(0).unwrap();
     assert_eq!(l.channel_bytes(0).unwrap(), vec![255, 255]); // stored inverted
     assert_eq!(l.channel_bytes(3).unwrap(), vec![255, 0]);
-    assert_eq!(l.rgba8().unwrap().data, vec![255, 255, 255, 255, 0, 0, 0, 255]);
-    assert_eq!(f.composite_rgba8().unwrap().data, vec![255, 255, 255, 255, 0, 0, 0, 255]);
+    assert_eq!(
+        l.rgba8().unwrap().data,
+        vec![255, 255, 255, 255, 0, 0, 0, 255]
+    );
+    assert_eq!(
+        f.composite_rgba8().unwrap().data,
+        vec![255, 255, 255, 255, 0, 0, 0, 255]
+    );
 }
 
 #[test]
@@ -111,7 +171,10 @@ fn cmyk16_builder() {
     let mut b = PsdBuilder::new(1, 1).color_mode(ColorMode::Cmyk).depth(16);
     b.push_layer(LayerSpec::new("c", 0, 0, 1, 1, PixelData::Cmyka16(px)));
     let f = built(&b);
-    assert_eq!(f.layer(0).unwrap().rgba8().unwrap().data, vec![255, 255, 255, 255]);
+    assert_eq!(
+        f.layer(0).unwrap().rgba8().unwrap().data,
+        vec![255, 255, 255, 255]
+    );
 }
 
 #[test]
@@ -135,14 +198,24 @@ fn layer_properties_roundtrip() {
     assert!(!r.is_visible());
     assert_eq!(r.clipping, 1);
     assert_eq!(r.layer_id(), Some(1));
-    assert_eq!(r.block(b"lclr").unwrap().parsed(), Some(Ok(BlockData::SheetColor(4))));
+    assert_eq!(
+        r.block(b"lclr").unwrap().parsed(),
+        Some(Ok(BlockData::SheetColor(4)))
+    );
 }
 
 #[test]
 fn all_blend_modes_via_builder() {
     let mut b = PsdBuilder::new(1, 1);
     for m in BlendMode::ALL {
-        let mut s = LayerSpec::new(format!("{m:?}"), 0, 0, 1, 1, PixelData::Rgba8(vec![1, 2, 3, 4]));
+        let mut s = LayerSpec::new(
+            format!("{m:?}"),
+            0,
+            0,
+            1,
+            1,
+            PixelData::Rgba8(vec![1, 2, 3, 4]),
+        );
         s.blend_mode = m;
         b.push_layer(s);
     }
@@ -155,7 +228,12 @@ fn all_blend_modes_via_builder() {
 fn masks_roundtrip() {
     let mask_px: Vec<u8> = (0..12).map(|i| i * 20).collect();
     let mut s = LayerSpec::new("m", 0, 0, 3, 3, PixelData::Rgba8(vec![100; 36]));
-    s.mask = Some(MaskSpec { rect: Rect::from_xywh(-1, 0, 4, 3), data: mask_px.clone(), default_color: 255, disabled: true });
+    s.mask = Some(MaskSpec {
+        rect: Rect::from_xywh(-1, 0, 4, 3),
+        data: mask_px.clone(),
+        default_color: 255,
+        disabled: true,
+    });
     for depth in [8u16, 16] {
         let mut b = PsdBuilder::new(3, 3).depth(depth);
         let mut s = s.clone();
@@ -171,14 +249,26 @@ fn masks_roundtrip() {
         assert_eq!(m.default_value, 255);
         assert!(l.record.layer_mask().unwrap().disabled());
         // Mask is not applied to rgba8.
-        assert!(l.rgba8().unwrap().data.chunks(4).all(|p| p == [100, 100, 100, 100]));
+        assert!(l
+            .rgba8()
+            .unwrap()
+            .data
+            .chunks(4)
+            .all(|p| p == [100, 100, 100, 100]));
     }
 }
 
 #[test]
 fn no_mask_returns_none() {
     let mut b = PsdBuilder::new(1, 1);
-    b.push_layer(LayerSpec::new("x", 0, 0, 1, 1, PixelData::Rgba8(vec![0; 4])));
+    b.push_layer(LayerSpec::new(
+        "x",
+        0,
+        0,
+        1,
+        1,
+        PixelData::Rgba8(vec![0; 4]),
+    ));
     let f = built(&b);
     assert!(f.layer(0).unwrap().user_mask().is_none());
 }
@@ -186,7 +276,14 @@ fn no_mask_returns_none() {
 #[test]
 fn empty_layer() {
     let mut b = PsdBuilder::new(2, 2);
-    b.push_layer(LayerSpec::new("empty", 0, 0, 0, 0, PixelData::Rgba8(vec![])));
+    b.push_layer(LayerSpec::new(
+        "empty",
+        0,
+        0,
+        0,
+        0,
+        PixelData::Rgba8(vec![]),
+    ));
     let f = built(&b);
     let img = f.layer(0).unwrap().rgba8().unwrap();
     assert_eq!((img.width, img.height), (0, 0));
@@ -197,14 +294,24 @@ fn empty_layer() {
 fn composite_supplied_with_alpha() {
     let px = vec![255, 0, 0, 128, 17, 89, 203, 0];
     let mut b = PsdBuilder::new(2, 1);
-    b.push_layer(LayerSpec::new("x", 0, 0, 2, 1, PixelData::Rgba8(px.clone())));
+    b.push_layer(LayerSpec::new(
+        "x",
+        0,
+        0,
+        2,
+        1,
+        PixelData::Rgba8(px.clone()),
+    ));
     b.composite(PixelData::Rgba8(px.clone()));
     let f = built(&b);
     assert_eq!(f.header.channels, 4);
     assert!(f.layer_info.as_ref().unwrap().merged_alpha);
     assert!(f.merged_has_alpha());
     assert_eq!(f.has_real_merged_data(), Some(true));
-    assert_eq!(f.decode_merged().unwrap(), [255, 17, 127, 89, 127, 203, 128, 0]);
+    assert_eq!(
+        f.decode_merged().unwrap(),
+        [255, 17, 127, 89, 127, 203, 128, 0]
+    );
     assert_eq!(f.composite_rgba8().unwrap().data, px);
 }
 
@@ -225,13 +332,23 @@ fn composite_16bit() {
     let mut b = PsdBuilder::new(2, 1).depth(16);
     b.composite(PixelData::Rgba16(px));
     let f = built(&b);
-    assert_eq!(f.composite_rgba8().unwrap().data, vec![255, 0, 0, 255, 0, 255, 0, 128]);
+    assert_eq!(
+        f.composite_rgba8().unwrap().data,
+        vec![255, 0, 0, 255, 0, 255, 0, 128]
+    );
 }
 
 #[test]
 fn placeholder_composite_is_flagged() {
     let mut b = PsdBuilder::new(2, 2);
-    b.push_layer(LayerSpec::new("x", 0, 0, 1, 1, PixelData::Rgba8(vec![0; 4])));
+    b.push_layer(LayerSpec::new(
+        "x",
+        0,
+        0,
+        1,
+        1,
+        PixelData::Rgba8(vec![0; 4]),
+    ));
     let f = built(&b);
     assert_eq!(f.has_real_merged_data(), Some(false));
     assert!(f.composite_rgba8().unwrap().data.iter().all(|&v| v == 255));
@@ -239,7 +356,9 @@ fn placeholder_composite_is_flagged() {
 
 #[test]
 fn builder_resources() {
-    let b = PsdBuilder::new(1, 1).resolution(300.0).icc_profile(vec![1, 2, 3]);
+    let b = PsdBuilder::new(1, 1)
+        .resolution(300.0)
+        .icc_profile(vec![1, 2, 3]);
     let f = built(&b);
     assert!((f.resolution().unwrap().v_res() - 300.0).abs() < 1e-9);
     assert_eq!(f.icc_profile(), Some(&[1u8, 2, 3][..]));
@@ -248,10 +367,24 @@ fn builder_resources() {
 #[test]
 fn builder_errors() {
     let mut b = PsdBuilder::new(2, 2);
-    b.push_layer(LayerSpec::new("bad", 0, 0, 2, 2, PixelData::Rgba8(vec![0; 3])));
+    b.push_layer(LayerSpec::new(
+        "bad",
+        0,
+        0,
+        2,
+        2,
+        PixelData::Rgba8(vec![0; 3]),
+    ));
     assert!(b.build().is_err());
     let mut b = PsdBuilder::new(2, 2);
-    b.push_layer(LayerSpec::new("wrong fmt", 0, 0, 1, 1, PixelData::GrayA8(vec![0; 2])));
+    b.push_layer(LayerSpec::new(
+        "wrong fmt",
+        0,
+        0,
+        1,
+        1,
+        PixelData::GrayA8(vec![0; 2]),
+    ));
     assert!(b.build().is_err());
     let mut b = PsdBuilder::new(2, 2);
     b.begin_group(GroupSpec::new("open"));
@@ -259,13 +392,21 @@ fn builder_errors() {
     let mut b = PsdBuilder::new(2, 2);
     assert!(b.end_group().is_err());
     assert!(PsdBuilder::new(1, 1).depth(32).build().is_err());
-    assert!(PsdBuilder::new(1, 1).color_mode(ColorMode::Lab).build().is_err());
+    assert!(PsdBuilder::new(1, 1)
+        .color_mode(ColorMode::Lab)
+        .build()
+        .is_err());
     let mut b = PsdBuilder::new(2, 2);
     b.composite(PixelData::Rgba8(vec![0; 4]));
     assert!(b.build().is_err());
     let mut b = PsdBuilder::new(2, 2);
     let mut s = LayerSpec::new("m", 0, 0, 1, 1, PixelData::Rgba8(vec![0; 4]));
-    s.mask = Some(MaskSpec { rect: Rect::from_xywh(0, 0, 2, 2), data: vec![0; 3], default_color: 0, disabled: false });
+    s.mask = Some(MaskSpec {
+        rect: Rect::from_xywh(0, 0, 2, 2),
+        data: vec![0; 3],
+        default_color: 0,
+        disabled: false,
+    });
     b.push_layer(s);
     assert!(b.build().is_err());
 }
@@ -273,8 +414,20 @@ fn builder_errors() {
 #[test]
 fn group_properties() {
     let mut b = PsdBuilder::new(1, 1);
-    b.begin_group(GroupSpec { blend_mode: BlendMode::Multiply, opacity: 77, visible: false, ..GroupSpec::new("G") });
-    b.push_layer(LayerSpec::new("x", 0, 0, 1, 1, PixelData::Rgba8(vec![0; 4])));
+    b.begin_group(GroupSpec {
+        blend_mode: BlendMode::Multiply,
+        opacity: 77,
+        visible: false,
+        ..GroupSpec::new("G")
+    });
+    b.push_layer(LayerSpec::new(
+        "x",
+        0,
+        0,
+        1,
+        1,
+        PixelData::Rgba8(vec![0; 4]),
+    ));
     b.end_group().unwrap();
     let f = built(&b);
     let g = &f.layers()[2];
@@ -289,7 +442,9 @@ fn group_properties() {
 
 #[test]
 fn psb_builder_large_canvas_header() {
-    let b = PsdBuilder::new(40_000, 1).version(Version::Psb).compression(Compression::Rle);
+    let b = PsdBuilder::new(40_000, 1)
+        .version(Version::Psb)
+        .compression(Compression::Rle);
     let f = built(&b);
     assert_eq!(f.header.width, 40_000);
     assert!(f.validate().is_ok());
@@ -299,11 +454,21 @@ fn psb_builder_large_canvas_header() {
 fn iter_layers_indices() {
     let mut b = PsdBuilder::new(1, 1);
     for i in 0..3 {
-        b.push_layer(LayerSpec::new(format!("l{i}"), 0, 0, 1, 1, PixelData::Rgba8(vec![0; 4])));
+        b.push_layer(LayerSpec::new(
+            format!("l{i}"),
+            0,
+            0,
+            1,
+            1,
+            PixelData::Rgba8(vec![0; 4]),
+        ));
     }
     let f = built(&b);
     let v: Vec<_> = f.iter_layers().map(|l| (l.index, l.name())).collect();
-    assert_eq!(v, vec![(0, "l0".into()), (1, "l1".into()), (2, "l2".into())]);
+    assert_eq!(
+        v,
+        vec![(0, "l0".into()), (1, "l1".into()), (2, "l2".into())]
+    );
     assert!(f.layer(3).is_none());
     assert_eq!(f.layer(0).unwrap().version(), Version::Psd);
 }

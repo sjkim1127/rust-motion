@@ -1,10 +1,6 @@
-//! `<Callout>` speech bubble shape component and path generator.
+//! Speech bubble callout shape path generator.
 
-#[cfg(feature = "dioxus")]
-use crate::render_svg::RenderSvg;
 use crate::shape_output::ShapeOutput;
-#[cfg(feature = "dioxus")]
-use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Direction in which the callout pointer/tail points.
@@ -19,39 +15,6 @@ pub enum CalloutDirection {
     Left,
     /// Pointer extends rightwards from the right edge.
     Right,
-}
-
-/// Props for the `<Callout>` shape component.
-#[cfg(feature = "dioxus")]
-#[derive(Props, Clone, PartialEq)]
-pub struct CalloutProps {
-    /// Bounding width of the callout body rectangle in pixels.
-    #[props(default = 200.0)]
-    pub width: f64,
-    /// Bounding height of the callout body rectangle in pixels.
-    #[props(default = 120.0)]
-    pub height: f64,
-    /// Length of the pointer/tail in pixels.
-    #[props(default = 30.0)]
-    pub pointer_length: f64,
-    /// Direction that the pointer extends towards.
-    #[props(default = CalloutDirection::Down)]
-    pub pointer_direction: CalloutDirection,
-    /// Fill color.
-    #[props(default = "#ffffff".to_string())]
-    pub fill: String,
-    /// Stroke color.
-    #[props(default = "none".to_string())]
-    pub stroke: String,
-    /// Stroke width in pixels.
-    #[props(default = 0.0)]
-    pub stroke_width: f64,
-    /// Opacity (0.0 to 1.0).
-    #[props(default = 1.0)]
-    pub opacity: f64,
-    /// Custom CSS styles.
-    #[props(default)]
-    pub style: String,
 }
 
 /// Generates parametric SVG path data and metadata for a speech bubble callout.
@@ -144,31 +107,6 @@ pub fn make_callout(
                 total_h,
                 format!("{} {}", ptr_len + w / 2.0, h / 2.0),
             )
-        }
-    }
-}
-
-/// Renders a procedural SVG Callout.
-#[cfg(feature = "dioxus")]
-#[component]
-pub fn Callout(props: CalloutProps) -> Element {
-    let shape = make_callout(
-        props.width,
-        props.height,
-        props.pointer_length,
-        props.pointer_direction,
-    );
-
-    rsx! {
-        RenderSvg {
-            path: shape.path,
-            width: shape.width,
-            height: shape.height,
-            fill: props.fill,
-            stroke: props.stroke,
-            stroke_width: props.stroke_width,
-            opacity: props.opacity,
-            style: props.style,
         }
     }
 }

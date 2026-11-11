@@ -144,8 +144,10 @@ impl FaceDetector {
 
                     // Typical face aspect ratio is 0.6..1.4, with minimum size
                     if (0.5..=1.6).contains(&aspect) && bw >= 24 && bh >= 24 {
-                        let density = count as f32 / ((max_x - min_x + 1) * (max_y - min_y + 1)) as f32;
-                        let score = (density * 0.7 + (1.0 - (aspect - 0.85).abs()) * 0.3).clamp(0.0, 1.0);
+                        let density =
+                            count as f32 / ((max_x - min_x + 1) * (max_y - min_y + 1)) as f32;
+                        let score =
+                            (density * 0.7 + (1.0 - (aspect - 0.85).abs()) * 0.3).clamp(0.0, 1.0);
 
                         if score >= min_score {
                             let fx = (min_x * scale) as f32 / w as f32;
@@ -234,7 +236,9 @@ impl VideoMatting {
         // Sample border pixels
         for x in 0..w {
             for y in [0, h - 1] {
-                let px = pixmap.pixel(x as u32, y as u32).unwrap_or(PremultipliedColorU8::TRANSPARENT);
+                let px = pixmap
+                    .pixel(x as u32, y as u32)
+                    .unwrap_or(PremultipliedColorU8::TRANSPARENT);
                 bg_r += px.red() as f32;
                 bg_g += px.green() as f32;
                 bg_b += px.blue() as f32;
@@ -243,7 +247,9 @@ impl VideoMatting {
         }
         for y in 1..h - 1 {
             for x in [0, w - 1] {
-                let px = pixmap.pixel(x as u32, y as u32).unwrap_or(PremultipliedColorU8::TRANSPARENT);
+                let px = pixmap
+                    .pixel(x as u32, y as u32)
+                    .unwrap_or(PremultipliedColorU8::TRANSPARENT);
                 bg_r += px.red() as f32;
                 bg_g += px.green() as f32;
                 bg_b += px.blue() as f32;
@@ -261,7 +267,9 @@ impl VideoMatting {
 
         for y in 0..h {
             for x in 0..w {
-                let px = pixmap.pixel(x as u32, y as u32).unwrap_or(PremultipliedColorU8::TRANSPARENT);
+                let px = pixmap
+                    .pixel(x as u32, y as u32)
+                    .unwrap_or(PremultipliedColorU8::TRANSPARENT);
                 let diff_r = px.red() as f32 - bg_r;
                 let diff_g = px.green() as f32 - bg_g;
                 let diff_b = px.blue() as f32 - bg_b;
@@ -314,7 +322,11 @@ impl VideoMatting {
         for (i, px) in pixmap.pixels_mut().iter_mut().enumerate() {
             let m = matte[i] as f32 / 255.0;
             let a = (px.alpha() as f32 * m).round().min(255.0) as u8;
-            let inv_a = if px.alpha() > 0 { 1.0 / px.alpha() as f32 } else { 0.0 };
+            let inv_a = if px.alpha() > 0 {
+                1.0 / px.alpha() as f32
+            } else {
+                0.0
+            };
             let r = (px.red() as f32 * inv_a * a as f32).round().min(255.0) as u8;
             let g = (px.green() as f32 * inv_a * a as f32).round().min(255.0) as u8;
             let b = (px.blue() as f32 * inv_a * a as f32).round().min(255.0) as u8;
@@ -390,7 +402,12 @@ pub struct TemporalDenoiser;
 
 impl TemporalDenoiser {
     /// Denoise current frame using temporal history buffer.
-    pub fn denoise(current: &mut Pixmap, prev_frame: Option<&Pixmap>, strength: f32, motion_threshold: f32) {
+    pub fn denoise(
+        current: &mut Pixmap,
+        prev_frame: Option<&Pixmap>,
+        strength: f32,
+        motion_threshold: f32,
+    ) {
         let Some(prev) = prev_frame else {
             return;
         };
@@ -421,10 +438,14 @@ impl TemporalDenoiser {
                 s
             };
 
-            let nr = (c_px.red() as f32 * (1.0 - weight) + p_px.red() as f32 * weight).round() as u8;
-            let ng = (c_px.green() as f32 * (1.0 - weight) + p_px.green() as f32 * weight).round() as u8;
-            let nb = (c_px.blue() as f32 * (1.0 - weight) + p_px.blue() as f32 * weight).round() as u8;
-            let na = (c_px.alpha() as f32 * (1.0 - weight) + p_px.alpha() as f32 * weight).round() as u8;
+            let nr =
+                (c_px.red() as f32 * (1.0 - weight) + p_px.red() as f32 * weight).round() as u8;
+            let ng =
+                (c_px.green() as f32 * (1.0 - weight) + p_px.green() as f32 * weight).round() as u8;
+            let nb =
+                (c_px.blue() as f32 * (1.0 - weight) + p_px.blue() as f32 * weight).round() as u8;
+            let na =
+                (c_px.alpha() as f32 * (1.0 - weight) + p_px.alpha() as f32 * weight).round() as u8;
 
             if let Some(c) = PremultipliedColorU8::from_rgba(nr, ng, nb, na) {
                 current.pixels_mut()[idx] = c;

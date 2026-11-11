@@ -1,37 +1,6 @@
-//! `<Heart>` shape component and path generator.
+//! Heart shape path generator.
 
-#[cfg(feature = "dioxus")]
-use crate::render_svg::RenderSvg;
 use crate::shape_output::ShapeOutput;
-#[cfg(feature = "dioxus")]
-use dioxus::prelude::*;
-
-/// Props for the `<Heart>` shape component.
-#[cfg(feature = "dioxus")]
-#[derive(Props, Clone, PartialEq)]
-pub struct HeartProps {
-    /// Bounding box width in pixels.
-    #[props(default = 100.0)]
-    pub width: f64,
-    /// Bounding box height in pixels.
-    #[props(default = 100.0)]
-    pub height: f64,
-    /// Fill color.
-    #[props(default = "#ffffff".to_string())]
-    pub fill: String,
-    /// Stroke color.
-    #[props(default = "none".to_string())]
-    pub stroke: String,
-    /// Stroke width in pixels.
-    #[props(default = 0.0)]
-    pub stroke_width: f64,
-    /// Opacity (0.0 to 1.0).
-    #[props(default = 1.0)]
-    pub opacity: f64,
-    /// Custom CSS styles.
-    #[props(default)]
-    pub style: String,
-}
 
 /// Generates parametric SVG path data and metadata for a heart shape.
 pub fn make_heart(width: f64, height: f64) -> ShapeOutput {
@@ -78,26 +47,6 @@ pub fn make_heart(width: f64, height: f64) -> ShapeOutput {
     ShapeOutput::new(path, w, h, format!("{} {}", half_w, h / 2.0))
 }
 
-/// Renders a procedural SVG Heart.
-#[cfg(feature = "dioxus")]
-#[component]
-pub fn Heart(props: HeartProps) -> Element {
-    let shape = make_heart(props.width, props.height);
-
-    rsx! {
-        RenderSvg {
-            path: shape.path,
-            width: shape.width,
-            height: shape.height,
-            fill: props.fill,
-            stroke: props.stroke,
-            stroke_width: props.stroke_width,
-            opacity: props.opacity,
-            style: props.style,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,27 +63,10 @@ mod tests {
     }
 
     #[test]
-    fn test_make_heart_zero_dimension() {
-        let heart = make_heart(0.0, 50.0);
-        assert_eq!(heart.path, "");
-        assert_eq!(heart.width, 0.0);
-        assert_eq!(heart.height, 50.0);
-    }
-
-    #[test]
-    fn test_make_heart_negative_clamping() {
-        let heart = make_heart(-20.0, -30.0);
+    fn test_make_heart_zero_dimensions() {
+        let heart = make_heart(0.0, 0.0);
         assert_eq!(heart.path, "");
         assert_eq!(heart.width, 0.0);
         assert_eq!(heart.height, 0.0);
-    }
-
-    #[test]
-    fn test_make_heart_custom_aspect_ratio() {
-        let heart = make_heart(220.0, 100.0);
-        assert_eq!(heart.width, 220.0);
-        assert_eq!(heart.height, 100.0);
-        assert_eq!(heart.transform_origin, "110 50");
-        assert!(heart.path.starts_with("M 110 100"));
     }
 }

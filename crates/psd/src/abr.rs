@@ -33,11 +33,11 @@
 //! is still readable. [`write_v12`] and [`write_v6`] produce files in the same layouts (used by
 //! the tests and fuzz seeds; exporting brushes reuses them).
 
-use crate::compression::{Compression, PlaneLayout, decode_planes, encode_planes};
+use crate::compression::{decode_planes, encode_planes, Compression, PlaneLayout};
 use crate::descriptor::{Descriptor, Value, VersionedDescriptor};
 use crate::error::{PsdError, Result};
 use crate::header::Version;
-use crate::patterns::{PatternBudget, PsdPattern, parse_pattern_block_with, write_pattern_block};
+use crate::patterns::{parse_pattern_block_with, write_pattern_block, PatternBudget, PsdPattern};
 
 /// Largest sampled tip edge accepted (Photoshop's own limit is 5000 px).
 pub const MAX_EDGE: u32 = 8192;
@@ -65,7 +65,12 @@ impl AbrSample {
     /// Samples as 0..1 paint amounts.
     pub fn to_unit(&self) -> Vec<f32> {
         if self.depth == 16 {
-            self.data.as_chunks::<2>().0.iter().map(|c| f32::from(u16::from_be_bytes(*c)) / 65535.0).collect()
+            self.data
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| f32::from(u16::from_be_bytes(*c)) / 65535.0)
+                .collect()
         } else {
             self.data.iter().map(|&v| f32::from(v) / 255.0).collect()
         }
@@ -139,8 +144,14 @@ impl<'a> Rd<'a> {
         self.b.len().saturating_sub(self.p)
     }
     fn take(&mut self, n: usize) -> Result<&'a [u8]> {
-        let end = self.p.checked_add(n).ok_or(PsdError::LimitExceeded("abr length overflow"))?;
-        let s = self.b.get(self.p..end).ok_or(PsdError::UnexpectedEof { offset: self.p, needed: end.saturating_sub(self.b.len()) })?;
+        let end = self
+            .p
+            .checked_add(n)
+            .ok_or(PsdError::LimitExceeded("abr length overflow"))?;
+        let s = self.b.get(self.p..end).ok_or(PsdError::UnexpectedEof {
+            offset: self.p,
+            needed: end.saturating_sub(self.b.len()),
+        })?;
         self.p = end;
         Ok(s)
     }
@@ -172,7 +183,9 @@ struct Budget(usize);
 
 impl Budget {
     fn spend(&mut self, n: usize) -> Result<()> {
-        self.0 = self.0.checked_sub(n).ok_or(PsdError::LimitExceeded("abr samples exceed MAX_TOTAL_BYTES"))?;
+        self.0 = self.0.checked_sub(n).ok_or(PsdError::LimitExceeded(
+            "abr samples exceed MAX_TOTAL_BYTES",
+        ))?;
         Ok(())
     }
 }
@@ -197,13 +210,29 @@ fn read_sample_body(r: &mut Rd, id: String, budget: &mut Budget) -> Result<AbrSa
     let compression = match comp {
         0 => Compression::Raw,
         1 => Compression::Rle,
-        c => return Err(PsdError::Unsupported(format!("brush sample compression {c}"))),
+        c => {
+            return Err(PsdError::Unsupported(format!(
+                "brush sample compression {c}"
+            )))
+        }
     };
-    let layout = PlaneLayout { planes: 1, width: w as usize, height: h as usize, depth, version: Version::Psd };
+    let layout = PlaneLayout {
+        planes: 1,
+        width: w as usize,
+        height: h as usize,
+        depth,
+        version: Version::Psd,
+    };
     budget.spend(layout.decoded_len()?)?;
     let rest = r.take(r.left())?;
     let data = decode_planes(compression, rest, &layout)?;
-    Ok(AbrSample { id, width: w, height: h, depth, data })
+    Ok(AbrSample {
+        id,
+        width: w,
+        height: h,
+        depth,
+        data,
+    })
 }
 
 fn read_ucs2(r: &mut Rd) -> Result<String> {
@@ -211,8 +240,16 @@ fn read_ucs2(r: &mut Rd) -> Result<String> {
     if n > 4096 {
         return Err(PsdError::LimitExceeded("abr name length"));
     }
-    let units: Vec<u16> = r.take(n * 2)?.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes(*c)).collect();
-    Ok(String::from_utf16_lossy(&units).trim_end_matches('\0').to_string())
+    let units: Vec<u16> = r
+        .take(n * 2)?
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_be_bytes(*c))
+        .collect();
+    Ok(String::from_utf16_lossy(&units)
+        .trim_end_matches('\0')
+        .to_string())
 }
 
 fn parse_v12(r: &mut Rd, version: u16, out: &mut AbrFile) -> Result<()> {
@@ -220,7 +257,8 @@ fn parse_v12(r: &mut Rd, version: u16, out: &mut AbrFile) -> Result<()> {
     let mut budget = Budget(MAX_TOTAL_BYTES);
     for i in 0..count {
         if r.left() == 0 {
-            out.warnings.push(format!("file ends after {i} of {count} brushes"));
+            out.warnings
+                .push(format!("file ends after {i} of {count} brushes"));
             break;
         }
         let ty = r.u16()?;
@@ -242,19 +280,41 @@ fn parse_v12(r: &mut Rd, version: u16, out: &mut AbrFile) -> Result<()> {
                     let roundness = b.u16()?;
                     let angle = b.u16()? as i16;
                     let hardness = b.u16()?;
-                    Ok(Some(LegacyBrush { name: String::new(), spacing, anti_alias: true, tip: LegacyTip::Computed { diameter, hardness, angle, roundness } }))
+                    Ok(Some(LegacyBrush {
+                        name: String::new(),
+                        spacing,
+                        anti_alias: true,
+                        tip: LegacyTip::Computed {
+                            diameter,
+                            hardness,
+                            angle,
+                            roundness,
+                        },
+                    }))
                 }
                 2 => {
                     let _misc = b.u32()?;
                     let spacing = b.u16()?;
-                    let name = if version == 2 { read_ucs2(&mut b)? } else { String::new() };
+                    let name = if version == 2 {
+                        read_ucs2(&mut b)?
+                    } else {
+                        String::new()
+                    };
                     let anti_alias = b.u8()? != 0;
                     b.skip(8)?; // short bounds (superseded by the 32-bit bounds)
                     let s = read_sample_body(&mut b, String::new(), &mut budget)?;
-                    Ok(Some(LegacyBrush { name, spacing, anti_alias, tip: LegacyTip::Sampled(s) }))
+                    Ok(Some(LegacyBrush {
+                        name,
+                        spacing,
+                        anti_alias,
+                        tip: LegacyTip::Sampled(s),
+                    }))
                 }
                 other => {
-                    out.warnings.push(format!("brush {}: unknown brush type {other} skipped", i + 1));
+                    out.warnings.push(format!(
+                        "brush {}: unknown brush type {other} skipped",
+                        i + 1
+                    ));
                     Ok(None)
                 }
             }
@@ -262,7 +322,9 @@ fn parse_v12(r: &mut Rd, version: u16, out: &mut AbrFile) -> Result<()> {
         match parsed {
             Ok(Some(lb)) => out.legacy.push(lb),
             Ok(None) => {}
-            Err(PsdError::LimitExceeded(m)) if m.contains("MAX_TOTAL_BYTES") => return Err(PsdError::LimitExceeded(m)),
+            Err(PsdError::LimitExceeded(m)) if m.contains("MAX_TOTAL_BYTES") => {
+                return Err(PsdError::LimitExceeded(m))
+            }
             Err(e) => out.warnings.push(format!("brush {}: {e}; skipped", i + 1)),
         }
     }
@@ -273,18 +335,23 @@ fn read_samp(data: &[u8], subversion: u16, out: &mut AbrFile, budget: &mut Budge
     let mut r = Rd::new(data);
     while r.left() >= 4 {
         if out.samples.len() >= MAX_BRUSHES {
-            out.warnings.push("too many sampled tips; the rest were skipped".into());
+            out.warnings
+                .push("too many sampled tips; the rest were skipped".into());
             break;
         }
         let len = r.u32()? as usize;
         if len == 0 {
             break;
         }
-        let padded = len.checked_add(3).ok_or(PsdError::LimitExceeded("abr sample length"))? & !3;
+        let padded = len
+            .checked_add(3)
+            .ok_or(PsdError::LimitExceeded("abr sample length"))?
+            & !3;
         let body = match r.take(padded.min(r.left())) {
             Ok(b) if b.len() >= len => b,
             _ => {
-                out.warnings.push(format!("sampled tip {}: truncated", out.samples.len() + 1));
+                out.warnings
+                    .push(format!("sampled tip {}: truncated", out.samples.len() + 1));
                 break;
             }
         };
@@ -297,8 +364,13 @@ fn read_samp(data: &[u8], subversion: u16, out: &mut AbrFile, budget: &mut Budge
         })();
         match parsed {
             Ok(s) => out.samples.push(s),
-            Err(PsdError::LimitExceeded(m)) if m.contains("MAX_TOTAL_BYTES") => return Err(PsdError::LimitExceeded(m)),
-            Err(e) => out.warnings.push(format!("sampled tip {}: {e}; skipped", out.samples.len() + 1)),
+            Err(PsdError::LimitExceeded(m)) if m.contains("MAX_TOTAL_BYTES") => {
+                return Err(PsdError::LimitExceeded(m))
+            }
+            Err(e) => out.warnings.push(format!(
+                "sampled tip {}: {e}; skipped",
+                out.samples.len() + 1
+            )),
         }
     }
     Ok(())
@@ -307,7 +379,13 @@ fn read_samp(data: &[u8], subversion: u16, out: &mut AbrFile, budget: &mut Budge
 fn read_desc(data: &[u8], out: &mut AbrFile) {
     match VersionedDescriptor::parse_prefix(data) {
         // Moves the presets out of the parsed descriptor instead of cloning each one.
-        Ok((vd, _)) => match vd.descriptor.items.into_iter().find(|(k, _)| k.is("Brsh")).map(|(_, v)| v) {
+        Ok((vd, _)) => match vd
+            .descriptor
+            .items
+            .into_iter()
+            .find(|(k, _)| k.is("Brsh"))
+            .map(|(_, v)| v)
+        {
             Some(Value::List(items)) => {
                 for v in items.into_iter().take(MAX_BRUSHES) {
                     if let Value::Descriptor(d) = v {
@@ -315,9 +393,13 @@ fn read_desc(data: &[u8], out: &mut AbrFile) {
                     }
                 }
             }
-            _ => out.warnings.push("brush settings (desc) hold no brush list".into()),
+            _ => out
+                .warnings
+                .push("brush settings (desc) hold no brush list".into()),
         },
-        Err(e) => out.warnings.push(format!("brush settings (desc) unreadable: {e}")),
+        Err(e) => out
+            .warnings
+            .push(format!("brush settings (desc) unreadable: {e}")),
     }
 }
 
@@ -340,12 +422,16 @@ fn read_phry(data: &[u8], presets: usize, warnings: &mut Vec<String>) -> Option<
     let vd = match VersionedDescriptor::parse_prefix(data) {
         Ok((vd, _)) => vd,
         Err(e) => {
-            warnings.push(format!("brush folders (phry) unreadable: {e}; brushes imported without folders"));
+            warnings.push(format!(
+                "brush folders (phry) unreadable: {e}; brushes imported without folders"
+            ));
             return None;
         }
     };
     let Some(Value::List(items)) = vd.descriptor.get("hierarchy") else {
-        warnings.push("brush folders (phry) hold no hierarchy; brushes imported without folders".into());
+        warnings.push(
+            "brush folders (phry) hold no hierarchy; brushes imported without folders".into(),
+        );
         return None;
     };
     let mut stack: Vec<String> = Vec::new();
@@ -368,7 +454,11 @@ fn read_phry(data: &[u8], presets: usize, warnings: &mut Vec<String>) -> Option<
                 _ => String::new(),
             };
             let name: String = name.trim().chars().take(MAX_FOLDER_NAME).collect();
-            stack.push(if name.is_empty() { "Group".to_string() } else { name });
+            stack.push(if name.is_empty() {
+                "Group".to_string()
+            } else {
+                name
+            });
         } else if d.class_id.is("groupEnd") {
             if overflow > 0 {
                 overflow -= 1;
@@ -380,7 +470,10 @@ fn read_phry(data: &[u8], presets: usize, warnings: &mut Vec<String>) -> Option<
             if out.len() >= presets {
                 continue;
             }
-            let size = stack.iter().map(|n| n.len().saturating_add(size_of::<String>())).fold(0usize, usize::saturating_add);
+            let size = stack
+                .iter()
+                .map(|n| n.len().saturating_add(size_of::<String>()))
+                .fold(0usize, usize::saturating_add);
             match bytes.checked_add(size).filter(|&b| b <= MAX_FOLDER_BYTES) {
                 Some(b) if !too_big => {
                     bytes = b;
@@ -400,12 +493,19 @@ fn read_phry(data: &[u8], presets: usize, warnings: &mut Vec<String>) -> Option<
         warnings.push(format!("brush folders nested deeper than {MAX_FOLDER_DEPTH} levels were merged into their parent"));
     }
     if too_big {
-        warnings.push("brush folders (phry) too large; the remaining brushes were imported at the top level".into());
+        warnings.push(
+            "brush folders (phry) too large; the remaining brushes were imported at the top level"
+                .into(),
+        );
     }
     if listed != presets {
         warnings.push(format!(
             "brush folders (phry) list {listed} brushes but the file holds {presets}; {}",
-            if listed > presets { "the extra entries were ignored" } else { "the rest were imported at the top level" }
+            if listed > presets {
+                "the extra entries were ignored"
+            } else {
+                "the rest were imported at the top level"
+            }
         ));
         out.resize(presets, Vec::new());
     }
@@ -415,7 +515,9 @@ fn read_phry(data: &[u8], presets: usize, warnings: &mut Vec<String>) -> Option<
 /// Pairs the `phry` section's preset tokens with the presets read from `desc`, in order.
 fn apply_hierarchy(out: &mut AbrFile, phry: Option<&[u8]>) {
     let Some(data) = phry else { return };
-    let Some(folders) = read_phry(data, out.presets.len(), &mut out.warnings) else { return };
+    let Some(folders) = read_phry(data, out.presets.len(), &mut out.warnings) else {
+        return;
+    };
     if folders.iter().any(|f| !f.is_empty()) {
         out.folders = folders;
     }
@@ -429,13 +531,17 @@ fn parse_v6(r: &mut Rd, out: &mut AbrFile) -> Result<()> {
 fn parse_v6_within(r: &mut Rd, out: &mut AbrFile, budget: &mut Budget) -> Result<()> {
     out.subversion = r.u16()?;
     if !matches!(out.subversion, 1 | 2) {
-        return Err(PsdError::Unsupported(format!("brush file subversion {}", out.subversion)));
+        return Err(PsdError::Unsupported(format!(
+            "brush file subversion {}",
+            out.subversion
+        )));
     }
     let mut hierarchy = None;
     while r.left() >= 12 {
         let sig = r.arr::<4>()?;
         if &sig != b"8BIM" {
-            out.warnings.push(format!("unexpected data at offset {} ignored", r.p - 4));
+            out.warnings
+                .push(format!("unexpected data at offset {} ignored", r.p - 4));
             break;
         }
         let key = r.arr::<4>()?;
@@ -443,13 +549,19 @@ fn parse_v6_within(r: &mut Rd, out: &mut AbrFile, budget: &mut Budget) -> Result
         let data = match r.take(len) {
             Ok(d) => d,
             Err(_) => {
-                out.warnings.push(format!("section {} truncated", String::from_utf8_lossy(&key)));
+                out.warnings.push(format!(
+                    "section {} truncated",
+                    String::from_utf8_lossy(&key)
+                ));
                 r.take(r.left())?
             }
         };
         // Sections are padded to 4 bytes; tolerate writers that don't pad.
         let pad = (4 - len % 4) % 4;
-        if pad > 0 && r.b.get(r.p..r.p + 4) != Some(b"8BIM") && r.b.get(r.p + pad..r.p + pad + 4) == Some(b"8BIM") {
+        if pad > 0
+            && r.b.get(r.p..r.p + 4) != Some(b"8BIM")
+            && r.b.get(r.p + pad..r.p + pad + 4) == Some(b"8BIM")
+        {
             r.p += pad;
         }
         match &key {
@@ -461,11 +573,14 @@ fn parse_v6_within(r: &mut Rd, out: &mut AbrFile, budget: &mut Budget) -> Result
                 let left = patterns.decoded_left();
                 match parse_pattern_block_with(data, &mut patterns) {
                     Ok(p) => {
-                        let spent = usize::try_from(left.saturating_sub(patterns.decoded_left())).unwrap_or(usize::MAX);
+                        let spent = usize::try_from(left.saturating_sub(patterns.decoded_left()))
+                            .unwrap_or(usize::MAX);
                         budget.spend(spent)?;
                         out.patterns.extend(p);
                     }
-                    Err(e) => out.warnings.push(format!("embedded patterns unreadable: {e}")),
+                    Err(e) => out
+                        .warnings
+                        .push(format!("embedded patterns unreadable: {e}")),
                 }
             }
             b"desc" => read_desc(data, out),
@@ -473,7 +588,9 @@ fn parse_v6_within(r: &mut Rd, out: &mut AbrFile, budget: &mut Budget) -> Result
             b"phry" => hierarchy = Some(data),
             // Tool presets: not needed for the brushes.
             b"lPdc" => {}
-            k => out.warnings.push(format!("section {} ignored", String::from_utf8_lossy(k))),
+            k => out
+                .warnings
+                .push(format!("section {} ignored", String::from_utf8_lossy(k))),
         }
     }
     apply_hierarchy(out, hierarchy);
@@ -484,15 +601,24 @@ fn parse_v6_within(r: &mut Rd, out: &mut AbrFile, budget: &mut Budget) -> Result
 pub fn parse(data: &[u8]) -> Result<AbrFile> {
     let mut r = Rd::new(data);
     let version = r.u16()?;
-    let mut out = AbrFile { version, ..Default::default() };
+    let mut out = AbrFile {
+        version,
+        ..Default::default()
+    };
     match version {
         1 | 2 => parse_v12(&mut r, version, &mut out)?,
         6..=10 => parse_v6(&mut r, &mut out)?,
         v => return Err(PsdError::Unsupported(format!("brush file version {v}"))),
     }
     if out.legacy.is_empty() && out.samples.is_empty() && out.presets.is_empty() {
-        let why = out.warnings.first().map(|w| format!(" ({w})")).unwrap_or_default();
-        return Err(PsdError::invalid(format!("the brush file holds no readable brushes{why}")));
+        let why = out
+            .warnings
+            .first()
+            .map(|w| format!(" ({w})"))
+            .unwrap_or_default();
+        return Err(PsdError::invalid(format!(
+            "the brush file holds no readable brushes{why}"
+        )));
     }
     Ok(out)
 }
@@ -507,7 +633,12 @@ fn put_u32(o: &mut Vec<u8>, v: u32) {
 }
 
 fn write_sample_body(o: &mut Vec<u8>, s: &AbrSample, rle: bool) -> Result<()> {
-    if s.width == 0 || s.height == 0 || s.width > MAX_EDGE || s.height > MAX_EDGE || !matches!(s.depth, 8 | 16) {
+    if s.width == 0
+        || s.height == 0
+        || s.width > MAX_EDGE
+        || s.height > MAX_EDGE
+        || !matches!(s.depth, 8 | 16)
+    {
         return Err(PsdError::LimitExceeded("brush sample size or depth"));
     }
     for v in [0, 0, s.height as i32, s.width as i32] {
@@ -515,15 +646,31 @@ fn write_sample_body(o: &mut Vec<u8>, s: &AbrSample, rle: bool) -> Result<()> {
     }
     put_u16(o, s.depth);
     o.push(u8::from(rle));
-    let layout = PlaneLayout { planes: 1, width: s.width as usize, height: s.height as usize, depth: s.depth, version: Version::Psd };
-    o.extend_from_slice(&encode_planes(if rle { Compression::Rle } else { Compression::Raw }, &s.data, &layout)?);
+    let layout = PlaneLayout {
+        planes: 1,
+        width: s.width as usize,
+        height: s.height as usize,
+        depth: s.depth,
+        version: Version::Psd,
+    };
+    o.extend_from_slice(&encode_planes(
+        if rle {
+            Compression::Rle
+        } else {
+            Compression::Raw
+        },
+        &s.data,
+        &layout,
+    )?);
     Ok(())
 }
 
 /// Writes a v1 or v2 file. Sampled tips are PackBits-compressed when `rle`.
 pub fn write_v12(version: u16, brushes: &[LegacyBrush], rle: bool) -> Result<Vec<u8>> {
     if !matches!(version, 1 | 2) || brushes.len() > usize::from(u16::MAX) {
-        return Err(PsdError::Unsupported(format!("writing brush file version {version}")));
+        return Err(PsdError::Unsupported(format!(
+            "writing brush file version {version}"
+        )));
     }
     let mut o = Vec::new();
     put_u16(&mut o, version);
@@ -533,7 +680,12 @@ pub fn write_v12(version: u16, brushes: &[LegacyBrush], rle: bool) -> Result<Vec
         put_u32(&mut body, 0);
         put_u16(&mut body, b.spacing);
         let ty = match &b.tip {
-            LegacyTip::Computed { diameter, hardness, angle, roundness } => {
+            LegacyTip::Computed {
+                diameter,
+                hardness,
+                angle,
+                roundness,
+            } => {
                 for v in [*diameter, *roundness, *angle as u16, *hardness] {
                     put_u16(&mut body, v);
                 }
@@ -548,7 +700,12 @@ pub fn write_v12(version: u16, brushes: &[LegacyBrush], rle: bool) -> Result<Vec
                     }
                 }
                 body.push(u8::from(b.anti_alias));
-                for v in [0u16, 0, s.height.min(0xffff) as u16, s.width.min(0xffff) as u16] {
+                for v in [
+                    0u16,
+                    0,
+                    s.height.min(0xffff) as u16,
+                    s.width.min(0xffff) as u16,
+                ] {
                     put_u16(&mut body, v);
                 }
                 write_sample_body(&mut body, s, rle)?;
@@ -574,7 +731,13 @@ fn section(o: &mut Vec<u8>, key: &[u8; 4], data: &[u8]) {
 /// Writes a v6 (`subversion` 1 or 2) file: sampled tips, embedded patterns and the preset
 /// descriptors (each a `brushPreset` object), listed under `Brsh`. Every preset is at the top
 /// level ([`write_v6_folders`] keeps folders).
-pub fn write_v6(subversion: u16, samples: &[AbrSample], patterns: &[PsdPattern], presets: &[Descriptor], rle: bool) -> Result<Vec<u8>> {
+pub fn write_v6(
+    subversion: u16,
+    samples: &[AbrSample],
+    patterns: &[PsdPattern],
+    presets: &[Descriptor],
+    rle: bool,
+) -> Result<Vec<u8>> {
     write_v6_folders(subversion, samples, patterns, presets, &[], rle)
 }
 
@@ -583,14 +746,25 @@ fn folder_uuid(path: &[&str], seq: usize) -> String {
     // FNV-1a over the path, with two seeds, for 128 bits.
     let hash = |seed: u64| {
         let mut h = 0xcbf2_9ce4_8422_2325u64 ^ seed;
-        for b in path.iter().flat_map(|s| s.bytes().chain(std::iter::once(0))).chain(seq.to_le_bytes()) {
+        for b in path
+            .iter()
+            .flat_map(|s| s.bytes().chain(std::iter::once(0)))
+            .chain(seq.to_le_bytes())
+        {
             h ^= u64::from(b);
             h = h.wrapping_mul(0x0000_0100_0000_01b3);
         }
         h
     };
     let (a, b) = (hash(1), hash(2));
-    format!("{:08x}-{:04x}-{:04x}-{:04x}-{:012x}", a >> 32, (a >> 16) & 0xffff, a & 0xffff, b >> 48, b & 0xffff_ffff_ffff)
+    format!(
+        "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+        a >> 32,
+        (a >> 16) & 0xffff,
+        a & 0xffff,
+        b >> 48,
+        b & 0xffff_ffff_ffff
+    )
 }
 
 /// The `phry` descriptor for presets in `folders` (one path per preset, in preset order).
@@ -601,7 +775,11 @@ fn hierarchy_descriptor(folders: &[Vec<String>]) -> Descriptor {
     let mut open: Vec<&str> = Vec::new();
     let mut seq = 0usize;
     for path in folders {
-        let path: Vec<&str> = path.iter().take(MAX_FOLDER_DEPTH).map(String::as_str).collect();
+        let path: Vec<&str> = path
+            .iter()
+            .take(MAX_FOLDER_DEPTH)
+            .map(String::as_str)
+            .collect();
         let common = open.iter().zip(&path).take_while(|(a, b)| a == b).count();
         while open.len() > common {
             open.pop();
@@ -610,7 +788,11 @@ fn hierarchy_descriptor(folders: &[Vec<String>]) -> Descriptor {
         for name in path.iter().skip(common) {
             open.push(name);
             seq += 1;
-            items.push(Value::Descriptor(Descriptor::new("Grup").with("Nm  ", text(name)).with("zuid", text(&folder_uuid(&open, seq)))));
+            items.push(Value::Descriptor(
+                Descriptor::new("Grup")
+                    .with("Nm  ", text(name))
+                    .with("zuid", text(&folder_uuid(&open, seq))),
+            ));
         }
         items.push(Value::Descriptor(Descriptor::new("preset")));
     }
@@ -632,10 +814,16 @@ pub fn write_v6_folders(
     rle: bool,
 ) -> Result<Vec<u8>> {
     if !folders.is_empty() && folders.len() != presets.len() {
-        return Err(PsdError::invalid(format!("{} folder paths for {} brush presets", folders.len(), presets.len())));
+        return Err(PsdError::invalid(format!(
+            "{} folder paths for {} brush presets",
+            folders.len(),
+            presets.len()
+        )));
     }
     if !matches!(subversion, 1 | 2) {
-        return Err(PsdError::Unsupported(format!("brush file subversion {subversion}")));
+        return Err(PsdError::Unsupported(format!(
+            "brush file subversion {subversion}"
+        )));
     }
     let mut o = Vec::new();
     put_u16(&mut o, 6);
@@ -647,7 +835,10 @@ pub fn write_v6_folders(
         let n = id.len().min(255);
         e.push(n as u8);
         e.extend_from_slice(&id[..n]);
-        e.extend(std::iter::repeat_n(0u8, if subversion == 1 { 10 } else { 264 }));
+        e.extend(std::iter::repeat_n(
+            0u8,
+            if subversion == 1 { 10 } else { 264 },
+        ));
         write_sample_body(&mut e, s, rle)?;
         put_u32(&mut samp, e.len() as u32);
         let pad = (4 - e.len() % 4) % 4;
@@ -662,7 +853,11 @@ pub fn write_v6_folders(
     let desc = VersionedDescriptor::new(Descriptor::new("null").with("Brsh", list));
     section(&mut o, b"desc", &desc.to_bytes());
     if folders.iter().any(|f| !f.is_empty()) {
-        section(&mut o, b"phry", &VersionedDescriptor::new(hierarchy_descriptor(folders)).to_bytes());
+        section(
+            &mut o,
+            b"phry",
+            &VersionedDescriptor::new(hierarchy_descriptor(folders)).to_bytes(),
+        );
     }
     Ok(o)
 }
@@ -674,8 +869,22 @@ mod tests {
 
     fn sample(id: &str, w: u32, h: u32, depth: u16) -> AbrSample {
         let bpp = usize::from(depth / 8);
-        let data = (0..w as usize * h as usize * bpp).map(|i| if (i / bpp) % 3 == 0 { 255 } else { (i % 7) as u8 * 30 }).collect();
-        AbrSample { id: id.into(), width: w, height: h, depth, data }
+        let data = (0..w as usize * h as usize * bpp)
+            .map(|i| {
+                if (i / bpp) % 3 == 0 {
+                    255
+                } else {
+                    (i % 7) as u8 * 30
+                }
+            })
+            .collect();
+        AbrSample {
+            id: id.into(),
+            width: w,
+            height: h,
+            depth,
+            data,
+        }
     }
 
     #[test]
@@ -704,7 +913,13 @@ mod tests {
         // One byte short: the patterns no longer fit after the sample (they used not to count).
         let (out, left) = parse_within(189);
         assert_eq!((out.samples.len(), out.patterns.len(), left), (1, 0, 89));
-        assert!(out.warnings.iter().any(|w| w.contains("embedded patterns unreadable")), "{:?}", out.warnings);
+        assert!(
+            out.warnings
+                .iter()
+                .any(|w| w.contains("embedded patterns unreadable")),
+            "{:?}",
+            out.warnings
+        );
     }
 
     #[test]
@@ -716,15 +931,29 @@ mod tests {
                         name: String::new(),
                         spacing: 25,
                         anti_alias: true,
-                        tip: LegacyTip::Computed { diameter: 19, hardness: 80, angle: -30, roundness: 50 },
+                        tip: LegacyTip::Computed {
+                            diameter: 19,
+                            hardness: 80,
+                            angle: -30,
+                            roundness: 50,
+                        },
                     },
                     LegacyBrush {
-                        name: if version == 2 { "Leaf ✓".into() } else { String::new() },
+                        name: if version == 2 {
+                            "Leaf ✓".into()
+                        } else {
+                            String::new()
+                        },
                         spacing: 40,
                         anti_alias: false,
                         tip: LegacyTip::Sampled(sample("", 13, 9, 8)),
                     },
-                    LegacyBrush { name: String::new(), spacing: 10, anti_alias: true, tip: LegacyTip::Sampled(sample("", 4, 6, 16)) },
+                    LegacyBrush {
+                        name: String::new(),
+                        spacing: 10,
+                        anti_alias: true,
+                        tip: LegacyTip::Sampled(sample("", 4, 6, 16)),
+                    },
                 ];
                 let bytes = write_v12(version, &brushes, rle).unwrap();
                 let f = parse(&bytes).unwrap();
@@ -740,10 +969,17 @@ mod tests {
         let samples = vec![sample("$abc", 20, 11, 8), sample("$def", 5, 5, 16)];
         let preset = Descriptor::new("brushPreset")
             .with("Nm  ", Value::Text(UnicodeString::new_nul("Grass")))
-            .with("Brsh", Value::Descriptor(Descriptor::new("sampledBrush").with("sampledData", Value::Text(UnicodeString::new_nul("$abc")))));
+            .with(
+                "Brsh",
+                Value::Descriptor(
+                    Descriptor::new("sampledBrush")
+                        .with("sampledData", Value::Text(UnicodeString::new_nul("$abc"))),
+                ),
+            );
         for sub in [1u16, 2] {
             for rle in [false, true] {
-                let bytes = write_v6(sub, &samples, &[], std::slice::from_ref(&preset), rle).unwrap();
+                let bytes =
+                    write_v6(sub, &samples, &[], std::slice::from_ref(&preset), rle).unwrap();
                 let f = parse(&bytes).unwrap();
                 assert_eq!((f.version, f.subversion), (6, sub));
                 assert_eq!(f.samples, samples);
@@ -762,12 +998,39 @@ mod tests {
         // Absurd sample bounds.
         let mut s = sample("", 2, 2, 8);
         s.width = MAX_EDGE + 1;
-        assert!(write_v12(1, &[LegacyBrush { name: String::new(), spacing: 1, anti_alias: true, tip: LegacyTip::Sampled(s) }], false).is_err());
-        let good = write_v6(2, &[sample("$a", 30, 30, 8)], &[], &[Descriptor::new("brushPreset")], true).unwrap();
+        assert!(write_v12(
+            1,
+            &[LegacyBrush {
+                name: String::new(),
+                spacing: 1,
+                anti_alias: true,
+                tip: LegacyTip::Sampled(s)
+            }],
+            false
+        )
+        .is_err());
+        let good = write_v6(
+            2,
+            &[sample("$a", 30, 30, 8)],
+            &[],
+            &[Descriptor::new("brushPreset")],
+            true,
+        )
+        .unwrap();
         for cut in 0..good.len() {
             let _ = parse(&good[..cut]);
         }
-        let v2 = write_v12(2, &[LegacyBrush { name: "x".into(), spacing: 1, anti_alias: true, tip: LegacyTip::Sampled(sample("", 9, 9, 16)) }], true).unwrap();
+        let v2 = write_v12(
+            2,
+            &[LegacyBrush {
+                name: "x".into(),
+                spacing: 1,
+                anti_alias: true,
+                tip: LegacyTip::Sampled(sample("", 9, 9, 16)),
+            }],
+            true,
+        )
+        .unwrap();
         for cut in 0..v2.len() {
             let _ = parse(&v2[..cut]);
         }
@@ -808,13 +1071,19 @@ mod tests {
                 Value::Descriptor(match t {
                     Tok::G(name) => Descriptor::new("Grup")
                         .with("Nm  ", Value::Text(UnicodeString::new_nul(name)))
-                        .with("zuid", Value::Text(UnicodeString::new_nul("c9ee8fd5-eb7d-924c-9e95-ddc98e40bb6c"))),
+                        .with(
+                            "zuid",
+                            Value::Text(UnicodeString::new_nul(
+                                "c9ee8fd5-eb7d-924c-9e95-ddc98e40bb6c",
+                            )),
+                        ),
                     Tok::P => Descriptor::new("preset"),
                     Tok::E => Descriptor::new("groupEnd"),
                 })
             })
             .collect();
-        VersionedDescriptor::new(Descriptor::new("null").with("hierarchy", Value::List(items))).to_bytes()
+        VersionedDescriptor::new(Descriptor::new("null").with("hierarchy", Value::List(items)))
+            .to_bytes()
     }
 
     fn path(p: &[&str]) -> Vec<String> {
@@ -825,16 +1094,56 @@ mod tests {
     fn phry_flat_folders_like_photoshop_25() {
         // The layout of Photoshop 25.1's default brushes: four folders, every preset in one.
         use Tok::*;
-        let f = parse(&with_phry(5, &[G("General"), P, P, E, G("Dry Media"), P, E, G("Wet Media"), P, E, G("Special Effects"), P, E])).unwrap();
-        assert_eq!(f.folders, vec![path(&["General"]), path(&["General"]), path(&["Dry Media"]), path(&["Wet Media"]), path(&["Special Effects"])]);
+        let f = parse(&with_phry(
+            5,
+            &[
+                G("General"),
+                P,
+                P,
+                E,
+                G("Dry Media"),
+                P,
+                E,
+                G("Wet Media"),
+                P,
+                E,
+                G("Special Effects"),
+                P,
+                E,
+            ],
+        ))
+        .unwrap();
+        assert_eq!(
+            f.folders,
+            vec![
+                path(&["General"]),
+                path(&["General"]),
+                path(&["Dry Media"]),
+                path(&["Wet Media"]),
+                path(&["Special Effects"])
+            ]
+        );
         assert!(f.warnings.is_empty(), "{:?}", f.warnings);
     }
 
     #[test]
     fn phry_nested_folders_and_top_level_presets() {
         use Tok::*;
-        let f = parse(&with_phry(5, &[P, G("Animals"), G("Birds"), P, E, P, G("Fish"), P, E, E, P])).unwrap();
-        assert_eq!(f.folders, vec![path(&[]), path(&["Animals", "Birds"]), path(&["Animals"]), path(&["Animals", "Fish"]), path(&[])]);
+        let f = parse(&with_phry(
+            5,
+            &[P, G("Animals"), G("Birds"), P, E, P, G("Fish"), P, E, E, P],
+        ))
+        .unwrap();
+        assert_eq!(
+            f.folders,
+            vec![
+                path(&[]),
+                path(&["Animals", "Birds"]),
+                path(&["Animals"]),
+                path(&["Animals", "Fish"]),
+                path(&[])
+            ]
+        );
         assert!(f.warnings.is_empty(), "{:?}", f.warnings);
         // No folder at all: no hierarchy.
         let f = parse(&with_phry(2, &[P, P])).unwrap();
@@ -847,11 +1156,21 @@ mod tests {
         // A stray groupEnd is ignored; an unclosed folder still holds its presets.
         let f = parse(&with_phry(2, &[E, G("A"), P, E, E, G("B"), P])).unwrap();
         assert_eq!(f.folders, vec![path(&["A"]), path(&["B"])]);
-        assert!(f.warnings.iter().any(|w| w.contains("folder end")), "{:?}", f.warnings);
+        assert!(
+            f.warnings.iter().any(|w| w.contains("folder end")),
+            "{:?}",
+            f.warnings
+        );
         // Fewer preset tokens than presets: the rest are at the top level.
         let f = parse(&with_phry(3, &[G("A"), P, E])).unwrap();
         assert_eq!(f.folders, vec![path(&["A"]), path(&[]), path(&[])]);
-        assert!(f.warnings.iter().any(|w| w.contains("list 1 brushes but the file holds 3")), "{:?}", f.warnings);
+        assert!(
+            f.warnings
+                .iter()
+                .any(|w| w.contains("list 1 brushes but the file holds 3")),
+            "{:?}",
+            f.warnings
+        );
         // More preset tokens than presets: extras ignored.
         let f = parse(&with_phry(1, &[G("A"), P, P, P, E])).unwrap();
         assert_eq!(f.folders, vec![path(&["A"])]);
@@ -865,13 +1184,21 @@ mod tests {
         let f = parse(&with_phry(2, &toks)).unwrap();
         assert_eq!(f.folders[0].len(), MAX_FOLDER_DEPTH);
         assert_eq!(f.folders[1], path(&["next"]));
-        assert!(f.warnings.iter().any(|w| w.contains("deeper")), "{:?}", f.warnings);
+        assert!(
+            f.warnings.iter().any(|w| w.contains("deeper")),
+            "{:?}",
+            f.warnings
+        );
         // An unreadable hierarchy: imported flat, with a warning.
         let mut bytes = write_v6(2, &[], &[], &[named("x")], false).unwrap();
         section(&mut bytes, b"phry", &[0, 0, 0, 16, 0xff, 0xff]);
         let f = parse(&bytes).unwrap();
         assert!(f.folders.is_empty() && f.presets.len() == 1);
-        assert!(f.warnings.iter().any(|w| w.contains("phry")), "{:?}", f.warnings);
+        assert!(
+            f.warnings.iter().any(|w| w.contains("phry")),
+            "{:?}",
+            f.warnings
+        );
         // Truncations and bit flips of a file with a hierarchy never panic.
         let good = with_phry(3, &[G("A"), P, G("B"), P, E, E, P]);
         for cut in 0..good.len() {
@@ -895,7 +1222,12 @@ mod tests {
         assert_eq!(folders.len(), 2);
         assert_eq!(folders.capacity(), 2);
         assert_eq!(folders[1].len(), MAX_FOLDER_DEPTH);
-        assert!(warnings.iter().any(|w| w.contains("list 100000 brushes but the file holds 2")), "{warnings:?}");
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("list 100000 brushes but the file holds 2")),
+            "{warnings:?}"
+        );
         // `phry` before `desc` still pairs with the file's presets.
         let mut bytes = write_v6(2, &[], &[], &[named("a"), named("b")], false).unwrap();
         let at = bytes.windows(8).position(|w| w == b"8BIMdesc").unwrap();
@@ -917,24 +1249,41 @@ mod tests {
         let mut warnings = Vec::new();
         let folders = read_phry(&phry_bytes(&toks), 3_000, &mut warnings).unwrap();
         assert_eq!(folders.len(), 3_000);
-        let held: usize = folders.iter().flatten().map(|n| n.len() + size_of::<String>()).sum();
+        let held: usize = folders
+            .iter()
+            .flatten()
+            .map(|n| n.len() + size_of::<String>())
+            .sum();
         assert!(held <= MAX_FOLDER_BYTES, "{held}");
         assert_eq!(folders[0].len(), MAX_FOLDER_DEPTH);
         assert!(folders[2_999].is_empty(), "past the budget: top level");
-        assert!(warnings.iter().any(|w| w.contains("too large")), "{warnings:?}");
+        assert!(
+            warnings.iter().any(|w| w.contains("too large")),
+            "{warnings:?}"
+        );
     }
 
     #[test]
     fn phry_round_trips_through_the_writer() {
         let presets: Vec<Descriptor> = (0..6).map(|i| named(&format!("B{i}"))).collect();
-        let folders = vec![path(&[]), path(&["Set", "Ink"]), path(&["Set", "Ink"]), path(&["Set"]), path(&["Other"]), path(&["Set", "Ink"])];
+        let folders = vec![
+            path(&[]),
+            path(&["Set", "Ink"]),
+            path(&["Set", "Ink"]),
+            path(&["Set"]),
+            path(&["Other"]),
+            path(&["Set", "Ink"]),
+        ];
         let bytes = write_v6_folders(2, &[], &[], &presets, &folders, true).unwrap();
         let f = parse(&bytes).unwrap();
         assert_eq!(f.presets, presets);
         assert_eq!(f.folders, folders);
         assert!(f.warnings.is_empty(), "{:?}", f.warnings);
         // No folders: no phry section, same bytes as write_v6.
-        assert_eq!(write_v6_folders(2, &[], &[], &presets, &vec![Vec::new(); 6], true).unwrap(), write_v6(2, &[], &[], &presets, true).unwrap());
+        assert_eq!(
+            write_v6_folders(2, &[], &[], &presets, &vec![Vec::new(); 6], true).unwrap(),
+            write_v6(2, &[], &[], &presets, true).unwrap()
+        );
         // Mismatched lengths are an error.
         assert!(write_v6_folders(2, &[], &[], &presets, &folders[..2], true).is_err());
     }

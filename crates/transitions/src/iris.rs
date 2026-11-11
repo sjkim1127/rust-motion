@@ -1,10 +1,7 @@
-//! Expanding circular aperture Iris transition presentation and component.
+//! Expanding circular aperture Iris transition presentation and scene emitter.
 
 use crate::presentation::{PresentationVisual, TransitionContext, TransitionPresentation};
-use dioxus::prelude::*;
-use rust_motion_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
 use rust_motion_composition::{CompositionError, SceneEmitter, SceneFrameContext};
-use rust_motion_core::hooks::use_current_frame;
 use rust_motion_rasterizer::{ClipRegion, Scene, SceneNode};
 use serde_json::Value;
 
@@ -109,48 +106,5 @@ impl<E: SceneEmitter> SceneEmitter for SceneIris<E> {
             });
         }
         Ok(())
-    }
-}
-
-/// Props for `<Iris>` component.
-#[derive(Props, Clone, PartialEq)]
-pub struct IrisProps {
-    #[props(default = 20)]
-    pub enter_duration: u32,
-    pub children: Element,
-}
-
-/// Iris circular aperture transition component.
-#[component]
-pub fn Iris(props: IrisProps) -> Element {
-    let frame = use_current_frame() as f64;
-    let enter = props.enter_duration as f64;
-
-    let p = if enter > 0.0 {
-        interpolate(
-            frame,
-            &[0.0, enter],
-            &[0.0, 1.0],
-            InterpolateOptions {
-                extrapolate_left: ExtrapolateType::Clamp,
-                extrapolate_right: ExtrapolateType::Clamp,
-                ..Default::default()
-            },
-        )
-    } else {
-        1.0
-    } as f32;
-
-    let iris = Iris::new();
-    let path = iris.build_clip_path(100.0, 100.0, p);
-
-    rsx! {
-        div {
-            style: "
-                position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                clip-path: path('{path}');
-            ",
-            {props.children}
-        }
     }
 }

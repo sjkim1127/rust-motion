@@ -17,7 +17,17 @@
 //! denormals never appear (no FTZ/DAZ CPU flags needed, which keeps the crate `unsafe`-free and
 //! portable to wasm).
 
-#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
 
 pub mod biquad;
 pub mod channels;
@@ -32,8 +42,8 @@ pub mod resample;
 mod smooth;
 pub mod sync;
 
-pub use effects::{Category, EffectInfo, create_effect, effect_info, effects};
-pub use loudness::{LoudnessMeter, normalize_gain_db};
+pub use effects::{create_effect, effect_info, effects, Category, EffectInfo};
+pub use loudness::{normalize_gain_db, LoudnessMeter};
 pub use smooth::Smoothed;
 
 /// Unit of a parameter value (for display and control construction).
@@ -79,20 +89,75 @@ pub struct ParamSpec {
 
 impl ParamSpec {
     /// A continuous (linear) parameter.
-    pub const fn new(id: &'static str, name: &'static str, min: f32, max: f32, default: f32, unit: Unit) -> Self {
-        ParamSpec { id, name, min, max, default, unit, log_scale: false, choices: &[] }
+    pub const fn new(
+        id: &'static str,
+        name: &'static str,
+        min: f32,
+        max: f32,
+        default: f32,
+        unit: Unit,
+    ) -> Self {
+        ParamSpec {
+            id,
+            name,
+            min,
+            max,
+            default,
+            unit,
+            log_scale: false,
+            choices: &[],
+        }
     }
     /// A continuous parameter best shown on a logarithmic control.
-    pub const fn log(id: &'static str, name: &'static str, min: f32, max: f32, default: f32, unit: Unit) -> Self {
-        ParamSpec { id, name, min, max, default, unit, log_scale: true, choices: &[] }
+    pub const fn log(
+        id: &'static str,
+        name: &'static str,
+        min: f32,
+        max: f32,
+        default: f32,
+        unit: Unit,
+    ) -> Self {
+        ParamSpec {
+            id,
+            name,
+            min,
+            max,
+            default,
+            unit,
+            log_scale: true,
+            choices: &[],
+        }
     }
     /// An on/off toggle.
     pub const fn toggle(id: &'static str, name: &'static str, default: bool) -> Self {
-        ParamSpec { id, name, min: 0.0, max: 1.0, default: if default { 1.0 } else { 0.0 }, unit: Unit::Toggle, log_scale: false, choices: &[] }
+        ParamSpec {
+            id,
+            name,
+            min: 0.0,
+            max: 1.0,
+            default: if default { 1.0 } else { 0.0 },
+            unit: Unit::Toggle,
+            log_scale: false,
+            choices: &[],
+        }
     }
     /// A discrete choice; the value is the index into `choices`.
-    pub const fn choice(id: &'static str, name: &'static str, choices: &'static [&'static str], default: usize) -> Self {
-        ParamSpec { id, name, min: 0.0, max: (choices.len() - 1) as f32, default: default as f32, unit: Unit::Choice, log_scale: false, choices }
+    pub const fn choice(
+        id: &'static str,
+        name: &'static str,
+        choices: &'static [&'static str],
+        default: usize,
+    ) -> Self {
+        ParamSpec {
+            id,
+            name,
+            min: 0.0,
+            max: (choices.len() - 1) as f32,
+            default: default as f32,
+            unit: Unit::Choice,
+            log_scale: false,
+            choices,
+        }
     }
     /// Clamp (and for choices/toggles, round) a value into this parameter's domain.
     /// NaN maps to the default.
@@ -155,7 +220,10 @@ pub(crate) struct ParamValues {
 
 impl ParamValues {
     pub(crate) fn new(specs: &'static [ParamSpec]) -> Self {
-        ParamValues { specs, values: specs.iter().map(|s| s.default).collect() }
+        ParamValues {
+            specs,
+            values: specs.iter().map(|s| s.default).collect(),
+        }
     }
     pub(crate) fn index_of(&self, id: &str) -> Option<usize> {
         self.specs.iter().position(|s| s.id == id)
@@ -227,13 +295,21 @@ pub fn gain_to_db(g: f32) -> f32 {
 /// Flush tiny values to zero (denormal protection for recursive state).
 #[inline(always)]
 pub(crate) fn flush(x: f64) -> f64 {
-    if x.abs() < 1e-30 { 0.0 } else { x }
+    if x.abs() < 1e-30 {
+        0.0
+    } else {
+        x
+    }
 }
 
 /// f32 variant of [`flush`] for f32 delay lines.
 #[inline(always)]
 pub(crate) fn flush32(x: f32) -> f32 {
-    if x.abs() < 1e-25 { 0.0 } else { x }
+    if x.abs() < 1e-25 {
+        0.0
+    } else {
+        x
+    }
 }
 
 /// Common block length of planar channels.
@@ -265,7 +341,11 @@ pub(crate) mod testutil {
     }
 
     pub fn sine(freq: f64, amp: f64, sr: f64, n: usize, phase: f64) -> Vec<f32> {
-        (0..n).map(|i| (amp * (2.0 * std::f64::consts::PI * freq * i as f64 / sr + phase).sin()) as f32).collect()
+        (0..n)
+            .map(|i| {
+                (amp * (2.0 * std::f64::consts::PI * freq * i as f64 / sr + phase).sin()) as f32
+            })
+            .collect()
     }
 
     pub fn rms(x: &[f32]) -> f64 {

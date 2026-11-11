@@ -1,6 +1,6 @@
 [package]
 name        = "rust-motion-transitions"
-description = "Transition components for Rust Motion — Fade, Slide, Wipe, etc."
+description = "Transition presentations and scene emitters for Rust Motion — Fade, Slide, Wipe, etc."
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -9,8 +9,6 @@ repository.workspace  = true
 readme.workspace      = true
 
 [dependencies]
-dioxus              = { workspace = true }
-rust-motion-core      = { workspace = true }
 rust-motion-animation = { workspace = true }
 rust-motion-composition = { workspace = true }
 rust-motion-rasterizer  = { workspace = true }

@@ -64,7 +64,9 @@ impl Huffman {
             }
             // the codes of one length must fit in that length
             if code > (1u32 << si) {
-                return Err(Error::Malformed("lossless JPEG: Huffman table over-subscribed"));
+                return Err(Error::Malformed(
+                    "lossless JPEG: Huffman table over-subscribed",
+                ));
             }
             code <<= 1;
             si += 1;
@@ -96,7 +98,13 @@ impl Huffman {
                 }
             }
         }
-        Ok(Huffman { fast, maxcode, valptr, mincode, values })
+        Ok(Huffman {
+            fast,
+            maxcode,
+            valptr,
+            mincode,
+            values,
+        })
     }
 }
 
@@ -112,7 +120,13 @@ struct Bits<'a> {
 
 impl<'a> Bits<'a> {
     fn new(data: &'a [u8], pos: usize) -> Self {
-        Bits { data, pos, acc: 0, n: 0, marker: None }
+        Bits {
+            data,
+            pos,
+            acc: 0,
+            n: 0,
+            marker: None,
+        }
     }
 
     fn fill(&mut self) {
@@ -174,7 +188,11 @@ impl<'a> Bits<'a> {
         for l in 1..=16usize {
             if code <= h.maxcode[l] {
                 let i = h.valptr[l] + code - h.mincode[l];
-                return h.values.get(i as usize).copied().ok_or(Error::Malformed("lossless JPEG: bad Huffman code"));
+                return h
+                    .values
+                    .get(i as usize)
+                    .copied()
+                    .ok_or(Error::Malformed("lossless JPEG: bad Huffman code"));
             }
             code = (code << 1) | self.bits(1) as i32;
         }
@@ -242,10 +260,14 @@ pub fn decode(data: &[u8], max_samples: usize) -> Result<Decoded> {
                 let height = usize::from(u16::from_be_bytes([*y0, *y1]));
                 let width = usize::from(u16::from_be_bytes([*x0, *x1]));
                 if !(2..=16).contains(&precision) {
-                    return Err(Error::Unsupported(format!("lossless JPEG precision {precision}")));
+                    return Err(Error::Unsupported(format!(
+                        "lossless JPEG precision {precision}"
+                    )));
                 }
                 if height == 0 {
-                    return Err(Error::Unsupported("lossless JPEG with the height in a DNL marker".into()));
+                    return Err(Error::Unsupported(
+                        "lossless JPEG with the height in a DNL marker".into(),
+                    ));
                 }
                 if width == 0 || !(1..=4).contains(&nf) || rest.len() < nf * 3 {
                     return Err(Error::Malformed("lossless JPEG: frame header"));
@@ -253,7 +275,9 @@ pub fn decode(data: &[u8], max_samples: usize) -> Result<Decoded> {
                 let mut comps = Vec::with_capacity(nf);
                 for c in rest.as_chunks::<3>().0.iter().take(nf) {
                     if c[1] != 0x11 {
-                        return Err(Error::Unsupported("subsampled lossless JPEG components".into()));
+                        return Err(Error::Unsupported(
+                            "subsampled lossless JPEG components".into(),
+                        ));
                     }
                     comps.push(Component { id: c[0], table: 0 });
                 }
@@ -263,7 +287,10 @@ pub fn decode(data: &[u8], max_samples: usize) -> Result<Decoded> {
                 let mut s = seg;
                 while !s.is_empty() {
                     let [tcth, counts @ ..] = s else { break };
-                    let bits: [u8; 16] = counts.get(..16).and_then(|b| b.try_into().ok()).ok_or(Error::Truncated)?;
+                    let bits: [u8; 16] = counts
+                        .get(..16)
+                        .and_then(|b| b.try_into().ok())
+                        .ok_or(Error::Truncated)?;
                     let n: usize = bits.iter().map(|&b| usize::from(b)).sum();
                     let values = counts.get(16..16 + n).ok_or(Error::Truncated)?.to_vec();
                     let th = usize::from(tcth & 0x0F);
@@ -271,7 +298,9 @@ pub fn decode(data: &[u8], max_samples: usize) -> Result<Decoded> {
                         return Err(Error::Malformed("lossless JPEG: Huffman table class or id"));
                     }
                     if values.iter().any(|&v| v > 16) {
-                        return Err(Error::Malformed("lossless JPEG: difference category above 16"));
+                        return Err(Error::Malformed(
+                            "lossless JPEG: difference category above 16",
+                        ));
                     }
                     tables[th] = Some(Huffman::new(&bits, values)?);
                     s = counts.get(16 + n..).unwrap_or(&[]);
@@ -283,15 +312,22 @@ pub fn decode(data: &[u8], max_samples: usize) -> Result<Decoded> {
             }
             0xDA => {
                 let Some((precision, width, height, mut comps)) = frame.take() else {
-                    return Err(Error::Malformed("lossless JPEG: scan before the frame header"));
+                    return Err(Error::Malformed(
+                        "lossless JPEG: scan before the frame header",
+                    ));
                 };
                 let ns = usize::from(*seg.first().ok_or(Error::Truncated)?);
                 if ns != comps.len() {
-                    return Err(Error::Unsupported("lossless JPEG with more than one scan".into()));
+                    return Err(Error::Unsupported(
+                        "lossless JPEG with more than one scan".into(),
+                    ));
                 }
                 for k in 0..ns {
                     let c = seg.get(1 + 2 * k..3 + 2 * k).ok_or(Error::Truncated)?;
-                    let comp = comps.iter_mut().find(|x| x.id == c[0]).ok_or(Error::Malformed("lossless JPEG: unknown scan component"))?;
+                    let comp = comps
+                        .iter_mut()
+                        .find(|x| x.id == c[0])
+                        .ok_or(Error::Malformed("lossless JPEG: unknown scan component"))?;
                     comp.table = usize::from(c[1] >> 4);
                     if comp.table > 3 {
                         return Err(Error::Malformed("lossless JPEG: Huffman table id"));
@@ -300,21 +336,48 @@ pub fn decode(data: &[u8], max_samples: usize) -> Result<Decoded> {
                 let tail = seg.get(1 + 2 * ns..4 + 2 * ns).ok_or(Error::Truncated)?;
                 let (predictor, pt) = (tail[0], tail[2] & 0x0F);
                 if !(1..=7).contains(&predictor) {
-                    return Err(Error::Unsupported(format!("lossless JPEG predictor {predictor}")));
+                    return Err(Error::Unsupported(format!(
+                        "lossless JPEG predictor {predictor}"
+                    )));
                 }
                 if pt >= precision {
                     return Err(Error::Malformed("lossless JPEG: point transform"));
                 }
-                let n = width.checked_mul(height).and_then(|v| v.checked_mul(comps.len())).ok_or(Error::TooLarge)?;
+                let n = width
+                    .checked_mul(height)
+                    .and_then(|v| v.checked_mul(comps.len()))
+                    .ok_or(Error::TooLarge)?;
                 if n > max_samples {
                     return Err(Error::TooLarge);
                 }
                 let mut hufs = Vec::with_capacity(comps.len());
                 for c in &comps {
-                    hufs.push(tables.get(c.table).and_then(|t| t.as_ref()).ok_or(Error::Malformed("lossless JPEG: missing Huffman table"))?);
+                    hufs.push(
+                        tables
+                            .get(c.table)
+                            .and_then(|t| t.as_ref())
+                            .ok_or(Error::Malformed("lossless JPEG: missing Huffman table"))?,
+                    );
                 }
-                let samples = scan(data, pos + len, &hufs, width, height, precision, predictor, pt, restart_interval)?;
-                return Ok(Decoded { width, height, components: comps.len(), precision, predictor, samples });
+                let samples = scan(
+                    data,
+                    pos + len,
+                    &hufs,
+                    width,
+                    height,
+                    precision,
+                    predictor,
+                    pt,
+                    restart_interval,
+                )?;
+                return Ok(Decoded {
+                    width,
+                    height,
+                    components: comps.len(),
+                    precision,
+                    predictor,
+                    samples,
+                });
             }
             0xC0..=0xC2 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF => {
                 return Err(Error::Unsupported("lossy (DCT) JPEG in a DNG".into()));
@@ -326,13 +389,29 @@ pub fn decode(data: &[u8], max_samples: usize) -> Result<Decoded> {
 }
 
 /// Decode the entropy-coded data of one scan (H.1.2).
-fn scan(data: &[u8], start: usize, hufs: &[&Huffman], width: usize, height: usize, precision: u8, predictor: u8, pt: u8, restart: usize) -> Result<Vec<u16>> {
+fn scan(
+    data: &[u8],
+    start: usize,
+    hufs: &[&Huffman],
+    width: usize,
+    height: usize,
+    precision: u8,
+    predictor: u8,
+    pt: u8,
+    restart: usize,
+) -> Result<Vec<u16>> {
     let nc = hufs.len();
     let row_len = width * nc;
     if restart != 0 && !restart.is_multiple_of(width) {
-        return Err(Error::Unsupported("lossless JPEG restart interval that splits a line".into()));
+        return Err(Error::Unsupported(
+            "lossless JPEG restart interval that splits a line".into(),
+        ));
     }
-    let lines_per_interval = if restart == 0 { usize::MAX } else { restart / width };
+    let lines_per_interval = if restart == 0 {
+        usize::MAX
+    } else {
+        restart / width
+    };
     let mut out = vec![0u16; row_len * height];
     let mut bits = Bits::new(data, start);
     let initial = 1i32 << (precision - pt - 1);
@@ -358,14 +437,23 @@ fn scan(data: &[u8], start: usize, hufs: &[&Huffman], width: usize, height: usiz
                     16 => 32768,
                     s => {
                         let v = bits.bits(s) as i32;
-                        if v < (1 << (s - 1)) { v - (1 << s) + 1 } else { v }
+                        if v < (1 << (s - 1)) {
+                            v - (1 << s) + 1
+                        } else {
+                            v
+                        }
                     }
                 };
                 let px = match above {
                     _ if first_line && x == 0 => initial,
                     _ if first_line => i32::from(cur[i - nc]),
                     Some(a) if x == 0 => i32::from(a[i]),
-                    Some(a) => predict(predictor, i32::from(cur[i - nc]), i32::from(a[i]), i32::from(a[i - nc])),
+                    Some(a) => predict(
+                        predictor,
+                        i32::from(cur[i - nc]),
+                        i32::from(a[i]),
+                        i32::from(a[i - nc]),
+                    ),
                     None => initial,
                 };
                 cur[i] = ((px + diff) & 0xFFFF) as u16;

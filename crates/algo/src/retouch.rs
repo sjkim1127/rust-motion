@@ -69,17 +69,31 @@ fn compress_gamut(c: [f32; 3], l: f32) -> [f32; 3] {
 ///
 /// With `protect_tones`, the curve is applied to luma and the colour scaled to the new luma
 /// (hue and saturation preserved, gamut-compressed); otherwise each channel goes through the curve.
-pub fn dodge_burn(c: [f32; 3], e: f32, range: ToneRange, burn: bool, protect_tones: bool) -> [f32; 3] {
+pub fn dodge_burn(
+    c: [f32; 3],
+    e: f32,
+    range: ToneRange,
+    burn: bool,
+    protect_tones: bool,
+) -> [f32; 3] {
     if e <= 0.0 {
         return c;
     }
     if protect_tones {
         let l = luma(c);
         let nl = tone_curve(l, e, range, burn);
-        let out = if l > 1e-6 { [c[0] * nl / l, c[1] * nl / l, c[2] * nl / l] } else { [nl; 3] };
+        let out = if l > 1e-6 {
+            [c[0] * nl / l, c[1] * nl / l, c[2] * nl / l]
+        } else {
+            [nl; 3]
+        };
         compress_gamut(out, nl)
     } else {
-        [tone_curve(c[0], e, range, burn), tone_curve(c[1], e, range, burn), tone_curve(c[2], e, range, burn)]
+        [
+            tone_curve(c[0], e, range, burn),
+            tone_curve(c[1], e, range, burn),
+            tone_curve(c[2], e, range, burn),
+        ]
     }
 }
 
@@ -87,7 +101,11 @@ pub fn dodge_burn(c: [f32; 3], e: f32, range: ToneRange, burn: bool, protect_ton
 #[inline]
 pub fn saturation(c: [f32; 3]) -> f32 {
     let (lo, hi) = (c[0].min(c[1]).min(c[2]), c[0].max(c[1]).max(c[2]));
-    if hi <= 1e-6 { 0.0 } else { ((hi - lo) / hi).clamp(0.0, 1.0) }
+    if hi <= 1e-6 {
+        0.0
+    } else {
+        ((hi - lo) / hi).clamp(0.0, 1.0)
+    }
 }
 
 /// Sponge: move a colour away from (`saturate`) or toward its luma grey by `amount` (0..1).
@@ -106,7 +124,10 @@ pub fn sponge(c: [f32; 3], amount: f32, saturate: bool, vibrance: bool) -> [f32;
     }
     let l = luma(c);
     let k = if saturate { 1.0 + a } else { 1.0 - a };
-    compress_gamut([l + (c[0] - l) * k, l + (c[1] - l) * k, l + (c[2] - l) * k], l)
+    compress_gamut(
+        [l + (c[0] - l) * k, l + (c[1] - l) * k, l + (c[2] - l) * k],
+        l,
+    )
 }
 
 /// Gaussian blur of the window `[x0, x1) × [y0, y1)` of an interleaved `w × h × ch` buffer, reading
@@ -114,14 +135,24 @@ pub fn sponge(c: [f32; 3], amount: f32, saturate: bool, vibrance: bool) -> [f32;
 /// premultiplied so transparent pixels don't bleed their (meaningless) colour. Returns the window's
 /// blurred pixels (`(x1−x0) × (y1−y0) × ch`).
 #[allow(clippy::too_many_arguments)]
-pub fn local_blur(data: &[f32], w: usize, h: usize, ch: usize, alpha: Option<usize>, win: (usize, usize, usize, usize), sigma: f32) -> Vec<f32> {
+pub fn local_blur(
+    data: &[f32],
+    w: usize,
+    h: usize,
+    ch: usize,
+    alpha: Option<usize>,
+    win: (usize, usize, usize, usize),
+    sigma: f32,
+) -> Vec<f32> {
     let (x0, y0, x1, y1) = win;
     let (ow, oh) = (x1 - x0, y1 - y0);
     if ow == 0 || oh == 0 || ch == 0 {
         return Vec::new();
     }
     let r = (sigma * 3.0).ceil().max(1.0) as i32;
-    let k: Vec<f32> = (-r..=r).map(|i| (-((i * i) as f32) / (2.0 * sigma * sigma).max(1e-6)).exp()).collect();
+    let k: Vec<f32> = (-r..=r)
+        .map(|i| (-((i * i) as f32) / (2.0 * sigma * sigma).max(1e-6)).exp())
+        .collect();
     let ks: f32 = k.iter().sum();
     let k: Vec<f32> = k.into_iter().map(|v| v / ks).collect();
     // Horizontal pass over the window rows extended vertically by r.
@@ -158,7 +189,10 @@ pub fn local_blur(data: &[f32], w: usize, h: usize, ch: usize, alpha: Option<usi
     for oy in 0..oh {
         let dst = &mut out[oy * stride..(oy + 1) * stride];
         for (i, kv) in k.iter().enumerate() {
-            for (d, s) in dst.iter_mut().zip(&tmp[(oy + i) * stride..(oy + i + 1) * stride]) {
+            for (d, s) in dst
+                .iter_mut()
+                .zip(&tmp[(oy + i) * stride..(oy + i + 1) * stride])
+            {
                 *d += s * kv;
             }
         }
@@ -168,7 +202,11 @@ pub fn local_blur(data: &[f32], w: usize, h: usize, ch: usize, alpha: Option<usi
                 let av = out[o + a];
                 for c in 0..ch {
                     if c != a {
-                        out[o + c] = if av > 1e-6 { out[o + c] / av } else { data[((y0 + oy) * w + x0 + ox) * ch + c] };
+                        out[o + c] = if av > 1e-6 {
+                            out[o + c] / av
+                        } else {
+                            data[((y0 + oy) * w + x0 + ox) * ch + c]
+                        };
                     }
                 }
             }
@@ -209,8 +247,20 @@ pub fn local_sharpen(
                 let mut s = v + amount * (v - blur[o + c]);
                 if protect_detail {
                     let (mut lo, mut hi) = (v, v);
-                    for (dx, dy) in [(-1i32, -1i32), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
-                        let (nx, ny) = ((x as i32 + dx).clamp(0, w as i32 - 1) as usize, (y as i32 + dy).clamp(0, h as i32 - 1) as usize);
+                    for (dx, dy) in [
+                        (-1i32, -1i32),
+                        (0, -1),
+                        (1, -1),
+                        (-1, 0),
+                        (1, 0),
+                        (-1, 1),
+                        (0, 1),
+                        (1, 1),
+                    ] {
+                        let (nx, ny) = (
+                            (x as i32 + dx).clamp(0, w as i32 - 1) as usize,
+                            (y as i32 + dy).clamp(0, h as i32 - 1) as usize,
+                        );
                         let nv = data[(ny * w + nx) * ch + c];
                         lo = lo.min(nv);
                         hi = hi.max(nv);
@@ -234,7 +284,10 @@ mod tests {
         assert!(g(0.5) > 0.1, "{}", g(0.5));
         assert!(g(0.5) > 2.0 * g(0.1));
         assert!(g(0.5) > 2.0 * g(0.95));
-        assert_eq!(dodge_burn([0.0; 3], 0.5, ToneRange::Midtones, false, true), [0.0; 3]);
+        assert_eq!(
+            dodge_burn([0.0; 3], 0.5, ToneRange::Midtones, false, true),
+            [0.0; 3]
+        );
         let b = dodge_burn([0.5; 3], 0.5, ToneRange::Midtones, true, true)[0];
         assert!(b < 0.45);
     }
@@ -277,18 +330,28 @@ mod tests {
     #[test]
     fn blur_reduces_variance_and_sharpen_increases_it() {
         let (w, h, ch) = (16, 16, 1);
-        let data: Vec<f32> = (0..w * h).map(|i| if (i % w + i / w) % 2 == 0 { 0.2 } else { 0.8 }).collect();
+        let data: Vec<f32> = (0..w * h)
+            .map(|i| if (i % w + i / w) % 2 == 0 { 0.2 } else { 0.8 })
+            .collect();
         let var = |v: &[f32]| {
             let m = v.iter().sum::<f32>() / v.len() as f32;
             v.iter().map(|x| (x - m).powi(2)).sum::<f32>() / v.len() as f32
         };
         let win = (4, 4, 12, 12);
-        let orig: Vec<f32> = (4..12).flat_map(|y| (4..12).map(move |x| (x, y))).map(|(x, y)| data[y * w + x]).collect();
+        let orig: Vec<f32> = (4..12)
+            .flat_map(|y| (4..12).map(move |x| (x, y)))
+            .map(|(x, y)| data[y * w + x])
+            .collect();
         let b = local_blur(&data, w, h, ch, None, win, 1.5);
         assert!(var(&b) < var(&orig) * 0.2);
-        let smooth: Vec<f32> = (0..w * h).map(|i| 0.3 + 0.03 * (i % w) as f32 + if i % w == 8 { 0.2 } else { 0.0 }).collect();
+        let smooth: Vec<f32> = (0..w * h)
+            .map(|i| 0.3 + 0.03 * (i % w) as f32 + if i % w == 8 { 0.2 } else { 0.0 })
+            .collect();
         let s = local_sharpen(&smooth, w, h, ch, None, win, 1.0, false);
-        let so: Vec<f32> = (4..12).flat_map(|y| (4..12).map(move |x| (x, y))).map(|(x, y)| smooth[y * w + x]).collect();
+        let so: Vec<f32> = (4..12)
+            .flat_map(|y| (4..12).map(move |x| (x, y)))
+            .map(|(x, y)| smooth[y * w + x])
+            .collect();
         assert!(var(&s) > var(&so));
         // Protect detail never exceeds the local range.
         let sp = local_sharpen(&smooth, w, h, ch, None, win, 4.0, true);
@@ -300,7 +363,15 @@ mod tests {
     fn blur_ignores_transparent_colour() {
         // Red opaque next to transparent green: blurred colour stays red.
         let (w, h, ch) = (8, 1, 4);
-        let data: Vec<f32> = (0..w).flat_map(|x| if x < 4 { [1.0, 0.0, 0.0, 1.0] } else { [0.0, 1.0, 0.0, 0.0] }).collect();
+        let data: Vec<f32> = (0..w)
+            .flat_map(|x| {
+                if x < 4 {
+                    [1.0, 0.0, 0.0, 1.0]
+                } else {
+                    [0.0, 1.0, 0.0, 0.0]
+                }
+            })
+            .collect();
         let b = local_blur(&data, w, h, ch, Some(3), (2, 0, 6, 1), 1.0);
         for p in b.as_chunks::<4>().0 {
             if p[3] > 0.01 {

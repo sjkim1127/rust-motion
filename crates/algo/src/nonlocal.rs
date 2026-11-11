@@ -51,7 +51,14 @@ pub struct Params {
 
 impl Default for Params {
     fn default() -> Self {
-        Self { patch_radius: 3, lambda: 50.0, max_iters: 10, pm_passes: 2, tolerance: 0.1 / 255.0, seed: 1 }
+        Self {
+            patch_radius: 3,
+            lambda: 50.0,
+            max_iters: 10,
+            pm_passes: 2,
+            tolerance: 0.1 / 255.0,
+            seed: 1,
+        }
     }
 }
 
@@ -95,8 +102,18 @@ fn valid_sources(w: usize, h: usize, hole: &[bool], r: usize) -> (Vec<bool>, Vec
 /// The texture features at every known cell: the mean of `|∂x|` and of `|∂y|` of the channel mean
 /// over a `side`-wide window, counting only derivatives between two known cells. Hole cells get 0
 /// (the completion fills them in).
-fn texture_features(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], side: usize) -> (Vec<f32>, Vec<f32>) {
-    let g: Vec<f32> = img.chunks_exact(ch).map(|p| p.iter().sum::<f32>() / ch as f32).collect();
+fn texture_features(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    hole: &[bool],
+    side: usize,
+) -> (Vec<f32>, Vec<f32>) {
+    let g: Vec<f32> = img
+        .chunks_exact(ch)
+        .map(|p| p.iter().sum::<f32>() / ch as f32)
+        .collect();
     let w1 = w + 1;
     // Summed-area tables of each derivative and of where it is defined.
     let table = |dx: usize, dy: usize| {
@@ -122,10 +139,21 @@ fn texture_features(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], s
                     return 0.0;
                 }
                 let (x, y) = (i % w, i / w);
-                let (x0, y0, x1, y1) = (x.saturating_sub(half), y.saturating_sub(half), (x + half + 1).min(w), (y + half + 1).min(h));
-                let s = sum[y1 * w1 + x1] + sum[y0 * w1 + x0] - sum[y0 * w1 + x1] - sum[y1 * w1 + x0];
-                let n = cnt[y1 * w1 + x1] + cnt[y0 * w1 + x0] - cnt[y0 * w1 + x1] - cnt[y1 * w1 + x0];
-                if n == 0 { 0.0 } else { (s / f64::from(n)) as f32 }
+                let (x0, y0, x1, y1) = (
+                    x.saturating_sub(half),
+                    y.saturating_sub(half),
+                    (x + half + 1).min(w),
+                    (y + half + 1).min(h),
+                );
+                let s =
+                    sum[y1 * w1 + x1] + sum[y0 * w1 + x0] - sum[y0 * w1 + x1] - sum[y1 * w1 + x0];
+                let n =
+                    cnt[y1 * w1 + x1] + cnt[y0 * w1 + x0] - cnt[y0 * w1 + x1] - cnt[y1 * w1 + x0];
+                if n == 0 {
+                    0.0
+                } else {
+                    (s / f64::from(n)) as f32
+                }
             })
             .collect::<Vec<f32>>()
     };
@@ -144,7 +172,9 @@ fn downsample(l: &Level, cha: usize, ch: usize) -> Level {
         for x in 0..w {
             let (fx, fy) = (x * 2, y * 2);
             let o = (y * w + x) * cha;
-            hole[y * w + x] = (0..2).any(|dy| (0..2).any(|dx| fx + dx < l.w && fy + dy < l.h && l.hole[(fy + dy) * l.w + fx + dx]));
+            hole[y * w + x] = (0..2).any(|dy| {
+                (0..2).any(|dx| fx + dx < l.w && fy + dy < l.h && l.hole[(fy + dy) * l.w + fx + dx])
+            });
             let mut wsum = 0.0f32;
             for (ky, oy) in (-1i32..=1).enumerate() {
                 for (kx, ox) in (-1i32..=1).enumerate() {
@@ -206,12 +236,19 @@ struct Solver<'a> {
 impl Solver<'_> {
     #[inline]
     fn is_valid(&self, x: i32, y: i32) -> bool {
-        x >= 0 && y >= 0 && (x as usize) < self.w && (y as usize) < self.h && self.valid[y as usize * self.w + x as usize]
+        x >= 0
+            && y >= 0
+            && (x as usize) < self.w
+            && (y as usize) < self.h
+            && self.valid[y as usize * self.w + x as usize]
     }
 
     fn random_source(&self, rng: &mut Rng) -> (i32, i32) {
         let n = self.valid_list.len().max(1) as u64;
-        self.valid_list.get((rng.next() % n) as usize).copied().unwrap_or((0, 0))
+        self.valid_list
+            .get((rng.next() % n) as usize)
+            .copied()
+            .unwrap_or((0, 0))
     }
 
     /// Mean squared difference between the target patch at `t` (clipped to the grid; with `known`,
@@ -234,7 +271,10 @@ impl Solver<'_> {
                 if known.is_some_and(|k| !k[tc]) {
                     continue;
                 }
-                let (ti, si) = (tc * cha, ((s.1 + dy) as usize * self.w + (s.0 + dx) as usize) * cha);
+                let (ti, si) = (
+                    tc * cha,
+                    ((s.1 + dy) as usize * self.w + (s.0 + dx) as usize) * cha,
+                );
                 for c in 0..cha {
                     let d = self.img[ti + c] - self.img[si + c];
                     sum += d * d;
@@ -246,11 +286,22 @@ impl Solver<'_> {
                 return f32::INFINITY;
             }
         }
-        if n == 0 { f32::INFINITY } else { sum / n as f32 }
+        if n == 0 {
+            f32::INFINITY
+        } else {
+            sum / n as f32
+        }
     }
 
     /// One PatchMatch pass over the targets, in parallel row bands (propagation stays in a band).
-    fn patchmatch(&self, nnf: &mut [(i32, i32)], cost: &mut [f32], pass: usize, seed: u64, radius: i32) {
+    fn patchmatch(
+        &self,
+        nnf: &mut [(i32, i32)],
+        cost: &mut [f32],
+        pass: usize,
+        seed: u64,
+        radius: i32,
+    ) {
         const BAND: usize = 16;
         let w = self.w;
         let reverse = pass % 2 == 1;
@@ -258,7 +309,9 @@ impl Solver<'_> {
             if self.ctl.cancelled() {
                 return;
             }
-            let mut rng = Rng::new(seed ^ (bi as u64).wrapping_mul(0x2545_F491_4F6C_DD1D) ^ ((pass as u64) << 40));
+            let mut rng = Rng::new(
+                seed ^ (bi as u64).wrapping_mul(0x2545_F491_4F6C_DD1D) ^ ((pass as u64) << 40),
+            );
             let rows = nn.len() / w;
             let step: i32 = if reverse { -1 } else { 1 };
             for ry in 0..rows {
@@ -306,10 +359,17 @@ impl Solver<'_> {
         #[cfg(not(target_arch = "wasm32"))]
         if w * self.h >= PAR_MIN {
             use rayon::prelude::*;
-            nnf.par_chunks_mut(BAND * w).zip(cost.par_chunks_mut(BAND * w)).enumerate().for_each(|(bi, (nn, co))| band(bi, nn, co));
+            nnf.par_chunks_mut(BAND * w)
+                .zip(cost.par_chunks_mut(BAND * w))
+                .enumerate()
+                .for_each(|(bi, (nn, co))| band(bi, nn, co));
             return;
         }
-        for (bi, (nn, co)) in nnf.chunks_mut(BAND * w).zip(cost.chunks_mut(BAND * w)).enumerate() {
+        for (bi, (nn, co)) in nnf
+            .chunks_mut(BAND * w)
+            .zip(cost.chunks_mut(BAND * w))
+            .enumerate()
+        {
             band(bi, nn, co);
         }
     }
@@ -317,7 +377,16 @@ impl Solver<'_> {
     /// Refresh every target's distance to its current match (hole cells change between iterations).
     fn refresh_costs(&self, nnf: &[(i32, i32)], cost: &mut [f32]) {
         let one = |(i, c): (usize, &mut f32)| {
-            *c = if self.targets[i] { self.dist(((i % self.w) as i32, (i / self.w) as i32), nnf[i], f32::INFINITY, None) } else { f32::INFINITY };
+            *c = if self.targets[i] {
+                self.dist(
+                    ((i % self.w) as i32, (i / self.w) as i32),
+                    nnf[i],
+                    f32::INFINITY,
+                    None,
+                )
+            } else {
+                f32::INFINITY
+            };
         };
         #[cfg(not(target_arch = "wasm32"))]
         if self.w * self.h >= PAR_MIN {
@@ -329,13 +398,19 @@ impl Solver<'_> {
     }
 
     /// `pick(x, y)` for every hole cell, in parallel rows: the cells it returns something for.
-    fn per_hole_cell<T: Send>(&self, pick: impl Fn(usize, usize) -> Option<T> + Sync) -> Vec<(usize, T)> {
+    fn per_hole_cell<T: Send>(
+        &self,
+        pick: impl Fn(usize, usize) -> Option<T> + Sync,
+    ) -> Vec<(usize, T)> {
         let (w, h) = (self.w, self.h);
         let row = |y: usize| -> Vec<(usize, T)> {
             if self.ctl.cancelled() {
                 return Vec::new();
             }
-            (0..w).filter(|&x| self.hole[y * w + x]).filter_map(|x| pick(x, y).map(|v| (y * w + x, v))).collect()
+            (0..w)
+                .filter(|&x| self.hole[y * w + x])
+                .filter_map(|x| pick(x, y).map(|v| (y * w + x, v)))
+                .collect()
         };
         #[cfg(not(target_arch = "wasm32"))]
         let rows: Vec<Vec<(usize, T)>> = if w * h >= PAR_MIN {
@@ -351,7 +426,14 @@ impl Solver<'_> {
 
     /// The cells of the patches covering hole cell `(x, y)`: each match's source cell for it, with
     /// that patch's cost.
-    fn sources(&self, x: usize, y: usize, nnf: &[(i32, i32)], cost: &[f32], mut f: impl FnMut(usize, f32)) {
+    fn sources(
+        &self,
+        x: usize,
+        y: usize,
+        nnf: &[(i32, i32)],
+        cost: &[f32],
+        mut f: impl FnMut(usize, f32),
+    ) {
         let (w, h, r) = (self.w as i32, self.h as i32, self.r);
         for dy in -r..=r {
             let ty = y as i32 + dy;
@@ -380,7 +462,12 @@ impl Solver<'_> {
     /// all weights equal, for a field fresh from the coarser level whose costs mean nothing yet).
     /// Returns the mean absolute change of the colour channels.
     fn vote(&mut self, nnf: &[(i32, i32)], cost: &[f32], uniform: bool) -> f32 {
-        let mut cs: Vec<f32> = cost.iter().zip(&self.targets).filter(|(c, t)| **t && c.is_finite()).map(|(c, _)| *c).collect();
+        let mut cs: Vec<f32> = cost
+            .iter()
+            .zip(&self.targets)
+            .filter(|(c, t)| **t && c.is_finite())
+            .map(|(c, _)| *c)
+            .collect();
         // σ² from the 75th percentile of the match costs, as Wexler et al. and the paper.
         let sigma2 = if cs.is_empty() {
             1.0
@@ -394,7 +481,11 @@ impl Solver<'_> {
             let mut v = vec![0.0f32; cha];
             let mut wsum = 0.0f32;
             self.sources(x, y, nnf, cost, |si, c| {
-                let wt = if uniform { 1.0 } else { (-c / (2.0 * sigma2)).exp().max(1e-8) };
+                let wt = if uniform {
+                    1.0
+                } else {
+                    (-c / (2.0 * sigma2)).exp().max(1e-8)
+                };
                 for (o, s) in v.iter_mut().zip(&self.img[si * cha..(si + 1) * cha]) {
                     *o += s * wt;
                 }
@@ -413,7 +504,11 @@ impl Solver<'_> {
             n += self.ch;
             self.img[i * cha..(i + 1) * cha].copy_from_slice(&v);
         }
-        if n == 0 { 0.0 } else { (change / n as f64) as f32 }
+        if n == 0 {
+            0.0
+        } else {
+            (change / n as f64) as f32
+        }
     }
 
     /// The final reconstruction (the paper's eq. 5): each hole cell copies the source cell of the
@@ -450,11 +545,28 @@ impl Solver<'_> {
         if copied.is_empty() {
             return;
         }
-        let unscale = if texture_scale > 0.0 { 0.5 / texture_scale } else { 0.0 };
+        let unscale = if texture_scale > 0.0 {
+            0.5 / texture_scale
+        } else {
+            0.0
+        };
         // Work on the hole's bounding box grown by one cell, which holds the ring of known cells.
-        let (x0, y0, x1, y1) =
-            copied.iter().fold((w, h, 0, 0), |(x0, y0, x1, y1), (p, _, _)| (x0.min(p % w), y0.min(p / w), x1.max(p % w + 1), y1.max(p / w + 1)));
-        let (x0, y0, x1, y1) = (x0.saturating_sub(1), y0.saturating_sub(1), (x1 + 1).min(w), (y1 + 1).min(h));
+        let (x0, y0, x1, y1) = copied
+            .iter()
+            .fold((w, h, 0, 0), |(x0, y0, x1, y1), (p, _, _)| {
+                (
+                    x0.min(p % w),
+                    y0.min(p / w),
+                    x1.max(p % w + 1),
+                    y1.max(p / w + 1),
+                )
+            });
+        let (x0, y0, x1, y1) = (
+            x0.saturating_sub(1),
+            y0.saturating_sub(1),
+            (x1 + 1).min(w),
+            (y1 + 1).min(h),
+        );
         let (bw, bh) = (x1.saturating_sub(x0), y1.saturating_sub(y0));
         let local = |i: usize| (i / w - y0) * bw + (i % w - x0);
         let img = &self.img;
@@ -463,10 +575,16 @@ impl Solver<'_> {
             let mut v = vec![0.0f32; bw * bh];
             let mut n = vec![0u8; bw * bh];
             for &(p, s, _) in copied {
-                let (px, py, sx, sy) = ((p % w) as i32, (p / w) as i32, (s % w) as i32, (s / w) as i32);
+                let (px, py, sx, sy) = (
+                    (p % w) as i32,
+                    (p / w) as i32,
+                    (s % w) as i32,
+                    (s / w) as i32,
+                );
                 for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
                     let (qx, qy, tx, ty) = (px + dx, py + dy, sx + dx, sy + dy);
-                    let inside = |x: i32, y: i32| x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h;
+                    let inside =
+                        |x: i32, y: i32| x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h;
                     if !inside(qx, qy) || !inside(tx, ty) {
                         continue;
                     }
@@ -512,12 +630,18 @@ impl Solver<'_> {
             // Known cells off the ring take the value of the nearest ring cell (breadth first), so
             // the solver's coarse levels, which average known cells, see the ring's values rather
             // than zeros; then the hole is solved.
-            let mut queue: std::collections::VecDeque<usize> = (0..bw * bh).filter(|&lq| n[lq] > 0).collect();
+            let mut queue: std::collections::VecDeque<usize> =
+                (0..bw * bh).filter(|&lq| n[lq] > 0).collect();
             let mut seen: Vec<bool> = n.iter().map(|n| *n > 0).collect();
             let in_hole = |lq: usize| hole[(y0 + lq / bw) * w + x0 + lq % bw];
             while let Some(lq) = queue.pop_front() {
                 let (x, y) = (lq % bw, lq / bw);
-                let around = [(x > 0).then(|| lq - 1), (x + 1 < bw).then(|| lq + 1), (y > 0).then(|| lq - bw), (y + 1 < bh).then(|| lq + bw)];
+                let around = [
+                    (x > 0).then(|| lq - 1),
+                    (x + 1 < bw).then(|| lq + 1),
+                    (y > 0).then(|| lq - bw),
+                    (y + 1 < bh).then(|| lq + bw),
+                ];
                 for nb in around.into_iter().flatten() {
                     if !seen[nb] && !in_hole(nb) {
                         seen[nb] = true;
@@ -562,8 +686,15 @@ impl Solver<'_> {
         for &(p, s, c) in copied {
             src[p] = (s, c);
         }
-        let cell = |x: i32, y: i32| (x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h).then(|| y as usize * w + x as usize);
-        let unscale = if texture_scale > 0.0 { 0.5 / texture_scale } else { 0.0 };
+        let cell = |x: i32, y: i32| {
+            (x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h)
+                .then(|| y as usize * w + x as usize)
+        };
+        let unscale = if texture_scale > 0.0 {
+            0.5 / texture_scale
+        } else {
+            0.0
+        };
         // `div e` per copied cell and channel: the sum over its visible-seam edges of how far the
         // step to the neighbour is off (`e(p → q)`, and `−e` seen from q).
         let mut div = vec![0.0f32; w * h * ch];
@@ -572,7 +703,9 @@ impl Solver<'_> {
             let (px, py) = ((p % w) as i32, (p / w) as i32);
             let texture = (self.img[p * cha + ch] + self.img[p * cha + ch + 1]) * unscale;
             for (dx, dy) in [(1, 0), (0, 1)] {
-                let Some(q) = cell(px + dx, py + dy) else { continue };
+                let Some(q) = cell(px + dx, py + dy) else {
+                    continue;
+                };
                 let (sq, cq) = src[q];
                 if sq == usize::MAX {
                     continue;
@@ -595,7 +728,12 @@ impl Solver<'_> {
                     (None, Some(m)) => (m, sq),
                     (None, None) => continue,
                 };
-                let e: Vec<f32> = (0..ch).map(|c| (self.img[b * cha + c] - self.img[a * cha + c]) - (self.img[q * cha + c] - self.img[p * cha + c])).collect();
+                let e: Vec<f32> = (0..ch)
+                    .map(|c| {
+                        (self.img[b * cha + c] - self.img[a * cha + c])
+                            - (self.img[q * cha + c] - self.img[p * cha + c])
+                    })
+                    .collect();
                 if e.iter().map(|v| v.abs()).sum::<f32>() / ch as f32 <= SEAM_CONTRAST * texture {
                     continue;
                 }
@@ -613,9 +751,17 @@ impl Solver<'_> {
         // harmonic away from the seams and fades within a few dozen cells, so only cells within
         // `FUSE_BAND` of a seam are solved for.
         const FUSE_BAND: usize = 16;
-        let seams: Vec<bool> = (0..w * h).map(|i| div[i * ch..(i + 1) * ch].iter().any(|v| *v != 0.0)).collect();
+        let seams: Vec<bool> = (0..w * h)
+            .map(|i| div[i * ch..(i + 1) * ch].iter().any(|v| *v != 0.0))
+            .collect();
         let band = crate::remove::dilate(w, h, &seams, FUSE_BAND);
-        let halves: [Vec<usize>; 2] = [0, 1].map(|colour| copied.iter().map(|(p, _, _)| *p).filter(|&p| band[p] && (p % w + p / w) % 2 == colour).collect());
+        let halves: [Vec<usize>; 2] = [0, 1].map(|colour| {
+            copied
+                .iter()
+                .map(|(p, _, _)| *p)
+                .filter(|&p| band[p] && (p % w + p / w) % 2 == colour)
+                .collect()
+        });
         let mut delta = vec![0.0f32; w * h * ch];
         let mut next: Vec<f32> = Vec::new();
         for _ in 0..iters {
@@ -631,9 +777,13 @@ impl Solver<'_> {
                     let mut deg = 0.0f32;
                     out.fill(0.0);
                     for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-                        let Some(q) = cell(x + dx, y + dy) else { continue };
+                        let Some(q) = cell(x + dx, y + dy) else {
+                            continue;
+                        };
                         deg += 1.0;
-                        out.iter_mut().zip(&d[q * ch..(q + 1) * ch]).for_each(|(s, v)| *s += v);
+                        out.iter_mut()
+                            .zip(&d[q * ch..(q + 1) * ch])
+                            .for_each(|(s, v)| *s += v);
                     }
                     for (c, o) in out.iter_mut().enumerate() {
                         let cur = d[p * ch + c];
@@ -643,7 +793,10 @@ impl Solver<'_> {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
                     use rayon::prelude::*;
-                    cells.par_iter().zip(next.par_chunks_mut(ch)).for_each(relax);
+                    cells
+                        .par_iter()
+                        .zip(next.par_chunks_mut(ch))
+                        .for_each(relax);
                 }
                 #[cfg(target_arch = "wasm32")]
                 cells.iter().zip(next.chunks_mut(ch)).for_each(relax);
@@ -662,7 +815,12 @@ impl Solver<'_> {
     /// Onion-peel initialisation (the paper's §3.4): fill the hole one boundary layer at a time.
     /// Each known patch centre next to the layer gets a match by its known cells; each layer cell
     /// is then the weighted vote of those matches. Leaves those matches in `nnf` (`has` marks them).
-    fn onion_peel(&mut self, nnf: &mut [(i32, i32)], has: &mut [bool], seed: u64) -> Result<(), Cancelled> {
+    fn onion_peel(
+        &mut self,
+        nnf: &mut [(i32, i32)],
+        has: &mut [bool],
+        seed: u64,
+    ) -> Result<(), Cancelled> {
         let (w, h, r, cha) = (self.w, self.h, self.r, self.cha);
         let mut known: Vec<bool> = self.hole.iter().map(|m| !*m).collect();
         // The cells still unknown, and per layer the known centres found (lists, so a layer costs
@@ -675,9 +833,16 @@ impl Solver<'_> {
             self.ctl.check()?;
             let neighbour_known = |i: usize, known: &[bool]| {
                 let (x, y) = (i % w, i / w);
-                (x > 0 && known[i - 1]) || (x + 1 < w && known[i + 1]) || (y > 0 && known[i - w]) || (y + 1 < h && known[i + w])
+                (x > 0 && known[i - 1])
+                    || (x + 1 < w && known[i + 1])
+                    || (y > 0 && known[i - w])
+                    || (y + 1 < h && known[i + w])
             };
-            let layer: Vec<usize> = unknown.iter().copied().filter(|&i| neighbour_known(i, &known)).collect();
+            let layer: Vec<usize> = unknown
+                .iter()
+                .copied()
+                .filter(|&i| neighbour_known(i, &known))
+                .collect();
             if layer.is_empty() {
                 return Ok(());
             }
@@ -703,7 +868,8 @@ impl Solver<'_> {
             let (nnf_ref, has_ref) = (&*nnf, &*has);
             let search = |&ci: &usize| -> (usize, (i32, i32), f32) {
                 let t = ((ci % w) as i32, (ci / w) as i32);
-                let mut rng = Rng::new(seed ^ (ci as u64).wrapping_mul(0x9E37_79B9) ^ (layer_no << 48));
+                let mut rng =
+                    Rng::new(seed ^ (ci as u64).wrapping_mul(0x9E37_79B9) ^ (layer_no << 48));
                 let (mut best, mut bc) = ((0, 0), f32::INFINITY);
                 let try_cand = |cand: (i32, i32), best: &mut (i32, i32), bc: &mut f32| {
                     if this.is_valid(cand.0, cand.1) {
@@ -719,7 +885,12 @@ impl Solver<'_> {
                 // Neighbours' matches, shifted (propagation), and a few random sources.
                 for (ox, oy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
                     let (nx, ny) = (t.0 + ox, t.1 + oy);
-                    if nx >= 0 && ny >= 0 && (nx as usize) < w && (ny as usize) < h && has_ref[ny as usize * w + nx as usize] {
+                    if nx >= 0
+                        && ny >= 0
+                        && (nx as usize) < w
+                        && (ny as usize) < h
+                        && has_ref[ny as usize * w + nx as usize]
+                    {
                         let s = nnf_ref[ny as usize * w + nx as usize];
                         try_cand((s.0 - ox, s.1 - oy), &mut best, &mut bc);
                     }
@@ -730,7 +901,11 @@ impl Solver<'_> {
                 for _ in 0..2 {
                     let mut rad = w.max(h) as i32;
                     while rad >= 1 {
-                        try_cand((best.0 + rng.range(-rad, rad), best.1 + rng.range(-rad, rad)), &mut best, &mut bc);
+                        try_cand(
+                            (best.0 + rng.range(-rad, rad), best.1 + rng.range(-rad, rad)),
+                            &mut best,
+                            &mut bc,
+                        );
                         rad /= 2;
                     }
                 }
@@ -808,7 +983,15 @@ impl Solver<'_> {
 /// Complete `hole` in `img` (see the module docs). `Ok(None)` when no fully-known patch exists to
 /// copy from; `Err(Cancelled)` when `ctl` was cancelled. A buffer or mask of the wrong size, or no
 /// hole, comes back unchanged.
-pub fn complete_with(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], p: &Params, ctl: &Interrupt) -> Result<Option<Vec<f32>>, Cancelled> {
+pub fn complete_with(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    hole: &[bool],
+    p: &Params,
+    ctl: &Interrupt,
+) -> Result<Option<Vec<f32>>, Cancelled> {
     let n = w.saturating_mul(h);
     if ch == 0 || hole.len() != n || img.len() != n.saturating_mul(ch) || !hole.iter().any(|m| *m) {
         return Ok(Some(img.to_vec()));
@@ -824,10 +1007,17 @@ pub fn complete_with(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], 
         data.extend_from_slice(px);
         data.extend_from_slice(&[tx[i] * k, ty[i] * k]);
     }
-    let mut pyramid = vec![Level { w, h, img: data, hole: hole.to_vec() }];
+    let mut pyramid = vec![Level {
+        w,
+        h,
+        img: data,
+        hole: hole.to_vec(),
+    }];
     while pyramid.len() < levels {
         ctl.check()?;
-        let Some(next) = pyramid.last().map(|l| downsample(l, cha, ch)) else { break };
+        let Some(next) = pyramid.last().map(|l| downsample(l, cha, ch)) else {
+            break;
+        };
         // A level with nothing to copy from can't seed the finer ones: stop above it.
         if valid_sources(next.w, next.h, &next.hole, r).1.is_empty() {
             break;
@@ -855,7 +1045,19 @@ pub fn complete_with(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], 
                 }
             }
         }
-        let mut s = Solver { w: lw, h: lh, cha, ch, r: ri, img: level.img.clone(), hole: &level.hole, valid, valid_list, targets, ctl };
+        let mut s = Solver {
+            w: lw,
+            h: lh,
+            cha,
+            ch,
+            r: ri,
+            img: level.img.clone(),
+            hole: &level.hole,
+            valid,
+            valid_list,
+            targets,
+            ctl,
+        };
         let mut nnf = vec![(0i32, 0i32); lw * lh];
         let mut cost = vec![f32::INFINITY; lw * lh];
         let mut rng = Rng::new(p.seed ^ ((li as u64) << 20));
@@ -905,10 +1107,20 @@ pub fn complete_with(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool], 
         for it in 0..p.max_iters.max(1) {
             ctl.check()?;
             s.refresh_costs(&nnf, &mut cost);
-            let radius = if coarsest || it == 0 { full } else { (8 * (2 * ri + 1)).min(full) };
+            let radius = if coarsest || it == 0 {
+                full
+            } else {
+                (8 * (2 * ri + 1)).min(full)
+            };
             for pass in 0..p.pm_passes.max(1) {
                 ctl.check()?;
-                s.patchmatch(&mut nnf, &mut cost, pass + it * p.pm_passes, p.seed.wrapping_add((li * 1000 + it) as u64), radius);
+                s.patchmatch(
+                    &mut nnf,
+                    &mut cost,
+                    pass + it * p.pm_passes,
+                    p.seed.wrapping_add((li * 1000 + it) as u64),
+                    radius,
+                );
             }
             ctl.check()?;
             let change = s.vote(&nnf, &cost, false);
@@ -967,49 +1179,138 @@ mod tests {
     #[test]
     fn a_hole_in_texture_next_to_a_flat_area_of_the_same_mean_gets_texture() {
         let (w, h) = (96, 64);
-        let img: Vec<f32> = (0..w * h).map(|i| if i % w < 48 { 0.5 } else { 0.25 + 0.5 * noise(i) }).collect();
-        let hole: Vec<bool> = (0..w * h).map(|i| (60..84).contains(&(i % w)) && (20..44).contains(&(i / w))).collect();
-        let out = complete_with(w, h, 1, &img, &hole, &Params::default(), &Interrupt::NONE).unwrap().unwrap();
+        let img: Vec<f32> = (0..w * h)
+            .map(|i| {
+                if i % w < 48 {
+                    0.5
+                } else {
+                    0.25 + 0.5 * noise(i)
+                }
+            })
+            .collect();
+        let hole: Vec<bool> = (0..w * h)
+            .map(|i| (60..84).contains(&(i % w)) && (20..44).contains(&(i / w)))
+            .collect();
+        let out = complete_with(w, h, 1, &img, &hole, &Params::default(), &Interrupt::NONE)
+            .unwrap()
+            .unwrap();
         let (filled, truth) = (grain(w, &out, &hole), grain(w, &img, &hole));
-        assert!(filled > truth * 0.7, "the fill is smoother than the texture around it: {filled} vs {truth}");
-        assert!(out.iter().zip(&img).zip(&hole).all(|((o, i), m)| *m || o == i), "known cells are kept");
+        assert!(
+            filled > truth * 0.7,
+            "the fill is smoother than the texture around it: {filled} vs {truth}"
+        );
+        assert!(
+            out.iter()
+                .zip(&img)
+                .zip(&hole)
+                .all(|((o, i), m)| *m || o == i),
+            "known cells are kept"
+        );
     }
 
     #[test]
     fn a_hole_in_a_gradient_follows_the_gradient() {
         let (w, h, ch) = (80, 60, 2);
-        let img: Vec<f32> = (0..w * h).flat_map(|i| [(i % w) as f32 / w as f32, 1.0]).collect();
-        let hole: Vec<bool> = (0..w * h).map(|i| (30..50).contains(&(i % w)) && (20..40).contains(&(i / w))).collect();
-        let out = complete_with(w, h, ch, &img, &hole, &Params::default(), &Interrupt::NONE).unwrap().unwrap();
+        let img: Vec<f32> = (0..w * h)
+            .flat_map(|i| [(i % w) as f32 / w as f32, 1.0])
+            .collect();
+        let hole: Vec<bool> = (0..w * h)
+            .map(|i| (30..50).contains(&(i % w)) && (20..40).contains(&(i / w)))
+            .collect();
+        let out = complete_with(w, h, ch, &img, &hole, &Params::default(), &Interrupt::NONE)
+            .unwrap()
+            .unwrap();
         for (i, _) in hole.iter().enumerate().filter(|(_, m)| **m) {
-            assert!((out[i * ch] - img[i * ch]).abs() < 0.1, "cell {i}: {} vs {}", out[i * ch], img[i * ch]);
+            assert!(
+                (out[i * ch] - img[i * ch]).abs() < 0.1,
+                "cell {i}: {} vs {}",
+                out[i * ch],
+                img[i * ch]
+            );
         }
     }
 
     #[test]
     fn levels_follow_the_hole_thickness() {
         let (w, h) = (400, 400);
-        let line: Vec<bool> = (0..w * h).map(|i| i / w == 200 && (20..380).contains(&(i % w))).collect();
-        assert_eq!(level_count(w, h, &line, 3), 1, "a thin line stays at full resolution");
-        let disc: Vec<bool> = (0..w * h).map(|i| ((i % w) as f32 - 200.0).hypot((i / w) as f32 - 200.0) < 90.0).collect();
+        let line: Vec<bool> = (0..w * h)
+            .map(|i| i / w == 200 && (20..380).contains(&(i % w)))
+            .collect();
+        assert_eq!(
+            level_count(w, h, &line, 3),
+            1,
+            "a thin line stays at full resolution"
+        );
+        let disc: Vec<bool> = (0..w * h)
+            .map(|i| ((i % w) as f32 - 200.0).hypot((i / w) as f32 - 200.0) < 90.0)
+            .collect();
         assert_eq!(level_count(w, h, &disc, 3), 5, "⌈log2(2·90/7)⌉");
     }
 
     #[test]
     fn nothing_to_copy_from_and_bad_sizes() {
         let img = vec![0.5f32; 12 * 12];
-        assert_eq!(complete_with(12, 12, 1, &img, &[true; 144], &Params::default(), &Interrupt::NONE).unwrap(), None);
-        assert_eq!(complete_with(12, 12, 1, &img, &[true; 3], &Params::default(), &Interrupt::NONE).unwrap(), Some(img.clone()));
-        assert_eq!(complete_with(12, 12, 0, &img, &[true; 144], &Params::default(), &Interrupt::NONE).unwrap(), Some(img.clone()));
+        assert_eq!(
+            complete_with(
+                12,
+                12,
+                1,
+                &img,
+                &[true; 144],
+                &Params::default(),
+                &Interrupt::NONE
+            )
+            .unwrap(),
+            None
+        );
+        assert_eq!(
+            complete_with(
+                12,
+                12,
+                1,
+                &img,
+                &[true; 3],
+                &Params::default(),
+                &Interrupt::NONE
+            )
+            .unwrap(),
+            Some(img.clone())
+        );
+        assert_eq!(
+            complete_with(
+                12,
+                12,
+                0,
+                &img,
+                &[true; 144],
+                &Params::default(),
+                &Interrupt::NONE
+            )
+            .unwrap(),
+            Some(img.clone())
+        );
     }
 
     #[test]
     fn cancelled_is_an_error() {
         let (w, h) = (64, 64);
         let img: Vec<f32> = (0..w * h).map(noise).collect();
-        let hole: Vec<bool> = (0..w * h).map(|i| (20..40).contains(&(i % w)) && (20..40).contains(&(i / w))).collect();
+        let hole: Vec<bool> = (0..w * h)
+            .map(|i| (20..40).contains(&(i % w)) && (20..40).contains(&(i / w)))
+            .collect();
         let cancel = || true;
         let progress = |_: f32| {};
-        assert_eq!(complete_with(w, h, 1, &img, &hole, &Params::default(), &Interrupt::new(&cancel, &progress)), Err(Cancelled));
+        assert_eq!(
+            complete_with(
+                w,
+                h,
+                1,
+                &img,
+                &hole,
+                &Params::default(),
+                &Interrupt::new(&cancel, &progress)
+            ),
+            Err(Cancelled)
+        );
     }
 }

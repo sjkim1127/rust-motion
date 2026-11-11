@@ -276,7 +276,10 @@ impl YuNetFaceDetection {
 }
 
 /// Apply Non-Maximum Suppression (NMS) to candidate face detections.
-pub fn nms_faces(mut candidates: Vec<YuNetFaceDetection>, iou_threshold: f32) -> Vec<YuNetFaceDetection> {
+pub fn nms_faces(
+    mut candidates: Vec<YuNetFaceDetection>,
+    iou_threshold: f32,
+) -> Vec<YuNetFaceDetection> {
     candidates.sort_by(|a, b| {
         b.confidence
             .partial_cmp(&a.confidence)
@@ -377,9 +380,9 @@ pub fn detect_faces_yunet(pixmap: &Pixmap, score_threshold: f32) -> Vec<YuNetFac
             if bw >= 12 && bh >= 12 {
                 let aspect = bw as f32 / bh as f32;
                 if (0.4..=2.2).contains(&aspect) {
-                    let fill_ratio =
-                        (count as f32 / ((max_x - min_x + 1) * (max_y - min_y + 1)) as f32)
-                            .clamp(0.0, 1.0);
+                    let fill_ratio = (count as f32
+                        / ((max_x - min_x + 1) * (max_y - min_y + 1)) as f32)
+                        .clamp(0.0, 1.0);
                     let conf = (0.5 + 0.5 * fill_ratio).clamp(0.0, 0.99);
                     if conf >= score_threshold {
                         let fx = (min_x * 4) as f32;

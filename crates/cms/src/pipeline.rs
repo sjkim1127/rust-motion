@@ -55,7 +55,12 @@ impl Stage {
     }
 
     pub fn matrix3(m: &math::Mat3) -> Stage {
-        Stage::Matrix { rows: 3, cols: 3, m: m.iter().flatten().copied().collect(), offset: vec![0.0; 3] }
+        Stage::Matrix {
+            rows: 3,
+            cols: 3,
+            m: m.iter().flatten().copied().collect(),
+            offset: vec![0.0; 3],
+        }
     }
 
     #[inline]
@@ -73,7 +78,12 @@ impl Stage {
                 }
                 n
             }
-            Stage::Matrix { rows, cols, m, offset } => {
+            Stage::Matrix {
+                rows,
+                cols,
+                m,
+                offset,
+            } => {
                 let mut o = [0.0f32; MAX];
                 for r in 0..*rows {
                     let mut s = offset[r];
@@ -160,7 +170,11 @@ pub struct Pipeline {
 impl Pipeline {
     pub fn new(inputs: usize, stages: Vec<Stage>) -> Self {
         let outputs = stages.iter().fold(inputs, |n, s| s.outputs(n));
-        Pipeline { inputs, outputs, stages }
+        Pipeline {
+            inputs,
+            outputs,
+            stages,
+        }
     }
 
     /// Appends stages.
@@ -189,8 +203,16 @@ impl Pipeline {
         for s in self.stages.drain(..) {
             let noop = match &s {
                 Stage::Curves(c) | Stage::InvCurves(c) => c.iter().all(Curve::is_identity),
-                Stage::Matrix { rows: 3, cols: 3, m, offset } => {
-                    offset.iter().all(|o| o.abs() < 1e-12) && m.iter().enumerate().all(|(i, v)| (v - if i % 4 == 0 { 1.0 } else { 0.0 }).abs() < 1e-12)
+                Stage::Matrix {
+                    rows: 3,
+                    cols: 3,
+                    m,
+                    offset,
+                } => {
+                    offset.iter().all(|o| o.abs() < 1e-12)
+                        && m.iter()
+                            .enumerate()
+                            .all(|(i, v)| (v - if i % 4 == 0 { 1.0 } else { 0.0 }).abs() < 1e-12)
                 }
                 _ => false,
             };
@@ -209,14 +231,30 @@ impl Pipeline {
             // which always holds for data coming out of a table, so those pairs cancel too.
             let cancels_dec = matches!(
                 (out.last(), &s),
-                (Some(Stage::DecodeLabV4), Stage::EncodeLabV4) | (Some(Stage::DecodeLabV2), Stage::EncodeLabV2) | (Some(Stage::DecodeXyz), Stage::EncodeXyz)
+                (Some(Stage::DecodeLabV4), Stage::EncodeLabV4)
+                    | (Some(Stage::DecodeLabV2), Stage::EncodeLabV2)
+                    | (Some(Stage::DecodeXyz), Stage::EncodeXyz)
             );
             if cancels || cancels_dec {
                 out.pop();
                 continue;
             }
             // Merge consecutive 3×3 matrices.
-            if let (Some(Stage::Matrix { rows: 3, cols: 3, m: a, offset: oa }), Stage::Matrix { rows: 3, cols: 3, m: b, offset: ob }) = (out.last(), &s) {
+            if let (
+                Some(Stage::Matrix {
+                    rows: 3,
+                    cols: 3,
+                    m: a,
+                    offset: oa,
+                }),
+                Stage::Matrix {
+                    rows: 3,
+                    cols: 3,
+                    m: b,
+                    offset: ob,
+                },
+            ) = (out.last(), &s)
+            {
                 let mut m = vec![0.0; 9];
                 let mut off = vec![0.0; 3];
                 for r in 0..3 {
@@ -226,7 +264,12 @@ impl Pipeline {
                     off[r] = (0..3).map(|k| b[r * 3 + k] * oa[k]).sum::<f64>() + ob[r];
                 }
                 out.pop();
-                out.push(Stage::Matrix { rows: 3, cols: 3, m, offset: off });
+                out.push(Stage::Matrix {
+                    rows: 3,
+                    cols: 3,
+                    m,
+                    offset: off,
+                });
                 continue;
             }
             out.push(s);

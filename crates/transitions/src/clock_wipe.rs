@@ -1,10 +1,7 @@
-//! Circular ClockWipe transition presentation and component.
+//! Circular ClockWipe transition presentation and scene emitter.
 
 use crate::presentation::{PresentationVisual, TransitionContext, TransitionPresentation};
-use dioxus::prelude::*;
-use rust_motion_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
 use rust_motion_composition::{CompositionError, SceneEmitter, SceneFrameContext};
-use rust_motion_core::hooks::use_current_frame;
 use rust_motion_rasterizer::{ClipRegion, Scene, SceneNode};
 use serde_json::Value;
 
@@ -70,7 +67,7 @@ impl ClockWipe {
         let x1 = cx + radius * end_rad.cos();
         let y1 = cy + radius * end_rad.sin();
 
-        let large_arc_flag = if p > 0.5 { 1 } else { 0 };
+        let large_arc_flag = if sweep_angle > 180.0 { 1 } else { 0 };
         let sweep_flag = if self.counter_clockwise { 0 } else { 1 };
 
         format!(
@@ -156,55 +153,5 @@ impl<E: SceneEmitter> SceneEmitter for SceneClockWipe<E> {
             });
         }
         Ok(())
-    }
-}
-
-/// Props for the `<ClockWipe>` Dioxus component.
-#[derive(Props, Clone, PartialEq)]
-pub struct ClockWipeProps {
-    #[props(default = 20)]
-    pub enter_duration: u32,
-    #[props(default = false)]
-    pub counter_clockwise: bool,
-    #[props(default = 0.0)]
-    pub start_angle_deg: f32,
-    pub children: Element,
-}
-
-/// Circular clock sweep transition reveal component.
-#[component]
-pub fn ClockWipe(props: ClockWipeProps) -> Element {
-    let frame = use_current_frame() as f64;
-    let enter = props.enter_duration as f64;
-
-    let p = if enter > 0.0 {
-        interpolate(
-            frame,
-            &[0.0, enter],
-            &[0.0, 1.0],
-            InterpolateOptions {
-                extrapolate_left: ExtrapolateType::Clamp,
-                extrapolate_right: ExtrapolateType::Clamp,
-                ..Default::default()
-            },
-        )
-    } else {
-        1.0
-    } as f32;
-
-    let wipe = ClockWipe {
-        counter_clockwise: props.counter_clockwise,
-        start_angle_deg: props.start_angle_deg,
-    };
-    let path = wipe.build_clip_path(100.0, 100.0, p);
-
-    rsx! {
-        div {
-            style: "
-                position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                clip-path: path('{path}');
-            ",
-            {props.children}
-        }
     }
 }

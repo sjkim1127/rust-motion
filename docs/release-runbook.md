@@ -88,7 +88,6 @@ Because internal crates depend on one another, publishing to crates.io must foll
 # Core primitives
 cargo publish -p rust-motion-paths
 cargo publish -p rust-motion-animation
-cargo publish -p rust-motion-core
 
 # Low-level rasterizer & media
 cargo publish -p rust-motion-rasterizer
@@ -105,8 +104,7 @@ cargo publish -p rust-motion-project
 
 # Engine & integrations
 cargo publish -p rust-motion-renderer
-cargo publish -p rust-motion-player
-cargo publish -p rust-motion-vdom
+cargo publish -p rust-motion-ts
 cargo publish -p rust-motion-cli
 ```
 

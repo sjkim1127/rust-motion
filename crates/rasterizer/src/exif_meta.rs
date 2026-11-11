@@ -380,7 +380,9 @@ pub fn parse_xmp_packet(xmp: &str, meta: &mut MediaMetadata) {
             meta.date_time_original = Some(dt);
         }
     }
-    if let Some(lens) = extract_attr_or_tag("aux:Lens").or_else(|| extract_attr_or_tag("exifEX:LensModel")) {
+    if let Some(lens) =
+        extract_attr_or_tag("aux:Lens").or_else(|| extract_attr_or_tag("exifEX:LensModel"))
+    {
         if meta.lens_model.is_none() {
             meta.lens_model = Some(lens);
         }
@@ -443,7 +445,9 @@ pub fn parse_iptc_iim(data: &[u8], meta: &mut MediaMetadata) {
             break;
         }
         if record == 2 {
-            let text = String::from_utf8_lossy(&data[i..i + len]).trim().to_string();
+            let text = String::from_utf8_lossy(&data[i..i + len])
+                .trim()
+                .to_string();
             match dataset {
                 5 => meta.iptc_object_name = Some(text),
                 25 => meta.iptc_keywords.push(text),

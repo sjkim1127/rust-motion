@@ -4,13 +4,11 @@ rust-motion-project
 rust-motion-rasterizer
 rust-motion-renderer
 rust-motion-composition
-rust-motion-core
 rust-motion-shapes
 rust-motion-charts
-rust-motion-vdom
 rust-motion-media
 rust-motion-captions
 rust-motion-noise
 rust-motion-transitions
-rust-motion-player
+rust-motion-ts
 rust-motion-cli

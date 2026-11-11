@@ -35,7 +35,11 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         // The gigabyte the other importers allow decoded pixels (`io`'s `MAX_PIXEL_BYTES`).
-        Self { max_entry: 256 << 20, max_total: 1 << 30, max_pixel_bytes: 1 << 30 }
+        Self {
+            max_entry: 256 << 20,
+            max_total: 1 << 30,
+            max_pixel_bytes: 1 << 30,
+        }
     }
 }
 
@@ -95,8 +99,14 @@ impl<'a> Cursor<'a> {
         self.bytes.len().saturating_sub(self.pos)
     }
     pub(crate) fn take(&mut self, n: usize) -> Result<&'a [u8], Error> {
-        let end = self.pos.checked_add(n).ok_or(Error::Malformed("length overflow"))?;
-        let s = self.bytes.get(self.pos..end).ok_or(Error::Malformed("truncated data"))?;
+        let end = self
+            .pos
+            .checked_add(n)
+            .ok_or(Error::Malformed("length overflow"))?;
+        let s = self
+            .bytes
+            .get(self.pos..end)
+            .ok_or(Error::Malformed("truncated data"))?;
         self.pos = end;
         Ok(s)
     }
@@ -144,7 +154,9 @@ pub fn header(bytes: &[u8]) -> Result<Header, Error> {
         return Err(Error::Unsupported("container variant"));
     }
     if c.take(4)? != DOCUMENT_KIND {
-        return Err(Error::Unsupported("this Affinity file is a library (assets, brushes or styles), not a document"));
+        return Err(Error::Unsupported(
+            "this Affinity file is a library (assets, brushes or styles), not a document",
+        ));
     }
     if c.take(4)? != b"#Inf" {
         return Err(Error::Malformed("missing information header"));
@@ -157,7 +169,13 @@ pub fn header(bytes: &[u8]) -> Result<Header, Error> {
     if c.take(4)? != b"Prot" {
         return Err(Error::Malformed("missing protocol header"));
     }
-    Ok(Header { version, flags, fat_offset, thumbnail_offset, saved })
+    Ok(Header {
+        version,
+        flags,
+        fat_offset,
+        thumbnail_offset,
+        saved,
+    })
 }
 
 impl<'a> Archive<'a> {
@@ -222,7 +240,15 @@ impl<'a> Archive<'a> {
                         } else {
                             stored
                         };
-                        record = Some(Entry { id, name: String::new(), offset, size, compressed, crc, compression });
+                        record = Some(Entry {
+                            id,
+                            name: String::new(),
+                            offset,
+                            size,
+                            compressed,
+                            crc,
+                            compression,
+                        });
                     }
                     2 => {}
                     _ => return Err(Error::Malformed("unknown allocation record")),
@@ -251,7 +277,14 @@ impl<'a> Archive<'a> {
                 entries.insert(e.name.clone(), e);
             }
         }
-        Ok(Self { bytes, header, entries, revisions: tables, extracted: 0, limits })
+        Ok(Self {
+            bytes,
+            header,
+            entries,
+            revisions: tables,
+            extracted: 0,
+            limits,
+        })
     }
 
     pub fn entry(&self, name: &str) -> Option<&Entry> {
@@ -269,12 +302,19 @@ impl<'a> Archive<'a> {
 
     /// Extract an entry by name: decompress, undo the byte predictor and verify the CRC.
     pub fn read(&mut self, name: &str) -> Result<Vec<u8>, Error> {
-        let e = self.entries.get(name).ok_or(Error::Malformed("missing archive entry"))?.clone();
+        let e = self
+            .entries
+            .get(name)
+            .ok_or(Error::Malformed("missing archive entry"))?
+            .clone();
         let size = usize::try_from(e.size).map_err(|_| Error::Limit("archive entry too large"))?;
         if size > self.limits.max_entry {
             return Err(Error::Limit("archive entry too large"));
         }
-        let total = self.extracted.checked_add(size).ok_or(Error::Limit("document too large"))?;
+        let total = self
+            .extracted
+            .checked_add(size)
+            .ok_or(Error::Limit("document too large"))?;
         if total > self.limits.max_total {
             return Err(Error::Limit("document too large"));
         }
@@ -283,7 +323,11 @@ impl<'a> Archive<'a> {
             return Err(Error::Malformed("archive entry has no data block"));
         }
         let method = e.compression & 3;
-        let stored_len = if matches!(method, 1 | 2) { e.compressed } else { e.size };
+        let stored_len = if matches!(method, 1 | 2) {
+            e.compressed
+        } else {
+            e.size
+        };
         let data = c.take(offset(stored_len)?)?;
         let mut out = match method {
             1 => inflate(data, size)?,
@@ -307,7 +351,10 @@ impl<'a> Archive<'a> {
 fn read_bounded(mut r: impl Read, size: usize) -> Result<Vec<u8>, Error> {
     let mut out = Vec::with_capacity(size.min(64 << 20));
     let cap = u64::try_from(size).unwrap_or(u64::MAX).saturating_add(1);
-    r.by_ref().take(cap).read_to_end(&mut out).map_err(|_| Error::Malformed("corrupt compressed entry"))?;
+    r.by_ref()
+        .take(cap)
+        .read_to_end(&mut out)
+        .map_err(|_| Error::Malformed("corrupt compressed entry"))?;
     Ok(out)
 }
 
@@ -320,9 +367,12 @@ fn unzstd(data: &[u8], size: usize) -> Result<Vec<u8>, Error> {
     let mut out = Vec::new();
     // Entries may hold several concatenated frames.
     while !src.is_empty() {
-        let left = size.checked_sub(out.len()).ok_or(Error::Malformed("archive entry size mismatch"))?;
-        let decoder = ruzstd::decoding::StreamingDecoder::new_with_max_window_size(&mut src, MAX_ZSTD_WINDOW)
-            .map_err(|_| Error::Malformed("corrupt compressed entry"))?;
+        let left = size
+            .checked_sub(out.len())
+            .ok_or(Error::Malformed("archive entry size mismatch"))?;
+        let decoder =
+            ruzstd::decoding::StreamingDecoder::new_with_max_window_size(&mut src, MAX_ZSTD_WINDOW)
+                .map_err(|_| Error::Malformed("corrupt compressed entry"))?;
         let frame = read_bounded(decoder, left)?;
         if frame.is_empty() {
             return Err(Error::Malformed("corrupt compressed entry"));
@@ -355,7 +405,8 @@ fn unpredict(b: &mut [u8], compression: u8) -> Result<(), Error> {
                 let planes = b.to_vec();
                 let (hi, lo) = planes.split_at(0x8000);
                 for (i, out) in b.as_chunks_mut::<4>().0.iter_mut().enumerate() {
-                    let (Some(h), Some(l)) = (hi.get(2 * i..2 * i + 2), lo.get(2 * i..2 * i + 2)) else {
+                    let (Some(h), Some(l)) = (hi.get(2 * i..2 * i + 2), lo.get(2 * i..2 * i + 2))
+                    else {
                         return Err(Error::Malformed("tile size"));
                     };
                     *out = [l[0], h[0], l[1], h[1]];

@@ -21,13 +21,13 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 
 rust-motion-animation = { workspace = true }
-rust-motion-captions = { workspace = true, default-features = false }
+rust-motion-captions = { workspace = true }
 rust-motion-cli = { workspace = true, features = ["rhai"] }
 rust-motion-composition = { workspace = true }
-rust-motion-media = { workspace = true, default-features = false }
+rust-motion-media = { workspace = true }
 rust-motion-paths = { workspace = true }
 rust-motion-rasterizer = { workspace = true }
-rust-motion-shapes = { workspace = true, default-features = false }
+rust-motion-shapes = { workspace = true }
 
 [features]
 default = ["extension-module"]

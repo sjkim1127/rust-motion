@@ -47,7 +47,11 @@ fn surface(fmt: PixelFormat, w: i32, h: i32) -> Surface {
     for y in 0..h {
         for x in 0..w {
             let v = ((x * 7 + y * 13) % 31) as f32 / 30.0;
-            let a = if (x + y) % 9 == 0 { 0.0 } else { 0.25 + 0.75 * ((x % 4) as f32 / 3.0) };
+            let a = if (x + y) % 9 == 0 {
+                0.0
+            } else {
+                0.25 + 0.75 * ((x % 4) as f32 / 3.0)
+            };
             s.write_pixel(x, y, &[v, 1.0 - v, (x % 5) as f32 / 4.0, a]);
         }
     }
@@ -72,16 +76,25 @@ fn example_invert_loads_and_reports_its_manifest() {
     assert_eq!(m.name, "Invert (WebAssembly)");
     assert_eq!(m.kind, rust_motion_plugins::Kind::Filter);
     assert!(m.params.is_empty());
-    assert!(p.size() < 4096, "the example stays tiny: {} bytes", p.size());
+    assert!(
+        p.size() < 4096,
+        "the example stays tiny: {} bytes",
+        p.size()
+    );
 }
 
 #[test]
 fn example_invert_inverts_colour_at_every_depth() {
     let p = Plugin::load(INVERT, Limits::default()).unwrap();
     for sample in SampleType::ALL {
-        let fmt = PixelFormat { sample, ..PixelFormat::RGBA8 };
+        let fmt = PixelFormat {
+            sample,
+            ..PixelFormat::RGBA8
+        };
         let s = surface(fmt, 40, 30);
-        let out = p.apply(&s, Rect::new(0, 0, 40, 30), None, &json!({})).unwrap();
+        let out = p
+            .apply(&s, Rect::new(0, 0, 40, 30), None, &json!({}))
+            .unwrap();
         for (x, y) in [(1, 1), (0, 0), (17, 3), (39, 29)] {
             let (a, b) = (s.pixel(x, y), out.pixel(x, y));
             if a[3] <= 0.0 {
@@ -89,7 +102,10 @@ fn example_invert_inverts_colour_at_every_depth() {
                 continue;
             }
             for c in 0..3 {
-                assert!((b[c] - (1.0 - a[c])).abs() < 1e-6, "{sample:?} ({x},{y}) c{c}: {a:?} -> {b:?}");
+                assert!(
+                    (b[c] - (1.0 - a[c])).abs() < 1e-6,
+                    "{sample:?} ({x},{y}) c{c}: {a:?} -> {b:?}"
+                );
             }
             assert_eq!(a[3], b[3], "alpha is kept");
         }
@@ -99,12 +115,18 @@ fn example_invert_inverts_colour_at_every_depth() {
 #[test]
 fn bands_are_seamless_and_selection_blends() {
     // Tiny bands: many instances, same result as one band.
-    let small = Limits { band_bytes: 40 * 4 * 4 * 3, ..Limits::default() };
+    let small = Limits {
+        band_bytes: 40 * 4 * 4 * 3,
+        ..Limits::default()
+    };
     let p1 = Plugin::load(INVERT, Limits::default()).unwrap();
     let p2 = Plugin::load(INVERT, small).unwrap();
     let s = surface(PixelFormat::RGBA16, 40, 30);
     let canvas = Rect::new(0, 0, 40, 30);
-    assert_eq!(p1.apply(&s, canvas, None, &json!({})).unwrap(), p2.apply(&s, canvas, None, &json!({})).unwrap());
+    assert_eq!(
+        p1.apply(&s, canvas, None, &json!({})).unwrap(),
+        p2.apply(&s, canvas, None, &json!({})).unwrap()
+    );
 
     // A half-strength selection over the left half.
     let mut sel = Surface::new(PixelFormat::GRAY8);
@@ -117,7 +139,10 @@ fn bands_are_seamless_and_selection_blends() {
     let (a, b) = (s.pixel(5, 5), out.pixel(5, 5));
     let k = sel.pixel(5, 5)[0];
     let half = a[0] + (1.0 - a[0] - a[0]) * k;
-    assert!((b[0] - half).abs() < 2.0 / 65535.0, "half selected: {a:?} {b:?}");
+    assert!(
+        (b[0] - half).abs() < 2.0 / 65535.0,
+        "half selected: {a:?} {b:?}"
+    );
 }
 
 #[test]
@@ -135,11 +160,16 @@ fn params_and_image_context_reach_the_plugin() {
     let p = Plugin::load(&module(man, 1, fill, ""), Limits::default()).unwrap();
     assert_eq!(p.manifest().params_notation(), r#"{"amount":0..10=5}"#);
     let s = surface(PixelFormat::RGBA32F, 8, 8);
-    let out = p.apply(&s, Rect::new(0, 0, 8, 8), None, &json!({"amount": 3})).unwrap();
+    let out = p
+        .apply(&s, Rect::new(0, 0, 8, 8), None, &json!({"amount": 3}))
+        .unwrap();
     let v = out.pixel(1, 1)[0] * 1000.0;
     assert!(v > 100.0 && v < 600.0, "params JSON length {v}");
     // Wrong-typed params are refused before the plug-in runs.
-    assert!(matches!(p.apply(&s, Rect::new(0, 0, 8, 8), None, &json!({"amount": "x"})), Err(Error::Params(_))));
+    assert!(matches!(
+        p.apply(&s, Rect::new(0, 0, 8, 8), None, &json!({"amount": "x"})),
+        Err(Error::Params(_))
+    ));
 }
 
 #[test]
@@ -154,12 +184,20 @@ fn nan_and_out_of_range_output_is_sanitised() {
       (i32.const 0)"#;
     let p = Plugin::load(&ok_module(nan), Limits::default()).unwrap();
     let s = surface(PixelFormat::RGBA32F, 8, 8);
-    assert_eq!(p.apply(&s, Rect::new(0, 0, 8, 8), None, &json!({})).unwrap(), s);
+    assert_eq!(
+        p.apply(&s, Rect::new(0, 0, 8, 8), None, &json!({}))
+            .unwrap(),
+        s
+    );
 }
 
 #[test]
 fn hostile_modules_fail_quickly() {
-    let quick = if cfg!(debug_assertions) { Duration::from_secs(15) } else { Duration::from_secs(5) };
+    let quick = if cfg!(debug_assertions) {
+        Duration::from_secs(15)
+    } else {
+        Duration::from_secs(5)
+    };
     let cases: Vec<(&str, Vec<u8>)> = vec![
         ("infinite loop", ok_module("(loop $l (br $l)) (i32.const 0)")),
         ("memory.grow bomb, then trap", ok_module("(loop $l (br_if $l (i32.ne (memory.grow (i32.const 512)) (i32.const -1)))) unreachable")),
@@ -186,10 +224,24 @@ fn hostile_modules_fail_quickly() {
 #[test]
 fn malformed_and_oversized_modules_are_refused() {
     let half = &INVERT[..INVERT.len() / 2];
-    for (name, bytes) in [("empty", &b""[..]), ("garbage", &b"\0asm\x01\0\0\0\xff\xff\xff"[..]), ("not wasm", &b"MZ\x90\0"[..]), ("truncated", half)] {
-        assert!(matches!(Plugin::load(bytes, Limits::default()), Err(Error::Module(_))), "{name}");
+    for (name, bytes) in [
+        ("empty", &b""[..]),
+        ("garbage", &b"\0asm\x01\0\0\0\xff\xff\xff"[..]),
+        ("not wasm", &b"MZ\x90\0"[..]),
+        ("truncated", half),
+    ] {
+        assert!(
+            matches!(
+                Plugin::load(bytes, Limits::default()),
+                Err(Error::Module(_))
+            ),
+            "{name}"
+        );
     }
-    let tiny = Limits { max_module_bytes: 100, ..Limits::default() };
+    let tiny = Limits {
+        max_module_bytes: 100,
+        ..Limits::default()
+    };
     assert!(matches!(Plugin::load(INVERT, tiny), Err(Error::Module(_))));
     // Huge initial memory, manifest outside memory, missing exports, bogus allocations.
     let huge = wat::parse_str(r#"(module (memory (export "memory") 60000))"#).unwrap();
@@ -204,7 +256,10 @@ fn malformed_and_oversized_modules_are_refused() {
            (func (export "pc_manifest") (result i64) (i64.const 0x00000064ffffff00))
            (func (export "pc_alloc") (param i32) (result i32) (i32.const 16))
            (func (export "pc_filter") (param i32 i32 i32 i32 i32 i32 i32 i32) (result i32) (i32.const 0)))"#;
-    assert!(matches!(Plugin::load(&wat::parse_str(src).unwrap(), Limits::default()), Err(Error::Abi(_))));
+    assert!(matches!(
+        Plugin::load(&wat::parse_str(src).unwrap(), Limits::default()),
+        Err(Error::Abi(_))
+    ));
     let bogus_alloc = wat::parse_str(format!(
         r#"(module (memory (export "memory") 1) (data (i32.const 16) "{}")
            (func (export "pc_abi_version") (result i32) (i32.const 1))
@@ -223,19 +278,35 @@ fn malformed_and_oversized_modules_are_refused() {
 fn budgets_stop_runaway_plugins() {
     let spin = ok_module("(loop $l (br $l)) (i32.const 0)");
     // Instruction budget.
-    let (e, _) = run_err(&spin, Limits { fuel_base: 1_000_000, fuel_per_sample: 10, ..Limits::default() });
+    let (e, _) = run_err(
+        &spin,
+        Limits {
+            fuel_base: 1_000_000,
+            fuel_per_sample: 10,
+            ..Limits::default()
+        },
+    );
     assert_eq!(e, Error::Limit("instruction budget".into()));
 }
 
 #[test]
 fn parallel_bands_preserve_the_originating_error() {
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(2).build().unwrap();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(2)
+        .build()
+        .unwrap();
     let mut s = Surface::new(PixelFormat::RGBA8);
     s.fill_rect(Rect::new(0, 0, 256, 256), &[0.0, 0.0, 0.0, 1.0]);
     s.fill_rect(Rect::new(0, 256, 256, 512), &[1.0, 0.0, 0.0, 1.0]);
     for (body, expected) in [
-        ("(i32.const 7)", Error::Failed("pc_filter returned error code 7".into())),
-        ("unreachable", Error::Trap("wasm `unreachable` instruction executed".into())),
+        (
+            "(i32.const 7)",
+            Error::Failed("pc_filter returned error code 7".into()),
+        ),
+        (
+            "unreachable",
+            Error::Trap("wasm `unreachable` instruction executed".into()),
+        ),
     ] {
         // The later band fails immediately while the earlier one is still running (or hasn't
         // started). Collecting in band order must not turn that failure into sibling cancellation.
@@ -243,10 +314,17 @@ fn parallel_bands_preserve_the_originating_error() {
             "(if (result i32) (f32.gt (f32.load (local.get $buf)) (f32.const 0.5)) \
              (then {body}) (else (loop $spin (br $spin)) (i32.const 0)))"
         );
-        let limits = Limits { band_bytes: 1, fuel_base: 100_000_000, fuel_per_sample: 0, ..Limits::default() };
+        let limits = Limits {
+            band_bytes: 1,
+            fuel_base: 100_000_000,
+            fuel_per_sample: 0,
+            ..Limits::default()
+        };
         let p = Plugin::load(&ok_module(&filter), limits).unwrap();
         let before = s.clone();
-        let e = pool.install(|| p.apply(&s, Rect::new(0, 0, 256, 512), None, &json!({}))).unwrap_err();
+        let e = pool
+            .install(|| p.apply(&s, Rect::new(0, 0, 256, 512), None, &json!({})))
+            .unwrap_err();
         assert_eq!(e, expected);
         assert_eq!(s, before, "a failed run must not change the input");
     }
@@ -254,16 +332,26 @@ fn parallel_bands_preserve_the_originating_error() {
 
 #[test]
 fn parallel_bands_preserve_instruction_budget() {
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .unwrap();
     let p = Plugin::load(
         &ok_module("(loop $spin (br $spin)) (i32.const 0)"),
-        Limits { band_bytes: 1, fuel_base: 1_000_000, fuel_per_sample: 0, ..Limits::default() },
+        Limits {
+            band_bytes: 1,
+            fuel_base: 1_000_000,
+            fuel_per_sample: 0,
+            ..Limits::default()
+        },
     )
     .unwrap();
     let mut s = Surface::new(PixelFormat::RGBA8);
     s.fill_rect(Rect::new(0, 0, 768, 512), &[0.25, 0.5, 0.75, 1.0]);
     for _ in 0..8 {
-        let e = pool.install(|| p.apply(&s, Rect::new(0, 0, 768, 512), None, &json!({}))).unwrap_err();
+        let e = pool
+            .install(|| p.apply(&s, Rect::new(0, 0, 768, 512), None, &json!({})))
+            .unwrap_err();
         assert_eq!(e, Error::Limit("instruction budget".into()));
     }
 }
@@ -272,7 +360,14 @@ fn parallel_bands_preserve_instruction_budget() {
 fn wall_clock_budget_stops_runaway_plugins() {
     let spin = ok_module("(loop $l (br $l)) (i32.const 0)");
     // Wall-clock budget, with an effectively unlimited instruction budget.
-    let (e, t) = run_err(&spin, Limits { fuel_base: u64::MAX / 4, wall_time_ms: 300, ..Limits::default() });
+    let (e, t) = run_err(
+        &spin,
+        Limits {
+            fuel_base: u64::MAX / 4,
+            wall_time_ms: 300,
+            ..Limits::default()
+        },
+    );
     assert_eq!(e, Error::Limit("time budget".into()));
     assert!(t < Duration::from_secs(3), "{t:?}");
 }
@@ -281,20 +376,51 @@ fn wall_clock_budget_stops_runaway_plugins() {
 fn memory_cap_limits_bands() {
     // Memory cap: a band that can't fit is refused up front.
     let s = surface(PixelFormat::RGBA8, 64, 8);
-    let p = Plugin::load(INVERT, Limits { max_memory_bytes: 4 << 20, band_bytes: 64 << 20, ..Limits::default() }).unwrap();
-    assert!(p.apply(&s, Rect::new(0, 0, 64, 8), None, &json!({})).is_ok(), "small bands still fit");
-    let p = Plugin::load(INVERT, Limits { max_memory_bytes: 1024, ..Limits::default() });
-    assert!(p.is_err() || p.unwrap().apply(&s, Rect::new(0, 0, 64, 8), None, &json!({})).is_err());
+    let p = Plugin::load(
+        INVERT,
+        Limits {
+            max_memory_bytes: 4 << 20,
+            band_bytes: 64 << 20,
+            ..Limits::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        p.apply(&s, Rect::new(0, 0, 64, 8), None, &json!({}))
+            .is_ok(),
+        "small bands still fit"
+    );
+    let p = Plugin::load(
+        INVERT,
+        Limits {
+            max_memory_bytes: 1024,
+            ..Limits::default()
+        },
+    );
+    assert!(
+        p.is_err()
+            || p.unwrap()
+                .apply(&s, Rect::new(0, 0, 64, 8), None, &json!({}))
+                .is_err()
+    );
 }
 
 #[test]
 fn registry_install_list_remove() {
     // Its own id: the registry is process-wide and tests run in parallel.
     let id = "test.registry";
-    let p = rust_motion_plugins::registry::install_bytes(&module(r#"{"id":"test.registry","name":"R","kind":"filter"}"#, 1, "(i32.const 0)", "")).unwrap();
+    let p = rust_motion_plugins::registry::install_bytes(&module(
+        r#"{"id":"test.registry","name":"R","kind":"filter"}"#,
+        1,
+        "(i32.const 0)",
+        "",
+    ))
+    .unwrap();
     assert_eq!(p.id(), id);
     let rev = rust_motion_plugins::registry::revision();
-    assert!(rust_motion_plugins::registry::list().iter().any(|p| p.id() == id));
+    assert!(rust_motion_plugins::registry::list()
+        .iter()
+        .any(|p| p.id() == id));
     assert!(rust_motion_plugins::registry::get(id).is_some());
     assert!(rust_motion_plugins::registry::remove(id));
     assert!(!rust_motion_plugins::registry::remove(id));
@@ -314,6 +440,9 @@ fn folder_loading_skips_bad_files() {
     assert_eq!(r.failed.len(), 1);
     assert!(r.failed[0].0.ends_with("b-broken.wasm"));
     assert!(rust_motion_plugins::registry::load_folder(&dir.join("missing")).is_err());
-    assert!(rust_motion_plugins::registry::load_file(&dir, Limits::default()).is_err(), "a directory is not a module");
+    assert!(
+        rust_motion_plugins::registry::load_file(&dir, Limits::default()).is_err(),
+        "a directory is not a module"
+    );
     std::fs::remove_dir_all(&dir).ok();
 }

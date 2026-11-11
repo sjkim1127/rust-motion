@@ -3,9 +3,13 @@
 use crate::bitstream::BitWriter;
 
 use crate::dct::{fdct8x8, quantize8x8};
-use crate::header::{FrameHeader, MAX_DIMENSION, PBU_PRIMARY_FRAME, write_frame_header, write_metadata_pbu};
-use crate::tables::{DEFAULT_Q_MATRIX_VAL, ZIGZAG_8X8, select_level_and_band};
-use crate::{ChromaFormat, ColorInfo, ContentLightLevel, Error, Frame, MasteringDisplay, Profile, Result};
+use crate::header::{
+    write_frame_header, write_metadata_pbu, FrameHeader, MAX_DIMENSION, PBU_PRIMARY_FRAME,
+};
+use crate::tables::{select_level_and_band, DEFAULT_Q_MATRIX_VAL, ZIGZAG_8X8};
+use crate::{
+    ChromaFormat, ColorInfo, ContentLightLevel, Error, Frame, MasteringDisplay, Profile, Result,
+};
 
 /// Generate RFC 9924 §7.2.4 variable-length codeword (`h(v)`).
 #[inline]
@@ -92,7 +96,8 @@ impl EncoderConfig {
         let tile_height_in_mbs = h_mbs.div_ceil(4).max(8).max(h_mbs.div_ceil(20));
         let target_frame_bytes = profile.nominal_frame_bytes(width, height);
         let kbps = ((target_frame_bytes as u64) * 8 * 30 / 1000).max(1000) as u32;
-        let (level_idc, band_idc) = select_level_and_band((width as u64) * (height as u64) * 30, kbps);
+        let (level_idc, band_idc) =
+            select_level_and_band((width as u64) * (height as u64) * 30, kbps);
         Self {
             profile,
             width,
@@ -137,20 +142,37 @@ impl Encoder {
     }
 
     pub fn with_config(cfg: EncoderConfig) -> Result<Self> {
-        if cfg.width == 0 || cfg.height == 0 || cfg.width > MAX_DIMENSION || cfg.height > MAX_DIMENSION {
-            return Err(Error::Input(format!("unsupported dimensions {}x{}", cfg.width, cfg.height)));
+        if cfg.width == 0
+            || cfg.height == 0
+            || cfg.width > MAX_DIMENSION
+            || cfg.height > MAX_DIMENSION
+        {
+            return Err(Error::Input(format!(
+                "unsupported dimensions {}x{}",
+                cfg.width, cfg.height
+            )));
         }
         if cfg.chroma == ChromaFormat::Yuv422 && !cfg.width.is_multiple_of(2) {
             return Err(Error::Input("4:2:2 requires even frame width".into()));
         }
         if !(10..=16).contains(&cfg.bit_depth) {
-            return Err(Error::Input(format!("unsupported coded bit depth {}", cfg.bit_depth)));
+            return Err(Error::Input(format!(
+                "unsupported coded bit depth {}",
+                cfg.bit_depth
+            )));
         }
         if !cfg.profile.supports(cfg.chroma, cfg.bit_depth) {
-            return Err(Error::Input(format!("profile {} does not support {:?} {}-bit", cfg.profile.name(), cfg.chroma, cfg.bit_depth)));
+            return Err(Error::Input(format!(
+                "profile {} does not support {:?} {}-bit",
+                cfg.profile.name(),
+                cfg.chroma,
+                cfg.bit_depth
+            )));
         }
         if cfg.tile_width_in_mbs == 0 || cfg.tile_height_in_mbs == 0 {
-            return Err(Error::Input("tile dimensions in MBs must be non-zero".into()));
+            return Err(Error::Input(
+                "tile dimensions in MBs must be non-zero".into(),
+            ));
         }
 
         let w_mbs = cfg.width.div_ceil(16);
@@ -158,7 +180,9 @@ impl Encoder {
         let tile_cols = w_mbs.div_ceil(cfg.tile_width_in_mbs);
         let tile_rows = h_mbs.div_ceil(cfg.tile_height_in_mbs);
         if tile_cols > 20 || tile_rows > 20 {
-            return Err(Error::Input(format!("tile grid {tile_cols}x{tile_rows} exceeds RFC 9924 limit of 20x20")));
+            return Err(Error::Input(format!(
+                "tile grid {tile_cols}x{tile_rows} exceeds RFC 9924 limit of 20x20"
+            )));
         }
 
         let mut col_starts = Vec::with_capacity(tile_cols as usize + 1);
@@ -180,7 +204,9 @@ impl Encoder {
         if let Some(qm) = &cfg.q_matrix {
             for c in 0..cfg.chroma.num_comps() {
                 if qm[c].contains(&0) {
-                    return Err(Error::Input("q_matrix entries must be non-zero (1..=255)".into()));
+                    return Err(Error::Input(
+                        "q_matrix entries must be non-zero (1..=255)".into(),
+                    ));
                 }
             }
         }
@@ -222,21 +248,36 @@ impl Encoder {
     /// Encode one frame into an APV Access Unit (`b"aPv1"...`), suitable for MP4/MOV (`apv1`) or MKV (`V_APV`).
     pub fn encode(&mut self, frame: &Frame) -> Result<Vec<u8>> {
         if frame.width != self.cfg.width || frame.height != self.cfg.height {
-            return Err(Error::Input(format!("frame is {}x{}, encoder is {}x{}", frame.width, frame.height, self.cfg.width, self.cfg.height)));
+            return Err(Error::Input(format!(
+                "frame is {}x{}, encoder is {}x{}",
+                frame.width, frame.height, self.cfg.width, self.cfg.height
+            )));
         }
         if frame.chroma != self.cfg.chroma {
-            return Err(Error::Input(format!("frame chroma {:?} does not match encoder {:?}", frame.chroma, self.cfg.chroma)));
+            return Err(Error::Input(format!(
+                "frame chroma {:?} does not match encoder {:?}",
+                frame.chroma, self.cfg.chroma
+            )));
         }
         if !(8..=16).contains(&frame.bit_depth) {
-            return Err(Error::Input(format!("unsupported input bit depth {}", frame.bit_depth)));
+            return Err(Error::Input(format!(
+                "unsupported input bit depth {}",
+                frame.bit_depth
+            )));
         }
         let n_luma = (frame.width as usize) * (frame.height as usize);
         let n_chroma = (frame.chroma_width() as usize) * (frame.chroma_height() as usize);
         if frame.y.len() != n_luma || frame.cb.len() != n_chroma || frame.cr.len() != n_chroma {
-            return Err(Error::Input("plane buffer lengths do not match frame geometry".into()));
+            return Err(Error::Input(
+                "plane buffer lengths do not match frame geometry".into(),
+            ));
         }
-        if self.cfg.chroma == ChromaFormat::Yuv4444 && frame.alpha.as_ref().is_none_or(|a| a.len() != n_luma) {
-            return Err(Error::Input("4:4:4:4 profile requires an alpha plane of width * height samples".into()));
+        if self.cfg.chroma == ChromaFormat::Yuv4444
+            && frame.alpha.as_ref().is_none_or(|a| a.len() != n_luma)
+        {
+            return Err(Error::Input(
+                "4:4:4:4 profile requires an alpha plane of width * height samples".into(),
+            ));
         }
 
         let prepared = self.prepare_tiles(frame);
@@ -250,7 +291,10 @@ impl Encoder {
             #[cfg(feature = "threads")]
             {
                 use rayon::prelude::*;
-                prepared.par_iter().map(|t| self.encode_tile(t, qp)).collect()
+                prepared
+                    .par_iter()
+                    .map(|t| self.encode_tile(t, qp))
+                    .collect()
             }
             #[cfg(not(feature = "threads"))]
             {
@@ -274,8 +318,14 @@ impl Encoder {
         let tiles_total_bytes: usize = encoded_tiles.iter().map(|t| 4 + t.len()).sum();
         let pbu_size = 4 + fh_bytes.len() + tiles_total_bytes;
 
-        let mdcv = frame.mastering_display.as_ref().or(self.cfg.mastering_display.as_ref());
-        let cll = frame.content_light.as_ref().or(self.cfg.content_light.as_ref());
+        let mdcv = frame
+            .mastering_display
+            .as_ref()
+            .or(self.cfg.mastering_display.as_ref());
+        let cll = frame
+            .content_light
+            .as_ref()
+            .or(self.cfg.content_light.as_ref());
         let meta_pbu = write_metadata_pbu(1, mdcv, cll);
         let meta_total = meta_pbu.as_ref().map_or(0, |m| 4 + m.len());
 
@@ -314,7 +364,11 @@ impl Encoder {
         v.push(1); // number_of_configuration_entry = 1
         v.push(PBU_PRIMARY_FRAME); // pbu_type[0] = 1
         v.push(1); // number_of_frame_info[0] = 1
-        let flags = if self.cfg.color_description_present { 0x02 } else { 0x00 } | 0x01; // capture_time_distance_ignored = 1
+        let flags = if self.cfg.color_description_present {
+            0x02
+        } else {
+            0x00
+        } | 0x01; // capture_time_distance_ignored = 1
         v.push(flags);
         v.push(self.hdr.profile_idc);
         v.push(self.hdr.level_idc);
@@ -327,7 +381,11 @@ impl Encoder {
             v.push(self.cfg.color.primaries);
             v.push(self.cfg.color.transfer);
             v.push(self.cfg.color.matrix);
-            v.push(if self.cfg.color.full_range { 0x80 } else { 0x00 });
+            v.push(if self.cfg.color.full_range {
+                0x80
+            } else {
+                0x00
+            });
         }
         v
     }
@@ -348,7 +406,13 @@ impl Encoder {
 
             for c in 0..num_comps {
                 let (plane, pw, ph, sub_w, sub_h) = match c {
-                    0 => (frame.y.as_slice(), frame.width as usize, frame.height as usize, 1u32, 1u32),
+                    0 => (
+                        frame.y.as_slice(),
+                        frame.width as usize,
+                        frame.height as usize,
+                        1u32,
+                        1u32,
+                    ),
                     1 => (
                         frame.cb.as_slice(),
                         frame.chroma_width() as usize,
@@ -363,13 +427,20 @@ impl Encoder {
                         self.hdr.chroma.sub_width_c(),
                         self.hdr.chroma.sub_height_c(),
                     ),
-                    _ => (frame.alpha.as_deref().unwrap_or(&[]), frame.width as usize, frame.height as usize, 1u32, 1u32),
+                    _ => (
+                        frame.alpha.as_deref().unwrap_or(&[]),
+                        frame.width as usize,
+                        frame.height as usize,
+                        1u32,
+                        1u32,
+                    ),
                 };
                 let blk_w = (16 / sub_w) as usize;
                 let blk_h = (16 / sub_h) as usize;
                 let blocks_x = blk_w / 8;
                 let blocks_y = blk_h / 8;
-                let total_blocks = (num_mb_cols as usize) * (num_mb_rows as usize) * blocks_x * blocks_y;
+                let total_blocks =
+                    (num_mb_cols as usize) * (num_mb_rows as usize) * blocks_x * blocks_y;
                 let mut blocks = Vec::with_capacity(total_blocks);
 
                 let coded_depth = self.hdr.bit_depth;
@@ -389,7 +460,8 @@ impl Encoder {
                                     for rx in 0..8 {
                                         let sx = (bx0 + rx).min(pw.saturating_sub(1));
                                         let v = plane[sy * pw + sx];
-                                        samples[ry * 8 + rx] = scale_sample(v, in_depth, coded_depth);
+                                        samples[ry * 8 + rx] =
+                                            scale_sample(v, in_depth, coded_depth);
                                     }
                                 }
                                 blocks.push(fdct8x8(&samples, coded_depth));
@@ -479,7 +551,9 @@ impl Encoder {
 
             while scan_pos < 64 {
                 let mut run = 0u32;
-                while scan_pos + (run as usize) < 64 && coeff[ZIGZAG_8X8[scan_pos + (run as usize)] as usize] == 0 {
+                while scan_pos + (run as usize) < 64
+                    && coeff[ZIGZAG_8X8[scan_pos + (run as usize)] as usize] == 0
+                {
                     run += 1;
                 }
                 let k_run = (prev_run >> 2).min(2);
@@ -535,7 +609,9 @@ impl Encoder {
 
                 while scan_pos < 64 {
                     let mut run = 0u32;
-                    while scan_pos + (run as usize) < 64 && coeff[ZIGZAG_8X8[scan_pos + (run as usize)] as usize] == 0 {
+                    while scan_pos + (run as usize) < 64
+                        && coeff[ZIGZAG_8X8[scan_pos + (run as usize)] as usize] == 0
+                    {
                         run += 1;
                     }
                     let k_run = (prev_run >> 2).min(2);
@@ -562,7 +638,8 @@ impl Encoder {
 
         // Write tile_header(tileIdx) (RFC 9924 §5.3.13)
         let tile_header_size = (5 + 5 * num_comps) as u16;
-        let total_size = tile_header_size as usize + comp_payloads.iter().map(Vec::len).sum::<usize>();
+        let total_size =
+            tile_header_size as usize + comp_payloads.iter().map(Vec::len).sum::<usize>();
         let mut out = Vec::with_capacity(total_size);
         out.extend_from_slice(&tile_header_size.to_be_bytes());
         out.extend_from_slice(&(tile.tile_idx as u16).to_be_bytes());

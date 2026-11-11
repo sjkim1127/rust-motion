@@ -224,7 +224,10 @@ fn node_to_scene_node(node: &Node) -> Result<Option<SceneNode>, RasterError> {
     }
 
     if let Some(dnode) = direct_node.take() {
-        if child_scene_nodes.is_empty() && (opacity - 1.0).abs() < 1e-4 && blend_mode == BlendMode::Normal {
+        if child_scene_nodes.is_empty()
+            && (opacity - 1.0).abs() < 1e-4
+            && blend_mode == BlendMode::Normal
+        {
             return Ok(Some(dnode));
         }
         let mut all_children = vec![dnode];
@@ -284,7 +287,9 @@ pub fn read_affinity_preview(data: &[u8]) -> Result<Option<Vec<u8>>, RasterError
     match preview(data) {
         Ok(p) => Ok(Some(p.png.to_vec())),
         Err(rust_motion_affinity::Error::Unsupported(_)) => Ok(None),
-        Err(e) => Err(RasterError::Scene(format!("failed to read Affinity preview: {e}"))),
+        Err(e) => Err(RasterError::Scene(format!(
+            "failed to read Affinity preview: {e}"
+        ))),
     }
 }
 

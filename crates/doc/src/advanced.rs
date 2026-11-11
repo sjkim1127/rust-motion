@@ -126,7 +126,11 @@ mod tests {
         assert!(!a.layer_mask_hides_effects);
         assert!(!a.vector_mask_hides_effects);
         assert!(a.is_default());
-        assert!(!AdvancedBlending { blend_clipped: false, ..a }.is_default());
+        assert!(!AdvancedBlending {
+            blend_clipped: false,
+            ..a
+        }
+        .is_default());
     }
 
     #[test]
@@ -143,10 +147,20 @@ mod tests {
     #[test]
     fn partial_json_keeps_photoshop_defaults() {
         let a: AdvancedBlending = serde_json::from_str(r#"{"knockout":"deep"}"#).unwrap();
-        assert_eq!(a, AdvancedBlending { knockout: Knockout::Deep, ..Default::default() });
+        assert_eq!(
+            a,
+            AdvancedBlending {
+                knockout: Knockout::Deep,
+                ..Default::default()
+            }
+        );
         let b: AdvancedBlending = serde_json::from_str("{}").unwrap();
         assert!(b.is_default());
-        let json = serde_json::to_string(&AdvancedBlending { layer_mask_hides_effects: true, ..Default::default() }).unwrap();
+        let json = serde_json::to_string(&AdvancedBlending {
+            layer_mask_hides_effects: true,
+            ..Default::default()
+        })
+        .unwrap();
         assert!(json.contains("\"layerMaskHidesEffects\":true"), "{json}");
     }
 }

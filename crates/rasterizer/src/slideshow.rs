@@ -38,9 +38,8 @@ impl KenBurnsEasing {
                 for _ in 0..8 {
                     let inv = 1.0 - s;
                     let x = 3.0 * inv * inv * s * x1 + 3.0 * inv * s * s * x2 + s * s * s;
-                    let dx = 3.0 * inv * inv * x1
-                        + 6.0 * inv * s * (x2 - x1)
-                        + 3.0 * s * s * (1.0 - x2);
+                    let dx =
+                        3.0 * inv * inv * x1 + 6.0 * inv * s * (x2 - x1) + 3.0 * s * s * (1.0 - x2);
                     if dx.abs() < 1e-6 {
                         break;
                     }
@@ -124,7 +123,9 @@ pub fn detect_salient_focus(photo: &Pixmap) -> (f32, f32) {
     let luma_at = |x: i32, y: i32| -> f32 {
         let cx = x.clamp(0, w - 1) as u32;
         let cy = y.clamp(0, h - 1) as u32;
-        let p = photo.pixel(cx, cy).unwrap_or(PremultipliedColorU8::TRANSPARENT);
+        let p = photo
+            .pixel(cx, cy)
+            .unwrap_or(PremultipliedColorU8::TRANSPARENT);
         (0.299 * p.red() as f32 + 0.587 * p.green() as f32 + 0.114 * p.blue() as f32) / 255.0
     };
 
@@ -355,12 +356,8 @@ fn box_blur_pixmap(pixmap: &mut Pixmap, radius: u32) {
                 acc[2] += p.blue() as f32;
                 acc[3] += p.alpha() as f32;
             }
-            temp[(y * w + x) as usize] = [
-                acc[0] / diam,
-                acc[1] / diam,
-                acc[2] / diam,
-                acc[3] / diam,
-            ];
+            temp[(y * w + x) as usize] =
+                [acc[0] / diam, acc[1] / diam, acc[2] / diam, acc[3] / diam];
         }
     }
 

@@ -5,7 +5,10 @@
 //! when the FAT needs more than the 109 header slots. Every chain is contiguous. Sibling trees are
 //! balanced binary search trees coloured as valid red-black trees (§2.6.4).
 
-use crate::{DIFSECT, ENDOFCHAIN, FATSECT, FREESECT, MINI_SECTOR_SIZE, MINI_STREAM_CUTOFF, NOSTREAM, Result, SIGNATURE, compare_names, validate_name};
+use crate::{
+    compare_names, validate_name, Result, DIFSECT, ENDOFCHAIN, FATSECT, FREESECT, MINI_SECTOR_SIZE,
+    MINI_STREAM_CUTOFF, NOSTREAM, SIGNATURE,
+};
 
 /// File format version.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -64,20 +67,51 @@ impl Writer {
     pub const ROOT: NodeId = NodeId(0);
 
     pub fn new(version: Version) -> Self {
-        Writer { version, nodes: vec![Node { name: "Root Entry".into(), kind: Kind::Root, clsid: [0; 16], data: Vec::new(), children: Vec::new() }] }
+        Writer {
+            version,
+            nodes: vec![Node {
+                name: "Root Entry".into(),
+                kind: Kind::Root,
+                clsid: [0; 16],
+                data: Vec::new(),
+                children: Vec::new(),
+            }],
+        }
     }
 
-    fn add(&mut self, parent: NodeId, name: &str, kind: Kind, clsid: [u8; 16], data: Vec<u8>) -> Result<NodeId> {
+    fn add(
+        &mut self,
+        parent: NodeId,
+        name: &str,
+        kind: Kind,
+        clsid: [u8; 16],
+        data: Vec<u8>,
+    ) -> Result<NodeId> {
         validate_name(name)?;
-        let p = self.nodes.get(parent.0).ok_or_else(|| crate::Error::NotFound(format!("node {}", parent.0)))?;
+        let p = self
+            .nodes
+            .get(parent.0)
+            .ok_or_else(|| crate::Error::NotFound(format!("node {}", parent.0)))?;
         if p.kind == Kind::Stream {
-            return Err(crate::Error::Invalid(format!("{:?} is a stream, not a storage", p.name)));
+            return Err(crate::Error::Invalid(format!(
+                "{:?} is a stream, not a storage",
+                p.name
+            )));
         }
-        if p.children.iter().any(|&c| compare_names(&self.nodes[c].name, name).is_eq()) {
+        if p.children
+            .iter()
+            .any(|&c| compare_names(&self.nodes[c].name, name).is_eq())
+        {
             return Err(crate::Error::BadName(format!("duplicate name {name}")));
         }
         let id = self.nodes.len();
-        self.nodes.push(Node { name: name.to_string(), kind, clsid, data, children: Vec::new() });
+        self.nodes.push(Node {
+            name: name.to_string(),
+            kind,
+            clsid,
+            data,
+            children: Vec::new(),
+        });
         self.nodes[parent.0].children.push(id);
         Ok(NodeId(id))
     }
@@ -134,7 +168,10 @@ impl Writer {
         let mut mini_chains: Vec<(u32, u32)> = Vec::new();
         for &n in &order {
             let node = &self.nodes[n];
-            if node.kind == Kind::Stream && !node.data.is_empty() && (node.data.len() as u64) < MINI_STREAM_CUTOFF as u64 {
+            if node.kind == Kind::Stream
+                && !node.data.is_empty()
+                && (node.data.len() as u64) < MINI_STREAM_CUTOFF as u64
+            {
                 let count = node.data.len().div_ceil(MINI_SECTOR_SIZE) as u32;
                 start[n] = next_mini;
                 mini_chains.push((next_mini, count));
@@ -143,10 +180,18 @@ impl Writer {
         }
         let mini_bytes = next_mini as usize * MINI_SECTOR_SIZE;
         let mini_stream_sectors = mini_bytes.div_ceil(ss) as u32;
-        let mini_stream_start = if mini_stream_sectors > 0 { next_sector } else { ENDOFCHAIN };
+        let mini_stream_start = if mini_stream_sectors > 0 {
+            next_sector
+        } else {
+            ENDOFCHAIN
+        };
         next_sector += mini_stream_sectors;
         let minifat_sectors = (next_mini as usize * 4).div_ceil(ss) as u32;
-        let minifat_start = if minifat_sectors > 0 { next_sector } else { ENDOFCHAIN };
+        let minifat_start = if minifat_sectors > 0 {
+            next_sector
+        } else {
+            ENDOFCHAIN
+        };
         next_sector += minifat_sectors;
         let dir_sectors = (order.len() * 128).div_ceil(ss) as u32;
         let dir_start = next_sector;
@@ -156,7 +201,11 @@ impl Writer {
         loop {
             let total = base + fat_n + difat_n;
             let need_fat = total.div_ceil(per_sector);
-            let need_difat = if need_fat > 109 { (need_fat - 109).div_ceil(per_sector - 1) } else { 0 };
+            let need_difat = if need_fat > 109 {
+                (need_fat - 109).div_ceil(per_sector - 1)
+            } else {
+                0
+            };
             if need_fat == fat_n && need_difat == difat_n {
                 break;
             }
@@ -171,7 +220,11 @@ impl Writer {
         let mut fat = vec![FREESECT; fat_n * per_sector];
         let chain = |first: u32, count: u32, fat: &mut [u32]| {
             for i in 0..count {
-                fat[(first + i) as usize] = if i + 1 == count { ENDOFCHAIN } else { first + i + 1 };
+                fat[(first + i) as usize] = if i + 1 == count {
+                    ENDOFCHAIN
+                } else {
+                    first + i + 1
+                };
             }
         };
         for &(f, c) in &big_chains {
@@ -236,7 +289,14 @@ impl Writer {
             let (st, size) = match node.kind {
                 Kind::Root => (mini_stream_start, mini_bytes as u64),
                 Kind::Storage => (0, 0),
-                Kind::Stream => (if node.data.is_empty() { ENDOFCHAIN } else { start[n] }, node.data.len() as u64),
+                Kind::Stream => (
+                    if node.data.is_empty() {
+                        ENDOFCHAIN
+                    } else {
+                        start[n]
+                    },
+                    node.data.len() as u64,
+                ),
             };
             e[116..120].copy_from_slice(&st.to_le_bytes());
             e[120..128].copy_from_slice(&size.to_le_bytes());
@@ -253,12 +313,33 @@ impl Writer {
         out.extend_from_slice(&SIGNATURE);
         out.extend_from_slice(&[0; 16]);
         out.extend_from_slice(&0x003Eu16.to_le_bytes());
-        out.extend_from_slice(&(if self.version == Version::V3 { 3u16 } else { 4u16 }).to_le_bytes());
+        out.extend_from_slice(
+            &(if self.version == Version::V3 {
+                3u16
+            } else {
+                4u16
+            })
+            .to_le_bytes(),
+        );
         out.extend_from_slice(&0xFFFEu16.to_le_bytes());
-        out.extend_from_slice(&(if self.version == Version::V3 { 9u16 } else { 12u16 }).to_le_bytes());
+        out.extend_from_slice(
+            &(if self.version == Version::V3 {
+                9u16
+            } else {
+                12u16
+            })
+            .to_le_bytes(),
+        );
         out.extend_from_slice(&6u16.to_le_bytes());
         out.extend_from_slice(&[0; 6]);
-        out.extend_from_slice(&(if self.version == Version::V3 { 0 } else { dir_sectors }).to_le_bytes());
+        out.extend_from_slice(
+            &(if self.version == Version::V3 {
+                0
+            } else {
+                dir_sectors
+            })
+            .to_le_bytes(),
+        );
         out.extend_from_slice(&(fat_n as u32).to_le_bytes());
         out.extend_from_slice(&dir_start.to_le_bytes());
         out.extend_from_slice(&0u32.to_le_bytes());
@@ -268,7 +349,11 @@ impl Writer {
         out.extend_from_slice(&(if difat_n > 0 { difat_start } else { ENDOFCHAIN }).to_le_bytes());
         out.extend_from_slice(&(difat_n as u32).to_le_bytes());
         for i in 0..109 {
-            let v = if i < fat_n { fat_start + i as u32 } else { FREESECT };
+            let v = if i < fat_n {
+                fat_start + i as u32
+            } else {
+                FREESECT
+            };
             out.extend_from_slice(&v.to_le_bytes());
         }
         out.resize(ss, 0);
@@ -289,7 +374,10 @@ impl Writer {
         }
         for &n in &order {
             let node = &self.nodes[n];
-            if node.kind == Kind::Stream && !node.data.is_empty() && (node.data.len() as u64) < MINI_STREAM_CUTOFF as u64 {
+            if node.kind == Kind::Stream
+                && !node.data.is_empty()
+                && (node.data.len() as u64) < MINI_STREAM_CUTOFF as u64
+            {
                 out.extend_from_slice(&node.data);
                 let r = node.data.len() % MINI_SECTOR_SIZE;
                 if r != 0 {
@@ -315,7 +403,11 @@ impl Writer {
             while s.len() < ss - 4 {
                 s.extend_from_slice(&FREESECT.to_le_bytes());
             }
-            let next = if i + 1 < difat_n { difat_start + i as u32 + 1 } else { ENDOFCHAIN };
+            let next = if i + 1 < difat_n {
+                difat_start + i as u32 + 1
+            } else {
+                ENDOFCHAIN
+            };
             s.extend_from_slice(&next.to_le_bytes());
             out.extend_from_slice(&s);
         }
@@ -326,14 +418,28 @@ impl Writer {
 
 /// Balanced BST of `kids[..]` (sorted). Nodes on the bottom level of an imperfect tree are red,
 /// so every root-to-leaf path has the same number of black nodes.
-fn build_tree(kids: &[usize], depth: usize, perfect: bool, height: usize, tree: &mut [(u32, u32, u32, u8)], dir_index: &[u32]) -> u32 {
+fn build_tree(
+    kids: &[usize],
+    depth: usize,
+    perfect: bool,
+    height: usize,
+    tree: &mut [(u32, u32, u32, u8)],
+    dir_index: &[u32],
+) -> u32 {
     if kids.is_empty() {
         return NOSTREAM;
     }
     let mid = kids.len() / 2;
     let n = kids[mid];
     let left = build_tree(&kids[..mid], depth + 1, perfect, height, tree, dir_index);
-    let right = build_tree(&kids[mid + 1..], depth + 1, perfect, height, tree, dir_index);
+    let right = build_tree(
+        &kids[mid + 1..],
+        depth + 1,
+        perfect,
+        height,
+        tree,
+        dir_index,
+    );
     tree[n].0 = left;
     tree[n].1 = right;
     tree[n].3 = if !perfect && depth == height { 0 } else { 1 };

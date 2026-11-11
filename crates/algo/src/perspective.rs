@@ -69,8 +69,18 @@ pub fn unify(planes: &mut [Plane]) {
             continue;
         }
         let n = g.len() as f64;
-        let s = g.iter().fold([0.0, 0.0], |a, &(p, c)| [a[0] + planes[p].src[c][0] / n, a[1] + planes[p].src[c][1] / n]);
-        let d = g.iter().fold([0.0, 0.0], |a, &(p, c)| [a[0] + planes[p].dst[c][0] / n, a[1] + planes[p].dst[c][1] / n]);
+        let s = g.iter().fold([0.0, 0.0], |a, &(p, c)| {
+            [
+                a[0] + planes[p].src[c][0] / n,
+                a[1] + planes[p].src[c][1] / n,
+            ]
+        });
+        let d = g.iter().fold([0.0, 0.0], |a, &(p, c)| {
+            [
+                a[0] + planes[p].dst[c][0] / n,
+                a[1] + planes[p].dst[c][1] / n,
+            ]
+        });
         for &(p, c) in &g {
             planes[p].src[c] = s;
             planes[p].dst[c] = d;
@@ -127,10 +137,13 @@ impl Straighten {
 pub fn straighten(planes: &mut [Plane], mode: Straighten) {
     unify(planes);
     let groups = linked_corners(planes);
-    let group_of = |p: usize, c: usize| groups.iter().position(|g| g.contains(&(p, c))).unwrap_or(0);
+    let group_of =
+        |p: usize, c: usize| groups.iter().position(|g| g.contains(&(p, c))).unwrap_or(0);
     let mut pos: Vec<[f64; 2]> = groups.iter().map(|g| planes[g[0].0].dst[g[0].1]).collect();
-    let edges: Vec<(usize, usize)> =
-        (0..planes.len()).flat_map(|p| (0..4).map(move |k| (p, k))).map(|(p, k)| (group_of(p, k), group_of(p, (k + 1) % 4))).collect();
+    let edges: Vec<(usize, usize)> = (0..planes.len())
+        .flat_map(|p| (0..4).map(move |k| (p, k)))
+        .map(|(p, k)| (group_of(p, k), group_of(p, (k + 1) % 4)))
+        .collect();
     for (a, b) in edges {
         let (pa, pb) = (pos[a], pos[b]);
         let (dx, dy) = ((pb[0] - pa[0]).abs(), (pb[1] - pa[1]).abs());
@@ -159,7 +172,9 @@ impl PerspectiveMap {
         }
         let mut planes = planes.to_vec();
         unify(&mut planes);
-        let near = |a: [f64; 2], b: [f64; 2]| (a[0] - b[0]).abs() <= LINK_EPS && (a[1] - b[1]).abs() <= LINK_EPS;
+        let near = |a: [f64; 2], b: [f64; 2]| {
+            (a[0] - b[0]).abs() <= LINK_EPS && (a[1] - b[1]).abs() <= LINK_EPS
+        };
         let mut maps = Vec::with_capacity(planes.len());
         for (i, p) in planes.iter().enumerate() {
             let src = unit_to_quad(&p.src)?;
@@ -180,7 +195,13 @@ impl PerspectiveMap {
                     })
                     .map(|(j, _)| j);
             }
-            maps.push(PlaneMap { src, src_inv, dst, quad: p.src, shared });
+            maps.push(PlaneMap {
+                src,
+                src_inv,
+                dst,
+                quad: p.src,
+                shared,
+            });
         }
         Some(PerspectiveMap { planes: maps })
     }
@@ -230,7 +251,12 @@ impl PerspectiveMap {
 
     /// Whether every plane maps onto itself (identity).
     pub fn is_identity(planes: &[Plane]) -> bool {
-        planes.iter().all(|p| p.src.iter().zip(&p.dst).all(|(a, b)| (a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9))
+        planes.iter().all(|p| {
+            p.src
+                .iter()
+                .zip(&p.dst)
+                .all(|(a, b)| (a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9)
+        })
     }
 }
 
@@ -240,7 +266,11 @@ fn dist_to_quad(q: &[[f64; 2]; 4], p: [f64; 2]) -> f64 {
             let (a, b) = (q[k], q[(k + 1) % 4]);
             let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
             let l2 = dx * dx + dy * dy;
-            let t = if l2 > 0.0 { (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 };
+            let t = if l2 > 0.0 {
+                (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
             ((a[0] + t * dx - p[0]).powi(2) + (a[1] + t * dy - p[1]).powi(2)).sqrt()
         })
         .fold(f64::MAX, f64::min)
@@ -275,7 +305,11 @@ mod tests {
         let q = [[10.0, 10.0], [90.0, 12.0], [85.0, 70.0], [12.0, 75.0]];
         let m = PerspectiveMap::new(&[Plane::identity(q)]).unwrap();
         for p in [(20.0, 20.0), (50.0, 40.0), (0.0, 0.0), (120.0, 90.0)] {
-            assert!(close(m.map(p.0, p.1), p, 1e-9), "{p:?} → {:?}", m.map(p.0, p.1));
+            assert!(
+                close(m.map(p.0, p.1), p, 1e-9),
+                "{p:?} → {:?}",
+                m.map(p.0, p.1)
+            );
         }
         // Square → trapezoid: corners land exactly, the centre lands where the homography says.
         let src = [[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]];
@@ -294,8 +328,14 @@ mod tests {
     #[test]
     fn shared_edges_stay_continuous() {
         // Two planes sharing the edge x = 50 (with slightly mismatched corners that get linked).
-        let a = Plane { src: [[0.0, 0.0], [50.0, 0.0], [50.0, 100.0], [0.0, 100.0]], dst: [[0.0, 10.0], [50.0, 0.0], [55.0, 100.0], [0.0, 90.0]] };
-        let b = Plane { src: [[50.2, 0.0], [100.0, 0.0], [100.0, 100.0], [50.0, 100.2]], dst: [[50.0, 0.0], [110.0, 20.0], [100.0, 80.0], [55.0, 100.0]] };
+        let a = Plane {
+            src: [[0.0, 0.0], [50.0, 0.0], [50.0, 100.0], [0.0, 100.0]],
+            dst: [[0.0, 10.0], [50.0, 0.0], [55.0, 100.0], [0.0, 90.0]],
+        };
+        let b = Plane {
+            src: [[50.2, 0.0], [100.0, 0.0], [100.0, 100.0], [50.0, 100.2]],
+            dst: [[50.0, 0.0], [110.0, 20.0], [100.0, 80.0], [55.0, 100.0]],
+        };
         let m = PerspectiveMap::new(&[a, b]).unwrap();
         // After linking, the shared edge runs from (50.1, 0) to (50, 100.1).
         for t in [0.05, 0.25, 0.5, 0.77, 0.95] {
@@ -309,8 +349,10 @@ mod tests {
 
     #[test]
     fn straighten_levels_and_plumbs_edges() {
-        let mut ps =
-            vec![Plane { src: [[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]], dst: [[0.0, 3.0], [100.0, -2.0], [96.0, 100.0], [4.0, 104.0]] }];
+        let mut ps = vec![Plane {
+            src: [[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]],
+            dst: [[0.0, 3.0], [100.0, -2.0], [96.0, 100.0], [4.0, 104.0]],
+        }];
         straighten(&mut ps, Straighten::Vertical);
         assert_eq!(ps[0].dst[1][0], ps[0].dst[2][0]);
         assert_eq!(ps[0].dst[0][0], ps[0].dst[3][0]);

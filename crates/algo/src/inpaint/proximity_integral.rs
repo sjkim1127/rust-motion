@@ -9,7 +9,11 @@ pub(super) struct HoleIntegral {
 }
 
 impl HoleIntegral {
-    pub(super) fn new(stride: usize, hole: &[bool], (x0, y0, x1, y1): (usize, usize, usize, usize)) -> Option<Self> {
+    pub(super) fn new(
+        stride: usize,
+        hole: &[bool],
+        (x0, y0, x1, y1): (usize, usize, usize, usize),
+    ) -> Option<Self> {
         let (w, h) = (x1.checked_sub(x0)?, y1.checked_sub(y0)?);
         let row_stride = w.checked_add(1)?;
         let len = row_stride.checked_mul(h.checked_add(1)?)?;
@@ -26,7 +30,13 @@ impl HoleIntegral {
                 *data.get_mut((y + 1) * row_stride + x + 1)? = above.checked_add(count)?;
             }
         }
-        Some(Self { x0: i32::try_from(x0).ok()?, y0: i32::try_from(y0).ok()?, w, h, data })
+        Some(Self {
+            x0: i32::try_from(x0).ok()?,
+            y0: i32::try_from(y0).ok()?,
+            w,
+            h,
+            data,
+        })
     }
 
     pub(super) fn count(&self, x0: i32, y0: i32, x1: i32, y1: i32) -> u32 {

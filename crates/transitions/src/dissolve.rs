@@ -1,10 +1,7 @@
-//! Cross-dissolve transition presentation and component.
+//! Cross-dissolve transition presentation and scene emitter.
 
 use crate::presentation::{PresentationVisual, TransitionContext, TransitionPresentation};
-use dioxus::prelude::*;
-use rust_motion_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
 use rust_motion_composition::{CompositionError, SceneEmitter, SceneFrameContext};
-use rust_motion_core::hooks::use_current_frame;
 use rust_motion_rasterizer::{Scene, SceneNode, Transform2D};
 use serde_json::Value;
 
@@ -77,45 +74,5 @@ impl<E: SceneEmitter> SceneEmitter for SceneDissolve<E> {
             });
         }
         Ok(())
-    }
-}
-
-/// Props for `<Dissolve>` component.
-#[derive(Props, Clone, PartialEq)]
-pub struct DissolveProps {
-    #[props(default = 20)]
-    pub enter_duration: u32,
-    pub children: Element,
-}
-
-/// Dissolve crossfade component.
-#[component]
-pub fn Dissolve(props: DissolveProps) -> Element {
-    let frame = use_current_frame() as f64;
-    let enter = props.enter_duration as f64;
-
-    let opacity = if enter > 0.0 {
-        interpolate(
-            frame,
-            &[0.0, enter],
-            &[0.0, 1.0],
-            InterpolateOptions {
-                extrapolate_left: ExtrapolateType::Clamp,
-                extrapolate_right: ExtrapolateType::Clamp,
-                ..Default::default()
-            },
-        )
-    } else {
-        1.0
-    };
-
-    rsx! {
-        div {
-            style: "
-                position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                opacity: {opacity:.4};
-            ",
-            {props.children}
-        }
     }
 }

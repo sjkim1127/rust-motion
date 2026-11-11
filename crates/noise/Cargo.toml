@@ -9,6 +9,4 @@ repository.workspace  = true
 readme.workspace      = true
 
 [dependencies]
-dioxus         = { workspace = true }
-rust-motion-core = { workspace = true }
 serde          = { workspace = true }

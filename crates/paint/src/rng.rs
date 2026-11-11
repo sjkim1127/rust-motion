@@ -16,7 +16,11 @@ pub fn mix64(mut z: u64) -> u64 {
 /// Uniform in [0, 1).
 #[inline]
 pub fn rand01(seed: u64, index: u64, stream: u64) -> f32 {
-    let h = mix64(seed ^ mix64(index.wrapping_mul(0xD1B5_4A32_D192_ED03) ^ stream.wrapping_mul(0x8CB9_2BA7_2F3D_8DD7)));
+    let h = mix64(
+        seed ^ mix64(
+            index.wrapping_mul(0xD1B5_4A32_D192_ED03) ^ stream.wrapping_mul(0x8CB9_2BA7_2F3D_8DD7),
+        ),
+    );
     (h >> 40) as f32 / (1u64 << 24) as f32
 }
 

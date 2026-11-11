@@ -1,47 +1,7 @@
-//! `<Pie>` shape component (pie chart / arc slices).
+//! Pie shape path generator (pie chart / arc slices).
 
-#[cfg(feature = "dioxus")]
-use crate::render_svg::RenderSvg;
 use crate::shape_output::ShapeOutput;
-#[cfg(feature = "dioxus")]
-use dioxus::prelude::*;
 use std::f64::consts::PI;
-
-/// Props for the `<Pie>` shape component.
-#[cfg(feature = "dioxus")]
-#[derive(Props, Clone, PartialEq)]
-pub struct PieProps {
-    /// Radius of the pie chart in pixels.
-    #[props(default = 100.0)]
-    pub radius: f64,
-    /// Progress ratio (0.0 = 0%, 0.5 = 50%, 1.0 = 100%).
-    #[props(default = 1.0)]
-    pub progress: f64,
-    /// Whether to close the path back to the center.
-    #[props(default = true)]
-    pub close_path: bool,
-    /// Whether to draw counter-clockwise.
-    #[props(default = false)]
-    pub counter_clockwise: bool,
-    /// Rotation offset in radians.
-    #[props(default = 0.0)]
-    pub rotation: f64,
-    /// Fill color.
-    #[props(default = "#ffffff".to_string())]
-    pub fill: String,
-    /// Stroke color.
-    #[props(default = "none".to_string())]
-    pub stroke: String,
-    /// Stroke width in pixels.
-    #[props(default = 0.0)]
-    pub stroke_width: f64,
-    /// Opacity (0.0 to 1.0).
-    #[props(default = 1.0)]
-    pub opacity: f64,
-    /// Custom CSS styles.
-    #[props(default)]
-    pub style: String,
-}
 
 #[inline]
 fn clean_coord(val: f64) -> f64 {
@@ -100,32 +60,6 @@ pub fn make_pie(
     };
 
     ShapeOutput::new(path, size, size, format!("{r} {r}"))
-}
-
-/// Renders a procedural SVG Pie.
-#[cfg(feature = "dioxus")]
-#[component]
-pub fn Pie(props: PieProps) -> Element {
-    let shape = make_pie(
-        props.radius,
-        props.progress,
-        props.close_path,
-        props.counter_clockwise,
-        props.rotation,
-    );
-
-    rsx! {
-        RenderSvg {
-            path: shape.path,
-            width: shape.width,
-            height: shape.height,
-            fill: props.fill,
-            stroke: props.stroke,
-            stroke_width: props.stroke_width,
-            opacity: props.opacity,
-            style: props.style,
-        }
-    }
 }
 
 #[cfg(test)]

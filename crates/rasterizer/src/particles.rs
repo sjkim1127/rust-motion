@@ -258,15 +258,9 @@ pub enum EmitterGeometry {
     /// Single point emitter.
     Point { position: Vec3 },
     /// Bounding box emitter.
-    Box {
-        min: Vec3,
-        max: Vec3,
-    },
+    Box { min: Vec3, max: Vec3 },
     /// Spherical emitter.
-    Sphere {
-        center: Vec3,
-        radius: f32,
-    },
+    Sphere { center: Vec3, radius: f32 },
 }
 
 impl Default for EmitterGeometry {
@@ -341,7 +335,9 @@ impl ParticleEmitter {
         }
 
         let max_k = (time_sec * self.birth_rate).floor() as i64;
-        let min_k = ((time_sec - self.lifespan) * self.birth_rate).floor().max(0.0) as i64;
+        let min_k = ((time_sec - self.lifespan) * self.birth_rate)
+            .floor()
+            .max(0.0) as i64;
         let active_count = (max_k - min_k + 1).max(0) as usize;
         let mut nodes = Vec::with_capacity(active_count);
 
@@ -357,7 +353,10 @@ impl ParticleEmitter {
             let tau = (age / self.lifespan).clamp(0.0, 1.0);
 
             // Deterministic particle pseudo-random properties derived from seed and index k
-            let mut rng = SimpleRng::new(self.seed.wrapping_add((k as u64).wrapping_mul(0x517cc1b727220a95)));
+            let mut rng = SimpleRng::new(
+                self.seed
+                    .wrapping_add((k as u64).wrapping_mul(0x517cc1b727220a95)),
+            );
 
             // Initial spawn position from geometry
             let p0 = match self.geometry {
@@ -400,10 +399,18 @@ impl ParticleEmitter {
             let size = (self.start_size * (1.0 - tau) + self.end_size * tau).max(0.1);
 
             // Color over life
-            let r = ((self.start_color.r as f32 * (1.0 - tau) + self.end_color.r as f32 * tau).round()).clamp(0.0, 255.0) as u8;
-            let g = ((self.start_color.g as f32 * (1.0 - tau) + self.end_color.g as f32 * tau).round()).clamp(0.0, 255.0) as u8;
-            let b = ((self.start_color.b as f32 * (1.0 - tau) + self.end_color.b as f32 * tau).round()).clamp(0.0, 255.0) as u8;
-            let a = ((self.start_color.a as f32 * (1.0 - tau) + self.end_color.a as f32 * tau).round()).clamp(0.0, 255.0) as u8;
+            let r = ((self.start_color.r as f32 * (1.0 - tau) + self.end_color.r as f32 * tau)
+                .round())
+            .clamp(0.0, 255.0) as u8;
+            let g = ((self.start_color.g as f32 * (1.0 - tau) + self.end_color.g as f32 * tau)
+                .round())
+            .clamp(0.0, 255.0) as u8;
+            let b = ((self.start_color.b as f32 * (1.0 - tau) + self.end_color.b as f32 * tau)
+                .round())
+            .clamp(0.0, 255.0) as u8;
+            let a = ((self.start_color.a as f32 * (1.0 - tau) + self.end_color.a as f32 * tau)
+                .round())
+            .clamp(0.0, 255.0) as u8;
             let color = Color::rgba(r, g, b, a);
 
             // Perspective scale
@@ -411,7 +418,11 @@ impl ParticleEmitter {
             let p_scale = (cam_dist / (cam_dist + cur_z).max(10.0)).clamp(0.2, 3.0);
             let final_r = size * p_scale;
 
-            let shape = self.shapes.get((k as usize) % self.shapes.len().max(1)).copied().unwrap_or(ConfettiShape::Circle);
+            let shape = self
+                .shapes
+                .get((k as usize) % self.shapes.len().max(1))
+                .copied()
+                .unwrap_or(ConfettiShape::Circle);
 
             let node = match shape {
                 ConfettiShape::Circle => SceneNode::Circle {

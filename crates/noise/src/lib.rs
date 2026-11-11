@@ -20,8 +20,8 @@ pub use fbm::{
     warp_points_2d, FbmOptions,
 };
 pub use noise_bg::{
-    generate_noise_svg_data_url, generate_noise_wave_path, NoiseBackground, NoiseBackgroundProps,
-    NoisePatternKind, WavePathOptions,
+    generate_noise_svg_data_url, generate_noise_wave_path, NoiseBackgroundConfig,
+    NoiseBackgroundProps, NoisePatternKind, WavePathOptions,
 };
 pub use seed::{hash_code, hash_seed, mulberry32, random, seed_to_float, NoiseSeed};
 pub use simplex::{noise2d, noise3d, noise4d, noise_2d, noise_3d, noise_4d, SimplexNoise};

@@ -22,14 +22,25 @@ pub fn tip_outline(b: &BrushSettings, full: bool) -> Option<Vec<Vec<[f32; 2]>>> 
     if !b.size.is_finite() || b.size <= 0.0 || !b.angle.is_finite() || !b.roundness.is_finite() {
         return None;
     }
-    let ro = b.roundness.clamp(0.0, 1.0).max(0.5 / (b.size / 2.0)).min(1.0);
+    let ro = b
+        .roundness
+        .clamp(0.0, 1.0)
+        .max(0.5 / (b.size / 2.0))
+        .min(1.0);
     let (sn, cs) = b.angle.to_radians().sin_cos();
-    let (fx, fy) = (if b.flip_x { -1.0 } else { 1.0 }, if b.flip_y { -1.0 } else { 1.0 });
+    let (fx, fy) = (
+        if b.flip_x { -1.0 } else { 1.0 },
+        if b.flip_y { -1.0 } else { 1.0 },
+    );
     match &b.tip {
         TipShape::Round => {
             // The normal cursor is the 50 % contour, matching the plain-circle path (#2744):
             // the soft tip falls off as (1 - t²)⁴, not the old smoothstep midpoint.
-            let f = if full { 1.0 } else { crate::half_coverage_radius(1.0, b.hardness) };
+            let f = if full {
+                1.0
+            } else {
+                crate::half_coverage_radius(1.0, b.hardness)
+            };
             let ring = (0..ELLIPSE_SEGMENTS)
                 .map(|i| {
                     let t = std::f32::consts::TAU * i as f32 / ELLIPSE_SEGMENTS as f32;
@@ -45,7 +56,11 @@ pub fn tip_outline(b: &BrushSettings, full: bool) -> Option<Vec<Vec<[f32; 2]>>> 
             if !t.is_valid() {
                 return None;
             }
-            trace(t, if full { FULL_THRESHOLD } else { HALF_THRESHOLD }, (sn, cs, fx, fy, ro))
+            trace(
+                t,
+                if full { FULL_THRESHOLD } else { HALF_THRESHOLD },
+                (sn, cs, fx, fy, ro),
+            )
         }
     }
 }
@@ -57,7 +72,10 @@ fn trace(t: &GrayTile, thr: f32, xf: (f32, f32, f32, f32, f32)) -> Option<Vec<Ve
     let (tw, th) = (t.width as f32, t.height as f32);
     let big = tw.max(th);
     let f = if big <= 160.0 { 2.0 } else { 160.0 / big };
-    let (gw, gh) = (((tw * f).ceil() as usize).max(1), ((th * f).ceil() as usize).max(1));
+    let (gw, gh) = (
+        ((tw * f).ceil() as usize).max(1),
+        ((th * f).ceil() as usize).max(1),
+    );
     let mut vals = vec![0.0f32; gw * gh];
     for gy in 0..gh {
         for gx in 0..gw {
@@ -65,7 +83,10 @@ fn trace(t: &GrayTile, thr: f32, xf: (f32, f32, f32, f32, f32)) -> Option<Vec<Ve
             vals[gy * gw + gx] = sample(t, px, py);
         }
     }
-    let mut rings: Vec<Vec<[f32; 2]>> = march(&vals, gw, gh, thr).into_iter().filter(|r| area(r) >= MIN_AREA * f * f).collect();
+    let mut rings: Vec<Vec<[f32; 2]>> = march(&vals, gw, gh, thr)
+        .into_iter()
+        .filter(|r| area(r) >= MIN_AREA * f * f)
+        .collect();
     if rings.is_empty() {
         return None;
     }
@@ -97,8 +118,15 @@ fn trace(t: &GrayTile, thr: f32, xf: (f32, f32, f32, f32, f32)) -> Option<Vec<Ve
         let (ux, uy) = (u * cs - v * sn, u * sn + v * cs);
         [ux, -uy]
     };
-    let rings: Vec<Vec<[f32; 2]>> = thin.into_iter().map(|r| r.into_iter().map(map).collect()).collect();
-    rings.iter().flatten().all(|p| p[0].is_finite() && p[1].is_finite()).then_some(rings)
+    let rings: Vec<Vec<[f32; 2]>> = thin
+        .into_iter()
+        .map(|r| r.into_iter().map(map).collect())
+        .collect();
+    rings
+        .iter()
+        .flatten()
+        .all(|p| p[0].is_finite() && p[1].is_finite())
+        .then_some(rings)
 }
 
 /// Bilinear sample with zero outside (tips fade to nothing at their edges).
@@ -106,7 +134,13 @@ fn sample(t: &GrayTile, x: f32, y: f32) -> f32 {
     let (x0, y0) = (x.floor(), y.floor());
     let (tx, ty) = (x - x0, y - y0);
     let (x0, y0) = (x0 as i64, y0 as i64);
-    let get = |x: i64, y: i64| if x < 0 || y < 0 || x >= t.width as i64 || y >= t.height as i64 { 0.0 } else { t.get(x as u32, y as u32) };
+    let get = |x: i64, y: i64| {
+        if x < 0 || y < 0 || x >= t.width as i64 || y >= t.height as i64 {
+            0.0
+        } else {
+            t.get(x as u32, y as u32)
+        }
+    };
     let a = get(x0, y0) + (get(x0 + 1, y0) - get(x0, y0)) * tx;
     let b = get(x0, y0 + 1) + (get(x0 + 1, y0 + 1) - get(x0, y0 + 1)) * tx;
     a + (b - a) * ty
@@ -127,7 +161,12 @@ fn area(r: &[[f32; 2]]) -> f32 {
 
 /// Link segments end-to-end into closed rings (quantised endpoint keys absorb float noise).
 fn stitch(segs: Vec<([f32; 2], [f32; 2])>) -> Vec<Vec<[f32; 2]>> {
-    let key = |p: [f32; 2]| ((p[0] * 4096.0).round() as i64, (p[1] * 4096.0).round() as i64);
+    let key = |p: [f32; 2]| {
+        (
+            (p[0] * 4096.0).round() as i64,
+            (p[1] * 4096.0).round() as i64,
+        )
+    };
     let mut ends: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
     for (i, (a, b)) in segs.iter().enumerate() {
         ends.entry(key(*a)).or_default().push(i);
@@ -142,7 +181,12 @@ fn stitch(segs: Vec<([f32; 2], [f32; 2])>) -> Vec<Vec<[f32; 2]>> {
         used[s] = true;
         let mut ring = vec![segs[s].0, segs[s].1];
         while let Some(tail) = ring.last().copied() {
-            let Some(&next) = ends.get(&key(tail)).and_then(|c| c.iter().find(|&&i| !used[i])) else { break };
+            let Some(&next) = ends
+                .get(&key(tail))
+                .and_then(|c| c.iter().find(|&&i| !used[i]))
+            else {
+                break;
+            };
             used[next] = true;
             let (a, b) = segs[next];
             let p = if key(a) == key(tail) { b } else { a };
@@ -161,16 +205,29 @@ fn stitch(segs: Vec<([f32; 2], [f32; 2])>) -> Vec<Vec<[f32; 2]>> {
 /// Marching squares over `v` (w by h samples at lattice nodes), outside treated as 0 so every
 /// contour closes; returns rings in node coordinates.
 fn march(v: &[f32], w: usize, h: usize, thr: f32) -> Vec<Vec<[f32; 2]>> {
-    let val = |x: i64, y: i64| -> f32 { if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 { 0.0 } else { v[y as usize * w + x as usize] } };
+    let val = |x: i64, y: i64| -> f32 {
+        if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 {
+            0.0
+        } else {
+            v[y as usize * w + x as usize]
+        }
+    };
     let lerp = |v0: f32, v1: f32, a: (f32, f32), b: (f32, f32)| -> [f32; 2] {
-        let t = if (v1 - v0).abs() < 1e-9 { 0.5 } else { ((thr - v0) / (v1 - v0)).clamp(0.0, 1.0) };
+        let t = if (v1 - v0).abs() < 1e-9 {
+            0.5
+        } else {
+            ((thr - v0) / (v1 - v0)).clamp(0.0, 1.0)
+        };
         [a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t]
     };
     let mut segs: Vec<([f32; 2], [f32; 2])> = Vec::new();
     for y in -1..h as i64 {
         for x in -1..w as i64 {
             let (va, vb, vc, vd) = (val(x, y), val(x + 1, y), val(x + 1, y + 1), val(x, y + 1));
-            let idx = u8::from(va >= thr) | (u8::from(vb >= thr) << 1) | (u8::from(vc >= thr) << 2) | (u8::from(vd >= thr) << 3);
+            let idx = u8::from(va >= thr)
+                | (u8::from(vb >= thr) << 1)
+                | (u8::from(vc >= thr) << 2)
+                | (u8::from(vd >= thr) << 3);
             if idx == 0 || idx == 15 {
                 continue;
             }
@@ -268,7 +325,8 @@ fn dp(pts: &[[f32; 2]], tol: f32, out: &mut Vec<[f32; 2]>) {
 /// Squared distance from `p` to the segment `a`-`b`.
 fn seg_dist2(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
     let (abx, aby) = (b[0] - a[0], b[1] - a[1]);
-    let t = (((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / (abx * abx + aby * aby).max(1e-12)).clamp(0.0, 1.0);
+    let t = (((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / (abx * abx + aby * aby).max(1e-12))
+        .clamp(0.0, 1.0);
     (p[0] - a[0] - abx * t).powi(2) + (p[1] - a[1] - aby * t).powi(2)
 }
 
@@ -277,7 +335,10 @@ mod tests {
     use super::*;
 
     fn max_radius(rings: &[Vec<[f32; 2]>]) -> f32 {
-        rings.iter().flatten().fold(0.0f32, |m, p| m.max(p[0].hypot(p[1])))
+        rings
+            .iter()
+            .flatten()
+            .fold(0.0f32, |m, p| m.max(p[0].hypot(p[1])))
     }
 
     /// The normal cursor of a rotated or flattened round tip is the same 50 % contour as the
@@ -285,11 +346,23 @@ mod tests {
     #[test]
     fn round_outlines_sit_on_the_half_coverage_contour() {
         for hardness in [0.0, 0.25, 0.5, 0.75, 1.0] {
-            let b = BrushSettings { size: 40.0, angle: 33.0, roundness: 0.4, hardness, ..Default::default() };
+            let b = BrushSettings {
+                size: 40.0,
+                angle: 33.0,
+                roundness: 0.4,
+                hardness,
+                ..Default::default()
+            };
             let normal = tip_outline(&b, false).expect("a rotated round tip traces");
             let full = tip_outline(&b, true).expect("a rotated round tip traces");
-            assert!((max_radius(&normal) - crate::half_coverage_radius(1.0, hardness)).abs() < 1e-4, "hardness {hardness}");
-            assert!((max_radius(&full) - 1.0).abs() < 1e-4, "hardness {hardness}");
+            assert!(
+                (max_radius(&normal) - crate::half_coverage_radius(1.0, hardness)).abs() < 1e-4,
+                "hardness {hardness}"
+            );
+            assert!(
+                (max_radius(&full) - 1.0).abs() < 1e-4,
+                "hardness {hardness}"
+            );
         }
     }
 
@@ -300,12 +373,23 @@ mod tests {
             let (dx, dy) = (x as f32 - 15.5, y as f32 - 15.5);
             (1.0 - (dx * dx + dy * dy).sqrt() / 16.0).clamp(0.0, 1.0)
         });
-        let b = BrushSettings { size: 20.0, tip: TipShape::Sampled(disc), ..Default::default() };
+        let b = BrushSettings {
+            size: 20.0,
+            tip: TipShape::Sampled(disc),
+            ..Default::default()
+        };
         let rings = tip_outline(&b, false).expect("a sampled disc traces");
         assert!(rings.iter().all(|r| r.len() >= 3));
-        assert!(rings.iter().flatten().all(|p| p[0].is_finite() && p[1].is_finite() && p[0].hypot(p[1]) <= 1.001));
+        assert!(rings
+            .iter()
+            .flatten()
+            .all(|p| p[0].is_finite() && p[1].is_finite() && p[0].hypot(p[1]) <= 1.001));
         let blank = GrayTile::from_fn(8, 8, |_, _| 0.0);
-        let b = BrushSettings { size: 20.0, tip: TipShape::Sampled(blank), ..Default::default() };
+        let b = BrushSettings {
+            size: 20.0,
+            tip: TipShape::Sampled(blank),
+            ..Default::default()
+        };
         assert!(tip_outline(&b, false).is_none());
     }
 
@@ -313,11 +397,21 @@ mod tests {
     #[test]
     fn hostile_settings_get_no_outline() {
         for size in [f32::NAN, f32::INFINITY, 0.0, -1.0] {
-            let b = BrushSettings { size, angle: 33.0, roundness: 0.5, ..Default::default() };
+            let b = BrushSettings {
+                size,
+                angle: 33.0,
+                roundness: 0.5,
+                ..Default::default()
+            };
             assert!(tip_outline(&b, false).is_none(), "size {size}");
         }
         for angle in [f32::NAN, f32::INFINITY] {
-            let b = BrushSettings { size: 40.0, angle, roundness: 0.5, ..Default::default() };
+            let b = BrushSettings {
+                size: 40.0,
+                angle,
+                roundness: 0.5,
+                ..Default::default()
+            };
             assert!(tip_outline(&b, false).is_none(), "angle {angle}");
         }
     }

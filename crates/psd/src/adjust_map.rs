@@ -1,16 +1,15 @@
 //! Mapping between PSD adjustment-layer blocks and `rust_motion_color::Adjustment`.
 
-use rust_motion_color::adjust::{
-    CURVE_MAP_LEN, CurvePoint, HueRange, LevelsChannel, ToneSpace, curve_map,
-    Adjustment,
-};
 use crate::descriptor::{Descriptor, Value, VersionedDescriptor};
 use crate::header::ColorMode;
+use rust_motion_color::adjust::{
+    curve_map, Adjustment, CurvePoint, HueRange, LevelsChannel, ToneSpace, CURVE_MAP_LEN,
+};
 
 /// All PSD adjustment keys recognized as adjustment layers.
 pub const ADJUSTMENT_KEYS: [&[u8; 4]; 16] = [
-    b"levl", b"curv", b"hue2", b"brit", b"nvrt", b"thrs", b"post", b"expA",
-    b"vibA", b"blnc", b"mixr", b"grdm", b"phfl", b"selc", b"blwh", b"clrL",
+    b"levl", b"curv", b"hue2", b"brit", b"nvrt", b"thrs", b"post", b"expA", b"vibA", b"blnc",
+    b"mixr", b"grdm", b"phfl", b"selc", b"blwh", b"clrL",
 ];
 
 fn be16(d: &[u8], at: usize) -> Option<u16> {
@@ -20,10 +19,12 @@ fn bei16(d: &[u8], at: usize) -> Option<i16> {
     be16(d, at).map(|v| v as i16)
 }
 fn be32(d: &[u8], at: usize) -> Option<u32> {
-    d.get(at..at + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    d.get(at..at + 4)
+        .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
 }
 fn bef32(d: &[u8], at: usize) -> Option<f32> {
-    d.get(at..at + 4).map(|b| f32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    d.get(at..at + 4)
+        .map(|b| f32::from_be_bytes([b[0], b[1], b[2], b[3]]))
 }
 
 fn unsupported(key: &[u8; 4], data: &[u8]) -> Adjustment {
@@ -51,7 +52,18 @@ fn parse_curves(d: &[u8]) -> Option<Adjustment> {
     }
     let bits = u32::from_be_bytes(d.get(3..7)?.try_into().ok()?);
     let mut at = 7;
-    let line = || vec![CurvePoint { input: 0.0, output: 0.0 }, CurvePoint { input: 1.0, output: 1.0 }];
+    let line = || {
+        vec![
+            CurvePoint {
+                input: 0.0,
+                output: 0.0,
+            },
+            CurvePoint {
+                input: 1.0,
+                output: 1.0,
+            },
+        ]
+    };
     let mut curves: Vec<Vec<CurvePoint>> = vec![line(), line(), line(), line(), line()];
     for bit in 0..32usize {
         if bits & (1 << bit) == 0 {
@@ -61,7 +73,11 @@ fn parse_curves(d: &[u8]) -> Option<Adjustment> {
             let map = d.get(at..at + CURVE_MAP_LEN)?;
             at += CURVE_MAP_LEN;
             if let Some(slot) = curves.get_mut(bit) {
-                *slot = curve_map(&map.iter().map(|&b| f32::from(b) / 255.0).collect::<Vec<_>>());
+                *slot = curve_map(
+                    &map.iter()
+                        .map(|&b| f32::from(b) / 255.0)
+                        .collect::<Vec<_>>(),
+                );
             }
             continue;
         }
@@ -72,7 +88,10 @@ fn parse_curves(d: &[u8]) -> Option<Adjustment> {
             let out = be16(d, at)?;
             let inp = be16(d, at + 2)?;
             at += 4;
-            pts.push(CurvePoint { input: f32::from(inp) / 255.0, output: f32::from(out) / 255.0 });
+            pts.push(CurvePoint {
+                input: f32::from(inp) / 255.0,
+                output: f32::from(out) / 255.0,
+            });
         }
         if let Some(slot) = curves.get_mut(bit) {
             *slot = pts;
@@ -81,7 +100,13 @@ fn parse_curves(d: &[u8]) -> Option<Adjustment> {
     let mut it = curves.into_iter();
     let master = it.next()?;
     let (r, g, b, k) = (it.next()?, it.next()?, it.next()?, it.next()?);
-    Some(Adjustment::Curves { master, per_channel: [r, g, b], space: ToneSpace::Rgb, black: k, pencil })
+    Some(Adjustment::Curves {
+        master,
+        per_channel: [r, g, b],
+        space: ToneSpace::Rgb,
+        black: k,
+        pencil,
+    })
 }
 
 fn desc_num(d: &Descriptor, key: &str) -> Option<f32> {
@@ -101,13 +126,18 @@ fn desc_bool(d: &Descriptor, key: &str) -> Option<bool> {
 }
 
 fn versioned(d: &[u8]) -> Option<Descriptor> {
-    VersionedDescriptor::parse_prefix(d).ok().map(|(v, _)| v.descriptor)
+    VersionedDescriptor::parse_prefix(d)
+        .ok()
+        .map(|(v, _)| v.descriptor)
 }
 
 fn parse_vibrance(d: &[u8]) -> Option<Adjustment> {
     let desc = versioned(d)?;
     let get = |k: &str| desc_num(&desc, k).unwrap_or(0.0).clamp(-100.0, 100.0);
-    Some(Adjustment::Vibrance { vibrance: get("vibrance"), saturation: get("Strt") })
+    Some(Adjustment::Vibrance {
+        vibrance: get("vibrance"),
+        saturation: get("Strt"),
+    })
 }
 
 fn parse_color_balance(d: &[u8]) -> Option<Adjustment> {
@@ -137,7 +167,10 @@ fn parse_selective(d: &[u8]) -> Option<Adjustment> {
             *v = f32::from(bei16(d, 4 + (r + 1) * 8 + k * 2)?);
         }
     }
-    Some(Adjustment::SelectiveColor { relative, adjustments })
+    Some(Adjustment::SelectiveColor {
+        relative,
+        adjustments,
+    })
 }
 
 fn desc_rgb(d: &Descriptor) -> Option<[f32; 3]> {
@@ -148,7 +181,11 @@ fn desc_rgb(d: &Descriptor) -> Option<[f32; 3]> {
         _ => None,
     };
     if let (Some(r), Some(g), Some(b)) = (g("Rd  "), g("Grn "), g("Bl  ")) {
-        return Some([(r / 255.0).clamp(0.0, 1.0), (g / 255.0).clamp(0.0, 1.0), (b / 255.0).clamp(0.0, 1.0)]);
+        return Some([
+            (r / 255.0).clamp(0.0, 1.0),
+            (g / 255.0).clamp(0.0, 1.0),
+            (b / 255.0).clamp(0.0, 1.0),
+        ]);
     }
     None
 }
@@ -166,10 +203,12 @@ fn parse_black_white(d: &[u8]) -> Option<Adjustment> {
         }
     }
     let tint = desc_bool(&desc, "useTint").unwrap_or(false).then(|| {
-        desc.get("tintColor").and_then(|v| match v {
-            Value::Descriptor(d) => desc_rgb(d),
-            _ => None,
-        }).unwrap_or(BW_TINT)
+        desc.get("tintColor")
+            .and_then(|v| match v {
+                Value::Descriptor(d) => desc_rgb(d),
+                _ => None,
+            })
+            .unwrap_or(BW_TINT)
     });
     Some(Adjustment::BlackWhite { weights, tint })
 }
@@ -181,7 +220,11 @@ fn parse_photo_filter(d: &[u8]) -> Option<Adjustment> {
             let space = be16(d, 2)?;
             let c = [be16(d, 4)?, be16(d, 6)?, be16(d, 8)?, be16(d, 10)?];
             let rgb = if space == 0 {
-                [c[0] as f32 / 65535.0, c[1] as f32 / 65535.0, c[2] as f32 / 65535.0]
+                [
+                    c[0] as f32 / 65535.0,
+                    c[1] as f32 / 65535.0,
+                    c[2] as f32 / 65535.0,
+                ]
             } else {
                 [1.0, 0.5, 0.0]
             };
@@ -189,17 +232,24 @@ fn parse_photo_filter(d: &[u8]) -> Option<Adjustment> {
         }
         3 => {
             let desc = versioned(d.get(2..)?)?;
-            let rgb = desc.get("Clr ").and_then(|v| match v {
-                Value::Descriptor(d) => desc_rgb(d),
-                _ => None,
-            }).unwrap_or([1.0, 0.5, 0.0]);
+            let rgb = desc
+                .get("Clr ")
+                .and_then(|v| match v {
+                    Value::Descriptor(d) => desc_rgb(d),
+                    _ => None,
+                })
+                .unwrap_or([1.0, 0.5, 0.0]);
             (rgb, d.len().saturating_sub(5))
         }
         _ => return None,
     };
     let density = be32(d, at)? as f32 / 100.0;
     let preserve_luminosity = *d.get(at + 4)? != 0;
-    Some(Adjustment::PhotoFilter { color, density, preserve_luminosity })
+    Some(Adjustment::PhotoFilter {
+        color,
+        density,
+        preserve_luminosity,
+    })
 }
 
 fn parse_channel_mixer(d: &[u8]) -> Option<Adjustment> {
@@ -263,17 +313,23 @@ pub fn parse(key: &[u8; 4], data: &[u8], cged: Option<&[u8]>, mode: ColorMode) -
 fn parse_any(key: &[u8; 4], data: &[u8], cged: Option<&[u8]>) -> Adjustment {
     let parsed = match key {
         b"nvrt" => Some(Adjustment::Invert),
-        b"thrs" => be16(data, 0).map(|v| Adjustment::Threshold { level: f32::from(v) / 255.0 }),
-        b"post" => be16(data, 0).map(|v| Adjustment::Posterize { levels: u32::from(v) }),
+        b"thrs" => be16(data, 0).map(|v| Adjustment::Threshold {
+            level: f32::from(v) / 255.0,
+        }),
+        b"post" => be16(data, 0).map(|v| Adjustment::Posterize {
+            levels: u32::from(v),
+        }),
         b"brit" => {
-            let modern = cged.and_then(|c| VersionedDescriptor::parse_prefix(c).ok()).and_then(|(v, _)| {
-                let d = v.descriptor;
-                Some(Adjustment::BrightnessContrast {
-                    brightness: desc_num(&d, "Brgh")?,
-                    contrast: desc_num(&d, "Cntr")?,
-                    legacy: desc_bool(&d, "useLegacy").unwrap_or(false),
-                })
-            });
+            let modern = cged
+                .and_then(|c| VersionedDescriptor::parse_prefix(c).ok())
+                .and_then(|(v, _)| {
+                    let d = v.descriptor;
+                    Some(Adjustment::BrightnessContrast {
+                        brightness: desc_num(&d, "Brgh")?,
+                        contrast: desc_num(&d, "Cntr")?,
+                        legacy: desc_bool(&d, "useLegacy").unwrap_or(false),
+                    })
+                });
             modern.or_else(|| {
                 Some(Adjustment::BrightnessContrast {
                     brightness: f32::from(bei16(data, 0)?),
@@ -289,8 +345,15 @@ fn parse_any(key: &[u8; 4], data: &[u8], cged: Option<&[u8]>) -> Adjustment {
             for (i, r) in ranges.iter_mut().enumerate() {
                 let at = 16 + i * 14;
                 let v = |k: usize| bei16(data, at + 2 * k).map(f32::from);
-                if let (Some(a), Some(b), Some(c), Some(d), Some(h), Some(s), Some(l)) = (v(0), v(1), v(2), v(3), v(4), v(5), v(6)) {
-                    *r = HueRange { hue: h, saturation: s, lightness: l, bounds: HueRange::canonical_bounds([a, b, c, d]) };
+                if let (Some(a), Some(b), Some(c), Some(d), Some(h), Some(s), Some(l)) =
+                    (v(0), v(1), v(2), v(3), v(4), v(5), v(6))
+                {
+                    *r = HueRange {
+                        hue: h,
+                        saturation: s,
+                        lightness: l,
+                        bounds: HueRange::canonical_bounds([a, b, c, d]),
+                    };
                 }
             }
             Some(Adjustment::HueSaturation {
@@ -301,14 +364,25 @@ fn parse_any(key: &[u8; 4], data: &[u8], cged: Option<&[u8]>) -> Adjustment {
                 ranges,
             })
         })(),
-        b"expA" => (|| Some(Adjustment::Exposure { exposure: bef32(data, 2)?, offset: bef32(data, 6)?, gamma: bef32(data, 10)? }))(),
+        b"expA" => (|| {
+            Some(Adjustment::Exposure {
+                exposure: bef32(data, 2)?,
+                offset: bef32(data, 6)?,
+                gamma: bef32(data, 10)?,
+            })
+        })(),
         b"levl" => (|| {
             let m = levels_rec(data, 2)?;
             let r = levels_rec(data, 12)?;
             let g = levels_rec(data, 22)?;
             let b = levels_rec(data, 32)?;
             let k = levels_rec(data, 42).unwrap_or_default();
-            Some(Adjustment::Levels { master: m, per_channel: [r, g, b], space: ToneSpace::Rgb, black: k })
+            Some(Adjustment::Levels {
+                master: m,
+                per_channel: [r, g, b],
+                space: ToneSpace::Rgb,
+                black: k,
+            })
         })(),
         b"curv" => parse_curves(data),
         b"selc" => parse_selective(data),

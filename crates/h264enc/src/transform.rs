@@ -1,6 +1,6 @@
 //! Integer transforms, quantisation and the normative inverse transforms/scaling (§8.5.12).
 
-use crate::tables::{DEQUANT4, DEQUANT8, QUANT4, pos_class4, pos_class8};
+use crate::tables::{pos_class4, pos_class8, DEQUANT4, DEQUANT8, QUANT4};
 
 /// Forward 4x4 core transform of a residual block (raster order).
 #[inline]
@@ -97,7 +97,16 @@ pub fn fdct8(d: &[i32; 64]) -> [i32; 64] {
     }
     let mut out = [0i32; 64];
     for x in 0..8 {
-        let col = [t[x], t[8 + x], t[16 + x], t[24 + x], t[32 + x], t[40 + x], t[48 + x], t[56 + x]];
+        let col = [
+            t[x],
+            t[8 + x],
+            t[16 + x],
+            t[24 + x],
+            t[32 + x],
+            t[40 + x],
+            t[48 + x],
+            t[56 + x],
+        ];
         let o = fdct8_1d(col);
         for k in 0..8 {
             out[k * 8 + x] = o[k];
@@ -137,7 +146,16 @@ pub fn idct8(d: &[i32; 64]) -> [i32; 64] {
         let b7 = a7 - (a1 >> 2);
         let b3 = a3 + (a5 >> 2);
         let b5 = (a3 >> 2) - a5;
-        [b0 + b7, b2 + b5, b4 + b3, b6 + b1, b6 - b1, b4 - b3, b2 - b5, b0 - b7]
+        [
+            b0 + b7,
+            b2 + b5,
+            b4 + b3,
+            b6 + b1,
+            b6 - b1,
+            b4 - b3,
+            b2 - b5,
+            b0 - b7,
+        ]
     }
     let mut g = [0i32; 64];
     for (i, row) in d.as_chunks::<8>().0.iter().enumerate() {
@@ -146,7 +164,16 @@ pub fn idct8(d: &[i32; 64]) -> [i32; 64] {
     }
     let mut r = [0i32; 64];
     for j in 0..8 {
-        let col = [g[j], g[8 + j], g[16 + j], g[24 + j], g[32 + j], g[40 + j], g[48 + j], g[56 + j]];
+        let col = [
+            g[j],
+            g[8 + j],
+            g[16 + j],
+            g[24 + j],
+            g[32 + j],
+            g[40 + j],
+            g[48 + j],
+            g[56 + j],
+        ];
         let o = one(col);
         for i in 0..8 {
             r[i * 8 + j] = (o[i] + 32) >> 6;
@@ -256,7 +283,11 @@ pub fn dequant8(c: &mut [i32; 64], qt: &QuantTables, qp: u8) {
     let q6 = (qp / 6) as i32;
     for i in 0..64 {
         let ls = 16 * v[i];
-        c[i] = if q6 >= 6 { (c[i] * ls) << (q6 - 6) } else { (c[i] * ls + (1 << (5 - q6))) >> (6 - q6) };
+        c[i] = if q6 >= 6 {
+            (c[i] * ls) << (q6 - 6)
+        } else {
+            (c[i] * ls + (1 << (5 - q6))) >> (6 - q6)
+        };
     }
 }
 
@@ -306,14 +337,23 @@ pub fn dequant_luma_dc(c: &[i32; 16], qt: &QuantTables, qp: u8) -> [i32; 16] {
     let q6 = (qp / 6) as i32;
     let mut o = [0i32; 16];
     for i in 0..16 {
-        o[i] = if q6 >= 6 { (f[i] * ls) << (q6 - 6) } else { (f[i] * ls + (1 << (5 - q6))) >> (6 - q6) };
+        o[i] = if q6 >= 6 {
+            (f[i] * ls) << (q6 - 6)
+        } else {
+            (f[i] * ls + (1 << (5 - q6))) >> (6 - q6)
+        };
     }
     o
 }
 
 /// Forward quantisation of chroma DC (2x2 raster of block DC coefficients).
 pub fn quant_chroma_dc(dc: &[i32; 4], qt: &QuantTables, qp: u8, dz: Deadzone) -> ([i32; 4], u32) {
-    let h = [dc[0] + dc[1] + dc[2] + dc[3], dc[0] - dc[1] + dc[2] - dc[3], dc[0] + dc[1] - dc[2] - dc[3], dc[0] - dc[1] - dc[2] + dc[3]];
+    let h = [
+        dc[0] + dc[1] + dc[2] + dc[3],
+        dc[0] - dc[1] + dc[2] - dc[3],
+        dc[0] + dc[1] - dc[2] - dc[3],
+        dc[0] - dc[1] - dc[2] + dc[3],
+    ];
     let qbits = 16 + (qp / 6) as u32;
     let f = ((1i64 << qbits) * dz.f256) >> 8;
     let mf = qt.mf4[(qp % 6) as usize][0] as i64;
@@ -330,7 +370,12 @@ pub fn quant_chroma_dc(dc: &[i32; 4], qt: &QuantTables, qp: u8, dz: Deadzone) ->
 
 /// Normative chroma DC inverse (§8.5.11.2) for 4:2:0: levels (raster 2x2) -> dcC.
 pub fn dequant_chroma_dc(c: &[i32; 4], qt: &QuantTables, qpc: u8) -> [i32; 4] {
-    let f = [c[0] + c[1] + c[2] + c[3], c[0] - c[1] + c[2] - c[3], c[0] + c[1] - c[2] - c[3], c[0] - c[1] - c[2] + c[3]];
+    let f = [
+        c[0] + c[1] + c[2] + c[3],
+        c[0] - c[1] + c[2] - c[3],
+        c[0] + c[1] - c[2] - c[3],
+        c[0] - c[1] - c[2] + c[3],
+    ];
     let ls = 16 * qt.v4[(qpc % 6) as usize][0];
     let q6 = (qpc / 6) as u32;
     let mut o = [0i32; 4];

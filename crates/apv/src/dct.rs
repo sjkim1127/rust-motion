@@ -5,7 +5,18 @@ use crate::tables::LEVEL_SCALE;
 /// 1D 8-point inverse transform using the RFC 9924 §6.3.2.3 even/odd butterfly decomposition,
 /// shifting each output by `(sum + round) >> shift`.
 #[inline(always)]
-fn idct_1d(x0: i32, x1: i32, x2: i32, x3: i32, x4: i32, x5: i32, x6: i32, x7: i32, round: i32, shift: u32) -> [i32; 8] {
+fn idct_1d(
+    x0: i32,
+    x1: i32,
+    x2: i32,
+    x3: i32,
+    x4: i32,
+    x5: i32,
+    x6: i32,
+    x7: i32,
+    round: i32,
+    shift: u32,
+) -> [i32; 8] {
     if (x1 | x2 | x3 | x4 | x5 | x6 | x7) == 0 {
         let v = (x0 * 64 + round) >> shift;
         return [v; 8];
@@ -39,9 +50,19 @@ fn idct_1d(x0: i32, x1: i32, x2: i32, x3: i32, x4: i32, x5: i32, x6: i32, x7: i3
 
 /// Fast path when an 8x8 block has only a DC coefficient (`coeff[1..64]` are all zero).
 #[inline]
-pub fn scale_and_idct8x8_dc_only(dc_coeff: i16, q0: u8, qp: u8, bit_depth: u8, out: &mut [u16; 64]) {
+pub fn scale_and_idct8x8_dc_only(
+    dc_coeff: i16,
+    q0: u8,
+    qp: u8,
+    bit_depth: u8,
+    out: &mut [u16; 64],
+) {
     let bd_shift_scale = (bit_depth as u32).saturating_sub(2);
-    let scale_round = if bd_shift_scale > 0 { 1i64 << (bd_shift_scale - 1) } else { 0 };
+    let scale_round = if bd_shift_scale > 0 {
+        1i64 << (bd_shift_scale - 1)
+    } else {
+        0
+    };
     let level_scale = LEVEL_SCALE[(qp % 6) as usize] as i64;
     let qp_shift = (qp / 6) as u32;
 
@@ -60,9 +81,19 @@ pub fn scale_and_idct8x8_dc_only(dc_coeff: i16, q0: u8, qp: u8, bit_depth: u8, o
 /// Scale and inverse-transform one 8x8 block of transform coefficients (indexed by `y * 8 + x`)
 /// into reconstructed samples at `bit_depth` (`10..=16`), per RFC 9924 §6.3.
 #[inline]
-pub fn scale_and_idct8x8(coeff: &[i16; 64], q_matrix: &[u8; 64], qp: u8, bit_depth: u8, out: &mut [u16; 64]) {
+pub fn scale_and_idct8x8(
+    coeff: &[i16; 64],
+    q_matrix: &[u8; 64],
+    qp: u8,
+    bit_depth: u8,
+    out: &mut [u16; 64],
+) {
     let bd_shift_scale = (bit_depth as u32).saturating_sub(2);
-    let scale_round = if bd_shift_scale > 0 { 1i64 << (bd_shift_scale - 1) } else { 0 };
+    let scale_round = if bd_shift_scale > 0 {
+        1i64 << (bd_shift_scale - 1)
+    } else {
+        0
+    };
     let level_scale = LEVEL_SCALE[(qp % 6) as usize] as i64;
     let qp_shift = (qp / 6) as u32;
 
@@ -79,7 +110,18 @@ pub fn scale_and_idct8x8(coeff: &[i16; 64], q_matrix: &[u8; 64], qp: u8, bit_dep
     // 1D vertical transform on each column x = 0..8, followed by (e + 64) >> 7
     let mut g = [0i32; 64];
     for x in 0..8 {
-        let col = idct_1d(d[x], d[8 + x], d[16 + x], d[24 + x], d[32 + x], d[40 + x], d[48 + x], d[56 + x], 64, 7);
+        let col = idct_1d(
+            d[x],
+            d[8 + x],
+            d[16 + x],
+            d[24 + x],
+            d[32 + x],
+            d[40 + x],
+            d[48 + x],
+            d[56 + x],
+            64,
+            7,
+        );
         for i in 0..8 {
             g[i * 8 + x] = col[i];
         }
@@ -93,7 +135,9 @@ pub fn scale_and_idct8x8(coeff: &[i16; 64], q_matrix: &[u8; 64], qp: u8, bit_dep
 
     for y in 0..8 {
         let r = &g[y * 8..y * 8 + 8];
-        let row = idct_1d(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], round, bd_shift);
+        let row = idct_1d(
+            r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], round, bd_shift,
+        );
         for i in 0..8 {
             out[y * 8 + i] = (row[i] + mid).clamp(0, max_val) as u16;
         }
@@ -102,7 +146,18 @@ pub fn scale_and_idct8x8(coeff: &[i16; 64], q_matrix: &[u8; 64], qp: u8, bit_dep
 
 /// 1D 8-point forward butterfly transform matching `TRANS_MATRIX`.
 #[inline(always)]
-fn fdct_1d(x0: i32, x1: i32, x2: i32, x3: i32, x4: i32, x5: i32, x6: i32, x7: i32, round: i32, shift: u32) -> [i32; 8] {
+fn fdct_1d(
+    x0: i32,
+    x1: i32,
+    x2: i32,
+    x3: i32,
+    x4: i32,
+    x5: i32,
+    x6: i32,
+    x7: i32,
+    round: i32,
+    shift: u32,
+) -> [i32; 8] {
     let s0 = x0 + x7;
     let d0 = x0 - x7;
     let s1 = x1 + x6;
@@ -159,7 +214,18 @@ pub fn fdct8x8(samples: &[u16; 64], bit_depth: u8) -> [i32; 64] {
     // Vertical forward pass
     let mut f = [0i32; 64];
     for u in 0..8 {
-        let col = fdct_1d(t[u], t[8 + u], t[16 + u], t[24 + u], t[32 + u], t[40 + u], t[48 + u], t[56 + u], 128, 8);
+        let col = fdct_1d(
+            t[u],
+            t[8 + u],
+            t[16 + u],
+            t[24 + u],
+            t[32 + u],
+            t[40 + u],
+            t[48 + u],
+            t[56 + u],
+            128,
+            8,
+        );
         for v in 0..8 {
             f[v * 8 + u] = col[v];
         }

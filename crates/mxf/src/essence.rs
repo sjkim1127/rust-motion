@@ -53,7 +53,15 @@ impl Codec {
     }
     /// Every picture is coded independently.
     pub fn intra_only(&self) -> bool {
-        matches!(self, Codec::Avc { intra: true } | Codec::Vc3 | Codec::ProRes { .. } | Codec::Jpeg2000 | Codec::Dv | Codec::Uncompressed)
+        matches!(
+            self,
+            Codec::Avc { intra: true }
+                | Codec::Vc3
+                | Codec::ProRes { .. }
+                | Codec::Jpeg2000
+                | Codec::Dv
+                | Codec::Uncompressed
+        )
     }
 }
 
@@ -72,7 +80,11 @@ pub fn identify_picture(coding: Option<Ul>, container: Option<Ul>, mpeg_descript
                 (0x02, _) => return Codec::Dv,
                 (0x03, 0x01) => return Codec::Jpeg2000,
                 (0x03, 0x02) => return Codec::Vc3,
-                (0x03, 0x06) => return Codec::ProRes { profile: Some(b[14]) },
+                (0x03, 0x06) => {
+                    return Codec::ProRes {
+                        profile: Some(b[14]),
+                    }
+                }
                 // Avid-registered VC-3 coding labels
                 (0x71, _) => return Codec::Vc3,
                 _ => {}
@@ -85,19 +97,23 @@ pub fn identify_picture(coding: Option<Ul>, container: Option<Ul>, mpeg_descript
     if let Some(c) = container.filter(Ul::is_smpte) {
         if c.item_starts_with(&[0x0D, 0x01, 0x03, 0x01, 0x02]) {
             match c.0[13] {
-            0x01 => return Codec::Mpeg2,
-            0x02 => return Codec::Dv,
-            0x04 if mpeg_descriptor => return Codec::Mpeg2,
-            0x05 => return Codec::Uncompressed,
-            0x0C => return Codec::Jpeg2000,
-            0x0F | 0x10 => return Codec::Avc { intra: false },
-            0x11 => return Codec::Vc3,
-            0x1C => return Codec::ProRes { profile: None },
-            _ => {}
+                0x01 => return Codec::Mpeg2,
+                0x02 => return Codec::Dv,
+                0x04 if mpeg_descriptor => return Codec::Mpeg2,
+                0x05 => return Codec::Uncompressed,
+                0x0C => return Codec::Jpeg2000,
+                0x0F | 0x10 => return Codec::Avc { intra: false },
+                0x11 => return Codec::Vc3,
+                0x1C => return Codec::ProRes { profile: None },
+                _ => {}
+            }
         }
     }
-}
-    if mpeg_descriptor { Codec::Mpeg2 } else { Codec::Unknown }
+    if mpeg_descriptor {
+        Codec::Mpeg2
+    } else {
+        Codec::Unknown
+    }
 }
 
 /// Identify a picture codec from the first bytes of an essence element.
@@ -150,16 +166,30 @@ pub struct PictureInfo {
 impl PictureInfo {
     /// Frame height: field-based layouts code the height of one field.
     pub fn frame_height(&self) -> u32 {
-        let h = if self.display_height > 0 { self.display_height } else { self.stored_height };
-        if matches!(self.frame_layout, 1 | 3) { h * 2 } else { h }
+        let h = if self.display_height > 0 {
+            self.display_height
+        } else {
+            self.stored_height
+        };
+        if matches!(self.frame_layout, 1 | 3) {
+            h * 2
+        } else {
+            h
+        }
     }
     pub fn frame_width(&self) -> u32 {
-        if self.display_width > 0 { self.display_width } else { self.stored_width }
+        if self.display_width > 0 {
+            self.display_width
+        } else {
+            self.stored_width
+        }
     }
     /// Full-range coding (black at 0 and white at the maximum code value).
     pub fn full_range(&self) -> bool {
         let d = self.component_depth;
-        d > 0 && self.black_ref_level == Some(0) && self.white_ref_level == Some((1u32 << d.min(31)) - 1)
+        d > 0
+            && self.black_ref_level == Some(0)
+            && self.white_ref_level == Some((1u32 << d.min(31)) - 1)
     }
 }
 
@@ -188,7 +218,11 @@ pub struct SoundInfo {
 impl SoundInfo {
     /// Bytes per sample frame of plain PCM.
     pub fn frame_bytes(&self) -> usize {
-        if self.block_align > 0 { self.block_align as usize } else { (self.channels.max(1) as usize).saturating_mul((self.bits as usize).div_ceil(8).max(1)) }
+        if self.block_align > 0 {
+            self.block_align as usize
+        } else {
+            (self.channels.max(1) as usize).saturating_mul((self.bits as usize).div_ceil(8).max(1))
+        }
     }
 }
 
@@ -206,16 +240,26 @@ pub fn aes3_element_samples(v: &[u8]) -> usize {
 /// `Pcm`: interleaved little-endian signed integers of `bits` (8-bit is unsigned, per WAVE),
 /// `frame_bytes` per sample frame. `Aes3Element`: the 24-bit sample of each ST 331 sub-frame
 /// (bits 4-27 of the little-endian 32-bit word), first `channels` of the 8 channels.
-pub fn decode_pcm(v: &[u8], format: SoundFormat, channels: usize, bits: u32, frame_bytes: usize) -> Result<Vec<Vec<f32>>> {
+pub fn decode_pcm(
+    v: &[u8],
+    format: SoundFormat,
+    channels: usize,
+    bits: u32,
+    frame_bytes: usize,
+) -> Result<Vec<Vec<f32>>> {
     let ch = channels.max(1);
     if ch > 256 {
-        return Err(crate::Error::Invalid("PCM channel count exceeds 256".into()));
+        return Err(crate::Error::Invalid(
+            "PCM channel count exceeds 256".into(),
+        ));
     }
     match format {
         SoundFormat::Pcm => {
             let bps = (bits as usize).div_ceil(8);
             if bps == 0 || bps > 4 || frame_bytes < bps * ch {
-                return Err(crate::Error::Unsupported(format!("{bits}-bit PCM with {frame_bytes}-byte frames")));
+                return Err(crate::Error::Unsupported(format!(
+                    "{bits}-bit PCM with {frame_bytes}-byte frames"
+                )));
             }
             // `frame_bytes >= bps * ch`, so the output is bounded by the bytes actually supplied.
             let n = v.len() / frame_bytes;
@@ -240,7 +284,9 @@ pub fn decode_pcm(v: &[u8], format: SoundFormat, channels: usize, bits: u32, fra
             // SMPTE 331M: an AES3 element carries at most eight channels (and an output buffer per
             // declared channel would multiply a hostile header's allocation).
             if ch > 8 {
-                return Err(crate::Error::Invalid("an AES3 element has at most eight channels".into()));
+                return Err(crate::Error::Invalid(
+                    "an AES3 element has at most eight channels".into(),
+                ));
             }
             let n = aes3_element_samples(v);
             let mut out = vec![Vec::with_capacity(n); ch];
@@ -263,30 +309,59 @@ mod tests {
     use super::*;
 
     fn ul(item: &[u8]) -> Ul {
-        let mut b = [0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x0A, 0, 0, 0, 0, 0, 0, 0, 0];
+        let mut b = [
+            0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x0A, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
         b[8..8 + item.len()].copy_from_slice(item);
         Ul(b)
     }
 
     #[test]
     fn identifies_picture_codings() {
-        assert_eq!(identify_picture(Some(ul(&[4, 1, 2, 2, 1, 0x31, 0x40, 1])), None, false), Codec::Avc { intra: false });
-        assert_eq!(identify_picture(Some(ul(&[4, 1, 2, 2, 1, 0x32, 0x21, 1])), None, false), Codec::Avc { intra: true });
-        assert_eq!(identify_picture(Some(ul(&[4, 1, 2, 2, 0x71, 0x11])), None, false), Codec::Vc3);
-        assert_eq!(identify_picture(Some(ul(&[4, 1, 2, 2, 3, 6, 4])), None, false), Codec::ProRes { profile: Some(4) });
-        assert_eq!(identify_picture(Some(ul(&[4, 1, 2, 2, 1, 1, 0x11])), None, true), Codec::Mpeg2);
+        assert_eq!(
+            identify_picture(Some(ul(&[4, 1, 2, 2, 1, 0x31, 0x40, 1])), None, false),
+            Codec::Avc { intra: false }
+        );
+        assert_eq!(
+            identify_picture(Some(ul(&[4, 1, 2, 2, 1, 0x32, 0x21, 1])), None, false),
+            Codec::Avc { intra: true }
+        );
+        assert_eq!(
+            identify_picture(Some(ul(&[4, 1, 2, 2, 0x71, 0x11])), None, false),
+            Codec::Vc3
+        );
+        assert_eq!(
+            identify_picture(Some(ul(&[4, 1, 2, 2, 3, 6, 4])), None, false),
+            Codec::ProRes { profile: Some(4) }
+        );
+        assert_eq!(
+            identify_picture(Some(ul(&[4, 1, 2, 2, 1, 1, 0x11])), None, true),
+            Codec::Mpeg2
+        );
         // container fallback
-        assert_eq!(identify_picture(None, Some(ul(&[0x0D, 1, 3, 1, 2, 0x11, 1])), false), Codec::Vc3);
-        assert_eq!(identify_picture(None, Some(ul(&[0x0D, 1, 3, 1, 2, 0x04, 0x60, 1])), true), Codec::Mpeg2);
+        assert_eq!(
+            identify_picture(None, Some(ul(&[0x0D, 1, 3, 1, 2, 0x11, 1])), false),
+            Codec::Vc3
+        );
+        assert_eq!(
+            identify_picture(None, Some(ul(&[0x0D, 1, 3, 1, 2, 0x04, 0x60, 1])), true),
+            Codec::Mpeg2
+        );
         assert_eq!(identify_picture(None, None, false), Codec::Unknown);
     }
 
     #[test]
     fn sniffs_essence() {
-        assert_eq!(sniff_picture(&[0, 0, 0, 1, 0x09, 0x10]), Some(Codec::Avc { intra: false }));
+        assert_eq!(
+            sniff_picture(&[0, 0, 0, 1, 0x09, 0x10]),
+            Some(Codec::Avc { intra: false })
+        );
         assert_eq!(sniff_picture(&[0, 0, 1, 0xB3, 0]), Some(Codec::Mpeg2));
         assert_eq!(sniff_picture(&[0, 0, 2, 0x80, 1]), Some(Codec::Vc3));
-        assert_eq!(sniff_picture(&[0, 0, 0, 9, b'i', b'c', b'p', b'f']), Some(Codec::ProRes { profile: None }));
+        assert_eq!(
+            sniff_picture(&[0, 0, 0, 9, b'i', b'c', b'p', b'f']),
+            Some(Codec::ProRes { profile: None })
+        );
         assert_eq!(sniff_picture(&[1, 2, 3]), None);
     }
 

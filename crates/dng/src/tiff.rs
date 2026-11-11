@@ -109,17 +109,30 @@ impl<'a> Tiff<'a> {
     }
 
     fn bytes_at(&self, off: u64, len: usize) -> Result<&'a [u8]> {
-        let start = usize::try_from(off).map_err(|_| Error::Malformed("offset outside the file"))?;
-        let end = start.checked_add(len).ok_or(Error::Malformed("offset outside the file"))?;
-        self.data.get(start..end).ok_or(Error::Malformed("offset outside the file"))
+        let start =
+            usize::try_from(off).map_err(|_| Error::Malformed("offset outside the file"))?;
+        let end = start
+            .checked_add(len)
+            .ok_or(Error::Malformed("offset outside the file"))?;
+        self.data
+            .get(start..end)
+            .ok_or(Error::Malformed("offset outside the file"))
     }
 
     pub fn u16_of(&self, b: [u8; 2]) -> u16 {
-        if self.big_endian { u16::from_be_bytes(b) } else { u16::from_le_bytes(b) }
+        if self.big_endian {
+            u16::from_be_bytes(b)
+        } else {
+            u16::from_le_bytes(b)
+        }
     }
 
     pub fn u32_of(&self, b: [u8; 4]) -> u32 {
-        if self.big_endian { u32::from_be_bytes(b) } else { u32::from_le_bytes(b) }
+        if self.big_endian {
+            u32::from_be_bytes(b)
+        } else {
+            u32::from_le_bytes(b)
+        }
     }
 
     fn u16_at(&self, off: u64) -> Result<u16> {
@@ -143,13 +156,31 @@ impl<'a> Tiff<'a> {
             let code = self.u16_of([e[2], e[3]]);
             let count = self.u32_of([e[4], e[5], e[6], e[7]]);
             // unknown field types are skipped (TIFF 6.0: readers ignore them)
-            let Some(ty) = Type::from_code(code) else { continue };
+            let Some(ty) = Type::from_code(code) else {
+                continue;
+            };
             let len = u64::from(count).saturating_mul(ty.size() as u64);
-            let value_at = if len <= 4 { at + 8 } else { u64::from(self.u32_of([e[8], e[9], e[10], e[11]])) };
-            entries.push(Entry { tag, ty, count, value_at });
+            let value_at = if len <= 4 {
+                at + 8
+            } else {
+                u64::from(self.u32_of([e[8], e[9], e[10], e[11]]))
+            };
+            entries.push(Entry {
+                tag,
+                ty,
+                count,
+                value_at,
+            });
         }
         let next = u64::from(self.u32_at(off + 2 + u64::from(n) * 12)?);
-        Ok((Ifd { offset: off, entries, depth }, next))
+        Ok((
+            Ifd {
+                offset: off,
+                entries,
+                depth,
+            },
+            next,
+        ))
     }
 
     /// Every IFD of the file: the main chain from `first` and, depth first, the SubIFDs (tag 330) of
@@ -192,7 +223,9 @@ impl<'a> Tiff<'a> {
 
     /// The value bytes of an entry.
     pub fn value_bytes(&self, e: &Entry) -> Result<&'a [u8]> {
-        let len = (e.count as usize).checked_mul(e.ty.size()).ok_or(Error::Malformed("entry too large"))?;
+        let len = (e.count as usize)
+            .checked_mul(e.ty.size())
+            .ok_or(Error::Malformed("entry too large"))?;
         self.bytes_at(e.value_at, len)
     }
 
@@ -200,7 +233,9 @@ impl<'a> Tiff<'a> {
     /// error).
     fn number(&self, e: &Entry, b: &[u8], i: usize) -> Result<f64> {
         let s = e.ty.size();
-        let v = b.get(i * s..i * s + s).ok_or(Error::Malformed("entry too short"))?;
+        let v = b
+            .get(i * s..i * s + s)
+            .ok_or(Error::Malformed("entry too short"))?;
         let u16v = |o: usize| self.u16_of([v[o], v[o + 1]]);
         let u32v = |o: usize| self.u32_of([v[o], v[o + 1], v[o + 2], v[o + 3]]);
         Ok(match e.ty {
@@ -228,7 +263,11 @@ impl<'a> Tiff<'a> {
             Type::Double => {
                 let mut a = [0u8; 8];
                 a.copy_from_slice(&v[..8]);
-                if self.big_endian { f64::from_be_bytes(a) } else { f64::from_le_bytes(a) }
+                if self.big_endian {
+                    f64::from_be_bytes(a)
+                } else {
+                    f64::from_le_bytes(a)
+                }
             }
             Type::Ascii => return Err(Error::Malformed("text where a number belongs")),
         })
@@ -250,7 +289,10 @@ impl<'a> Tiff<'a> {
 
     /// All values of an unsigned integer entry (BYTE, SHORT, LONG, IFD).
     pub fn uints(&self, e: &Entry) -> Result<Vec<u64>> {
-        if !matches!(e.ty, Type::Byte | Type::Undefined | Type::Short | Type::Long | Type::Ifd) {
+        if !matches!(
+            e.ty,
+            Type::Byte | Type::Undefined | Type::Short | Type::Long | Type::Ifd
+        ) {
             return Err(Error::Malformed("expected an unsigned integer field"));
         }
         let b = self.value_bytes(e)?;
@@ -266,7 +308,10 @@ impl<'a> Tiff<'a> {
 
     /// The first value of an unsigned integer entry.
     pub fn uint(&self, e: &Entry) -> Result<u64> {
-        self.uints(e)?.first().copied().ok_or(Error::Malformed("empty field"))
+        self.uints(e)?
+            .first()
+            .copied()
+            .ok_or(Error::Malformed("empty field"))
     }
 
     /// An ASCII entry up to its first NUL, lossily decoded.

@@ -5,9 +5,7 @@ members = [
     "crates/apv",
     "crates/audio-dsp",
     "crates/composition",
-    "crates/core",
     "crates/media",
-    "crates/player",
     "crates/renderer",
     "crates/transitions",
     "crates/cli",
@@ -16,7 +14,6 @@ members = [
     "crates/captions",
     "crates/noise",
     "crates/rasterizer",
-    "crates/vdom",
     "crates/charts",
     "crates/h264enc",
     "crates/mxf",
@@ -42,8 +39,6 @@ members = [
     "crates/inpaint",
     "crates/mcp",
     "crates/ts",
-    "apps/studio",
-    "apps/example",
 ]
 
 
@@ -62,12 +57,6 @@ repository   = "https://github.com/sjkim1127/rust-motion"
 readme       = "README.md"
 
 [workspace.dependencies]
-# UI framework
-dioxus            = { version = "0.6", default-features = false, features = ["macro", "hooks", "signals", "html", "document", "launch"] }
-dioxus-web        = { version = "0.6" }
-dioxus-desktop    = { version = "0.6" }
-dioxus-core       = { version = "0.6" }
-
 # Async runtime
 tokio             = { version = "1", features = ["full"] }
 futures           = "0.3"
@@ -125,17 +114,14 @@ rust-motion-apv         = { version = "1.0.0", path = "crates/apv" }
 rust-motion-audio-dsp   = { version = "1.0.0", path = "crates/audio-dsp" }
 rust-motion-cli         = { version = "1.0.0", path = "crates/cli" }
 rust-motion-composition = { version = "1.0.0", path = "crates/composition" }
-rust-motion-core        = { version = "1.0.0", path = "crates/core" }
-rust-motion-media       = { version = "1.0.0", path = "crates/media", default-features = false }
-rust-motion-player      = { version = "1.0.0", path = "crates/player" }
+rust-motion-media       = { version = "1.0.0", path = "crates/media" }
 rust-motion-renderer    = { version = "1.0.0", path = "crates/renderer" }
 rust-motion-transitions = { version = "1.0.0", path = "crates/transitions" }
-rust-motion-shapes      = { version = "1.0.0", path = "crates/shapes", default-features = false }
+rust-motion-shapes      = { version = "1.0.0", path = "crates/shapes" }
 rust-motion-paths       = { version = "1.0.0", path = "crates/paths" }
-rust-motion-captions    = { version = "1.0.0", path = "crates/captions", default-features = false }
+rust-motion-captions    = { version = "1.0.0", path = "crates/captions" }
 rust-motion-noise       = { version = "1.0.0", path = "crates/noise" }
 rust-motion-rasterizer  = { version = "1.0.0", path = "crates/rasterizer" }
-rust-motion-vdom        = { version = "1.0.0", path = "crates/vdom" }
 rust-motion-charts      = { version = "1.0.0", path = "crates/charts" }
 rust-motion-h264enc     = { version = "1.0.0", path = "crates/h264enc" }
 rust-motion-mxf         = { version = "1.0.0", path = "crates/mxf" }
@@ -167,12 +153,5 @@ lto        = true
 codegen-units = 1
 strip      = true
 
-[profile.wasm-dev]
-inherits = "dev"
-opt-level = 1
-
 [profile.server-dev]
-inherits = "dev"
-
-[profile.android-dev]
 inherits = "dev"

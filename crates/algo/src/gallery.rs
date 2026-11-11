@@ -10,8 +10,11 @@ use rust_motion_geom::Rect;
 
 mod spin_plan;
 
-use crate::fxutil::{MAXC, add_sample_premul, gauss_blur_n, gauss_box_radii, premul_window, smoothstep, unpremul_px, xy};
-use crate::image::{Image, premultiply};
+use crate::fxutil::{
+    add_sample_premul, gauss_blur_n, gauss_box_radii, premul_window, smoothstep, unpremul_px, xy,
+    MAXC,
+};
+use crate::image::{premultiply, Image};
 use crate::{BlurPath, Ctx, FieldPin, IrisPin, SpinPin};
 
 #[cfg(test)]
@@ -35,7 +38,14 @@ pub(crate) fn reach(blur: f32) -> f32 {
 const LEVELS: usize = 6;
 
 /// Blurs `src` over `out` with a per-pixel σ (`sigma(x, y)`, ≤ `smax`).
-fn variable_blur(src: &Image, out: Rect, ctx: &Ctx, smax: f32, trim_levels: bool, sigma: impl Fn(f32, f32) -> f32) -> Vec<f32> {
+fn variable_blur(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    smax: f32,
+    trim_levels: bool,
+    sigma: impl Fn(f32, f32) -> f32,
+) -> Vec<f32> {
     let n = src.ch;
     if n == 0 || out.is_empty() {
         return Vec::new();
@@ -46,15 +56,25 @@ fn variable_blur(src: &Image, out: Rect, ctx: &Ctx, smax: f32, trim_levels: bool
     let win = src.rect;
     let (ww, wh) = (win.width() as usize, win.height() as usize);
     let (ow, oh) = (out.width() as usize, out.height() as usize);
-    let Some(row_len) = ww.checked_mul(n).filter(|&len| len > 0) else { return Vec::new() };
-    let Some(source_len) = row_len.checked_mul(wh) else { return Vec::new() };
-    let Some(pixels) = ow.checked_mul(oh) else { return Vec::new() };
-    let Some(samples) = pixels.checked_mul(n) else { return Vec::new() };
+    let Some(row_len) = ww.checked_mul(n).filter(|&len| len > 0) else {
+        return Vec::new();
+    };
+    let Some(source_len) = row_len.checked_mul(wh) else {
+        return Vec::new();
+    };
+    let Some(pixels) = ow.checked_mul(oh) else {
+        return Vec::new();
+    };
+    let Some(samples) = pixels.checked_mul(n) else {
+        return Vec::new();
+    };
     if trim_levels && src.data.len() != source_len {
         return Vec::new();
     }
     // Level σs: 0, then smax / 2^(LEVELS-1) … smax.
-    let lv: Vec<f32> = std::iter::once(0.0).chain((0..LEVELS).map(|k| smax / 2f32.powi((LEVELS - 1 - k) as i32))).collect();
+    let lv: Vec<f32> = std::iter::once(0.0)
+        .chain((0..LEVELS).map(|k| smax / 2f32.powi((LEVELS - 1 - k) as i32)))
+        .collect();
     let sig: Vec<f32> = (0..pixels)
         .map(|i| {
             let (x, y) = xy(out, i);
@@ -96,10 +116,22 @@ fn variable_blur(src: &Image, out: Rect, ctx: &Ctx, smax: f32, trim_levels: bool
             // not the maximum blur's trailing halo. Keep the original top/left:
             // moving the running sums' start changes floating-point cancellation.
             let trim = trim_levels && win.intersect(&out) == out;
-            let reach = if !trim || lvk < 0.3 { 0 } else { gauss_box_radii(lvk).iter().sum::<usize>() };
+            let reach = if !trim || lvk < 0.3 {
+                0
+            } else {
+                gauss_box_radii(lvk).iter().sum::<usize>()
+            };
             let reach = i32::try_from(reach).unwrap_or(i32::MAX);
-            let lw = if trim { (i64::from(out.x1.saturating_add(reach).min(win.x1)) - i64::from(win.x0)) as usize } else { ww };
-            let lh = if trim { (i64::from(out.y1.saturating_add(reach).min(win.y1)) - i64::from(win.y0)) as usize } else { wh };
+            let lw = if trim {
+                (i64::from(out.x1.saturating_add(reach).min(win.x1)) - i64::from(win.x0)) as usize
+            } else {
+                ww
+            };
+            let lh = if trim {
+                (i64::from(out.y1.saturating_add(reach).min(win.y1)) - i64::from(win.y0)) as usize
+            } else {
+                wh
+            };
             buf.clear();
             if buf.capacity() == 0 {
                 // Match the old single full-window allocation. Row appends must
@@ -145,10 +177,22 @@ fn short_side(b: Rect) -> f32 {
 /// Tilt-Shift: a sharp band through the centre at `angle`, blurring with
 /// distance beyond `focus` over `transition` (both fractions of the shorter side).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn tilt_shift(src: &Image, out: Rect, ctx: &Ctx, blur: f32, centre: (f32, f32), angle: f32, focus: f32, transition: f32) -> Vec<f32> {
+pub(crate) fn tilt_shift(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    blur: f32,
+    centre: (f32, f32),
+    angle: f32,
+    focus: f32,
+    transition: f32,
+) -> Vec<f32> {
     let b = ctx.bounds;
     let ss = short_side(b);
-    let (cx, cy) = (b.x0 as f32 + centre.0 * b.width() as f32, b.y0 as f32 + centre.1 * b.height() as f32);
+    let (cx, cy) = (
+        b.x0 as f32 + centre.0 * b.width() as f32,
+        b.y0 as f32 + centre.1 * b.height() as f32,
+    );
     // Band normal (the band runs along `angle`).
     let (s, c) = angle.to_radians().sin_cos();
     let (nx, ny) = (s, c);
@@ -163,16 +207,37 @@ pub(crate) fn tilt_shift(src: &Image, out: Rect, ctx: &Ctx, blur: f32, centre: (
 
 /// Normalized (super)elliptical distance of a point from an iris/spin pin.
 #[allow(clippy::too_many_arguments)]
-fn pin_distance(x: f32, y: f32, b: Rect, px: f32, py: f32, rx: f32, ry: f32, angle: f32, m: f32) -> (f32, f32, f32) {
+fn pin_distance(
+    x: f32,
+    y: f32,
+    b: Rect,
+    px: f32,
+    py: f32,
+    rx: f32,
+    ry: f32,
+    angle: f32,
+    m: f32,
+) -> (f32, f32, f32) {
     let ss = short_side(b);
-    let (cx, cy) = (b.x0 as f32 + px * b.width() as f32, b.y0 as f32 + py * b.height() as f32);
+    let (cx, cy) = (
+        b.x0 as f32 + px * b.width() as f32,
+        b.y0 as f32 + py * b.height() as f32,
+    );
     let angle_deg = if angle.is_finite() { angle } else { 0.0 };
     let (s, c) = angle_deg.to_radians().sin_cos();
     let (dx, dy) = (x - cx, y - cy);
     let (u, v) = (dx * c + dy * s, -dx * s + dy * c);
     let (u, v) = (u / (rx.max(1e-3) * ss), v / (ry.max(1e-3) * ss));
-    let e = if (m - 2.0).abs() < 1e-3 { (u * u + v * v).sqrt() } else { (u.abs().powf(m) + v.abs().powf(m)).powf(1.0 / m) };
-    if !e.is_finite() { (f32::INFINITY, 0.0, 0.0) } else { (e, u, v) }
+    let e = if (m - 2.0).abs() < 1e-3 {
+        (u * u + v * v).sqrt()
+    } else {
+        (u.abs().powf(m) + v.abs().powf(m)).powf(1.0 / m)
+    };
+    if !e.is_finite() {
+        (f32::INFINITY, 0.0, 0.0)
+    } else {
+        (e, u, v)
+    }
 }
 
 /// Iris Blur: everything outside each pin's ellipse is blurred; the sharp
@@ -194,9 +259,14 @@ pub(crate) fn iris(src: &Image, out: Rect, ctx: &Ctx, pins: &[IrisPin]) -> Vec<f
     };
     variable_blur(src, out, ctx, smax, true, |x, y| {
         if let Some(prepared) = &prepared {
-            prepared.iter().map(|p| p.sigma(x, y)).fold(f32::MAX, f32::min)
+            prepared
+                .iter()
+                .map(|p| p.sigma(x, y))
+                .fold(f32::MAX, f32::min)
         } else {
-            pins.iter().map(|p| PreparedIris::new(p, b).sigma(x, y)).fold(f32::MAX, f32::min)
+            pins.iter()
+                .map(|p| PreparedIris::new(p, b).sigma(x, y))
+                .fold(f32::MAX, f32::min)
         }
     })
 }
@@ -233,7 +303,10 @@ impl PreparedIris {
 
     fn sigma(&self, x: f32, y: f32) -> f32 {
         let (dx, dy) = (x - self.cx, y - self.cy);
-        let (u, v) = ((dx * self.cos + dy * self.sin) / self.rx, (-dx * self.sin + dy * self.cos) / self.ry);
+        let (u, v) = (
+            (dx * self.cos + dy * self.sin) / self.rx,
+            (-dx * self.sin + dy * self.cos) / self.ry,
+        );
         // Outside the normalized bounding square, the superellipse distance
         // is at least one. The falloff is saturated: no sqrt/powf is needed.
         let e = if u.abs() >= 1.0 || v.abs() >= 1.0 {
@@ -255,8 +328,16 @@ pub(crate) fn field(src: &Image, out: Rect, ctx: &Ctx, pins: &[FieldPin]) -> Vec
         return src.crop(out);
     }
     let smax = pins.iter().map(|p| sigma_of(p.blur)).fold(0.0, f32::max);
-    let pts: Vec<(f32, f32, f32)> =
-        pins.iter().map(|p| (b.x0 as f32 + p.x * b.width() as f32, b.y0 as f32 + p.y * b.height() as f32, sigma_of(p.blur))).collect();
+    let pts: Vec<(f32, f32, f32)> = pins
+        .iter()
+        .map(|p| {
+            (
+                b.x0 as f32 + p.x * b.width() as f32,
+                b.y0 as f32 + p.y * b.height() as f32,
+                sigma_of(p.blur),
+            )
+        })
+        .collect();
     variable_blur(src, out, ctx, smax, false, |x, y| {
         let (mut ws, mut s) = (0.0f32, 0.0f32);
         for &(px, py, sg) in &pts {
@@ -281,7 +362,13 @@ pub(crate) fn spin(src: &Image, out: Rect, ctx: &Ctx, pins: &[SpinPin]) -> Vec<f
     }
 }
 
-fn spin_impl<const N: usize>(src: &Image, out: Rect, ctx: &Ctx, pins: &[SpinPin], prepare: bool) -> Vec<f32> {
+fn spin_impl<const N: usize>(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    pins: &[SpinPin],
+    prepare: bool,
+) -> Vec<f32> {
     let n = if N == 0 { src.ch } else { N };
     let b = ctx.bounds;
     let ss = short_side(b);
@@ -303,15 +390,28 @@ fn spin_impl<const N: usize>(src: &Image, out: Rect, ctx: &Ctx, pins: &[SpinPin]
             let theta = p.blur_angle.clamp(0.0, 360.0).to_radians();
             let rpx = (e * p.radius_x.max(p.radius_y) * ss).max(0.0);
             // ~2 px between samples along the arc is smooth enough for a blur and halves the cost.
-            let m = if rpx.is_finite() && theta.is_finite() { ((theta * rpx / 2.0).ceil() as usize).clamp(2, 64) } else { 2 };
-            let (cx, cy) = (b.x0 as f32 + p.x * b.width() as f32, b.y0 as f32 + p.y * b.height() as f32);
+            let m = if rpx.is_finite() && theta.is_finite() {
+                ((theta * rpx / 2.0).ceil() as usize).clamp(2, 64)
+            } else {
+                2
+            };
+            let (cx, cy) = (
+                b.x0 as f32 + p.x * b.width() as f32,
+                b.y0 as f32 + p.y * b.height() as f32,
+            );
             let angle_deg = if p.angle.is_finite() { p.angle } else { 0.0 };
             let (sa, ca) = angle_deg.to_radians().sin_cos();
-            let rotations = plans.as_ref().and_then(|plans| plans.get(pi)).and_then(|plan| plan.rotations(m));
+            let rotations = plans
+                .as_ref()
+                .and_then(|plans| plans.get(pi))
+                .and_then(|plan| plan.rotations(m));
             acc[..n].fill(0.0);
             for j in 0..m {
                 let phi = theta * (j as f32 / (m - 1) as f32 - 0.5);
-                let (sp, cp) = rotations.and_then(|table| table.get(j)).copied().unwrap_or_else(|| phi.sin_cos());
+                let (sp, cp) = rotations
+                    .and_then(|table| table.get(j))
+                    .copied()
+                    .unwrap_or_else(|| phi.sin_cos());
                 // Rotate in the ellipse's normalized space, then map back.
                 let (ru, rv) = (u * cp - v * sp, u * sp + v * cp);
                 let (lu, lv) = (ru * p.radius_x * ss, rv * p.radius_y * ss);
@@ -346,12 +446,28 @@ pub(crate) fn path(src: &Image, out: Rect, ctx: &Ctx, paths: &[BlurPath]) -> Vec
     // Segments in document space: (ax, ay, bx, by, path index, t0, t1 along path).
     let mut segs = Vec::new();
     for (pi, p) in paths.iter().enumerate() {
-        let pts: Vec<(f32, f32)> = p.points.iter().map(|q| (b.x0 as f32 + q[0] * bw, b.y0 as f32 + q[1] * bh)).collect();
-        let total: f32 = pts.windows(2).map(|w| (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1)).sum::<f32>().max(1e-3);
+        let pts: Vec<(f32, f32)> = p
+            .points
+            .iter()
+            .map(|q| (b.x0 as f32 + q[0] * bw, b.y0 as f32 + q[1] * bh))
+            .collect();
+        let total: f32 = pts
+            .windows(2)
+            .map(|w| (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1))
+            .sum::<f32>()
+            .max(1e-3);
         let mut run = 0.0;
         for w in pts.windows(2) {
             let l = (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1);
-            segs.push((w[0].0, w[0].1, w[1].0, w[1].1, pi, run / total, (run + l) / total));
+            segs.push((
+                w[0].0,
+                w[0].1,
+                w[1].0,
+                w[1].1,
+                pi,
+                run / total,
+                (run + l) / total,
+            ));
             run += l;
         }
     }
@@ -390,7 +506,14 @@ pub(crate) fn path(src: &Image, out: Rect, ctx: &Ctx, paths: &[BlurPath]) -> Vec
         acc[..n].fill(0.0);
         for j in 0..steps {
             let o = len * (j as f32 / (steps - 1) as f32 - 0.5);
-            add_sample_premul(src, fx + ux * o, fy + uy * o, clip, ctx.alpha, &mut acc[..n]);
+            add_sample_premul(
+                src,
+                fx + ux * o,
+                fy + uy * o,
+                clip,
+                ctx.alpha,
+                &mut acc[..n],
+            );
         }
         for v in acc.iter_mut().take(n) {
             *v /= steps as f32;

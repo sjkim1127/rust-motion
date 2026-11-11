@@ -2,7 +2,7 @@
 
 use crate::descriptor::UnicodeString;
 use crate::error::{PsdError, Result};
-use crate::io::{Reader, WriteExt, read_pascal, write_pascal};
+use crate::io::{read_pascal, write_pascal, Reader, WriteExt};
 
 /// Well-known resource ids.
 pub mod ids {
@@ -70,7 +70,14 @@ impl ResolutionInfo {
     /// Resolution info for `dpi` pixels per inch in both directions.
     pub fn from_dpi(dpi: f64) -> Self {
         let f = (dpi * 65536.0).round().clamp(0.0, u32::MAX as f64) as u32;
-        ResolutionInfo { h_res_fixed: f, h_res_unit: 1, width_unit: 1, v_res_fixed: f, v_res_unit: 1, height_unit: 1 }
+        ResolutionInfo {
+            h_res_fixed: f,
+            h_res_unit: 1,
+            width_unit: 1,
+            v_res_fixed: f,
+            v_res_unit: 1,
+            height_unit: 1,
+        }
     }
     /// Horizontal resolution in pixels per inch.
     pub fn h_res(&self) -> f64 {
@@ -174,7 +181,12 @@ pub enum ResourceData<'a> {
 impl ImageResource {
     /// A new `8BIM` resource with an empty name.
     pub fn new(id: u16, data: Vec<u8>) -> Self {
-        ImageResource { signature: *b"8BIM", id, name: Vec::new(), data }
+        ImageResource {
+            signature: *b"8BIM",
+            id,
+            name: Vec::new(),
+            data,
+        }
     }
 
     /// Typed parse of well-known resources. Returns `None` for unknown ids,
@@ -189,7 +201,13 @@ impl ImageResource {
                 if !d.len().is_multiple_of(2) {
                     Err(PsdError::invalid("layer group info has odd length"))
                 } else {
-                    Ok(ResourceData::LayerGroupInfo(d.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes([c[0], c[1]])).collect()))
+                    Ok(ResourceData::LayerGroupInfo(
+                        d.as_chunks::<2>()
+                            .0
+                            .iter()
+                            .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                            .collect(),
+                    ))
                 }
             }
             ids::THUMBNAIL | ids::THUMBNAIL_PS4 => Ok(ResourceData::Thumbnail(d)),
@@ -205,13 +223,18 @@ impl ImageResource {
 
     /// XMP packet as a string (resource 1060).
     pub fn xmp_str(&self) -> Option<&str> {
-        (self.id == ids::XMP).then(|| std::str::from_utf8(&self.data).ok()).flatten()
+        (self.id == ids::XMP)
+            .then(|| std::str::from_utf8(&self.data).ok())
+            .flatten()
     }
 
     pub(crate) fn read(r: &mut Reader<'_>) -> Result<Self> {
         let signature = r.array::<4>()?;
         if !matches!(&signature, b"8BIM" | b"MeSa" | b"AgHg" | b"PHUT" | b"DCSR") {
-            return Err(PsdError::InvalidSignature { expected: "8BIM resource", found: signature });
+            return Err(PsdError::InvalidSignature {
+                expected: "8BIM resource",
+                found: signature,
+            });
         }
         let id = r.u16()?;
         let name = read_pascal(r, 2)?;
@@ -220,7 +243,12 @@ impl ImageResource {
         if len % 2 == 1 {
             r.skip(1)?;
         }
-        Ok(ImageResource { signature, id, name, data })
+        Ok(ImageResource {
+            signature,
+            id,
+            name,
+            data,
+        })
     }
 
     pub(crate) fn write(&self, out: &mut Vec<u8>) -> Result<()> {
@@ -316,7 +344,14 @@ mod tests {
     #[test]
     fn truncation_errors() {
         let mut out = Vec::new();
-        write_section(&mut out, &[ImageResource::new(1005, ResolutionInfo::from_dpi(72.0).to_bytes())]).unwrap();
+        write_section(
+            &mut out,
+            &[ImageResource::new(
+                1005,
+                ResolutionInfo::from_dpi(72.0).to_bytes(),
+            )],
+        )
+        .unwrap();
         for cut in 0..out.len() {
             assert!(read_section(&mut Reader::new(&out[..cut])).is_err());
         }
@@ -345,7 +380,10 @@ mod tests {
         let r = ImageResource::new(ids::LAYER_STATE, vec![0, 2]);
         assert_eq!(r.parsed(), Some(Ok(ResourceData::LayerState(2))));
         let r = ImageResource::new(ids::LAYER_GROUP_INFO, vec![0, 1, 0, 2]);
-        assert_eq!(r.parsed(), Some(Ok(ResourceData::LayerGroupInfo(vec![1, 2]))));
+        assert_eq!(
+            r.parsed(),
+            Some(Ok(ResourceData::LayerGroupInfo(vec![1, 2])))
+        );
         let r = ImageResource::new(ids::LAYER_GROUP_INFO, vec![0]);
         assert!(matches!(r.parsed(), Some(Err(_))));
         let r = ImageResource::new(ids::ICC_PROFILE, vec![1]);

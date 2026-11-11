@@ -9,7 +9,7 @@
 
 use rust_motion_geom::Rect;
 
-use super::{Region, Sampler, clean_mask};
+use super::{clean_mask, Region, Sampler};
 use crate::matting::{box_mean, guided_filter_color};
 
 /// Working-resolution budget (pixels).
@@ -18,7 +18,11 @@ pub const WORK_PX: usize = 1_000_000;
 /// Per-pixel normalised sharpness (`0..=1`) of `img`.
 pub fn sharpness(img: &super::RgbImage, noise: f32) -> Vec<f32> {
     let (w, h) = (img.w, img.h);
-    let y: Vec<f32> = img.px.iter().map(|p| 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]).collect();
+    let y: Vec<f32> = img
+        .px
+        .iter()
+        .map(|p| 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2])
+        .collect();
     let at = |x: usize, yy: usize| y[yy * w + x];
     let mut lap = vec![0.0f32; w * h];
     for yy in 0..h {
@@ -35,7 +39,9 @@ pub fn sharpness(img: &super::RgbImage, noise: f32) -> Vec<f32> {
     let k = ((sorted.len() as f32 * 0.99) as usize).min(sorted.len().saturating_sub(1));
     let p99 = *sorted.select_nth_unstable_by(k, |a, b| a.total_cmp(b)).1;
     let floor = noise.clamp(0.0, 1.0) * 0.5;
-    e.iter().map(|v| ((v / p99.max(1e-6)).min(1.0) - floor).max(0.0) / (1.0 - floor).max(1e-3)).collect()
+    e.iter()
+        .map(|v| ((v / p99.max(1e-6)).min(1.0) - floor).max(0.0) / (1.0 - floor).max(1e-3))
+        .collect()
 }
 
 /// Focus Area selection over `canvas`.
@@ -57,7 +63,17 @@ pub fn focus_area(sampler: &dyn Sampler, canvas: Rect, range: f32, noise: f32) -
         return None;
     }
     // Soft upsampling: bilinear field, steepened to about a working pixel of transition.
-    let field: Vec<f32> = mask.iter().zip(&smooth).map(|(m, v)| if *m { v.clamp(0.5, 1.0) } else { v.clamp(0.0, 0.5) }).collect();
+    let field: Vec<f32> = mask
+        .iter()
+        .zip(&smooth)
+        .map(|(m, v)| {
+            if *m {
+                v.clamp(0.5, 1.0)
+            } else {
+                v.clamp(0.0, 0.5)
+            }
+        })
+        .collect();
     let (fw, fh) = (canvas.width() as usize, canvas.height() as usize);
     let st = step as f32;
     let mut out = vec![0u8; fw * fh];
@@ -78,9 +94,14 @@ pub fn focus_area(sampler: &dyn Sampler, canvas: Rect, range: f32, noise: f32) -
     #[cfg(not(target_arch = "wasm32"))]
     {
         use rayon::prelude::*;
-        out.par_chunks_mut(fw).enumerate().for_each(|(y, o)| row(y, o));
+        out.par_chunks_mut(fw)
+            .enumerate()
+            .for_each(|(y, o)| row(y, o));
     }
     #[cfg(target_arch = "wasm32")]
     out.chunks_mut(fw).enumerate().for_each(|(y, o)| row(y, o));
-    super::trim_region(Region { bbox: canvas, mask: out })
+    super::trim_region(Region {
+        bbox: canvas,
+        mask: out,
+    })
 }

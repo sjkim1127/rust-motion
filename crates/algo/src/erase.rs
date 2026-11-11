@@ -14,11 +14,23 @@ use crate::selection::Region;
 /// coverage. With `lock_color` (native colour channels, e.g. the background colour converted to the
 /// surface's model) the pixels are painted toward that colour instead and alpha is kept, as
 /// Photoshop does on layers with locked transparency. Returns the damaged rectangle.
-pub fn magic_erase(target: &mut Surface, region: &Region, amount: f32, selection: Option<&Surface>, lock_color: Option<&[f32]>) -> Rect {
-    let amount = if amount.is_finite() { amount.clamp(0.0, 1.0) } else { 0.0 };
+pub fn magic_erase(
+    target: &mut Surface,
+    region: &Region,
+    amount: f32,
+    selection: Option<&Surface>,
+    lock_color: Option<&[f32]>,
+) -> Rect {
+    let amount = if amount.is_finite() {
+        amount.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     let bbox = region.bbox;
     let bw = bbox.width() as usize;
-    let Some(pixels) = bw.checked_mul(bbox.height() as usize) else { return Rect::EMPTY };
+    let Some(pixels) = bw.checked_mul(bbox.height() as usize) else {
+        return Rect::EMPTY;
+    };
     if bbox.is_empty() || amount <= 0.0 || region.mask.len() != pixels {
         return Rect::EMPTY;
     }
@@ -29,15 +41,26 @@ pub fn magic_erase(target: &mut Surface, region: &Region, amount: f32, selection
     if alpha.is_none() && lock_color.is_none() {
         return Rect::EMPTY;
     }
-    let lock: Option<Vec<f32>> = lock_color.map(|c| (0..nc).map(|i| c.get(i).copied().unwrap_or(0.0)).collect());
-    let rects: Vec<Rect> = bbox.tiles().map(|tc| tc.rect().intersect(&bbox)).filter(|r| !r.is_empty()).collect();
+    let lock: Option<Vec<f32>> =
+        lock_color.map(|c| (0..nc).map(|i| c.get(i).copied().unwrap_or(0.0)).collect());
+    let rects: Vec<Rect> = bbox
+        .tiles()
+        .map(|tc| tc.rect().intersect(&bbox))
+        .filter(|r| !r.is_empty())
+        .collect();
     let src: &Surface = target;
     let (sample, bpp) = (fmt.sample, fmt.bytes_per_pixel());
     // Each tile is edited as encoded bytes (only the touched samples are decoded), in parallel;
     // the results are copied back serially.
     let work = |r: Rect| -> Option<(Rect, Vec<u8>)> {
         let w = r.width() as usize;
-        let cov = |x: i32, y: i32| region.mask.get((y - bbox.y0) as usize * bw + (x - bbox.x0) as usize).copied().unwrap_or(0);
+        let cov = |x: i32, y: i32| {
+            region
+                .mask
+                .get((y - bbox.y0) as usize * bw + (x - bbox.x0) as usize)
+                .copied()
+                .unwrap_or(0)
+        };
         // Skip tiles the region doesn't touch.
         if !(r.y0..r.y1).any(|y| (r.x0..r.x1).any(|x| cov(x, y) != 0)) {
             return None;
@@ -51,12 +74,16 @@ pub fn magic_erase(target: &mut Surface, region: &Region, amount: f32, selection
                     continue;
                 }
                 let i = (y - r.y0) as usize * w + (x - r.x0) as usize;
-                let s = sel.as_ref().map_or(1.0, |(sc, v)| v.get(i * sc).copied().unwrap_or(0.0));
+                let s = sel
+                    .as_ref()
+                    .map_or(1.0, |(sc, v)| v.get(i * sc).copied().unwrap_or(0.0));
                 let k = f32::from(c) / 255.0 * amount * s;
                 if k <= 0.0 {
                     continue;
                 }
-                let Some(px) = bytes.get_mut(i * bpp..(i + 1) * bpp) else { continue };
+                let Some(px) = bytes.get_mut(i * bpp..(i + 1) * bpp) else {
+                    continue;
+                };
                 match (&lock, alpha) {
                     (Some(col), _) => {
                         for (ch, t) in col.iter().enumerate() {
@@ -104,25 +131,55 @@ mod tests {
     use rust_motion_raster::from_rgba;
 
     fn region(bbox: Rect, v: u8) -> Region {
-        Region { bbox, mask: vec![v; bbox.width() as usize * bbox.height() as usize] }
+        Region {
+            bbox,
+            mask: vec![v; bbox.width() as usize * bbox.height() as usize],
+        }
     }
 
     #[test]
     fn erases_alpha_in_every_format() {
-        for mode in [ColorMode::Rgb, ColorMode::Cmyk, ColorMode::Grayscale, ColorMode::Lab] {
+        for mode in [
+            ColorMode::Rgb,
+            ColorMode::Cmyk,
+            ColorMode::Grayscale,
+            ColorMode::Lab,
+        ] {
             for sample in [SampleType::U8, SampleType::U16, SampleType::F32] {
                 let fmt = PixelFormat::new(mode, sample, true);
                 let mut s = Surface::new(fmt);
-                s.fill_rect(Rect::new(0, 0, 600, 300), &from_rgba(&fmt, [0.2, 0.5, 0.7, 1.0]));
+                s.fill_rect(
+                    Rect::new(0, 0, 600, 300),
+                    &from_rgba(&fmt, [0.2, 0.5, 0.7, 1.0]),
+                );
                 let before = s.pixel(10, 10);
-                let d = magic_erase(&mut s, &region(Rect::new(0, 0, 300, 300), 255), 1.0, None, None);
+                let d = magic_erase(
+                    &mut s,
+                    &region(Rect::new(0, 0, 300, 300), 255),
+                    1.0,
+                    None,
+                    None,
+                );
                 assert_eq!(d, Rect::new(0, 0, 300, 300));
                 assert_eq!(s.rgba(10, 10)[3], 0.0, "{fmt:?}");
-                assert_eq!(s.pixel(400, 10), before, "outside the region is untouched {fmt:?}");
+                assert_eq!(
+                    s.pixel(400, 10),
+                    before,
+                    "outside the region is untouched {fmt:?}"
+                );
                 // Half opacity halves alpha and keeps colour.
                 let mut h = Surface::new(fmt);
-                h.fill_rect(Rect::new(0, 0, 10, 10), &from_rgba(&fmt, [0.2, 0.5, 0.7, 1.0]));
-                magic_erase(&mut h, &region(Rect::new(0, 0, 10, 10), 255), 0.5, None, None);
+                h.fill_rect(
+                    Rect::new(0, 0, 10, 10),
+                    &from_rgba(&fmt, [0.2, 0.5, 0.7, 1.0]),
+                );
+                magic_erase(
+                    &mut h,
+                    &region(Rect::new(0, 0, 10, 10), 255),
+                    0.5,
+                    None,
+                    None,
+                );
                 let p = h.pixel(5, 5);
                 let a = fmt.mode.color_channels();
                 assert!((p[a] - 0.5).abs() < 0.01, "{fmt:?} {p:?}");
@@ -138,13 +195,25 @@ mod tests {
         s.fill_rect(Rect::new(0, 0, 20, 20), &[1.0, 0.0, 0.0, 1.0]);
         let mut sel = Surface::new(PixelFormat::GRAY8);
         sel.fill_rect(Rect::new(0, 0, 10, 20), &[1.0]);
-        magic_erase(&mut s, &region(Rect::new(0, 0, 20, 20), 255), 1.0, Some(&sel), None);
+        magic_erase(
+            &mut s,
+            &region(Rect::new(0, 0, 20, 20), 255),
+            1.0,
+            Some(&sel),
+            None,
+        );
         assert_eq!(s.rgba(5, 5)[3], 0.0);
         assert_eq!(s.rgba(15, 5)[3], 1.0);
         // Locked transparency paints the lock colour, alpha kept.
         let mut l = Surface::new(fmt);
         l.fill_rect(Rect::new(0, 0, 20, 20), &[1.0, 0.0, 0.0, 1.0]);
-        magic_erase(&mut l, &region(Rect::new(0, 0, 20, 20), 255), 1.0, None, Some(&[1.0, 1.0, 1.0]));
+        magic_erase(
+            &mut l,
+            &region(Rect::new(0, 0, 20, 20), 255),
+            1.0,
+            None,
+            Some(&[1.0, 1.0, 1.0]),
+        );
         assert_eq!(l.rgba(5, 5), [1.0, 1.0, 1.0, 1.0]);
     }
 
@@ -153,8 +222,14 @@ mod tests {
         let mut s = Surface::new(PixelFormat::RGBA8);
         s.fill_rect(Rect::new(0, 0, 1, 1), &[1.0, 0.0, 0.0, 1.0]);
         let before = s.pixel(0, 0);
-        let oversized = Region { bbox: Rect::new(i32::MIN, i32::MIN, i32::MAX, i32::MAX), mask: vec![255] };
-        assert_eq!(magic_erase(&mut s, &oversized, 1.0, None, None), Rect::EMPTY);
+        let oversized = Region {
+            bbox: Rect::new(i32::MIN, i32::MIN, i32::MAX, i32::MAX),
+            mask: vec![255],
+        };
+        assert_eq!(
+            magic_erase(&mut s, &oversized, 1.0, None, None),
+            Rect::EMPTY
+        );
         assert_eq!(s.pixel(0, 0), before);
     }
 
@@ -164,12 +239,31 @@ mod tests {
         s.fill_rect(Rect::new(0, 0, 4, 4), &[1.0, 0.0, 0.0, 1.0]);
         let orig = s.clone();
         // Mask length mismatch, zero/NaN amount, empty box.
-        assert!(magic_erase(&mut s, &Region { bbox: Rect::new(0, 0, 4, 4), mask: vec![255; 3] }, 1.0, None, None).is_empty());
-        assert!(magic_erase(&mut s, &region(Rect::new(0, 0, 4, 4), 255), f32::NAN, None, None).is_empty());
+        assert!(magic_erase(
+            &mut s,
+            &Region {
+                bbox: Rect::new(0, 0, 4, 4),
+                mask: vec![255; 3]
+            },
+            1.0,
+            None,
+            None
+        )
+        .is_empty());
+        assert!(magic_erase(
+            &mut s,
+            &region(Rect::new(0, 0, 4, 4), 255),
+            f32::NAN,
+            None,
+            None
+        )
+        .is_empty());
         assert!(magic_erase(&mut s, &region(Rect::EMPTY, 255), 1.0, None, None).is_empty());
         assert_eq!(s, orig);
         // No alpha channel and no lock colour: nothing to erase.
         let mut g = Surface::new(PixelFormat::GRAY8);
-        assert!(magic_erase(&mut g, &region(Rect::new(0, 0, 4, 4), 255), 1.0, None, None).is_empty());
+        assert!(
+            magic_erase(&mut g, &region(Rect::new(0, 0, 4, 4), 255), 1.0, None, None).is_empty()
+        );
     }
 }

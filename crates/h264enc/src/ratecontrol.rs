@@ -60,7 +60,11 @@ impl PassStats {
     pub fn from_text(text: &str) -> Option<PassStats> {
         let mut lines = text.lines();
         let head = lines.next()?;
-        let fps = head.strip_prefix("h264enc-pass1 fps=")?.trim().parse().ok()?;
+        let fps = head
+            .strip_prefix("h264enc-pass1 fps=")?
+            .trim()
+            .parse()
+            .ok()?;
         let mut frames = Vec::new();
         for l in lines {
             let mut it = l.split_whitespace();
@@ -70,7 +74,12 @@ impl PassStats {
                 "B" => SliceType::B,
                 _ => return None,
             };
-            frames.push(FrameStat { slice_type: t, qscale: it.next()?.parse().ok()?, bits: it.next()?.parse().ok()?, cplx: it.next()?.parse().ok()? });
+            frames.push(FrameStat {
+                slice_type: t,
+                qscale: it.next()?.parse().ok()?,
+                bits: it.next()?.parse().ok()?,
+                cplx: it.next()?.parse().ok()?,
+            });
         }
         Some(PassStats { frames, fps })
     }
@@ -80,8 +89,14 @@ impl PassStats {
 pub enum RcKind {
     Qp(u8),
     Crf(f32),
-    Abr { kbps: u32 },
-    TwoPass { kbps: u32, plan: Vec<f64>, planned_bits: Vec<f64> },
+    Abr {
+        kbps: u32,
+    },
+    TwoPass {
+        kbps: u32,
+        plan: Vec<f64>,
+        planned_bits: Vec<f64>,
+    },
 }
 
 pub struct RateControl {
@@ -109,7 +124,12 @@ pub struct RateControl {
 }
 
 impl RateControl {
-    pub fn new(kind: RcKind, fps: f64, vbv_maxrate_kbps: Option<u32>, vbv_buf_kbits: Option<u32>) -> Self {
+    pub fn new(
+        kind: RcKind,
+        fps: f64,
+        vbv_maxrate_kbps: Option<u32>,
+        vbv_buf_kbits: Option<u32>,
+    ) -> Self {
         let max = vbv_maxrate_kbps.map_or(0.0, |k| k as f64 * 1000.0 / fps);
         let size = vbv_buf_kbits.map_or(0.0, |k| k as f64 * 1000.0);
         RateControl {
@@ -137,11 +157,30 @@ impl RateControl {
     pub fn plan_two_pass(stats: &PassStats, kbps: u32) -> RcKind {
         let n = stats.frames.len().max(1);
         let target = kbps as f64 * 1000.0 * n as f64 / stats.fps;
-        let c: Vec<f64> = stats.frames.iter().map(|f| (f.bits as f64 * f.qscale).max(1.0)).collect();
+        let c: Vec<f64> = stats
+            .frames
+            .iter()
+            .map(|f| (f.bits as f64 * f.qscale).max(1.0))
+            .collect();
         let qs = |rf: f64| -> Vec<f64> {
-            stats.frames.iter().zip(&c).map(|(f, &ci)| (rf * ci.powf(1.0 - QCOMP) * type_factor(f.slice_type)).clamp(qp2qscale(0.0), qp2qscale(51.0))).collect()
+            stats
+                .frames
+                .iter()
+                .zip(&c)
+                .map(|(f, &ci)| {
+                    (rf * ci.powf(1.0 - QCOMP) * type_factor(f.slice_type))
+                        .clamp(qp2qscale(0.0), qp2qscale(51.0))
+                })
+                .collect()
         };
-        let bits_for = |q: &[f64]| -> f64 { stats.frames.iter().zip(q).map(|(f, &qi)| f.bits as f64 * f.qscale / qi).sum() };
+        let bits_for = |q: &[f64]| -> f64 {
+            stats
+                .frames
+                .iter()
+                .zip(q)
+                .map(|(f, &qi)| f.bits as f64 * f.qscale / qi)
+                .sum()
+        };
         // bisection on log(rf)
         let (mut lo, mut hi) = (-30.0f64, 30.0f64);
         for _ in 0..100 {
@@ -153,8 +192,17 @@ impl RateControl {
             }
         }
         let plan = qs((0.5 * (lo + hi)).exp());
-        let planned_bits = stats.frames.iter().zip(&plan).map(|(f, &q)| f.bits as f64 * f.qscale / q).collect();
-        RcKind::TwoPass { kbps, plan, planned_bits }
+        let planned_bits = stats
+            .frames
+            .iter()
+            .zip(&plan)
+            .map(|(f, &q)| f.bits as f64 * f.qscale / q)
+            .collect();
+        RcKind::TwoPass {
+            kbps,
+            plan,
+            planned_bits,
+        }
     }
 
     /// Choose the frame QP (fractional) for frame `index` (display order) of `t` with lookahead complexity `cplx`.
@@ -164,7 +212,11 @@ impl RateControl {
         let qp = match &self.kind {
             RcKind::Qp(q) => {
                 let q = *q as f64;
-                return if t == SliceType::B { (q + 2.0).min(51.0) } else { q };
+                return if t == SliceType::B {
+                    (q + 2.0).min(51.0)
+                } else {
+                    q
+                };
             }
             RcKind::Crf(c) => {
                 let c = *c as f64;
@@ -185,20 +237,34 @@ impl RateControl {
                 // the current model. Re-estimated every frame: the initial guess of `coef` can be several times off,
                 // and a history frozen at that guess starves the opening second of bits.
                 let fps = self.fps;
-                let (pn0, c0) = *self.prior.get_or_insert_with(|| (fps.max(1.0), if t == SliceType::I { 0.4 * cplx } else { cplx }));
-                let per_frame = if self.inter_n > 0 { self.inter_s / self.inter_n as f64 } else { self.coef[1] * c0.powf(QCOMP) };
+                let (pn0, c0) = *self.prior.get_or_insert_with(|| {
+                    (
+                        fps.max(1.0),
+                        if t == SliceType::I { 0.4 * cplx } else { cplx },
+                    )
+                });
+                let per_frame = if self.inter_n > 0 {
+                    self.inter_s / self.inter_n as f64
+                } else {
+                    self.coef[1] * c0.powf(QCOMP)
+                };
                 let fade = (1.0 - self.frames as f64 / pn0).max(0.0);
                 let (pn, ps) = (pn0 * fade, pn0 * fade * per_frame);
                 let s = self.sum_s + s_here + ps;
                 let wanted = bpf * (self.frames as f64 + 1.0 + pn);
                 let mut rf = s / wanted;
                 let abr_buffer = bpf * self.fps.max(1.0);
-                let overflow = (1.0 + (self.total_bits - bpf * self.frames as f64) / abr_buffer).clamp(0.5, 2.0);
+                let overflow = (1.0 + (self.total_bits - bpf * self.frames as f64) / abr_buffer)
+                    .clamp(0.5, 2.0);
                 rf *= overflow;
                 let q = rf * cplx.powf(1.0 - QCOMP) * type_factor(t);
                 qscale2qp(q)
             }
-            RcKind::TwoPass { kbps, plan, planned_bits } => {
+            RcKind::TwoPass {
+                kbps,
+                plan,
+                planned_bits,
+            } => {
                 // Closed-loop second pass: `m` measures how far real frame sizes deviate from the first-pass model
                 // (bits ∝ 1/qscale) at the qscales actually used; the remaining plan is rescaled so its predicted
                 // size fits the remaining budget.
@@ -209,7 +275,8 @@ impl RateControl {
                 let m = ((self.total_bits + smooth) / (self.model_done + smooth)).clamp(0.3, 3.0);
                 let inflight: f64 = self.inflight.iter().sum();
                 let remaining_plan: f64 = planned_bits[i..].iter().sum();
-                let remaining_budget = (target_total - self.total_bits - m * inflight).max(0.05 * remaining_plan.max(1.0));
+                let remaining_budget = (target_total - self.total_bits - m * inflight)
+                    .max(0.05 * remaining_plan.max(1.0));
                 let f = (m * remaining_plan / remaining_budget).clamp(0.25, 4.0);
                 let q = plan[i] * f;
                 self.inflight.push_back(planned_bits[i] * plan[i] / q);
@@ -239,7 +306,11 @@ impl RateControl {
         let q = qp2qscale(qp);
         let c = bits as f64 * q / cplx;
         let n = self.coef_n[ti];
-        let w = if n == 0 { 1.0 } else { 0.35f64.max(1.0 / (n + 1) as f64) };
+        let w = if n == 0 {
+            1.0
+        } else {
+            0.35f64.max(1.0 / (n + 1) as f64)
+        };
         self.coef[ti] = self.coef[ti] * (1.0 - w) + c * w;
         self.coef_n[ti] += 1;
         // If a type has never been observed, keep it proportional to observed ones.
@@ -260,7 +331,8 @@ impl RateControl {
         }
         self.frames += 1;
         if self.vbv_size > 0.0 {
-            self.vbv_fill = (self.vbv_fill - bits as f64 + self.vbv_max_bits_per_frame).min(self.vbv_size);
+            self.vbv_fill =
+                (self.vbv_fill - bits as f64 + self.vbv_max_bits_per_frame).min(self.vbv_size);
             if self.vbv_fill < 0.0 {
                 self.vbv_fill = 0.0;
             }
@@ -268,6 +340,11 @@ impl RateControl {
     }
 
     pub fn record_pass1(&mut self, t: SliceType, qp: f64, cplx: f64, bits: u64) {
-        self.pass1.push(FrameStat { slice_type: t, qscale: qp2qscale(qp), bits, cplx });
+        self.pass1.push(FrameStat {
+            slice_type: t,
+            qscale: qp2qscale(qp),
+            bits,
+            cplx,
+        });
     }
 }

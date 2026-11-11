@@ -47,17 +47,53 @@ pub struct Pose {
 impl Pose {
     /// The number of parameters (the length of [`Pose::to_vec`]).
     pub const N: usize = 8;
-    pub const IDENTITY: Pose = Pose { dx: 0.0, dy: 0.0, scale: 1.0, rot: 0.0, aspect: 1.0, shear: 0.0, px: 0.0, py: 0.0 };
+    pub const IDENTITY: Pose = Pose {
+        dx: 0.0,
+        dy: 0.0,
+        scale: 1.0,
+        rot: 0.0,
+        aspect: 1.0,
+        shear: 0.0,
+        px: 0.0,
+        py: 0.0,
+    };
     /// The search box's half-width around the start, per parameter: 10 % of the layer in shift,
     /// 10 % in scale, 5° in rotation, 5 % in aspect and shear, 5 % in each perspective term.
-    const SPAN: [f64; Pose::N] = [0.10, 0.10, 0.10, 0.087_266_462_599_716_47, 0.05, 0.05, 0.05, 0.05];
+    const SPAN: [f64; Pose::N] = [
+        0.10,
+        0.10,
+        0.10,
+        0.087_266_462_599_716_47,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+    ];
 
     pub fn to_vec(self) -> [f64; Pose::N] {
-        [self.dx, self.dy, self.scale, self.rot, self.aspect, self.shear, self.px, self.py]
+        [
+            self.dx,
+            self.dy,
+            self.scale,
+            self.rot,
+            self.aspect,
+            self.shear,
+            self.px,
+            self.py,
+        ]
     }
 
     pub fn from_vec(v: &[f64; Pose::N]) -> Pose {
-        Pose { dx: v[0], dy: v[1], scale: v[2], rot: v[3], aspect: v[4], shear: v[5], px: v[6], py: v[7] }
+        Pose {
+            dx: v[0],
+            dy: v[1],
+            scale: v[2],
+            rot: v[3],
+            aspect: v[4],
+            shear: v[5],
+            px: v[6],
+            py: v[7],
+        }
     }
 
     /// Which parameters a search over `motion` may move: shifts, then scale and rotation, then
@@ -78,7 +114,12 @@ impl Pose {
         let (cx, cy) = (w as f64 / 2.0, h as f64 / 2.0);
         let (c, s) = (self.rot.cos(), self.rot.sin());
         let sc = self.scale;
-        let (a, b, d, e) = (sc * c, sc * (c * self.shear - s * self.aspect), sc * s, sc * (s * self.shear + c * self.aspect));
+        let (a, b, d, e) = (
+            sc * c,
+            sc * (c * self.shear - s * self.aspect),
+            sc * s,
+            sc * (s * self.shear + c * self.aspect),
+        );
         let (gx, gy) = (self.px / w as f64, self.py / h as f64);
         // T(c) · [[a, b, t], [d, e, t'], [gx, gy, 1]] · T(−c), written out.
         let (a2, b2, d2, e2) = (a + cx * gx, b + cx * gy, d + cy * gx, e + cy * gy);
@@ -126,13 +167,21 @@ const K: [f32; 5] = [1.0 / 16.0, 4.0 / 16.0, 6.0 / 16.0, 4.0 / 16.0, 1.0 / 16.0]
 /// subsample); a reduced pixel is covered when more than half its support is.
 fn reduce(l: &Lvl) -> Lvl {
     let (w, h) = (l.w.div_ceil(2), l.h.div_ceil(2));
-    let cover: Vec<f32> = l.valid.as_ref().map(|v| v.iter().map(|b| *b as u8 as f32).collect()).unwrap_or_default();
+    let cover: Vec<f32> = l
+        .valid
+        .as_ref()
+        .map(|v| v.iter().map(|b| *b as u8 as f32).collect())
+        .unwrap_or_default();
     let pass = |src: &[f32]| -> Vec<f32> {
         let mut tmp = vec![0.0f32; w * l.h];
         for (y, row) in tmp.chunks_mut(w).enumerate() {
             let s = &src[y * l.w..(y + 1) * l.w];
             for (x, o) in row.iter_mut().enumerate() {
-                *o = K.iter().enumerate().map(|(k, wt)| wt * s[(2 * x + k).saturating_sub(2).min(l.w - 1)]).sum();
+                *o = K
+                    .iter()
+                    .enumerate()
+                    .map(|(k, wt)| wt * s[(2 * x + k).saturating_sub(2).min(l.w - 1)])
+                    .sum();
             }
         }
         let mut out = vec![0.0f32; w * h];
@@ -154,7 +203,12 @@ fn reduce(l: &Lvl) -> Lvl {
 /// The search pyramid of a plane: level 0 is the plane, each next level half its size, while
 /// the height exceeds 64 and the width 8.
 fn levels(p: &Plane) -> Vec<Lvl> {
-    let mut out = vec![Lvl { luma: p.luma.to_vec(), valid: p.valid.map(<[bool]>::to_vec), w: p.w, h: p.h }];
+    let mut out = vec![Lvl {
+        luma: p.luma.to_vec(),
+        valid: p.valid.map(<[bool]>::to_vec),
+        w: p.w,
+        h: p.h,
+    }];
     while let Some(last) = out.last() {
         if last.h <= 64 || last.w <= 8 {
             break;
@@ -181,7 +235,8 @@ fn spline4(t: f64) -> [f64; 4] {
 #[inline]
 fn affine_row(inv: &Homography, y: f64) -> Option<(f64, f64, f64, f64)> {
     let m = &inv.0;
-    (m[6] == 0.0 && m[7] == 0.0 && m[8] == 1.0).then(|| (m[1] * y + m[2], m[4] * y + m[5], m[0], m[3]))
+    (m[6] == 0.0 && m[7] == 0.0 && m[8] == 1.0)
+        .then(|| (m[1] * y + m[2], m[4] * y + m[5], m[0], m[3]))
 }
 
 /// `src` sampled at `(sx, sy)` with the cubic B-spline, edge-clamped.
@@ -215,15 +270,22 @@ fn covered(valid: Option<&[bool]>, w: usize, sx: f64, sy: f64) -> bool {
 /// Σt, Σr², Σt², Σrt and the count: rms = √((Σd² − (Σd)²/n) / n) with d = r − t, and the
 /// correlation of r and t over the same pixels, also returned (0 when either has no spread).
 fn cost(reference: &Lvl, target: &Lvl, pose: &Pose) -> (f64, usize, f64) {
-    let Some(inv) = pose.matrix(target.w, target.h).inverse() else { return (1e9, 0, 0.0) };
+    let Some(inv) = pose.matrix(target.w, target.h).inverse() else {
+        return (1e9, 0, 0.0);
+    };
     let (xmax, ymax) = ((target.w - 1) as f64, (target.h - 1) as f64);
     let rows = par_map(reference.h, |y| {
-        let (mut sr, mut st, mut sr2, mut st2, mut srt, mut cnt) = (0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64, 0usize);
+        let (mut sr, mut st, mut sr2, mut st2, mut srt, mut cnt) =
+            (0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64, 0usize);
         let yf = y as f64;
         let aff = affine_row(&inv, yf);
         let row = &reference.luma[y * reference.w..(y + 1) * reference.w];
         for (x, &r) in row.iter().enumerate() {
-            if reference.valid.as_ref().is_some_and(|v| !v[y * reference.w + x]) {
+            if reference
+                .valid
+                .as_ref()
+                .is_some_and(|v| !v[y * reference.w + x])
+            {
                 continue;
             }
             let (sx, sy) = match aff {
@@ -234,7 +296,10 @@ fn cost(reference: &Lvl, target: &Lvl, pose: &Pose) -> (f64, usize, f64) {
             if !inside || !covered(target.valid.as_deref(), target.w, sx, sy) {
                 continue;
             }
-            let (r, t) = (f64::from(r), f64::from(sample(&target.luma, target.w, target.h, sx, sy)));
+            let (r, t) = (
+                f64::from(r),
+                f64::from(sample(&target.luma, target.w, target.h, sx, sy)),
+            );
             sr += r;
             st += t;
             sr2 += r * r;
@@ -244,16 +309,32 @@ fn cost(reference: &Lvl, target: &Lvl, pose: &Pose) -> (f64, usize, f64) {
         }
         (sr, st, sr2, st2, srt, cnt)
     });
-    let (sr, st, sr2, st2, srt, cnt) =
-        rows.iter().fold((0.0, 0.0, 0.0, 0.0, 0.0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2, a.3 + b.3, a.4 + b.4, a.5 + b.5));
+    let (sr, st, sr2, st2, srt, cnt) = rows.iter().fold((0.0, 0.0, 0.0, 0.0, 0.0, 0), |a, b| {
+        (
+            a.0 + b.0,
+            a.1 + b.1,
+            a.2 + b.2,
+            a.3 + b.3,
+            a.4 + b.4,
+            a.5 + b.5,
+        )
+    });
     if cnt < 16 {
         return (1e9, cnt, 0.0);
     }
     let n = cnt as f64;
     // Central moments: Σ(r−r̄)², Σ(t−t̄)², Σ(r−r̄)(t−t̄).
-    let (vr, vt, cov) = ((sr2 - sr * sr / n).max(0.0), (st2 - st * st / n).max(0.0), srt - sr * st / n);
+    let (vr, vt, cov) = (
+        (sr2 - sr * sr / n).max(0.0),
+        (st2 - st * st / n).max(0.0),
+        srt - sr * st / n,
+    );
     let rms = ((vr + vt - 2.0 * cov) / n).max(0.0).sqrt();
-    let correlation = if vr > 0.0 && vt > 0.0 { (cov / (vr * vt).sqrt()).clamp(-1.0, 1.0) } else { 0.0 };
+    let correlation = if vr > 0.0 && vt > 0.0 {
+        (cov / (vr * vt).sqrt()).clamp(-1.0, 1.0)
+    } else {
+        0.0
+    };
     (rms, cnt, correlation)
 }
 
@@ -277,24 +358,38 @@ const TOL_PX: f64 = 0.1;
 fn level_steps(free: &[usize], lvl: usize, w: usize, h: usize) -> (Vec<f64>, Vec<f64>) {
     let gain = param_gain(w, h);
     let px = (1u64 << lvl.min(60)) as f64;
-    (free.iter().map(|&k| STEP_PX * px / gain[k]).collect(), free.iter().map(|&k| TOL_PX * px / gain[k]).collect())
+    (
+        free.iter().map(|&k| STEP_PX * px / gain[k]).collect(),
+        free.iter().map(|&k| TOL_PX * px / gain[k]).collect(),
+    )
 }
 
 /// Nelder-Mead's stopping rule on a simplex sorted by `fv`: the values agree to 1e-4 relative
 /// and every vertex lies within `tol[k]` of the best along each axis.
 fn converged(simplex: &[Vec<f64>], fv: &[f64], tol: &[f64]) -> bool {
     let n = tol.len();
-    let (Some(first), Some(last), Some(best)) = (fv.first(), fv.get(n), simplex.first()) else { return true };
+    let (Some(first), Some(last), Some(best)) = (fv.first(), fv.get(n), simplex.first()) else {
+        return true;
+    };
     if (last - first).abs() > 1e-4 * (1.0 + first.abs()) {
         return false;
     }
-    simplex[1..].iter().all(|v| (0..n).all(|k| (v[k] - best[k]).abs() <= tol[k]))
+    simplex[1..]
+        .iter()
+        .all(|v| (0..n).all(|k| (v[k] - best[k]).abs() <= tol[k]))
 }
 
 /// Bounded Nelder-Mead: minimises `f` over the box `[lo, hi]` from `x0`, the first simplex `x0`
 /// moved by `step[k]` along each axis, until the vertices agree to 1e-4 relative in `f` and lie
 /// within `tol[k]` of the best along every axis, or 200 iterations.
-fn nelder_mead<F: Fn(&[f64]) -> f64>(f: &F, x0: &[f64], lo: &[f64], hi: &[f64], step: &[f64], tol: &[f64]) -> Vec<f64> {
+fn nelder_mead<F: Fn(&[f64]) -> f64>(
+    f: &F,
+    x0: &[f64],
+    lo: &[f64],
+    hi: &[f64],
+    step: &[f64],
+    tol: &[f64],
+) -> Vec<f64> {
     let n = x0.len();
     if n == 0 {
         return Vec::new();
@@ -327,7 +422,9 @@ fn nelder_mead<F: Fn(&[f64]) -> f64>(f: &F, x0: &[f64], lo: &[f64], hi: &[f64], 
                 c[k] += v[k] / n as f64;
             }
         }
-        let mut xr: Vec<f64> = (0..n).map(|k| c[k] + alpha * (c[k] - simplex[n][k])).collect();
+        let mut xr: Vec<f64> = (0..n)
+            .map(|k| c[k] + alpha * (c[k] - simplex[n][k]))
+            .collect();
         clamp(&mut xr);
         let fr = f(&xr);
         if fr < fv[0] {
@@ -342,7 +439,9 @@ fn nelder_mead<F: Fn(&[f64]) -> f64>(f: &F, x0: &[f64], lo: &[f64], hi: &[f64], 
         } else if fr < fv[n - 1] {
             (simplex[n], fv[n]) = (xr, fr);
         } else {
-            let mut xc: Vec<f64> = (0..n).map(|k| c[k] + rho * (simplex[n][k] - c[k])).collect();
+            let mut xc: Vec<f64> = (0..n)
+                .map(|k| c[k] + rho * (simplex[n][k] - c[k]))
+                .collect();
             clamp(&mut xc);
             let fc = f(&xc);
             if fc < fv[n] {
@@ -359,14 +458,22 @@ fn nelder_mead<F: Fn(&[f64]) -> f64>(f: &F, x0: &[f64], lo: &[f64], hi: &[f64], 
             }
         }
     }
-    let best = (0..=n).min_by(|&a, &b| fv[a].total_cmp(&fv[b])).unwrap_or(0);
+    let best = (0..=n)
+        .min_by(|&a, &b| fv[a].total_cmp(&fv[b]))
+        .unwrap_or(0);
     simplex[best].clone()
 }
 
 /// Registers `target` to `reference` (planes of the same size) with the parameters `motion`
 /// moves, from `init` (the previous layer's pose, or the identity), stopping `coarsen` levels
 /// short of full resolution (at least one level is searched).
-pub fn register(reference: &Plane, target: &Plane, motion: Motion, init: Pose, coarsen: usize) -> Registration {
+pub fn register(
+    reference: &Plane,
+    target: &Plane,
+    motion: Motion,
+    init: Pose,
+    coarsen: usize,
+) -> Registration {
     let (w, h) = (target.w, target.h);
     let pref = levels(reference);
     let ptgt = levels(target);
@@ -397,7 +504,13 @@ pub fn register(reference: &Plane, target: &Plane, motion: Motion, init: Pose, c
         (rms, overlap, correlation) = cost(rl, tl, &Pose::from_vec(&cur));
     }
     let pose = Pose::from_vec(&cur);
-    Registration { pose, h: pose.matrix(w, h), rms, overlap, correlation }
+    Registration {
+        pose,
+        h: pose.matrix(w, h),
+        rms,
+        overlap,
+        correlation,
+    }
 }
 
 /// `src` (with its coverage) warped by `pose` into a plane of the same size with the cubic
@@ -407,7 +520,9 @@ pub fn warp(src: &Plane, pose: &Pose) -> (Vec<f32>, Vec<bool>) {
     let (w, h) = (src.w, src.h);
     let mut out = vec![0.0f32; w * h];
     let mut valid = vec![false; w * h];
-    let Some(inv) = pose.matrix(w, h).inverse() else { return (out, valid) };
+    let Some(inv) = pose.matrix(w, h).inverse() else {
+        return (out, valid);
+    };
     let (xmax, ymax) = ((w - 1) as f64, (h - 1) as f64);
     par_rows2(&mut out, &mut valid, w, |y, orow, vrow| {
         let yf = y as f64;
@@ -437,29 +552,49 @@ mod tests {
         (0..w * h)
             .map(|i| {
                 let (x, y) = ((i % w) as f32, (i / w) as f32);
-                let v =
-                    (x * 0.21 + s).sin() * (y * 0.17 - s).cos() + (x * 0.071 + y * 0.093 + s * 0.5).sin() * 0.7 + ((x * 0.33 - y * 0.29) * 1.3 + s).cos() * 0.4;
+                let v = (x * 0.21 + s).sin() * (y * 0.17 - s).cos()
+                    + (x * 0.071 + y * 0.093 + s * 0.5).sin() * 0.7
+                    + ((x * 0.33 - y * 0.29) * 1.3 + s).cos() * 0.4;
                 0.5 + 0.2 * v
             })
             .collect()
     }
 
     fn plane(w: usize, h: usize, luma: &[f32]) -> Plane<'_> {
-        Plane { w, h, luma, valid: None }
+        Plane {
+            w,
+            h,
+            luma,
+            valid: None,
+        }
     }
 
     #[test]
     fn pose_matrix_is_the_identity_at_the_identity_and_shifts_in_pixels() {
         assert_eq!(Pose::IDENTITY.matrix(640, 480), Homography::IDENTITY);
-        let p = Pose { dx: 0.1, dy: -0.05, ..Pose::IDENTITY };
+        let p = Pose {
+            dx: 0.1,
+            dy: -0.05,
+            ..Pose::IDENTITY
+        };
         let (x, y) = p.matrix(200, 100).apply(50.0, 20.0);
         assert!((x - 70.0).abs() < 1e-9 && (y - 15.0).abs() < 1e-9);
         // Scale and rotation are about the centre.
-        let p = Pose { scale: 1.5, rot: 0.3, ..Pose::IDENTITY };
+        let p = Pose {
+            scale: 1.5,
+            rot: 0.3,
+            ..Pose::IDENTITY
+        };
         let (x, y) = p.matrix(200, 100).apply(100.0, 50.0);
         assert!((x - 100.0).abs() < 1e-9 && (y - 50.0).abs() < 1e-9);
         assert_eq!(Pose::from_vec(&p.to_vec()), p);
-        assert_eq!(Pose::free(Motion::Translation).iter().filter(|f| **f).count(), 2);
+        assert_eq!(
+            Pose::free(Motion::Translation)
+                .iter()
+                .filter(|f| **f)
+                .count(),
+            2
+        );
         assert_eq!(Pose::free(Motion::Homography), [true; Pose::N]);
     }
 
@@ -471,11 +606,25 @@ mod tests {
         assert!(o.iter().zip(&src).all(|(a, b)| (a - b).abs() < 1e-6));
         assert!(v.iter().all(|b| *b));
         // A shift of 10 px to the right leaves the left 10 columns uncovered.
-        let (_, v) = warp(&plane(w, h, &src), &Pose { dx: 10.0 / w as f64, ..Pose::IDENTITY });
+        let (_, v) = warp(
+            &plane(w, h, &src),
+            &Pose {
+                dx: 10.0 / w as f64,
+                ..Pose::IDENTITY
+            },
+        );
         assert!((0..h).all(|y| !v[y * w] && !v[y * w + 9] && v[y * w + 10]));
         // The source's own coverage carries over.
         let valid: Vec<bool> = (0..w * h).map(|i| i % w < 20).collect();
-        let (_, v) = warp(&Plane { w, h, luma: &src, valid: Some(&valid) }, &Pose::IDENTITY);
+        let (_, v) = warp(
+            &Plane {
+                w,
+                h,
+                luma: &src,
+                valid: Some(&valid),
+            },
+            &Pose::IDENTITY,
+        );
         assert!(v[5 * w + 10] && !v[5 * w + 30]);
     }
 
@@ -485,12 +634,33 @@ mod tests {
         let src = texture(w, h, 2);
         let l = levels(&plane(w, h, &src));
         assert!(cost(&l[0], &l[0], &Pose::IDENTITY).0 < 1e-9);
-        assert_eq!(cost(&l[0], &l[0], &Pose { dx: 2.0, ..Pose::IDENTITY }).0, 1e9);
+        assert_eq!(
+            cost(
+                &l[0],
+                &l[0],
+                &Pose {
+                    dx: 2.0,
+                    ..Pose::IDENTITY
+                }
+            )
+            .0,
+            1e9
+        );
         // The mean is removed: a brighter copy costs nothing.
         let bright: Vec<f32> = src.iter().map(|v| v + 0.2).collect();
         let lb = levels(&plane(w, h, &bright));
         assert!(cost(&l[0], &lb[0], &Pose::IDENTITY).0 < 1e-6);
-        assert!(cost(&l[0], &lb[0], &Pose { dx: 0.02, ..Pose::IDENTITY }).0 > 1e-3);
+        assert!(
+            cost(
+                &l[0],
+                &lb[0],
+                &Pose {
+                    dx: 0.02,
+                    ..Pose::IDENTITY
+                }
+            )
+            .0 > 1e-3
+        );
     }
 
     /// The correlation tells a fit from a non-fit whatever the exposure: a stop brighter copy of
@@ -510,17 +680,33 @@ mod tests {
         assert!(corr.abs() < 0.3, "unrelated textures correlate at {corr}");
         let flat = levels(&plane(w, h, &vec![0.5; w * h]));
         assert_eq!(cost(&l[0], &flat[0], &Pose::IDENTITY).2, 0.0);
-        let r = register(&plane(w, h, &src), &plane(w, h, &doubled), Motion::Similarity, Pose::IDENTITY, 0);
+        let r = register(
+            &plane(w, h, &src),
+            &plane(w, h, &doubled),
+            Motion::Similarity,
+            Pose::IDENTITY,
+            0,
+        );
         assert!(r.correlation > 0.999, "{r:?}");
     }
 
     #[test]
     fn pyramid_stops_above_64_rows() {
         let l = levels(&plane(40, 300, &vec![0.25; 40 * 300]));
-        assert_eq!(l.iter().map(|l| (l.w, l.h)).collect::<Vec<_>>(), vec![(40, 300), (20, 150), (10, 75), (5, 38)]);
-        assert!(l.iter().all(|l| l.luma.iter().all(|v| (v - 0.25).abs() < 1e-6)));
+        assert_eq!(
+            l.iter().map(|l| (l.w, l.h)).collect::<Vec<_>>(),
+            vec![(40, 300), (20, 150), (10, 75), (5, 38)]
+        );
+        assert!(l
+            .iter()
+            .all(|l| l.luma.iter().all(|v| (v - 0.25).abs() < 1e-6)));
         let valid: Vec<bool> = (0..40 * 300).map(|i| i % 40 < 20).collect();
-        let l = levels(&Plane { w: 40, h: 300, luma: &vec![0.25; 40 * 300], valid: Some(&valid) });
+        let l = levels(&Plane {
+            w: 40,
+            h: 300,
+            luma: &vec![0.25; 40 * 300],
+            valid: Some(&valid),
+        });
         let v = l[2].valid.as_ref().unwrap();
         assert!(v[10 * 10 + 2] && !v[10 * 10 + 8]);
     }
@@ -528,10 +714,27 @@ mod tests {
     #[test]
     fn nelder_mead_finds_the_minimum_of_a_bowl() {
         let f = |x: &[f64]| (x[0] - 0.3).powi(2) + 2.0 * (x[1] + 0.2).powi(2);
-        let r = nelder_mead(&f, &[0.0, 0.0], &[-1.0, -1.0], &[1.0, 1.0], &[0.1, 0.1], &[1e-6, 1e-6]);
-        assert!((r[0] - 0.3).abs() < 1e-4 && (r[1] + 0.2).abs() < 1e-4, "{r:?}");
+        let r = nelder_mead(
+            &f,
+            &[0.0, 0.0],
+            &[-1.0, -1.0],
+            &[1.0, 1.0],
+            &[0.1, 0.1],
+            &[1e-6, 1e-6],
+        );
+        assert!(
+            (r[0] - 0.3).abs() < 1e-4 && (r[1] + 0.2).abs() < 1e-4,
+            "{r:?}"
+        );
         // The box binds.
-        let r = nelder_mead(&f, &[0.0, 0.0], &[-1.0, -1.0], &[0.1, 1.0], &[0.1, 0.1], &[1e-6, 1e-6]);
+        let r = nelder_mead(
+            &f,
+            &[0.0, 0.0],
+            &[-1.0, -1.0],
+            &[0.1, 1.0],
+            &[0.1, 0.1],
+            &[1e-6, 1e-6],
+        );
         assert!((r[0] - 0.1).abs() < 1e-6, "{r:?}");
         assert!(nelder_mead(&f, &[], &[], &[], &[], &[]).is_empty());
         let (step, tol) = level_steps(&[0, 2], 3, 8000, 6000);
@@ -544,17 +747,39 @@ mod tests {
     fn registers_a_similarity_to_a_tenth_of_a_pixel() {
         let (w, h) = (320, 240);
         let reference = texture(w, h, 3);
-        let truth = Pose { dx: 3.3 / w as f64, dy: -2.1 / h as f64, scale: 1.012, rot: 0.6f64.to_radians(), ..Pose::IDENTITY };
+        let truth = Pose {
+            dx: 3.3 / w as f64,
+            dy: -2.1 / h as f64,
+            scale: 1.012,
+            rot: 0.6f64.to_radians(),
+            ..Pose::IDENTITY
+        };
         // The pose maps the target's pixels onto the reference's: target(u) = reference(M u).
         let m = truth.matrix(w, h);
         let target: Vec<f32> = (0..w * h)
             .map(|i| {
                 let (x, y) = m.apply((i % w) as f64, (i / w) as f64);
-                sample(&reference, w, h, x.clamp(0.0, (w - 1) as f64), y.clamp(0.0, (h - 1) as f64))
+                sample(
+                    &reference,
+                    w,
+                    h,
+                    x.clamp(0.0, (w - 1) as f64),
+                    y.clamp(0.0, (h - 1) as f64),
+                )
             })
             .collect();
-        for (motion, coarsen) in [(Motion::Similarity, 0), (Motion::Similarity, 1), (Motion::Homography, 0)] {
-            let r = register(&plane(w, h, &reference), &plane(w, h, &target), motion, Pose::IDENTITY, coarsen);
+        for (motion, coarsen) in [
+            (Motion::Similarity, 0),
+            (Motion::Similarity, 1),
+            (Motion::Homography, 0),
+        ] {
+            let r = register(
+                &plane(w, h, &reference),
+                &plane(w, h, &target),
+                motion,
+                Pose::IDENTITY,
+                coarsen,
+            );
             let (tx, ty) = truth.matrix(w, h).apply(0.0, 0.0);
             let (rx, ry) = r.h.apply(0.0, 0.0);
             let corner = ((tx - rx).hypot(ty - ry)).max({
@@ -562,17 +787,49 @@ mod tests {
                 let (rx, ry) = r.h.apply(w as f64, h as f64);
                 (tx - rx).hypot(ty - ry)
             });
-            assert!(corner < 0.1 * (1 << coarsen) as f64 + 0.05, "{motion:?} coarsen {coarsen}: corners off by {corner} px, {:?}", r.pose);
+            assert!(
+                corner < 0.1 * (1 << coarsen) as f64 + 0.05,
+                "{motion:?} coarsen {coarsen}: corners off by {corner} px, {:?}",
+                r.pose
+            );
             let searched = (w >> coarsen) * (h >> coarsen);
-            assert!(r.rms < 0.01 && r.overlap > searched / 2, "{motion:?}: rms {} overlap {} of {searched}", r.rms, r.overlap);
+            assert!(
+                r.rms < 0.01 && r.overlap > searched / 2,
+                "{motion:?}: rms {} overlap {} of {searched}",
+                r.rms,
+                r.overlap
+            );
         }
         // Translation only: the shift is found, the rest stays put.
-        let t = Pose { dx: 4.0 / w as f64, dy: 3.0 / h as f64, ..Pose::IDENTITY };
+        let t = Pose {
+            dx: 4.0 / w as f64,
+            dy: 3.0 / h as f64,
+            ..Pose::IDENTITY
+        };
         let target: Vec<f32> = (0..w * h)
-            .map(|i| sample(&reference, w, h, ((i % w) as f64 + 4.0).clamp(0.0, (w - 1) as f64), ((i / w) as f64 + 3.0).clamp(0.0, (h - 1) as f64)))
+            .map(|i| {
+                sample(
+                    &reference,
+                    w,
+                    h,
+                    ((i % w) as f64 + 4.0).clamp(0.0, (w - 1) as f64),
+                    ((i / w) as f64 + 3.0).clamp(0.0, (h - 1) as f64),
+                )
+            })
             .collect();
-        let r = register(&plane(w, h, &reference), &plane(w, h, &target), Motion::Translation, Pose::IDENTITY, 0);
-        assert!(((r.pose.dx - t.dx) * w as f64).abs() < 0.1 && ((r.pose.dy - t.dy) * h as f64).abs() < 0.1, "{:?}", r.pose);
+        let r = register(
+            &plane(w, h, &reference),
+            &plane(w, h, &target),
+            Motion::Translation,
+            Pose::IDENTITY,
+            0,
+        );
+        assert!(
+            ((r.pose.dx - t.dx) * w as f64).abs() < 0.1
+                && ((r.pose.dy - t.dy) * h as f64).abs() < 0.1,
+            "{:?}",
+            r.pose
+        );
         assert_eq!((r.pose.scale, r.pose.rot), (1.0, 0.0));
     }
 
@@ -582,14 +839,35 @@ mod tests {
     fn coverage_keeps_uncovered_pixels_out_of_the_fit() {
         let (w, h) = (320, 240);
         let reference = texture(w, h, 4);
-        let mut target: Vec<f32> = (0..w * h).map(|i| sample(&reference, w, h, ((i % w) as f64 + 2.5).clamp(0.0, (w - 1) as f64), (i / w) as f64)).collect();
+        let mut target: Vec<f32> = (0..w * h)
+            .map(|i| {
+                sample(
+                    &reference,
+                    w,
+                    h,
+                    ((i % w) as f64 + 2.5).clamp(0.0, (w - 1) as f64),
+                    (i / w) as f64,
+                )
+            })
+            .collect();
         let valid: Vec<bool> = (0..w * h).map(|i| i % w < w / 2).collect();
         for (i, v) in target.iter_mut().enumerate() {
             if !valid[i] {
                 *v = ((i * 7919) % 1000) as f32 / 1000.0;
             }
         }
-        let r = register(&plane(w, h, &reference), &Plane { w, h, luma: &target, valid: Some(&valid) }, Motion::Translation, Pose::IDENTITY, 0);
+        let r = register(
+            &plane(w, h, &reference),
+            &Plane {
+                w,
+                h,
+                luma: &target,
+                valid: Some(&valid),
+            },
+            Motion::Translation,
+            Pose::IDENTITY,
+            0,
+        );
         assert!((r.pose.dx * w as f64 - 2.5).abs() < 0.1, "{:?}", r.pose);
         assert!(r.overlap < w * h / 2 + w && r.overlap > w * h / 3);
     }

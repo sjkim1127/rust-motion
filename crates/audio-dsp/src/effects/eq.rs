@@ -1,10 +1,18 @@
 //! Parametric (8-band) and simple 3-band equalisers.
 
 use crate::biquad::{Biquad, Coeffs, FilterType};
-use crate::{AudioEffect, ParamSpec, ParamValues, Smoothed, Unit, block_len, param_plumbing};
+use crate::{block_len, param_plumbing, AudioEffect, ParamSpec, ParamValues, Smoothed, Unit};
 
 /// Names of [`FilterType::ALL`] for the `type` choice parameters.
-pub const FILTER_TYPE_NAMES: &[&str] = &["Peaking", "Low Shelf", "High Shelf", "Low Pass", "High Pass", "Notch", "Band Pass"];
+pub const FILTER_TYPE_NAMES: &[&str] = &[
+    "Peaking",
+    "Low Shelf",
+    "High Shelf",
+    "Low Pass",
+    "High Pass",
+    "Notch",
+    "Band Pass",
+];
 
 /// Coefficients are recomputed at most every this many samples while parameters glide.
 const COEFF_INTERVAL: u32 = 16;
@@ -47,10 +55,24 @@ impl BandBank {
             coeffs: Coeffs::IDENTITY,
             dirty: true,
         };
-        BandBank { sample_rate: sample_rate as f64, bands: vec![band; nbands], state: vec![vec![Biquad::new(); nbands]; channels.max(1)], counter: 0 }
+        BandBank {
+            sample_rate: sample_rate as f64,
+            bands: vec![band; nbands],
+            state: vec![vec![Biquad::new(); nbands]; channels.max(1)],
+            counter: 0,
+        }
     }
 
-    pub(crate) fn set_band(&mut self, i: usize, on: bool, kind: FilterType, freq: f32, gain: f32, q: f32, snap: bool) {
+    pub(crate) fn set_band(
+        &mut self,
+        i: usize,
+        on: bool,
+        kind: FilterType,
+        freq: f32,
+        gain: f32,
+        q: f32,
+        snap: bool,
+    ) {
         let b = &mut self.bands[i];
         if b.kind != kind {
             b.kind = kind;
@@ -73,7 +95,13 @@ impl BandBank {
         let sr = self.sample_rate;
         for b in &mut self.bands {
             if b.dirty || force {
-                b.coeffs = Coeffs::design(b.kind, sr, 2f64.powf(b.freq.value() as f64), b.q.value() as f64, b.gain.value() as f64);
+                b.coeffs = Coeffs::design(
+                    b.kind,
+                    sr,
+                    2f64.powf(b.freq.value() as f64),
+                    b.q.value() as f64,
+                    b.gain.value() as f64,
+                );
                 b.dirty = b.freq.is_smoothing() || b.gain.is_smoothing() || b.q.is_smoothing();
             }
         }
@@ -99,7 +127,13 @@ impl BandBank {
         let mut db = 0.0;
         for b in &self.bands {
             if b.mix.target() >= 0.5 {
-                let c = Coeffs::design(b.kind, self.sample_rate, 2f64.powf(b.freq.target() as f64), b.q.target() as f64, b.gain.target() as f64);
+                let c = Coeffs::design(
+                    b.kind,
+                    self.sample_rate,
+                    2f64.powf(b.freq.target() as f64),
+                    b.q.target() as f64,
+                    b.gain.target() as f64,
+                );
                 db += c.magnitude_db(freq, self.sample_rate);
             }
         }
@@ -114,7 +148,13 @@ impl BandBank {
             return;
         }
         if !out_gain.is_smoothing()
-            && self.bands.iter().all(|b| !b.dirty && !b.freq.is_smoothing() && !b.gain.is_smoothing() && !b.q.is_smoothing() && !b.mix.is_smoothing())
+            && self.bands.iter().all(|b| {
+                !b.dirty
+                    && !b.freq.is_smoothing()
+                    && !b.gain.is_smoothing()
+                    && !b.q.is_smoothing()
+                    && !b.mix.is_smoothing()
+            })
         {
             // Keep the exact per-sample arithmetic and recursive state; only the settled
             // parameter/smoother bookkeeping is hoisted out of the hot loop.
@@ -304,18 +344,42 @@ pub struct SimpleEq {
 impl SimpleEq {
     pub const PARAMS: &'static [ParamSpec] = &[
         ParamSpec::new("low", "Low", -24.0, 24.0, 0.0, Unit::Decibels),
-        ParamSpec::log("low_freq", "Low Frequency", 20.0, 1000.0, 200.0, Unit::Hertz),
+        ParamSpec::log(
+            "low_freq",
+            "Low Frequency",
+            20.0,
+            1000.0,
+            200.0,
+            Unit::Hertz,
+        ),
         ParamSpec::new("mid", "Mid", -24.0, 24.0, 0.0, Unit::Decibels),
-        ParamSpec::log("mid_freq", "Mid Frequency", 100.0, 10000.0, 1000.0, Unit::Hertz),
+        ParamSpec::log(
+            "mid_freq",
+            "Mid Frequency",
+            100.0,
+            10000.0,
+            1000.0,
+            Unit::Hertz,
+        ),
         ParamSpec::log("mid_q", "Mid Q", 0.1, 10.0, 0.7, Unit::Q),
         ParamSpec::new("high", "High", -24.0, 24.0, 0.0, Unit::Decibels),
-        ParamSpec::log("high_freq", "High Frequency", 1000.0, 20000.0, 5000.0, Unit::Hertz),
+        ParamSpec::log(
+            "high_freq",
+            "High Frequency",
+            1000.0,
+            20000.0,
+            5000.0,
+            Unit::Hertz,
+        ),
         ParamSpec::new("output", "Output Gain", -24.0, 24.0, 0.0, Unit::Decibels),
     ];
 
     pub fn new(sample_rate: f32, channels: usize) -> Self {
-        let mut s =
-            SimpleEq { pv: ParamValues::new(Self::PARAMS), bank: BandBank::new(sample_rate, channels, 3), out: Smoothed::with_ms(1.0, sample_rate, SMOOTH_MS) };
+        let mut s = SimpleEq {
+            pv: ParamValues::new(Self::PARAMS),
+            bank: BandBank::new(sample_rate, channels, 3),
+            out: Smoothed::with_ms(1.0, sample_rate, SMOOTH_MS),
+        };
         s.apply_params(true);
         s
     }
@@ -323,10 +387,21 @@ impl SimpleEq {
     fn apply_params(&mut self, snap: bool) {
         let sq = std::f32::consts::FRAC_1_SQRT_2;
         let p = &self.pv;
-        let (lg, lf, mg, mf, mq, hg, hf) = (p.v("low"), p.v("low_freq"), p.v("mid"), p.v("mid_freq"), p.v("mid_q"), p.v("high"), p.v("high_freq"));
-        self.bank.set_band(0, true, FilterType::LowShelf, lf, lg, sq, snap);
-        self.bank.set_band(1, true, FilterType::Peaking, mf, mg, mq, snap);
-        self.bank.set_band(2, true, FilterType::HighShelf, hf, hg, sq, snap);
+        let (lg, lf, mg, mf, mq, hg, hf) = (
+            p.v("low"),
+            p.v("low_freq"),
+            p.v("mid"),
+            p.v("mid_freq"),
+            p.v("mid_q"),
+            p.v("high"),
+            p.v("high_freq"),
+        );
+        self.bank
+            .set_band(0, true, FilterType::LowShelf, lf, lg, sq, snap);
+        self.bank
+            .set_band(1, true, FilterType::Peaking, mf, mg, mq, snap);
+        self.bank
+            .set_band(2, true, FilterType::HighShelf, hf, hg, sq, snap);
         self.out.set(crate::db_to_gain(self.pv.v("output")));
         if snap {
             self.out.snap();
@@ -395,10 +470,16 @@ mod tests {
         eq.set_param("b8.freq", 12000.0);
         eq.set_param("b8.q", 5.0);
         eq.set_param("output", 1.5);
-        assert!((eq.response_db(1000.0) - (9.0 + 1.5 + eq.bank.response_db(1000.0) - 9.0)).abs() < 1e-9);
+        assert!(
+            (eq.response_db(1000.0) - (9.0 + 1.5 + eq.bank.response_db(1000.0) - 9.0)).abs() < 1e-9
+        );
         for f in [30.0, 80.0, 400.0, 1000.0, 3000.0, 12000.0 * 1.2] {
             let m = measure(&mut eq, f);
-            assert!((m - eq.response_db(f)).abs() < 0.05, "f {f}: measured {m} analytic {}", eq.response_db(f));
+            assert!(
+                (m - eq.response_db(f)).abs() < 0.05,
+                "f {f}: measured {m} analytic {}",
+                eq.response_db(f)
+            );
         }
         assert!(measure(&mut eq, 12000.0) < -30.0);
     }
@@ -422,7 +503,10 @@ mod tests {
         eq.process(&mut [&mut x[..2400]]);
         eq.set_param("output", 12.0);
         eq.process(&mut [&mut x[2400..]]);
-        let max_step = x.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f32::max);
+        let max_step = x
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs())
+            .fold(0.0, f32::max);
         assert!(max_step < 0.01, "step {max_step}");
         assert!((x[4799] - 0.5 * crate::db_to_gain(12.0)).abs() < 1e-4);
     }
@@ -481,9 +565,19 @@ mod throughput_tests {
         let mut reference = fast.clone();
         let mut gain = Smoothed::new(1.0, 0);
         let mut ref_gain = gain;
-        for input in
-            [vec![-0.0, 0.0, f32::MIN_POSITIVE, f32::from_bits(1), f32::MAX, -f32::MAX, 0.7], vec![0.0; 100], vec![f32::INFINITY, f32::NEG_INFINITY, f32::NAN]]
-        {
+        for input in [
+            vec![
+                -0.0,
+                0.0,
+                f32::MIN_POSITIVE,
+                f32::from_bits(1),
+                f32::MAX,
+                -f32::MAX,
+                0.7,
+            ],
+            vec![0.0; 100],
+            vec![f32::INFINITY, f32::NEG_INFINITY, f32::NAN],
+        ] {
             let mut a = [input.clone(), input];
             let mut b = a.clone();
             let [al, ar] = &mut a;
@@ -529,7 +623,15 @@ mod throughput_tests {
                 ref_gain.set(gain.target());
             }
             let n = [0, 1, 17, 64, 513][block % 5];
-            let input: Vec<f32> = (0..n).map(|i| if block > 400 { 0.0 } else { ((i + block * 13) as f32 * 0.17).sin() * 0.3 }).collect();
+            let input: Vec<f32> = (0..n)
+                .map(|i| {
+                    if block > 400 {
+                        0.0
+                    } else {
+                        ((i + block * 13) as f32 * 0.17).sin() * 0.3
+                    }
+                })
+                .collect();
             let mut a = [input.clone(), input.clone()];
             let mut b = a.clone();
             let [al, ar] = &mut a;

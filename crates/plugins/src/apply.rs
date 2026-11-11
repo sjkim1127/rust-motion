@@ -1,9 +1,9 @@
 //! Running a filter plug-in over a surface, band by band.
 
 use rust_motion_color::{ColorMode, PixelFormat, SampleType};
-use rust_motion_geom::{Rect, TILE_SIZE, TileCoord};
+use rust_motion_geom::{Rect, TileCoord, TILE_SIZE};
 use rust_motion_raster::Surface;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::manifest::Area;
 use crate::runtime::{Deadline, Plugin};
@@ -73,12 +73,19 @@ fn read_clamped(s: &Surface, rect: Rect, extent: Rect) -> Vec<f32> {
 impl Plugin {
     /// The rectangle a run writes: the layer's content (grown by the plug-in's overlap) or the
     /// canvas, limited to the selection's bounds.
-    pub fn output_area(&self, surface: &Surface, canvas: Rect, selection: Option<&Surface>) -> Rect {
+    pub fn output_area(
+        &self,
+        surface: &Surface,
+        canvas: Rect,
+        selection: Option<&Surface>,
+    ) -> Rect {
         let content = surface.content_bounds();
         let extent = canvas.union(&content);
         let mut area = match self.manifest().area {
             Area::Content if content.is_empty() => Rect::EMPTY,
-            Area::Content => content.inflate(self.manifest().overlap as i32).intersect(&extent),
+            Area::Content => content
+                .inflate(self.manifest().overlap as i32)
+                .intersect(&extent),
             Area::Canvas => canvas,
         };
         if let Some(sel) = selection {
@@ -90,7 +97,13 @@ impl Plugin {
     /// Runs the filter on `surface` with user `params` (validated against the manifest) and
     /// returns the new surface. `canvas` is the document bounds; `selection` (coverage in
     /// channel 0) limits and feathers the result, as for built-in filters.
-    pub fn apply(&self, surface: &Surface, canvas: Rect, selection: Option<&Surface>, params: &Value) -> Result<Surface> {
+    pub fn apply(
+        &self,
+        surface: &Surface,
+        canvas: Rect,
+        selection: Option<&Surface>,
+        params: &Value,
+    ) -> Result<Surface> {
         let resolved = self.manifest().resolve_params(params)?;
         let area = self.output_area(surface, canvas, selection);
         let mut out = surface.clone();
@@ -107,24 +120,45 @@ impl Plugin {
         // Half the plug-in's memory cap is for the band (the module needs room of its own).
         let room = self.limits().max_memory_bytes / 2;
         let across = (self.limits().band_bytes.min(room) / tile_bytes).clamp(1, 1024) as i32;
-        let in_bytes = ((across * TILE_SIZE + 2 * ov) as usize) * ((TILE_SIZE + 2 * ov) as usize) * n * 4;
+        let in_bytes =
+            ((across * TILE_SIZE + 2 * ov) as usize) * ((TILE_SIZE + 2 * ov) as usize) * n * 4;
         if in_bytes > room {
-            return Err(Error::Limit("memory budget (a band does not fit in the plug-in's memory)".into()));
+            return Err(Error::Limit(
+                "memory budget (a band does not fit in the plug-in's memory)".into(),
+            ));
         }
         let mut bands = Vec::new();
-        let (t0, t1) = (TileCoord::containing(area.x0, area.y0), TileCoord::containing(area.x1 - 1, area.y1 - 1));
+        let (t0, t1) = (
+            TileCoord::containing(area.x0, area.y0),
+            TileCoord::containing(area.x1 - 1, area.y1 - 1),
+        );
         for ty in t0.ty..=t1.ty {
             let mut tx = t0.tx;
             while tx <= t1.tx {
-                let r = Rect::new(tx * TILE_SIZE, ty * TILE_SIZE, (tx + across).min(t1.tx + 1) * TILE_SIZE, (ty + 1) * TILE_SIZE);
+                let r = Rect::new(
+                    tx * TILE_SIZE,
+                    ty * TILE_SIZE,
+                    (tx + across).min(t1.tx + 1) * TILE_SIZE,
+                    (ty + 1) * TILE_SIZE,
+                );
                 bands.push(r.intersect(&area));
                 tx += across;
             }
         }
         let deadline = Deadline::new(self.limits());
-        let ctx = BandCtx { surface, extent, canvas, selection, fmt, ov, params: Value::Object(resolved) };
+        let ctx = BandCtx {
+            surface,
+            extent,
+            canvas,
+            selection,
+            fmt,
+            ov,
+            params: Value::Object(resolved),
+        };
         let run = |b: &Rect| {
-            let r = self.run_band(&ctx, *b, &deadline).map(|data| encode_band(surface, *b, &data));
+            let r = self
+                .run_band(&ctx, *b, &deadline)
+                .map(|data| encode_band(surface, *b, &data));
             if let Err(error) = &r {
                 deadline.abort(error.clone());
             }
@@ -171,8 +205,17 @@ impl Plugin {
         }
         let pbytes = serde_json::to_vec(&params).map_err(|e| Error::Params(e.to_string()))?;
         let orig_full = data.clone();
-        let run =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.filter_buffer(&mut data, iw, ih, n as u32, format_code(c.fmt), &pbytes, deadline)));
+        let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.filter_buffer(
+                &mut data,
+                iw,
+                ih,
+                n as u32,
+                format_code(c.fmt),
+                &pbytes,
+                deadline,
+            )
+        }));
         run.map_err(|_| Error::Trap("the runtime panicked".into()))??;
         // Keep the band (drop the overlap margins), sanitise and blend by the selection.
         let (bw, bh) = (band.width() as usize, band.height() as usize);
@@ -183,13 +226,26 @@ impl Plugin {
         let int_depth = c.fmt.sample != SampleType::F32;
         for row in 0..bh {
             if let (Some(s), Some(sn)) = (c.selection, sel_row) {
-                let r = Rect::new(band.x0, band.y0 + row as i32, band.x1, band.y0 + row as i32 + 1);
-                sel = s.read_region(r).chunks_exact(sn.max(1)).map(|p| p.first().copied().unwrap_or(0.0).clamp(0.0, 1.0)).collect();
+                let r = Rect::new(
+                    band.x0,
+                    band.y0 + row as i32,
+                    band.x1,
+                    band.y0 + row as i32 + 1,
+                );
+                sel = s
+                    .read_region(r)
+                    .chunks_exact(sn.max(1))
+                    .map(|p| p.first().copied().unwrap_or(0.0).clamp(0.0, 1.0))
+                    .collect();
             }
             for col in 0..bw {
                 let si = ((row + ov) * (bw + 2 * ov) + col + ov) * n;
                 let di = (row * bw + col) * n;
-                let k = if c.selection.is_some() { sel.get(col).copied().unwrap_or(0.0) } else { 1.0 };
+                let k = if c.selection.is_some() {
+                    sel.get(col).copied().unwrap_or(0.0)
+                } else {
+                    1.0
+                };
                 for ch in 0..n {
                     let o = orig_full.get(si + ch).copied().unwrap_or(0.0);
                     let mut v = data.get(si + ch).copied().unwrap_or(o);

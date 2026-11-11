@@ -16,13 +16,23 @@
 //! organisation; see `NOTICE`).
 
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
 
 pub mod membrane;
 pub mod patchmatch;
 
 pub use membrane::membrane_fill;
-pub use patchmatch::{CompleteParams, complete, complete_with};
+pub use patchmatch::{complete, complete_with, CompleteParams};
 
 /// A cancelled [`complete_with`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,20 +52,58 @@ mod tests {
 
     #[test]
     fn hostile_sizes_do_not_panic() {
-        assert_eq!(complete(4, 4, 3, &[0.0; 5], &[true; 16], &CompleteParams::default()), None);
-        assert_eq!(complete(4, 4, 0, &[], &[true; 16], &CompleteParams::default()), None);
-        assert_eq!(complete(usize::MAX, 2, 3, &[0.0; 6], &[true; 2], &CompleteParams::default()), None);
+        assert_eq!(
+            complete(4, 4, 3, &[0.0; 5], &[true; 16], &CompleteParams::default()),
+            None
+        );
+        assert_eq!(
+            complete(4, 4, 0, &[], &[true; 16], &CompleteParams::default()),
+            None
+        );
+        assert_eq!(
+            complete(
+                usize::MAX,
+                2,
+                3,
+                &[0.0; 6],
+                &[true; 2],
+                &CompleteParams::default()
+            ),
+            None
+        );
         assert_eq!(membrane_fill(4, 4, 1, &[0.5; 3], &[true; 16]), vec![0.5; 3]);
         // A hole covering everything: nothing to copy from.
-        assert_eq!(complete(16, 16, 1, &[0.5; 256], &[true; 256], &CompleteParams::default()), None);
+        assert_eq!(
+            complete(
+                16,
+                16,
+                1,
+                &[0.5; 256],
+                &[true; 256],
+                &CompleteParams::default()
+            ),
+            None
+        );
         // A tiny image smaller than a patch.
-        let _ = complete(2, 2, 1, &[0.5; 4], &[true, false, false, false], &CompleteParams::default());
+        let _ = complete(
+            2,
+            2,
+            1,
+            &[0.5; 4],
+            &[true, false, false, false],
+            &CompleteParams::default(),
+        );
     }
 
     #[test]
     fn cancellation_stops() {
         let img = vec![0.5f32; 64 * 64];
-        let hole: Vec<bool> = (0..64 * 64usize).map(|i| (i % 64).abs_diff(32) < 4 && (i / 64).abs_diff(32) < 4).collect();
-        assert_eq!(complete_with(64, 64, 1, &img, &hole, &CompleteParams::default(), &|| true), Err(Cancelled));
+        let hole: Vec<bool> = (0..64 * 64usize)
+            .map(|i| (i % 64).abs_diff(32) < 4 && (i / 64).abs_diff(32) < 4)
+            .collect();
+        assert_eq!(
+            complete_with(64, 64, 1, &img, &hole, &CompleteParams::default(), &|| true),
+            Err(Cancelled)
+        );
     }
 }

@@ -9,9 +9,7 @@ use rust_motion_rasterizer::exif_meta::{
     parse_xmp_packet, serialize_iptc_iim, serialize_tiff_exif, serialize_xmp_packet,
     sync_multicam_clips, MediaMetadata,
 };
-use rust_motion_rasterizer::lens_correction::{
-    apply_brown_conrady_correction, BrownConradyModel,
-};
+use rust_motion_rasterizer::lens_correction::{apply_brown_conrady_correction, BrownConradyModel};
 use rust_motion_rasterizer::neural_face::{
     apply_privacy_face_mask, compute_auto_reframe_crop, detect_faces_yunet,
     parse_onnx_model_checked, PrivacyMaskMode, Tensor3D,
@@ -231,7 +229,10 @@ fn test_onnx_runtime_yunet_face_landmarks_reframe_and_privacy_mask() {
     let faces = detect_faces_yunet(&frame, 0.5);
     assert_eq!(faces.len(), 1);
     let f = &faces[0];
-    assert!(f.landmarks[0].0 < f.landmarks[1].0, "Right eye left of left eye");
+    assert!(
+        f.landmarks[0].0 < f.landmarks[1].0,
+        "Right eye left of left eye"
+    );
     assert!(f.landmarks[2].1 > f.landmarks[0].1, "Nose below eyes");
     assert!(f.landmarks[3].1 > f.landmarks[2].1, "Mouth below nose");
 
@@ -244,7 +245,11 @@ fn test_onnx_runtime_yunet_face_landmarks_reframe_and_privacy_mask() {
     assert!((crop_cx - 116.0).abs() < 6.0, "Crop center X: {crop_cx}");
 
     // 5. Smart Privacy Face Mask (Mosaic & Blur)
-    apply_privacy_face_mask(&mut frame, &faces, PrivacyMaskMode::Mosaic { block_size: 8 });
+    apply_privacy_face_mask(
+        &mut frame,
+        &faces,
+        PrivacyMaskMode::Mosaic { block_size: 8 },
+    );
     apply_privacy_face_mask(&mut frame, &faces, PrivacyMaskMode::Blur { radius: 4 });
 }
 

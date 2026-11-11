@@ -1,6 +1,6 @@
 //! NAL unit and parameter-set/slice-header generation (§7.3), SEI and the AVCDecoderConfigurationRecord.
 
-use crate::bitstream::{BitWriter, escape_rbsp};
+use crate::bitstream::{escape_rbsp, BitWriter};
 
 pub const NAL_SLICE: u8 = 1;
 pub const NAL_IDR: u8 = 5;
@@ -52,7 +52,10 @@ impl Sps {
         w.write_bits(self.constraint_flags as u32, 8);
         w.write_bits(self.level_idc as u32, 8);
         w.write_ue(0); // seq_parameter_set_id
-        if matches!(self.profile_idc, 100 | 110 | 122 | 244 | 44 | 83 | 86 | 118 | 128 | 138 | 139 | 134 | 135) {
+        if matches!(
+            self.profile_idc,
+            100 | 110 | 122 | 244 | 44 | 83 | 86 | 118 | 128 | 138 | 139 | 134 | 135
+        ) {
             w.write_ue(1); // chroma_format_idc 4:2:0
             w.write_ue(0); // bit_depth_luma_minus8
             w.write_ue(0); // bit_depth_chroma_minus8
@@ -165,7 +168,10 @@ pub fn aud_rbsp(primary_pic_type: u8) -> Vec<u8> {
 
 /// user_data_unregistered SEI carrying an encoder identification string.
 pub fn sei_user_data_rbsp(text: &str) -> Vec<u8> {
-    const UUID: [u8; 16] = [0x7a, 0x3c, 0x1f, 0x52, 0xd4, 0x0b, 0x4e, 0x8e, 0x9d, 0x61, 0x2f, 0xc4, 0x93, 0x05, 0xb7, 0x1a];
+    const UUID: [u8; 16] = [
+        0x7a, 0x3c, 0x1f, 0x52, 0xd4, 0x0b, 0x4e, 0x8e, 0x9d, 0x61, 0x2f, 0xc4, 0x93, 0x05, 0xb7,
+        0x1a,
+    ];
     let mut payload = UUID.to_vec();
     payload.extend_from_slice(text.as_bytes());
     let mut w = BitWriter::new();
@@ -244,7 +250,7 @@ impl SliceHeader {
         }
         if self.slice_type != SliceType::I {
             w.write_bit(false); // num_ref_idx_active_override_flag
-            // ref_pic_list_modification
+                                // ref_pic_list_modification
             match self.l0_modification {
                 Some(d) => {
                     w.write_bit(true);
@@ -298,12 +304,25 @@ pub fn avcc(sps_nal: &[u8], pps_nal: &[u8], profile_idc: u8, constraint: u8, lev
 /// The requested level when it is at least `needed` (and a valid level_idc), else `needed`.
 /// Level 1b (`11` with constraint_set3) is not distinguished; 9 is not a level here.
 pub fn level_at_least(requested: u8, needed: u8) -> u8 {
-    const VALID: [u8; 19] = [10, 11, 12, 13, 20, 21, 22, 30, 31, 32, 40, 41, 42, 50, 51, 52, 60, 61, 62];
-    if VALID.contains(&requested) && requested >= needed { requested } else { needed }
+    const VALID: [u8; 19] = [
+        10, 11, 12, 13, 20, 21, 22, 30, 31, 32, 40, 41, 42, 50, 51, 52, 60, 61, 62,
+    ];
+    if VALID.contains(&requested) && requested >= needed {
+        requested
+    } else {
+        needed
+    }
 }
 
 /// Pick the lowest level satisfying frame size, macroblock rate, DPB size and (optionally) bitrate.
-pub fn pick_level(width_mbs: u32, height_mbs: u32, fps: f64, dpb_frames: u32, kbps: Option<u32>, high: bool) -> u8 {
+pub fn pick_level(
+    width_mbs: u32,
+    height_mbs: u32,
+    fps: f64,
+    dpb_frames: u32,
+    kbps: Option<u32>,
+    high: bool,
+) -> u8 {
     // (level_idc, MaxMBPS, MaxFS, MaxDpbMbs, MaxBR kbit/s)
     const LEVELS: [(u8, u64, u64, u64, u64); 17] = [
         (10, 1485, 99, 396, 64),
@@ -327,9 +346,12 @@ pub fn pick_level(width_mbs: u32, height_mbs: u32, fps: f64, dpb_frames: u32, kb
     let fs = (width_mbs * height_mbs) as u64;
     let mbps = (fs as f64 * fps).ceil() as u64;
     for &(l, max_mbps, max_fs, max_dpb, max_br) in &LEVELS {
-        let br_ok = kbps.is_none_or(|k| (k as u64) * 1000 <= max_br * if high { 1250 } else { 1000 });
-        let dim_ok = (width_mbs as u64).pow(2) <= 8 * max_fs && (height_mbs as u64).pow(2) <= 8 * max_fs;
-        if fs <= max_fs && mbps <= max_mbps && fs * dpb_frames as u64 <= max_dpb && br_ok && dim_ok {
+        let br_ok =
+            kbps.is_none_or(|k| (k as u64) * 1000 <= max_br * if high { 1250 } else { 1000 });
+        let dim_ok =
+            (width_mbs as u64).pow(2) <= 8 * max_fs && (height_mbs as u64).pow(2) <= 8 * max_fs;
+        if fs <= max_fs && mbps <= max_mbps && fs * dpb_frames as u64 <= max_dpb && br_ok && dim_ok
+        {
             return l;
         }
     }

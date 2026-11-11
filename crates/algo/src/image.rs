@@ -26,7 +26,11 @@ pub struct Image {
 impl Image {
     /// Reads `rect` from a surface.
     pub fn read(s: &Surface, rect: Rect) -> Self {
-        Image { rect, ch: s.channels(), data: s.read_region(rect) }
+        Image {
+            rect,
+            ch: s.channels(),
+            data: s.read_region(rect),
+        }
     }
 
     /// Reads `rect`, repeating the nearest pixel of `extent` for samples outside it. Photoshop
@@ -55,7 +59,11 @@ impl Image {
 
     /// New zeroed image.
     pub fn new(rect: Rect, ch: usize) -> Self {
-        Image { rect, ch, data: vec![0.0; rect.width() as usize * rect.height() as usize * ch] }
+        Image {
+            rect,
+            ch,
+            data: vec![0.0; rect.width() as usize * rect.height() as usize * ch],
+        }
     }
 
     #[inline]
@@ -65,13 +73,18 @@ impl Image {
 
     #[inline]
     fn index(&self, x: i32, y: i32) -> usize {
-        ((y - self.rect.y0) as usize * self.rect.width() as usize + (x - self.rect.x0) as usize) * self.ch
+        ((y - self.rect.y0) as usize * self.rect.width() as usize + (x - self.rect.x0) as usize)
+            * self.ch
     }
 
     /// Sample at integer coordinates; 0 outside.
     #[inline]
     pub fn get(&self, x: i32, y: i32, c: usize) -> f32 {
-        if self.rect.contains(x, y) { self.data[self.index(x, y) + c] } else { 0.0 }
+        if self.rect.contains(x, y) {
+            self.data[self.index(x, y) + c]
+        } else {
+            0.0
+        }
     }
 
     /// Samples of the pixels of a one-pixel-high rectangle (must be inside).
@@ -99,10 +112,18 @@ impl Image {
         }
         match edge {
             Edge::Transparent => 0.0,
-            Edge::Repeat => self.get(x.clamp(area.x0, area.x1 - 1), y.clamp(area.y0, area.y1 - 1), c),
+            Edge::Repeat => self.get(
+                x.clamp(area.x0, area.x1 - 1),
+                y.clamp(area.y0, area.y1 - 1),
+                c,
+            ),
             Edge::Wrap => {
                 let (w, h) = (area.width().max(1) as i32, area.height().max(1) as i32);
-                self.get(area.x0 + (x - area.x0).rem_euclid(w), area.y0 + (y - area.y0).rem_euclid(h), c)
+                self.get(
+                    area.x0 + (x - area.x0).rem_euclid(w),
+                    area.y0 + (y - area.y0).rem_euclid(h),
+                    c,
+                )
             }
         }
     }
@@ -119,12 +140,25 @@ impl Image {
             *v = 0.0;
         }
         let mut acc_a = 0.0;
-        for (dx, dy, wgt) in [(0, 0, (1.0 - ax) * (1.0 - ay)), (1, 0, ax * (1.0 - ay)), (0, 1, (1.0 - ax) * ay), (1, 1, ax * ay)] {
+        for (dx, dy, wgt) in [
+            (0, 0, (1.0 - ax) * (1.0 - ay)),
+            (1, 0, ax * (1.0 - ay)),
+            (0, 1, (1.0 - ax) * ay),
+            (1, 1, ax * ay),
+        ] {
             if wgt <= 0.0 {
                 continue;
             }
-            let a = if alpha { self.get_edge(x0 + dx, y0 + dy, n - 1, edge, area) } else { 1.0 };
-            for (c, o) in out.iter_mut().enumerate().take(if alpha { n - 1 } else { n }) {
+            let a = if alpha {
+                self.get_edge(x0 + dx, y0 + dy, n - 1, edge, area)
+            } else {
+                1.0
+            };
+            for (c, o) in out
+                .iter_mut()
+                .enumerate()
+                .take(if alpha { n - 1 } else { n })
+            {
                 *o += self.get_edge(x0 + dx, y0 + dy, c, edge, area) * a * wgt;
             }
             acc_a += a * wgt;

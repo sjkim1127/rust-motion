@@ -96,7 +96,11 @@ fn clamp01(v: f32) -> f32 {
 /// would alter a legal 360 to 0 (and f32 round-off on a tiny negative can itself land on 360),
 /// changing the colour at the boundary. The input is already finite, so the result stays finite.
 fn hue(h: f32) -> f32 {
-    if (0.0..=360.0).contains(&h) { h } else { h.rem_euclid(360.0) }
+    if (0.0..=360.0).contains(&h) {
+        h
+    } else {
+        h.rem_euclid(360.0)
+    }
 }
 
 fn obj<'a>(d: &'a Descriptor, k: &str) -> Option<&'a Descriptor> {
@@ -121,15 +125,38 @@ fn color(c: &Descriptor) -> Option<GrdColor> {
         // Every component documented as 0..=1 is clamped here, like every other range in this
         // module: a hostile file can store any integer at all, and dividing by 100 or 255 does not
         // bring it back into range on its own.
-        b"RGBC" => GrdColor::Rgb([f(c, "Rd  ") / 255.0, f(c, "Grn ") / 255.0, f(c, "Bl  ") / 255.0].map(clamp01)),
+        b"RGBC" => GrdColor::Rgb(
+            [
+                f(c, "Rd  ") / 255.0,
+                f(c, "Grn ") / 255.0,
+                f(c, "Bl  ") / 255.0,
+            ]
+            .map(clamp01),
+        ),
         // Hue is a circular degree value in 0..=360; see `hue`. An in-range value (including
         // exactly 360) is kept, only an out-of-range one wraps, so a hostile hue cannot become a
         // different, wrong colour at the boundary.
-        b"HSBC" => GrdColor::Hsb([hue(f(c, "H   ")), (f(c, "Strt") / 100.0).clamp(0.0, 1.0), (f(c, "Brgh") / 100.0).clamp(0.0, 1.0)]),
-        b"CMYC" => GrdColor::Cmyk([f(c, "Cyn ") / 100.0, f(c, "Mgnt") / 100.0, f(c, "Ylw ") / 100.0, f(c, "Blck") / 100.0].map(clamp01)),
+        b"HSBC" => GrdColor::Hsb([
+            hue(f(c, "H   ")),
+            (f(c, "Strt") / 100.0).clamp(0.0, 1.0),
+            (f(c, "Brgh") / 100.0).clamp(0.0, 1.0),
+        ]),
+        b"CMYC" => GrdColor::Cmyk(
+            [
+                f(c, "Cyn ") / 100.0,
+                f(c, "Mgnt") / 100.0,
+                f(c, "Ylw ") / 100.0,
+                f(c, "Blck") / 100.0,
+            ]
+            .map(clamp01),
+        ),
         // L* is 0..=100; a*/b* are signed and bounded to the CIELAB gamut (-128..=127) so a hostile
         // value cannot hand a downstream colour converter an out-of-gamut number to overflow on.
-        b"LbCl" => GrdColor::Lab([f(c, "Lmnc").clamp(0.0, 100.0), f(c, "A   ").clamp(-128.0, 127.0), f(c, "B   ").clamp(-128.0, 127.0)]),
+        b"LbCl" => GrdColor::Lab([
+            f(c, "Lmnc").clamp(0.0, 100.0),
+            f(c, "A   ").clamp(-128.0, 127.0),
+            f(c, "B   ").clamp(-128.0, 127.0),
+        ]),
         b"Grsc" => GrdColor::Gray(clamp01(f(c, "Gry ") / 100.0)),
         _ => return None,
     })
@@ -139,7 +166,9 @@ fn location(d: &Descriptor) -> f32 {
     (f(d, "Lctn") / 4096.0).clamp(0.0, 1.0)
 }
 fn midpoint(d: &Descriptor) -> f32 {
-    finite(num(d, "Mdpn").unwrap_or(50.0) / 100.0).unwrap_or(0.5).clamp(0.0, 1.0)
+    finite(num(d, "Mdpn").unwrap_or(50.0) / 100.0)
+        .unwrap_or(0.5)
+        .clamp(0.0, 1.0)
 }
 
 fn gradient(g: &Descriptor) -> GrdGradient {
@@ -147,7 +176,11 @@ fn gradient(g: &Descriptor) -> GrdGradient {
         Some(Value::Text(t)) => t.to_string_lossy(),
         _ => String::new(),
     };
-    let mut out = GrdGradient { name, noise: enum_is(g, "GrdF", "ClNs"), ..Default::default() };
+    let mut out = GrdGradient {
+        name,
+        noise: enum_is(g, "GrdF", "ClNs"),
+        ..Default::default()
+    };
     for v in list(g, "Clrs").iter().take(MAX_STOPS) {
         let Value::Descriptor(s) = v else { continue };
         let c = if enum_is(s, "Type", "FrgC") {
@@ -158,27 +191,51 @@ fn gradient(g: &Descriptor) -> GrdGradient {
             obj(s, "Clr ").and_then(color)
         };
         if let Some(color) = c {
-            out.stops.push(GrdStop { location: location(s), midpoint: midpoint(s), color });
+            out.stops.push(GrdStop {
+                location: location(s),
+                midpoint: midpoint(s),
+                color,
+            });
         }
     }
     for v in list(g, "Trns").iter().take(MAX_STOPS) {
         let Value::Descriptor(s) = v else { continue };
-        out.opacity.push((location(s), finite(num(s, "Opct").unwrap_or(100.0) / 100.0).unwrap_or(1.0).clamp(0.0, 1.0), midpoint(s)));
+        out.opacity.push((
+            location(s),
+            finite(num(s, "Opct").unwrap_or(100.0) / 100.0)
+                .unwrap_or(1.0)
+                .clamp(0.0, 1.0),
+            midpoint(s),
+        ));
     }
     out
 }
 
 /// Parses a `.grd` file.
 pub fn parse(data: &[u8]) -> Result<Vec<GrdGradient>> {
-    let sig = data.get(0..4).ok_or(PsdError::UnexpectedEof { offset: 0, needed: 4 })?;
+    let sig = data.get(0..4).ok_or(PsdError::UnexpectedEof {
+        offset: 0,
+        needed: 4,
+    })?;
     if sig != b"8BGR" {
         let mut found = [0u8; 4];
         found.copy_from_slice(sig);
-        return Err(PsdError::InvalidSignature { expected: "8BGR", found });
+        return Err(PsdError::InvalidSignature {
+            expected: "8BGR",
+            found,
+        });
     }
-    let version = data.get(4..6).map(|b| u16::from_be_bytes([b[0], b[1]])).ok_or(PsdError::UnexpectedEof { offset: 4, needed: 2 })?;
+    let version = data
+        .get(4..6)
+        .map(|b| u16::from_be_bytes([b[0], b[1]]))
+        .ok_or(PsdError::UnexpectedEof {
+            offset: 4,
+            needed: 2,
+        })?;
     if version != 5 {
-        return Err(PsdError::Unsupported(format!("gradient file version {version} (only version 5, Photoshop 6 and later)")));
+        return Err(PsdError::Unsupported(format!(
+            "gradient file version {version} (only version 5, Photoshop 6 and later)"
+        )));
     }
     let (vd, _) = VersionedDescriptor::parse_prefix(data.get(6..).unwrap_or_default())?;
     let out: Vec<GrdGradient> = list(&vd.descriptor, "GrdL")
@@ -198,7 +255,10 @@ pub fn parse(data: &[u8]) -> Result<Vec<GrdGradient>> {
 /// Writes a version 5 `.grd` file (RGB / foreground / background stops; used by tests).
 pub fn write(gradients: &[GrdGradient]) -> Vec<u8> {
     use crate::descriptor::{Id, UnicodeString};
-    let en = |t: &str, v: &str| Value::Enumerated { type_id: Id::new(t), value: Id::new(v) };
+    let en = |t: &str, v: &str| Value::Enumerated {
+        type_id: Id::new(t),
+        value: Id::new(v),
+    };
     let items = gradients
         .iter()
         .map(|g| {
@@ -233,7 +293,13 @@ pub fn write(gradients: &[GrdGradient]) -> Vec<u8> {
                 .map(|&(l, o, m)| {
                     Value::Descriptor(
                         Descriptor::new("TrnS")
-                            .with("Opct", Value::UnitFloat { unit: *b"#Prc", value: f64::from(o) * 100.0 })
+                            .with(
+                                "Opct",
+                                Value::UnitFloat {
+                                    unit: *b"#Prc",
+                                    value: f64::from(o) * 100.0,
+                                },
+                            )
                             .with("Lctn", Value::Integer((l * 4096.0).round() as i32))
                             .with("Mdpn", Value::Integer((m * 100.0).round() as i32)),
                     )
@@ -250,7 +316,10 @@ pub fn write(gradients: &[GrdGradient]) -> Vec<u8> {
         .collect();
     let mut out = b"8BGR".to_vec();
     out.extend_from_slice(&5u16.to_be_bytes());
-    out.extend_from_slice(&VersionedDescriptor::new(Descriptor::new("null").with("GrdL", Value::List(items))).to_bytes());
+    out.extend_from_slice(
+        &VersionedDescriptor::new(Descriptor::new("null").with("GrdL", Value::List(items)))
+            .to_bytes(),
+    );
     out
 }
 
@@ -264,13 +333,29 @@ mod tests {
                 name: "Sunset ✓".into(),
                 noise: false,
                 stops: vec![
-                    GrdStop { location: 0.0, midpoint: 0.5, color: GrdColor::Foreground },
-                    GrdStop { location: 0.25, midpoint: 0.3, color: GrdColor::Rgb([1.0, 0.5, 0.0]) },
-                    GrdStop { location: 1.0, midpoint: 0.5, color: GrdColor::Background },
+                    GrdStop {
+                        location: 0.0,
+                        midpoint: 0.5,
+                        color: GrdColor::Foreground,
+                    },
+                    GrdStop {
+                        location: 0.25,
+                        midpoint: 0.3,
+                        color: GrdColor::Rgb([1.0, 0.5, 0.0]),
+                    },
+                    GrdStop {
+                        location: 1.0,
+                        midpoint: 0.5,
+                        color: GrdColor::Background,
+                    },
                 ],
                 opacity: vec![(0.0, 1.0, 0.5), (1.0, 0.25, 0.5)],
             },
-            GrdGradient { name: "Noise".into(), noise: true, ..Default::default() },
+            GrdGradient {
+                name: "Noise".into(),
+                noise: true,
+                ..Default::default()
+            },
         ]
     }
 

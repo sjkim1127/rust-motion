@@ -39,7 +39,9 @@ pub const TICKS_PER_SECOND: i64 = 254_016_000_000;
 ///
 /// Arithmetic saturates at `i64` storage boundaries; all representable results remain
 /// exact with zero floating-point accumulated drift.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 #[serde(transparent)]
 pub struct Tick(pub i64);
 
@@ -461,24 +463,11 @@ pub fn frames_to_fields(
     let s = (n / base) % 60;
     let mi = (n / (base * 60)) % 60;
     let h = n / (base * 3600);
-    (
-        neg,
-        clamp_i64(h),
-        clamp_i64(mi),
-        clamp_i64(s),
-        clamp_i64(f),
-    )
+    (neg, clamp_i64(h), clamp_i64(mi), clamp_i64(s), clamp_i64(f))
 }
 
 /// Convert SMPTE fields back to an exact frame count.
-pub fn fields_to_frames(
-    h: i64,
-    m: i64,
-    s: i64,
-    f: i64,
-    rate: FrameRate,
-    drop_frame: bool,
-) -> i64 {
+pub fn fields_to_frames(h: i64, m: i64, s: i64, f: i64, rate: FrameRate, drop_frame: bool) -> i64 {
     let (drop, base) = df_params(rate);
     let seconds = i128::from(h) * 3600 + i128::from(m) * 60 + i128::from(s);
     let mut n = seconds
@@ -516,7 +505,11 @@ pub fn format_time(
         TimeDisplay::Timecode => format_timecode_frames(frame, rate, drop_frame),
         TimeDisplay::Frames => format!("{frame}"),
         TimeDisplay::Feet35 | TimeDisplay::Feet16 => {
-            let per_ft = if display == TimeDisplay::Feet35 { 16 } else { 40 };
+            let per_ft = if display == TimeDisplay::Feet35 {
+                16
+            } else {
+                40
+            };
             let neg = frame < 0;
             let a = frame.unsigned_abs();
             format!(
@@ -649,7 +642,10 @@ mod tests {
                 r
             );
         }
-        for sr in SAMPLE_RATES.iter().chain(&[8000, 11025, 16000, 22050, 176_400]) {
+        for sr in SAMPLE_RATES
+            .iter()
+            .chain(&[8000, 11025, 16000, 22050, 176_400])
+        {
             assert_eq!(
                 TICKS_PER_SECOND % sr,
                 0,
@@ -693,14 +689,8 @@ mod tests {
     fn test_time_display_modes() {
         let r = FrameRate::FPS_24;
         let t = r.tick_of(40);
-        assert_eq!(
-            format_time(t, r, false, TimeDisplay::Feet35, 48000),
-            "2+08"
-        );
-        assert_eq!(
-            format_time(t, r, false, TimeDisplay::Feet16, 48000),
-            "1+00"
-        );
+        assert_eq!(format_time(t, r, false, TimeDisplay::Feet35, 48000), "2+08");
+        assert_eq!(format_time(t, r, false, TimeDisplay::Feet16, 48000), "1+00");
         assert_eq!(format_time(t, r, false, TimeDisplay::Frames, 48000), "40");
         assert_eq!(
             format_time(
@@ -737,7 +727,13 @@ mod tests {
             assert!(r.frame_duration() > Tick::ZERO);
             assert!(r.timecode_base() >= 1);
             let _ = r.snap_nearest(Tick(12345));
-            let _ = format_time(Tick(TICKS_PER_SECOND), r, true, TimeDisplay::Timecode, 48_000);
+            let _ = format_time(
+                Tick(TICKS_PER_SECOND),
+                r,
+                true,
+                TimeDisplay::Timecode,
+                48_000,
+            );
         }
 
         assert_eq!(Tick::from_rational(100, 1, 0), Tick::ZERO);
@@ -757,7 +753,11 @@ mod tests {
         ];
         for &(r, name) in rates {
             for f in -1000i64..1000 {
-                assert_eq!(r.frame_at(r.tick_of(f)), f, "{name} roundtrip failure at frame {f}");
+                assert_eq!(
+                    r.frame_at(r.tick_of(f)),
+                    f,
+                    "{name} roundtrip failure at frame {f}"
+                );
             }
         }
     }
@@ -767,7 +767,10 @@ mod tests {
         let tr1 = TimeRange::new(Tick(0), Tick(100));
         let tr2 = TimeRange::new(Tick(50), Tick(100));
         assert!(tr1.overlaps(&tr2));
-        assert_eq!(tr1.intersect(&tr2), Some(TimeRange::new(Tick(50), Tick(50))));
+        assert_eq!(
+            tr1.intersect(&tr2),
+            Some(TimeRange::new(Tick(50), Tick(50)))
+        );
         assert!(tr1.contains(Tick(0)));
         assert!(tr1.contains(Tick(99)));
         assert!(!tr1.contains(Tick(100)));

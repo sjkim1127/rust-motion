@@ -60,8 +60,21 @@ impl MbCode {
             _ => match self.part {
                 Part::P16x16 => 1 + self.bdir[0] as u32,
                 Part::P16x8 | Part::P8x16 => {
-                    const PAIRS: [(u8, u8); 9] = [(0, 0), (1, 1), (0, 1), (1, 0), (0, 2), (1, 2), (2, 0), (2, 1), (2, 2)];
-                    let k = PAIRS.iter().position(|&p| p == (self.bdir[0], self.bdir[1])).unwrap_or(0) as u32;
+                    const PAIRS: [(u8, u8); 9] = [
+                        (0, 0),
+                        (1, 1),
+                        (0, 1),
+                        (1, 0),
+                        (0, 2),
+                        (1, 2),
+                        (2, 0),
+                        (2, 1),
+                        (2, 2),
+                    ];
+                    let k = PAIRS
+                        .iter()
+                        .position(|&p| p == (self.bdir[0], self.bdir[1]))
+                        .unwrap_or(0) as u32;
                     4 + 2 * k + (self.part == Part::P8x16) as u32
                 }
                 Part::P8x8 => 22,
@@ -98,7 +111,11 @@ impl NbCtx<'_> {
     pub fn luma_nnz(&self, raster: usize, left: bool) -> Option<u8> {
         let (x, y) = (raster & 3, raster >> 2);
         if left {
-            if x > 0 { Some(self.cur.nnz[raster - 1]) } else { self.left.map(|m| m.nnz[y * 4 + 3]) }
+            if x > 0 {
+                Some(self.cur.nnz[raster - 1])
+            } else {
+                self.left.map(|m| m.nnz[y * 4 + 3])
+            }
         } else if y > 0 {
             Some(self.cur.nnz[raster - 4])
         } else {
@@ -110,7 +127,11 @@ impl NbCtx<'_> {
     pub fn chroma_nnz(&self, c: usize, b: usize, left: bool) -> Option<u8> {
         let (x, y) = (b & 1, b >> 1);
         if left {
-            if x > 0 { Some(self.cur.nnz_c[c * 4 + b - 1]) } else { self.left.map(|m| m.nnz_c[c * 4 + y * 2 + 1]) }
+            if x > 0 {
+                Some(self.cur.nnz_c[c * 4 + b - 1])
+            } else {
+                self.left.map(|m| m.nnz_c[c * 4 + y * 2 + 1])
+            }
         } else if y > 0 {
             Some(self.cur.nnz_c[c * 4 + b - 2])
         } else {

@@ -38,7 +38,17 @@
 //! ```
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
 
 pub mod abr;
 pub mod aco;
@@ -81,7 +91,10 @@ pub use error::{PsdError, Result};
 pub use file::{GlobalLayerMask, LayerInfoPlacement, PsdFile};
 pub use header::{ColorMode, Header, Version};
 pub use image_data::ImageData;
-pub use layer::{BlendingRanges, ChannelData, LayerFlags, LayerInfo, LayerMask, LayerRecord, MaskData, MaskParameters, RealMask, Rect};
+pub use layer::{
+    BlendingRanges, ChannelData, LayerFlags, LayerInfo, LayerMask, LayerRecord, MaskData,
+    MaskParameters, RealMask, Rect,
+};
 pub use pixels::{GrayImage, Layer, RgbaImage};
 pub use resources::{ImageResource, ResolutionInfo, ResourceData};
 pub use tagged::{BlockData, SectionDivider, SectionType, TaggedBlock};

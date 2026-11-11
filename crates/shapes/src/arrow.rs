@@ -1,36 +1,4 @@
-//! `<Arrow>` shape component.
-
-#[cfg(feature = "dioxus")]
-use crate::render_svg::RenderSvg;
-#[cfg(feature = "dioxus")]
-use dioxus::prelude::*;
-
-/// Props for the `<Arrow>` shape component.
-#[cfg(feature = "dioxus")]
-#[derive(Props, Clone, PartialEq)]
-pub struct ArrowProps {
-    /// Total length of the arrow in pixels.
-    #[props(default = 200.0)]
-    pub length: f64,
-    /// Thickness of the arrow stem in pixels.
-    #[props(default = 20.0)]
-    pub thickness: f64,
-    /// Fill color.
-    #[props(default = "#ffffff".to_string())]
-    pub fill: String,
-    /// Stroke color.
-    #[props(default = "none".to_string())]
-    pub stroke: String,
-    /// Stroke width.
-    #[props(default = 0.0)]
-    pub stroke_width: f64,
-    /// Opacity.
-    #[props(default = 1.0)]
-    pub opacity: f64,
-    /// Custom CSS styles.
-    #[props(default)]
-    pub style: String,
-}
+//! Arrow shape path generation and geometry.
 
 /// Generates SVG path string and dimensions for a right-pointing arrow.
 pub fn make_arrow(length: f64, thickness: f64) -> (String, f64, f64) {
@@ -50,26 +18,6 @@ pub fn make_arrow(length: f64, thickness: f64) -> (String, f64, f64) {
     );
 
     (path, l, height)
-}
-
-/// Renders a procedural SVG Arrow.
-#[cfg(feature = "dioxus")]
-#[component]
-pub fn Arrow(props: ArrowProps) -> Element {
-    let (path, width, height) = make_arrow(props.length, props.thickness);
-
-    rsx! {
-        RenderSvg {
-            path,
-            width,
-            height,
-            fill: props.fill,
-            stroke: props.stroke,
-            stroke_width: props.stroke_width,
-            opacity: props.opacity,
-            style: props.style,
-        }
-    }
 }
 
 #[cfg(test)]

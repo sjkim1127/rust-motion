@@ -48,7 +48,14 @@ pub enum BlendMode {
 
 impl BlendMode {
     /// Paint.NET modes without an exact Photoshop equivalent.
-    pub const PAINT_NET_MODES: [BlendMode; 6] = [Self::Reflect, Self::Glow, Self::Negation, Self::Xor, Self::PaintNetColorBurn, Self::PaintNetColorDodge];
+    pub const PAINT_NET_MODES: [BlendMode; 6] = [
+        Self::Reflect,
+        Self::Glow,
+        Self::Negation,
+        Self::Xor,
+        Self::PaintNetColorBurn,
+        Self::PaintNetColorDodge,
+    ];
 
     /// All editable layer modes, with Paint.NET modes after Photoshop's menu order.
     pub fn layer_modes() -> impl Iterator<Item = Self> {
@@ -160,18 +167,31 @@ impl BlendMode {
             BlendMode::Saturation => b"sat ",
             BlendMode::Color => b"colr",
             BlendMode::Luminosity => b"lum ",
-            BlendMode::Reflect | BlendMode::Glow | BlendMode::Negation | BlendMode::Xor | BlendMode::PaintNetColorBurn | BlendMode::PaintNetColorDodge => {
-                b"norm"
-            }
+            BlendMode::Reflect
+            | BlendMode::Glow
+            | BlendMode::Negation
+            | BlendMode::Xor
+            | BlendMode::PaintNetColorBurn
+            | BlendMode::PaintNetColorDodge => b"norm",
         }
     }
 
     pub fn from_psd_key(key: [u8; 4]) -> Option<BlendMode> {
-        std::iter::once(BlendMode::PassThrough).chain(Self::LAYER_MODES).find(|m| m.psd_key() == key)
+        std::iter::once(BlendMode::PassThrough)
+            .chain(Self::LAYER_MODES)
+            .find(|m| m.psd_key() == key)
     }
 
     pub fn is_separable(self) -> bool {
-        !matches!(self, BlendMode::Hue | BlendMode::Saturation | BlendMode::Color | BlendMode::Luminosity | BlendMode::DarkerColor | BlendMode::LighterColor)
+        !matches!(
+            self,
+            BlendMode::Hue
+                | BlendMode::Saturation
+                | BlendMode::Color
+                | BlendMode::Luminosity
+                | BlendMode::DarkerColor
+                | BlendMode::LighterColor
+        )
     }
 }
 
@@ -234,7 +254,11 @@ fn channel(mode: BlendMode, cb: f32, cs: f32, hi: f32) -> f32 {
         BlendMode::Subtract => (cb - cs).max(0.0),
         BlendMode::Divide => {
             if cs <= 0.0 {
-                if cb <= 0.0 { 0.0 } else { 1.0 }
+                if cb <= 0.0 {
+                    0.0
+                } else {
+                    1.0
+                }
             } else {
                 (cb / cs).min(hi)
             }
@@ -263,12 +287,21 @@ fn channel(mode: BlendMode, cb: f32, cs: f32, hi: f32) -> f32 {
             }
         }
         // Non-separable modes are handled by `blend_rgb`; fall back to source.
-        BlendMode::DarkerColor | BlendMode::LighterColor | BlendMode::Hue | BlendMode::Saturation | BlendMode::Color | BlendMode::Luminosity => cs,
+        BlendMode::DarkerColor
+        | BlendMode::LighterColor
+        | BlendMode::Hue
+        | BlendMode::Saturation
+        | BlendMode::Color
+        | BlendMode::Luminosity => cs,
     }
 }
 
 fn reflect(cb: f32, cs: f32) -> f32 {
-    if cs >= 1.0 { 1.0 } else { (cb * cb / (1.0 - cs)).min(1.0) }
+    if cs >= 1.0 {
+        1.0
+    } else {
+        (cb * cb / (1.0 - cs)).min(1.0)
+    }
 }
 
 #[inline]
@@ -326,7 +359,11 @@ fn hard_light(cb: f32, cs: f32) -> f32 {
 /// Photoshop's Soft Light (differs from the W3C/PDF definition in the upper half).
 #[inline]
 fn soft_light_ps(cb: f32, cs: f32) -> f32 {
-    if cs <= 0.5 { 2.0 * cb * cs + cb * cb * (1.0 - 2.0 * cs) } else { 2.0 * cb * (1.0 - cs) + cb.max(0.0).sqrt() * (2.0 * cs - 1.0) }
+    if cs <= 0.5 {
+        2.0 * cb * cs + cb * cb * (1.0 - 2.0 * cs)
+    } else {
+        2.0 * cb * (1.0 - cs) + cb.max(0.0).sqrt() * (2.0 * cs - 1.0)
+    }
 }
 
 // ---- non-separable helpers (W3C Compositing Level 1) ----
@@ -354,13 +391,21 @@ fn clip_color(c: [f32; 3], top: f32) -> [f32; 3] {
     if n < 0.0 {
         let d = l - n;
         for v in &mut out {
-            *v = if l > 0.0 && d > 0.0 { l + (*v - l) * l / d } else { l };
+            *v = if l > 0.0 && d > 0.0 {
+                l + (*v - l) * l / d
+            } else {
+                l
+            };
         }
     }
     if x > top {
         let d = x - l;
         for v in &mut out {
-            *v = if l < top && d > 0.0 { l + (*v - l) * (top - l) / d } else { l };
+            *v = if l < top && d > 0.0 {
+                l + (*v - l) * (top - l) / d
+            } else {
+                l
+            };
         }
     }
     out
@@ -422,14 +467,22 @@ pub fn blend_rgb_within(mode: BlendMode, cb: [f32; 3], cs: [f32; 3], top: f32) -
                 cb
             }
         }
-        m => [blend_channel(m, cb[0], cs[0]), blend_channel(m, cb[1], cs[1]), blend_channel(m, cb[2], cs[2])],
+        m => [
+            blend_channel(m, cb[0], cs[0]),
+            blend_channel(m, cb[1], cs[1]),
+            blend_channel(m, cb[2], cs[2]),
+        ],
     }
 }
 
 /// [`blend_rgb`] for 32-bit float documents: separable modes use [`blend_channel_hdr`], and the
 /// non-separable ones keep values above 1 ([`blend_rgb_within`] at `f32::MAX`).
 pub fn blend_rgb_hdr(mode: BlendMode, cb: [f32; 3], cs: [f32; 3]) -> [f32; 3] {
-    if mode.is_separable() { std::array::from_fn(|i| blend_channel_hdr(mode, cb[i], cs[i])) } else { blend_rgb_within(mode, cb, cs, f32::MAX) }
+    if mode.is_separable() {
+        std::array::from_fn(|i| blend_channel_hdr(mode, cb[i], cs[i]))
+    } else {
+        blend_rgb_within(mode, cb, cs, f32::MAX)
+    }
 }
 
 /// Composite a straight-alpha source over a straight-alpha backdrop with blend mode and opacity.
@@ -493,7 +546,10 @@ mod tests {
         assert_eq!(blend_channel(BlendMode::PaintNetColorDodge, 0.0, 1.0), 1.0);
         for b in 0..=255u8 {
             for s in 0..=255u8 {
-                assert!(close(blend_channel(BlendMode::Xor, f32::from(b) / 255.0, f32::from(s) / 255.0), f32::from(b ^ s) / 255.0));
+                assert!(close(
+                    blend_channel(BlendMode::Xor, f32::from(b) / 255.0, f32::from(s) / 255.0),
+                    f32::from(b ^ s) / 255.0
+                ));
             }
         }
         for mode in BlendMode::PAINT_NET_MODES {
@@ -578,10 +634,42 @@ mod tests {
 
     #[test]
     fn vivid_light_and_hard_mix_composite_extremes() {
-        assert_eq!(composite(BlendMode::VividLight, [1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 1.0], 1.0), [0.0, 0.0, 0.0, 1.0]);
-        assert_eq!(composite(BlendMode::VividLight, [0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0], 1.0), [1.0, 1.0, 1.0, 1.0]);
-        assert_eq!(composite(BlendMode::HardMix, [0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0], 1.0), [0.0, 0.0, 0.0, 1.0]);
-        assert_eq!(composite(BlendMode::HardMix, [1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 1.0], 1.0), [1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(
+            composite(
+                BlendMode::VividLight,
+                [1.0, 1.0, 1.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
+                1.0
+            ),
+            [0.0, 0.0, 0.0, 1.0]
+        );
+        assert_eq!(
+            composite(
+                BlendMode::VividLight,
+                [0.0, 0.0, 0.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0],
+                1.0
+            ),
+            [1.0, 1.0, 1.0, 1.0]
+        );
+        assert_eq!(
+            composite(
+                BlendMode::HardMix,
+                [0.0, 0.0, 0.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0],
+                1.0
+            ),
+            [0.0, 0.0, 0.0, 1.0]
+        );
+        assert_eq!(
+            composite(
+                BlendMode::HardMix,
+                [1.0, 1.0, 1.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
+                1.0
+            ),
+            [1.0, 1.0, 1.0, 1.0]
+        );
     }
 
     #[test]
@@ -607,29 +695,59 @@ mod tests {
         assert_eq!(blend_channel(BlendMode::Divide, 2.0, 0.5), 1.0);
         assert_eq!(blend_channel(BlendMode::Divide, 0.5, 0.25), 1.0);
         // 32-bit float: light adds up past 1 (adding light never darkens).
-        assert!(close(blend_channel_hdr(BlendMode::LinearDodge, 2.0, 0.5), 2.5));
-        assert!(close(blend_channel_hdr(BlendMode::LinearDodge, 0.75, 0.5), 1.25));
+        assert!(close(
+            blend_channel_hdr(BlendMode::LinearDodge, 2.0, 0.5),
+            2.5
+        ));
+        assert!(close(
+            blend_channel_hdr(BlendMode::LinearDodge, 0.75, 0.5),
+            1.25
+        ));
         assert!(close(blend_channel_hdr(BlendMode::Divide, 2.0, 0.5), 4.0));
         assert!(close(blend_channel_hdr(BlendMode::Divide, 0.5, 0.25), 2.0));
-        assert_eq!(blend_rgb_hdr(BlendMode::LinearDodge, [2.0, 0.5, 4.0], [0.5, 0.25, 0.5]), [2.5, 0.75, 4.5]);
-        assert_eq!(blend_rgb_hdr(BlendMode::Divide, [2.0, 0.5, 4.0], [0.5, 0.25, 0.5]), [4.0, 2.0, 8.0]);
+        assert_eq!(
+            blend_rgb_hdr(BlendMode::LinearDodge, [2.0, 0.5, 4.0], [0.5, 0.25, 0.5]),
+            [2.5, 0.75, 4.5]
+        );
+        assert_eq!(
+            blend_rgb_hdr(BlendMode::Divide, [2.0, 0.5, 4.0], [0.5, 0.25, 0.5]),
+            [4.0, 2.0, 8.0]
+        );
         // Divide by zero keeps its guard; overflow stays finite.
         assert_eq!(blend_channel_hdr(BlendMode::Divide, 0.0, 0.0), 0.0);
         assert_eq!(blend_channel_hdr(BlendMode::Divide, 3.0, 0.0), 1.0);
         assert_eq!(blend_channel_hdr(BlendMode::Divide, 3.0, -1.0), 1.0);
-        assert_eq!(blend_channel_hdr(BlendMode::Divide, f32::MAX, 1e-30), f32::MAX);
-        assert_eq!(blend_channel_hdr(BlendMode::LinearDodge, f32::MAX, f32::MAX), f32::MAX);
+        assert_eq!(
+            blend_channel_hdr(BlendMode::Divide, f32::MAX, 1e-30),
+            f32::MAX
+        );
+        assert_eq!(
+            blend_channel_hdr(BlendMode::LinearDodge, f32::MAX, f32::MAX),
+            f32::MAX
+        );
         assert!(blend_channel_hdr(BlendMode::LinearDodge, f32::INFINITY, 1.0).is_finite());
         // Every other separable mode is unchanged (the non-separable ones keep values above 1:
         // blend_rgb_within), and the in-range results agree.
-        for m in BlendMode::LAYER_MODES.into_iter().filter(|m| m.is_separable() && !matches!(m, BlendMode::LinearDodge | BlendMode::Divide)) {
+        for m in BlendMode::LAYER_MODES.into_iter().filter(|m| {
+            m.is_separable() && !matches!(m, BlendMode::LinearDodge | BlendMode::Divide)
+        }) {
             for (cb, cs) in [(0.2, 0.3), (0.9, 0.05), (2.0, 0.5), (0.4, 1.5)] {
-                assert_eq!(blend_rgb(m, [cb, cs, 0.5], [cs, cb, 0.25]), blend_rgb_hdr(m, [cb, cs, 0.5], [cs, cb, 0.25]), "{m:?} cb={cb} cs={cs}");
+                assert_eq!(
+                    blend_rgb(m, [cb, cs, 0.5], [cs, cb, 0.25]),
+                    blend_rgb_hdr(m, [cb, cs, 0.5], [cs, cb, 0.25]),
+                    "{m:?} cb={cb} cs={cs}"
+                );
             }
         }
         let (cb, cs) = ([0.2, 0.3, 0.1], [0.3, 0.4, 0.4]);
-        assert_eq!(blend_rgb_hdr(BlendMode::LinearDodge, cb, cs), blend_rgb(BlendMode::LinearDodge, cb, cs));
-        assert_eq!(blend_rgb_hdr(BlendMode::Divide, cb, cs), blend_rgb(BlendMode::Divide, cb, cs));
+        assert_eq!(
+            blend_rgb_hdr(BlendMode::LinearDodge, cb, cs),
+            blend_rgb(BlendMode::LinearDodge, cb, cs)
+        );
+        assert_eq!(
+            blend_rgb_hdr(BlendMode::Divide, cb, cs),
+            blend_rgb(BlendMode::Divide, cb, cs)
+        );
     }
 
     #[test]
@@ -657,13 +775,21 @@ mod tests {
         if n < 0.0 {
             let d = l - n;
             for v in &mut out {
-                *v = if d.abs() < 1e-12 { l } else { l + (*v - l) * l / d };
+                *v = if d.abs() < 1e-12 {
+                    l
+                } else {
+                    l + (*v - l) * l / d
+                };
             }
         }
         if x > 1.0 {
             let d = x - l;
             for v in &mut out {
-                *v = if d.abs() < 1e-12 { l } else { l + (*v - l) * (1.0 - l) / d };
+                *v = if d.abs() < 1e-12 {
+                    l
+                } else {
+                    l + (*v - l) * (1.0 - l) / d
+                };
             }
         }
         out
@@ -683,13 +809,19 @@ mod tests {
         }
     }
 
-    const NON_SEPARABLE: [BlendMode; 4] = [BlendMode::Hue, BlendMode::Saturation, BlendMode::Color, BlendMode::Luminosity];
+    const NON_SEPARABLE: [BlendMode; 4] = [
+        BlendMode::Hue,
+        BlendMode::Saturation,
+        BlendMode::Color,
+        BlendMode::Luminosity,
+    ];
 
     #[test]
     fn non_separable_modes_unchanged_on_integer_inputs() {
         // 8/16-bit documents only hold 0..1, where the luminosity stays in range (up to a
         // rounding step at white) and ClipColor is the plain ISO 32000 formula.
-        let mut edges: Vec<f32> = vec![0.0, 1.0 / 255.0, 0.5, 254.0 / 255.0, 65534.0 / 65535.0, 1.0];
+        let mut edges: Vec<f32> =
+            vec![0.0, 1.0 / 255.0, 0.5, 254.0 / 255.0, 65534.0 / 65535.0, 1.0];
         edges.extend((0..=8).map(|i| i as f32 / 8.0));
         let mut colors = Vec::new();
         for &r in &edges {
@@ -747,16 +879,29 @@ mod tests {
                 for cb in colors {
                     for cs in colors {
                         let r = blend_rgb_within(m, cb, cs, top);
-                        assert!(r.iter().all(|v| v.is_finite()), "{m:?} {cb:?} {cs:?} {top}: {r:?}");
+                        assert!(
+                            r.iter().all(|v| v.is_finite()),
+                            "{m:?} {cb:?} {cs:?} {top}: {r:?}"
+                        );
                         // The target luminosity is kept, at any depth.
-                        let want = if m == BlendMode::Luminosity { lum(cs) } else { lum(cb) };
+                        let want = if m == BlendMode::Luminosity {
+                            lum(cs)
+                        } else {
+                            lum(cb)
+                        };
                         if want >= 0.0 {
-                            assert!((lum(r) - want).abs() <= 1e-4 * want.max(1.0), "{m:?} {cb:?} {cs:?} {top}: {r:?}");
+                            assert!(
+                                (lum(r) - want).abs() <= 1e-4 * want.max(1.0),
+                                "{m:?} {cb:?} {cs:?} {top}: {r:?}"
+                            );
                         }
                         let (lo, hi) = (r[0].min(r[1]).min(r[2]), r[0].max(r[1]).max(r[2]));
                         if top == 1.0 {
                             // In gamut, or (a luminosity above 1 has no in-gamut colour) its grey.
-                            assert!((lo >= 0.0 && hi <= 1.0 + E) || hi - lo <= 1e-6 * hi, "{m:?} {cb:?} {cs:?}: {r:?}");
+                            assert!(
+                                (lo >= 0.0 && hi <= 1.0 + E) || hi - lo <= 1e-6 * hi,
+                                "{m:?} {cb:?} {cs:?}: {r:?}"
+                            );
                         } else {
                             assert!(lo >= -1e-6 * hi.max(1.0), "{m:?} {cb:?} {cs:?}: {r:?}");
                         }
@@ -771,7 +916,10 @@ mod tests {
             for cs in colors {
                 for m in [BlendMode::Hue, BlendMode::Saturation] {
                     let r = blend_rgb_within(m, grey, cs, f32::MAX);
-                    assert!(r.iter().all(|&v| (v - lum(grey)).abs() <= 1e-5 * g), "{m:?} {g} {cs:?}: {r:?}");
+                    assert!(
+                        r.iter().all(|&v| (v - lum(grey)).abs() <= 1e-5 * g),
+                        "{m:?} {g} {cs:?}: {r:?}"
+                    );
                 }
             }
             let r = blend_rgb_within(BlendMode::Luminosity, [0.5, 0.25, 0.125], grey, f32::MAX);
@@ -780,13 +928,19 @@ mod tests {
             assert!(r[0] > 1.0 && r[0] > r[1] && r[1] > r[2], "{g}: {r:?}");
             // Integer documents: no colour of that luminosity fits in 0..1, so it is its grey.
             let r = blend_rgb_within(BlendMode::Luminosity, [0.5, 0.25, 0.125], grey, 1.0);
-            assert!(r.iter().all(|&v| (v - lum(grey)).abs() <= 1e-5 * g), "{g}: {r:?}");
+            assert!(
+                r.iter().all(|&v| (v - lum(grey)).abs() <= 1e-5 * g),
+                "{g}: {r:?}"
+            );
         }
         // Continuous across near-greys: the result barely moves from the grey's.
         for m in NON_SEPARABLE {
             let a = blend_rgb_within(m, [2.0, 2.0, 2.0], [4.0, 4.0, 4.0], f32::MAX);
             let b = blend_rgb_within(m, [2.0, 2.0, 1.999_999], [4.0, 3.999_999, 4.0], f32::MAX);
-            assert!(a.iter().zip(b).all(|(x, y)| (x - y).abs() <= 1e-4), "{m:?}: {a:?} {b:?}");
+            assert!(
+                a.iter().zip(b).all(|(x, y)| (x - y).abs() <= 1e-4),
+                "{m:?}: {a:?} {b:?}"
+            );
         }
     }
 
@@ -794,15 +948,24 @@ mod tests {
     fn darker_lighter_color_pick_whole_pixel() {
         let a = [0.9, 0.1, 0.1];
         let b = [0.2, 0.6, 0.2];
-        assert_eq!(blend_rgb(BlendMode::DarkerColor, a, b), if lum(b) < lum(a) { b } else { a });
-        assert_eq!(blend_rgb(BlendMode::LighterColor, a, b), if lum(b) > lum(a) { b } else { a });
+        assert_eq!(
+            blend_rgb(BlendMode::DarkerColor, a, b),
+            if lum(b) < lum(a) { b } else { a }
+        );
+        assert_eq!(
+            blend_rgb(BlendMode::LighterColor, a, b),
+            if lum(b) > lum(a) { b } else { a }
+        );
     }
 
     #[test]
     fn composite_alpha_rules() {
         let bg = [0.2, 0.4, 0.6, 1.0];
         // Transparent source leaves backdrop.
-        assert_eq!(composite(BlendMode::Multiply, bg, [1.0, 0.0, 0.0, 0.0], 1.0), bg);
+        assert_eq!(
+            composite(BlendMode::Multiply, bg, [1.0, 0.0, 0.0, 0.0], 1.0),
+            bg
+        );
         // Opaque normal source replaces.
         let r = composite(BlendMode::Normal, bg, [1.0, 0.0, 0.0, 1.0], 1.0);
         assert!(close(r[0], 1.0) && close(r[3], 1.0));
@@ -813,7 +976,12 @@ mod tests {
         let r = composite(BlendMode::Multiply, [0.0; 4], [0.3, 0.5, 0.7, 1.0], 1.0);
         assert!(close(r[0], 0.3) && close(r[1], 0.5) && close(r[2], 0.7) && close(r[3], 1.0));
         // Alpha accumulates.
-        let r = composite(BlendMode::Screen, [0.0, 0.0, 0.0, 0.5], [0.0, 0.0, 0.0, 0.5], 1.0);
+        let r = composite(
+            BlendMode::Screen,
+            [0.0, 0.0, 0.0, 0.5],
+            [0.0, 0.0, 0.0, 0.5],
+            1.0,
+        );
         assert!(close(r[3], 0.75));
     }
 }

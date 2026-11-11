@@ -38,21 +38,36 @@ struct Tiff<'a> {
 impl Tiff<'_> {
     fn u16(&self, o: usize) -> Option<u16> {
         let s = self.b.get(o..o.checked_add(2)?)?;
-        Some(if self.le { u16::from_le_bytes([s[0], s[1]]) } else { u16::from_be_bytes([s[0], s[1]]) })
+        Some(if self.le {
+            u16::from_le_bytes([s[0], s[1]])
+        } else {
+            u16::from_be_bytes([s[0], s[1]])
+        })
     }
     fn u32(&self, o: usize) -> Option<u32> {
         let s = self.b.get(o..o.checked_add(4)?)?;
         let a = [s[0], s[1], s[2], s[3]];
-        Some(if self.le { u32::from_le_bytes(a) } else { u32::from_be_bytes(a) })
+        Some(if self.le {
+            u32::from_le_bytes(a)
+        } else {
+            u32::from_be_bytes(a)
+        })
     }
     /// Entries of the IFD at `off`: (tag, type, count, value offset field position).
     fn ifd(&self, off: usize) -> Vec<(u16, u16, u32, usize)> {
-        let Some(n) = self.u16(off) else { return Vec::new() };
+        let Some(n) = self.u16(off) else {
+            return Vec::new();
+        };
         (0..n as usize)
             .filter_map(|k| {
                 // Checked: offsets come from the file, and usize is 32 bits on wasm.
                 let e = off.checked_add(2)?.checked_add(k * 12)?;
-                Some((self.u16(e)?, self.u16(e.checked_add(2)?)?, self.u32(e.checked_add(4)?)?, e.checked_add(8)?))
+                Some((
+                    self.u16(e)?,
+                    self.u16(e.checked_add(2)?)?,
+                    self.u32(e.checked_add(4)?)?,
+                    e.checked_add(8)?,
+                ))
             })
             .collect()
     }
@@ -65,7 +80,11 @@ impl Tiff<'_> {
             _ => return None,
         }
         .checked_mul(usize::try_from(count).ok()?)?;
-        let at = if size <= 4 { field } else { usize::try_from(self.u32(field)?).ok()? };
+        let at = if size <= 4 {
+            field
+        } else {
+            usize::try_from(self.u32(field)?).ok()?
+        };
         // The whole value must lie inside the payload, not just its first element.
         self.b.get(at..at.checked_add(size)?)?;
         Some(at)
@@ -91,8 +110,13 @@ impl Tiff<'_> {
             return None;
         }
         let at = self.data_at(typ, count, field)?;
-        let s = self.b.get(at..at.checked_add(usize::try_from(count).ok()?)?)?;
-        let s = String::from_utf8_lossy(s).trim_end_matches('\0').trim().to_string();
+        let s = self
+            .b
+            .get(at..at.checked_add(usize::try_from(count).ok()?)?)?;
+        let s = String::from_utf8_lossy(s)
+            .trim_end_matches('\0')
+            .trim()
+            .to_string();
         (!s.is_empty()).then_some(s)
     }
 }
@@ -189,31 +213,32 @@ pub fn build(info: &CameraInfo) -> Vec<u8> {
     let mut out = b"II*\0".to_vec();
     out.extend_from_slice(&(ifd0_off as u32).to_le_bytes());
     let mut data = Vec::new();
-    let mut write_ifd = |out: &mut Vec<u8>, entries: &[(u16, u16, u32, Vec<u8>)], extra: Option<u32>| {
-        let n = entries.len() + usize::from(extra.is_some());
-        out.extend_from_slice(&(n as u16).to_le_bytes());
-        for (tag, typ, count, bytes) in entries {
-            out.extend_from_slice(&tag.to_le_bytes());
-            out.extend_from_slice(&typ.to_le_bytes());
-            out.extend_from_slice(&count.to_le_bytes());
-            if bytes.len() <= 4 {
-                let mut f = bytes.clone();
-                f.resize(4, 0);
-                out.extend_from_slice(&f);
-            } else {
-                out.extend_from_slice(&(data_off as u32).to_le_bytes());
-                data.extend_from_slice(bytes);
-                data_off += bytes.len();
+    let mut write_ifd =
+        |out: &mut Vec<u8>, entries: &[(u16, u16, u32, Vec<u8>)], extra: Option<u32>| {
+            let n = entries.len() + usize::from(extra.is_some());
+            out.extend_from_slice(&(n as u16).to_le_bytes());
+            for (tag, typ, count, bytes) in entries {
+                out.extend_from_slice(&tag.to_le_bytes());
+                out.extend_from_slice(&typ.to_le_bytes());
+                out.extend_from_slice(&count.to_le_bytes());
+                if bytes.len() <= 4 {
+                    let mut f = bytes.clone();
+                    f.resize(4, 0);
+                    out.extend_from_slice(&f);
+                } else {
+                    out.extend_from_slice(&(data_off as u32).to_le_bytes());
+                    data.extend_from_slice(bytes);
+                    data_off += bytes.len();
+                }
             }
-        }
-        if let Some(p) = extra {
-            out.extend_from_slice(&0x8769u16.to_le_bytes());
-            out.extend_from_slice(&4u16.to_le_bytes());
-            out.extend_from_slice(&1u32.to_le_bytes());
-            out.extend_from_slice(&p.to_le_bytes());
-        }
-        out.extend_from_slice(&0u32.to_le_bytes());
-    };
+            if let Some(p) = extra {
+                out.extend_from_slice(&0x8769u16.to_le_bytes());
+                out.extend_from_slice(&4u16.to_le_bytes());
+                out.extend_from_slice(&1u32.to_le_bytes());
+                out.extend_from_slice(&p.to_le_bytes());
+            }
+            out.extend_from_slice(&0u32.to_le_bytes());
+        };
     write_ifd(&mut out, &ifd0, Some(exif_off as u32));
     write_ifd(&mut out, &exif, None);
     out.extend_from_slice(&data);
@@ -292,8 +317,12 @@ mod tests {
             }
             let _ = read(&n);
         }
-        let good =
-            build(&CameraInfo { make: Some("Make".into()), date_taken: Some("2024:02:17 12:40:19".into()), exposure_time: Some(0.004), ..Default::default() });
+        let good = build(&CameraInfo {
+            make: Some("Make".into()),
+            date_taken: Some("2024:02:17 12:40:19".into()),
+            exposure_time: Some(0.004),
+            ..Default::default()
+        });
         for cut in 0..good.len() {
             let _ = read(&good[..cut]);
         }

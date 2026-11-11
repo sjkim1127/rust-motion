@@ -10,9 +10,7 @@ use rust_motion_rasterizer::genai_orchestrator::{
     apply_video_style_transfer, DistributedWorkerCluster, GaussianSplatCloud, GenAiPromptSpec,
     GenAiProviderModel, GpuWorkerNode, TimelinePrefetchScheduler,
 };
-use rust_motion_rasterizer::math_typeset::{
-    parse_math_tex, typeset_math, MathPartStyle,
-};
+use rust_motion_rasterizer::math_typeset::{parse_math_tex, typeset_math, MathPartStyle};
 use rust_motion_rasterizer::play_wait_schedule::{
     LinkedMediaStrip, MediaStreamKind, ObjectAnimation, SceneDirector,
 };

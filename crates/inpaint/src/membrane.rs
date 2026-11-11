@@ -23,7 +23,14 @@ pub(crate) fn solve_membrane(w: usize, h: usize, unknown: &[bool], v: &mut [f32]
     solve_rec(w, h, unknown, v, 0, &|| false);
 }
 
-fn solve_rec(w: usize, h: usize, unknown: &[bool], v: &mut [f32], depth: usize, stop: &(dyn Fn() -> bool + Sync)) {
+fn solve_rec(
+    w: usize,
+    h: usize,
+    unknown: &[bool],
+    v: &mut [f32],
+    depth: usize,
+    stop: &(dyn Fn() -> bool + Sync),
+) {
     if stop() {
         return;
     }
@@ -31,7 +38,12 @@ fn solve_rec(w: usize, h: usize, unknown: &[bool], v: &mut [f32], depth: usize, 
     if n_unknown == 0 {
         return;
     }
-    let known: Vec<f32> = v.iter().zip(unknown).filter(|(_, u)| !**u).map(|(x, _)| *x).collect();
+    let known: Vec<f32> = v
+        .iter()
+        .zip(unknown)
+        .filter(|(_, u)| !**u)
+        .map(|(x, _)| *x)
+        .collect();
     if known.is_empty() {
         return; // nothing to interpolate from
     }
@@ -89,13 +101,24 @@ fn solve_rec(w: usize, h: usize, unknown: &[bool], v: &mut [f32], depth: usize, 
 }
 
 /// SOR sweeps over the unknown pixels until the largest update drops below [`TOL`].
-fn sor(w: usize, h: usize, unknown: &[bool], v: &mut [f32], max_iter: usize, omega: f32, stop: &(dyn Fn() -> bool + Sync)) {
+fn sor(
+    w: usize,
+    h: usize,
+    unknown: &[bool],
+    v: &mut [f32],
+    max_iter: usize,
+    omega: f32,
+    stop: &(dyn Fn() -> bool + Sync),
+) {
     // Precompute the unknown pixels and which neighbours exist.
     let cells: Vec<(u32, u8)> = (0..w * h)
         .filter(|&i| unknown[i])
         .map(|i| {
             let (x, y) = (i % w, i / w);
-            let m = u8::from(x > 0) | (u8::from(x + 1 < w) << 1) | (u8::from(y > 0) << 2) | (u8::from(y + 1 < h) << 3);
+            let m = u8::from(x > 0)
+                | (u8::from(x + 1 < w) << 1)
+                | (u8::from(y > 0) << 2)
+                | (u8::from(y + 1 < h) << 3);
             (i as u32, m)
         })
         .collect();
@@ -143,7 +166,12 @@ fn sor(w: usize, h: usize, unknown: &[bool], v: &mut [f32], max_iter: usize, ome
 }
 
 /// Map `f` over the channels of an interleaved buffer as planar slices (parallel on native).
-fn per_channel(w: usize, h: usize, ch: usize, f: impl Fn(usize) -> Vec<f32> + Sync + Send) -> Vec<f32> {
+fn per_channel(
+    w: usize,
+    h: usize,
+    ch: usize,
+    f: impl Fn(usize) -> Vec<f32> + Sync + Send,
+) -> Vec<f32> {
     #[cfg(not(target_arch = "wasm32"))]
     let planes: Vec<Vec<f32>> = if w * h >= 64 * 64 {
         use rayon::prelude::*;
@@ -170,7 +198,9 @@ pub fn membrane_fill(w: usize, h: usize, ch: usize, img: &[f32], hole: &[bool]) 
         return img.to_vec();
     }
     per_channel(w, h, ch, |c| {
-        let mut v: Vec<f32> = (0..w * h).map(|i| if hole[i] { 0.0 } else { img[i * ch + c] }).collect();
+        let mut v: Vec<f32> = (0..w * h)
+            .map(|i| if hole[i] { 0.0 } else { img[i * ch + c] })
+            .collect();
         solve_membrane(w, h, hole, &mut v);
         v
     })
@@ -180,7 +210,9 @@ mod tests {
     use super::*;
 
     fn disc(w: usize, h: usize, cx: f32, cy: f32, r: f32) -> Vec<bool> {
-        (0..w * h).map(|i| ((i % w) as f32 - cx).hypot((i / w) as f32 - cy) < r).collect()
+        (0..w * h)
+            .map(|i| ((i % w) as f32 - cx).hypot((i / w) as f32 - cy) < r)
+            .collect()
     }
 
     #[test]
@@ -188,10 +220,20 @@ mod tests {
         // A linear function is harmonic: the solve must reproduce it exactly inside the hole.
         let (w, h) = (80, 60);
         let unknown = disc(w, h, 40.0, 30.0, 20.0);
-        let truth: Vec<f32> = (0..w * h).map(|i| 0.2 + 0.005 * (i % w) as f32 + 0.003 * (i / w) as f32).collect();
-        let mut v: Vec<f32> = truth.iter().zip(&unknown).map(|(t, u)| if *u { 0.0 } else { *t }).collect();
+        let truth: Vec<f32> = (0..w * h)
+            .map(|i| 0.2 + 0.005 * (i % w) as f32 + 0.003 * (i / w) as f32)
+            .collect();
+        let mut v: Vec<f32> = truth
+            .iter()
+            .zip(&unknown)
+            .map(|(t, u)| if *u { 0.0 } else { *t })
+            .collect();
         solve_membrane(w, h, &unknown, &mut v);
-        let err = v.iter().zip(&truth).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
+        let err = v
+            .iter()
+            .zip(&truth)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0, f32::max);
         assert!(err < 2e-3, "{err}");
     }
 }

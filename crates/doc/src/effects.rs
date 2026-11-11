@@ -101,7 +101,11 @@ pub struct FxCommon {
 
 impl FxCommon {
     pub fn new(blend: BlendMode, opacity: f32) -> Self {
-        FxCommon { enabled: true, blend, opacity }
+        FxCommon {
+            enabled: true,
+            blend,
+            opacity,
+        }
     }
 }
 
@@ -236,7 +240,11 @@ pub struct BevelContour {
 
 impl Default for BevelContour {
     fn default() -> Self {
-        BevelContour { contour: Contour::Linear, range: 0.5, anti_alias: false }
+        BevelContour {
+            contour: Contour::Linear,
+            range: 0.5,
+            anti_alias: false,
+        }
     }
 }
 
@@ -307,7 +315,9 @@ impl Effect {
             Effect::OuterGlow(g) | Effect::InnerGlow(g) => paint(&mut g.paint),
             Effect::Stroke(s) => paint(&mut s.paint),
             Effect::ColorOverlay { color, .. } => cc(color),
-            Effect::GradientOverlay { gradient, .. } => gradient.stops.iter_mut().for_each(|s| cc(&mut s.1)),
+            Effect::GradientOverlay { gradient, .. } => {
+                gradient.stops.iter_mut().for_each(|s| cc(&mut s.1))
+            }
             Effect::Satin(s) => cc(&mut s.color),
             Effect::BevelEmboss(b) => {
                 cc(&mut b.highlight_color);
@@ -324,7 +334,9 @@ impl Effect {
             Effect::DropShadow(s) | Effect::InnerShadow(s) => s.common.enabled,
             Effect::OuterGlow(g) | Effect::InnerGlow(g) => g.common.enabled,
             Effect::Stroke(s) => s.common.enabled,
-            Effect::ColorOverlay { common, .. } | Effect::GradientOverlay { common, .. } | Effect::PatternOverlay { common, .. } => common.enabled,
+            Effect::ColorOverlay { common, .. }
+            | Effect::GradientOverlay { common, .. }
+            | Effect::PatternOverlay { common, .. } => common.enabled,
             Effect::Satin(s) => s.common.enabled,
             Effect::BevelEmboss(b) => b.enabled,
         }
@@ -336,7 +348,9 @@ impl Effect {
             Effect::DropShadow(s) | Effect::InnerShadow(s) => s.common.enabled = on,
             Effect::OuterGlow(g) | Effect::InnerGlow(g) => g.common.enabled = on,
             Effect::Stroke(s) => s.common.enabled = on,
-            Effect::ColorOverlay { common, .. } | Effect::GradientOverlay { common, .. } | Effect::PatternOverlay { common, .. } => common.enabled = on,
+            Effect::ColorOverlay { common, .. }
+            | Effect::GradientOverlay { common, .. }
+            | Effect::PatternOverlay { common, .. } => common.enabled = on,
             Effect::Satin(s) => s.common.enabled = on,
             Effect::BevelEmboss(b) => b.enabled = on,
         }
@@ -390,6 +404,9 @@ pub struct GlobalLight {
 
 impl Default for GlobalLight {
     fn default() -> Self {
-        GlobalLight { angle: 120.0, altitude: 30.0 }
+        GlobalLight {
+            angle: 120.0,
+            altitude: 30.0,
+        }
     }
 }

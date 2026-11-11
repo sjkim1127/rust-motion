@@ -18,7 +18,13 @@ pub struct Plane {
 impl Plane {
     pub fn new(w: usize, h: usize, pad: usize) -> Self {
         let stride = w + 2 * pad;
-        Plane { data: vec![0; stride * (h + 2 * pad)], stride, w, h, pad }
+        Plane {
+            data: vec![0; stride * (h + 2 * pad)],
+            stride,
+            w,
+            h,
+            pad,
+        }
     }
     #[inline]
     pub fn idx(&self, x: isize, y: isize) -> usize {
@@ -38,7 +44,8 @@ impl Plane {
         let last = (pad + h - 1) * stride;
         for y in 0..pad {
             self.data.copy_within(first..first + stride, y * stride);
-            self.data.copy_within(last..last + stride, (pad + h + y) * stride);
+            self.data
+                .copy_within(last..last + stride, (pad + h + y) * stride);
         }
     }
     /// Copy the picture area out as a tightly packed plane of `cw x ch` (cropping).
@@ -60,7 +67,11 @@ pub struct Frame {
 
 impl Frame {
     pub fn new(w: usize, h: usize) -> Self {
-        Frame { y: Plane::new(w, h, LUMA_PAD), u: Plane::new(w / 2, h / 2, CHROMA_PAD), v: Plane::new(w / 2, h / 2, CHROMA_PAD) }
+        Frame {
+            y: Plane::new(w, h, LUMA_PAD),
+            u: Plane::new(w / 2, h / 2, CHROMA_PAD),
+            v: Plane::new(w / 2, h / 2, CHROMA_PAD),
+        }
     }
     pub fn extend_edges(&mut self) {
         self.y.extend_edges();
@@ -87,10 +98,18 @@ fn clip8(v: i32) -> u8 {
 /// Compute the H, V and centre half-sample planes over the whole padded area (clamped at the buffer edge,
 /// which equals the normative picture-edge clamping because the padding is replicated).
 pub fn build_hpel(f: &Plane, reuse: Option<[Plane; 3]>) -> [Plane; 3] {
-    let [mut hp, mut vp, mut cp] = reuse.filter(|r| r[0].data.len() == f.data.len()).unwrap_or_else(|| {
-        let mk = || Plane { data: vec![0; f.data.len()], stride: f.stride, w: f.w, h: f.h, pad: f.pad };
-        [mk(), mk(), mk()]
-    });
+    let [mut hp, mut vp, mut cp] = reuse
+        .filter(|r| r[0].data.len() == f.data.len())
+        .unwrap_or_else(|| {
+            let mk = || Plane {
+                data: vec![0; f.data.len()],
+                stride: f.stride,
+                w: f.w,
+                h: f.h,
+                pad: f.pad,
+            };
+            [mk(), mk(), mk()]
+        });
     let rows = f.data.len() / f.stride;
     let band = 16usize;
     let work = |b: usize, hrows: &mut [u8], vrows: &mut [u8], crows: &mut [u8]| {
@@ -111,7 +130,13 @@ pub fn build_hpel(f: &Plane, reuse: Option<[Plane; 3]>) -> [Plane; 3] {
     }
     #[cfg(not(feature = "threads"))]
     {
-        for (b, ((h, v), c)) in hp.data.chunks_mut(chunk).zip(vp.data.chunks_mut(chunk)).zip(cp.data.chunks_mut(chunk)).enumerate() {
+        for (b, ((h, v), c)) in hp
+            .data
+            .chunks_mut(chunk)
+            .zip(vp.data.chunks_mut(chunk))
+            .zip(cp.data.chunks_mut(chunk))
+            .enumerate()
+        {
             work(b, h, v, c);
         }
     }
@@ -138,7 +163,8 @@ fn hpel_rows(f: &Plane, r0: usize, r1: usize, hout: &mut [u8], vout: &mut [u8], 
         let o = &mut hs[k * stride..k * stride + stride];
         for x in 0..stride {
             let e = &ext[x..x + 6];
-            o[x] = (e[0] as i16 + e[5] as i16) - 5 * (e[1] as i16 + e[4] as i16) + 20 * (e[2] as i16 + e[3] as i16);
+            o[x] = (e[0] as i16 + e[5] as i16) - 5 * (e[1] as i16 + e[4] as i16)
+                + 20 * (e[2] as i16 + e[3] as i16);
         }
     }
     for r in r0..r1 {
@@ -151,14 +177,17 @@ fn hpel_rows(f: &Plane, r0: usize, r1: usize, hout: &mut [u8], vout: &mut [u8], 
         // vertical
         let rr: [usize; 6] = std::array::from_fn(|i| clampr(r as isize - 2 + i as isize) * stride);
         for x in 0..stride {
-            let s = f.data[rr[0] + x] as i32 + f.data[rr[5] + x] as i32 - 5 * (f.data[rr[1] + x] as i32 + f.data[rr[4] + x] as i32)
+            let s = f.data[rr[0] + x] as i32 + f.data[rr[5] + x] as i32
+                - 5 * (f.data[rr[1] + x] as i32 + f.data[rr[4] + x] as i32)
                 + 20 * (f.data[rr[2] + x] as i32 + f.data[rr[3] + x] as i32);
             vout[lo + x] = clip8((s + 16) >> 5);
         }
         // centre from horizontal intermediates
-        let hk: [&[i16]; 6] = std::array::from_fn(|i| &hs[(k - 2 + i) * stride..(k - 1 + i) * stride]);
+        let hk: [&[i16]; 6] =
+            std::array::from_fn(|i| &hs[(k - 2 + i) * stride..(k - 1 + i) * stride]);
         for x in 0..stride {
-            let s = hk[0][x] as i32 + hk[5][x] as i32 - 5 * (hk[1][x] as i32 + hk[4][x] as i32) + 20 * (hk[2][x] as i32 + hk[3][x] as i32);
+            let s = hk[0][x] as i32 + hk[5][x] as i32 - 5 * (hk[1][x] as i32 + hk[4][x] as i32)
+                + 20 * (hk[2][x] as i32 + hk[3][x] as i32);
             cout[lo + x] = clip8((s + 512) >> 10);
         }
     }
@@ -199,7 +228,16 @@ impl RefPic {
     }
 
     /// Luma prediction of a w x h block at picture position (x, y) displaced by `mv` (quarter samples).
-    pub fn mc_luma(&self, x: usize, y: usize, mv: Mv, w: usize, h: usize, out: &mut [u8], ostride: usize) {
+    pub fn mc_luma(
+        &self,
+        x: usize,
+        y: usize,
+        mv: Mv,
+        w: usize,
+        h: usize,
+        out: &mut [u8],
+        ostride: usize,
+    ) {
         let xi = x as isize + (mv.x as isize >> 2);
         let yi = y as isize + (mv.y as isize >> 2);
         let q = ((mv.y & 3) * 4 + (mv.x & 3)) as usize;
@@ -209,7 +247,8 @@ impl RefPic {
         let ia = a.idx(xi + dxa as isize, yi + dya as isize);
         if pa == pb && dxa == dxb && dya == dyb {
             for r in 0..h {
-                out[r * ostride..r * ostride + w].copy_from_slice(&a.data[ia + r * stride..ia + r * stride + w]);
+                out[r * ostride..r * ostride + w]
+                    .copy_from_slice(&a.data[ia + r * stride..ia + r * stride + w]);
             }
         } else {
             let b = self.plane(pb);
@@ -226,7 +265,17 @@ impl RefPic {
     }
 
     /// Chroma prediction (both planes) of a w x h chroma block at chroma position (x, y); mv in luma quarter units.
-    pub fn mc_chroma(&self, x: usize, y: usize, mv: Mv, w: usize, h: usize, out_u: &mut [u8], out_v: &mut [u8], ostride: usize) {
+    pub fn mc_chroma(
+        &self,
+        x: usize,
+        y: usize,
+        mv: Mv,
+        w: usize,
+        h: usize,
+        out_u: &mut [u8],
+        out_v: &mut [u8],
+        ostride: usize,
+    ) {
         let xi = x as isize + (mv.x as isize >> 3);
         let yi = y as isize + (mv.y as isize >> 3);
         let fx = (mv.x & 7) as u32;
@@ -243,7 +292,12 @@ impl RefPic {
                 let b = &p.data[i0 + (r + 1) * s..i0 + (r + 1) * s + w + 1];
                 let o = &mut out[r * ostride..r * ostride + w];
                 for i in 0..w {
-                    o[i] = ((w00 * a[i] as u32 + w01 * a[i + 1] as u32 + w10 * b[i] as u32 + w11 * b[i + 1] as u32 + 32) >> 6) as u8;
+                    o[i] = ((w00 * a[i] as u32
+                        + w01 * a[i + 1] as u32
+                        + w10 * b[i] as u32
+                        + w11 * b[i + 1] as u32
+                        + 32)
+                        >> 6) as u8;
                 }
             }
         }

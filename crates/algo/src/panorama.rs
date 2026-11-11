@@ -35,7 +35,7 @@
 #![allow(clippy::needless_range_loop)] // index loops mirror the maths (pixels × channels)
 
 use crate::features::{self, Descriptor, Model};
-use crate::photo_util::{Normal, Rng, par_map, solve_dense};
+use crate::photo_util::{par_map, solve_dense, Normal, Rng};
 use crate::transform::Homography;
 
 /// Photomerge layouts.
@@ -157,8 +157,12 @@ pub fn fit_motion(motion: Motion, src: &[[f64; 2]], dst: &[[f64; 2]]) -> Option<
                 return None;
             }
             let nf = n as f64;
-            let cs = src.iter().fold([0.0, 0.0], |a, p| [a[0] + p[0] / nf, a[1] + p[1] / nf]);
-            let cd = dst.iter().fold([0.0, 0.0], |a, p| [a[0] + p[0] / nf, a[1] + p[1] / nf]);
+            let cs = src
+                .iter()
+                .fold([0.0, 0.0], |a, p| [a[0] + p[0] / nf, a[1] + p[1] / nf]);
+            let cd = dst
+                .iter()
+                .fold([0.0, 0.0], |a, p| [a[0] + p[0] / nf, a[1] + p[1] / nf]);
             let (mut sxx, mut sxy) = (0.0, 0.0);
             for (s, d) in src.iter().zip(dst) {
                 let (a, b) = ([s[0] - cs[0], s[1] - cs[1]], [d[0] - cd[0], d[1] - cd[1]]);
@@ -167,13 +171,30 @@ pub fn fit_motion(motion: Motion, src: &[[f64; 2]], dst: &[[f64; 2]]) -> Option<
             }
             let th = sxy.atan2(sxx);
             let (s, c) = th.sin_cos();
-            Some(Homography([c, -s, cd[0] - (c * cs[0] - s * cs[1]), s, c, cd[1] - (s * cs[0] + c * cs[1]), 0.0, 0.0, 1.0]))
+            Some(Homography([
+                c,
+                -s,
+                cd[0] - (c * cs[0] - s * cs[1]),
+                s,
+                c,
+                cd[1] - (s * cs[0] + c * cs[1]),
+                0.0,
+                0.0,
+                1.0,
+            ]))
         }
     }
 }
 
 /// RANSAC over [`Motion`] models; returns the refit model and its inlier indices.
-pub fn ransac_motion(motion: Motion, src: &[[f64; 2]], dst: &[[f64; 2]], iters: usize, threshold: f64, seed: u64) -> Option<(Homography, Vec<usize>)> {
+pub fn ransac_motion(
+    motion: Motion,
+    src: &[[f64; 2]],
+    dst: &[[f64; 2]],
+    iters: usize,
+    threshold: f64,
+    seed: u64,
+) -> Option<(Homography, Vec<usize>)> {
     let k = motion.min_points();
     let n = src.len();
     if n < k {
@@ -201,7 +222,9 @@ pub fn ransac_motion(motion: Motion, src: &[[f64; 2]], dst: &[[f64; 2]], iters: 
             }
         }
         let (s, d): (Vec<[f64; 2]>, Vec<[f64; 2]>) = idx.iter().map(|&i| (src[i], dst[i])).unzip();
-        let Some(h) = fit_motion(motion, &s, &d) else { continue };
+        let Some(h) = fit_motion(motion, &s, &d) else {
+            continue;
+        };
         let inl = inliers_of(&h);
         if best.as_ref().is_none_or(|(_, b)| inl.len() > b.len()) {
             best = Some((h, inl));
@@ -214,7 +237,11 @@ pub fn ransac_motion(motion: Motion, src: &[[f64; 2]], dst: &[[f64; 2]], iters: 
     let (s, d): (Vec<[f64; 2]>, Vec<[f64; 2]>) = inl.iter().map(|&i| (src[i], dst[i])).unzip();
     let h2 = fit_motion(motion, &s, &d).unwrap_or(h);
     let inl2 = inliers_of(&h2);
-    Some(if inl2.len() >= inl.len() { (h2, inl2) } else { (h, inl) })
+    Some(if inl2.len() >= inl.len() {
+        (h2, inl2)
+    } else {
+        (h, inl)
+    })
 }
 
 /// Where one image lands in the panorama: image px → (undistort) → projection → 2-D motion.
@@ -325,7 +352,10 @@ impl Placement {
     /// Shifted in the panorama.
     pub fn translated(&self, dx: f64, dy: f64) -> Placement {
         let t = Homography([1.0, 0.0, dx, 0.0, 1.0, dy, 0.0, 0.0, 1.0]);
-        Placement { h: t.mul(&self.h), ..self.clone() }
+        Placement {
+            h: t.mul(&self.h),
+            ..self.clone()
+        }
     }
 
     /// Bounds `[x0, y0, x1, y1]` of a `w × h` image in the panorama (sampled along its edges).
@@ -355,11 +385,22 @@ pub struct ImageFeatures {
 }
 
 /// Detects up to `max` corners of a `w × h` luminance image and describes them.
-pub fn detect(w: usize, h: usize, luma: &[f32], valid: Option<&[bool]>, max: usize) -> ImageFeatures {
+pub fn detect(
+    w: usize,
+    h: usize,
+    luma: &[f32],
+    valid: Option<&[bool]>,
+    max: usize,
+) -> ImageFeatures {
     let min_dist = (w.max(h) as f32 / 70.0).clamp(3.0, 20.0);
     let corners = features::harris(w, h, luma, max, min_dist, valid);
     let desc = features::describe(w, h, luma, &corners, false);
-    ImageFeatures { w, h, points: corners.iter().map(|c| [c.x as f64, c.y as f64]).collect(), desc }
+    ImageFeatures {
+        w,
+        h,
+        points: corners.iter().map(|c| [c.x as f64, c.y as f64]).collect(),
+        desc,
+    }
 }
 
 /// One image for [`detect_many`]: `(w, h, luma, valid)`.
@@ -387,7 +428,9 @@ pub struct PairMatch {
 /// Matches every pair and keeps those that pass RANSAC + the Brown–Lowe verification.
 pub fn match_pairs(feats: &[ImageFeatures]) -> Vec<PairMatch> {
     let n = feats.len();
-    let pairs: Vec<(usize, usize)> = (0..n).flat_map(|a| (a + 1..n).map(move |b| (a, b))).collect();
+    let pairs: Vec<(usize, usize)> = (0..n)
+        .flat_map(|a| (a + 1..n).map(move |b| (a, b)))
+        .collect();
     let out = par_map(pairs.len(), |k| {
         let (a, b) = pairs[k];
         let (fa, fb) = (&feats[a], &feats[b]);
@@ -401,11 +444,24 @@ pub fn match_pairs(feats: &[ImageFeatures]) -> Vec<PairMatch> {
         let src: Vec<[f64; 2]> = m.iter().map(|&(i, _)| fb.points[i]).collect();
         let dst: Vec<[f64; 2]> = m.iter().map(|&(_, j)| fa.points[j]).collect();
         let thr = (fa.w.max(fa.h) as f64 / 300.0).clamp(1.5, 4.0);
-        let (hm, inl) = ransac_motion(Motion::Homography, &src, &dst, 1200, thr, (a * 131 + b) as u64)?;
+        let (hm, inl) = ransac_motion(
+            Motion::Homography,
+            &src,
+            &dst,
+            1200,
+            thr,
+            (a * 131 + b) as u64,
+        )?;
         if (inl.len() as f64) < 8.0 + 0.3 * m.len() as f64 || inl.len() < 10 {
             return None;
         }
-        Some(PairMatch { a, b, pts_a: inl.iter().map(|&i| dst[i]).collect(), pts_b: inl.iter().map(|&i| src[i]).collect(), homography: hm })
+        Some(PairMatch {
+            a,
+            b,
+            pts_a: inl.iter().map(|&i| dst[i]).collect(),
+            pts_b: inl.iter().map(|&i| src[i]).collect(),
+            homography: hm,
+        })
     });
     out.into_iter().flatten().collect()
 }
@@ -426,9 +482,21 @@ pub fn focal_from_homography(h: &Homography, ca: [f64; 2], cb: [f64; 2]) -> Opti
         }
     };
     // Columns of K⁻¹HK orthogonal and of equal norm (focal of b) …
-    let f1 = pick((-(m[0] * m[1] + m[3] * m[4]), m[6] * m[7]), (m[1] * m[1] + m[4] * m[4] - m[0] * m[0] - m[3] * m[3], m[6] * m[6] - m[7] * m[7]));
+    let f1 = pick(
+        (-(m[0] * m[1] + m[3] * m[4]), m[6] * m[7]),
+        (
+            m[1] * m[1] + m[4] * m[4] - m[0] * m[0] - m[3] * m[3],
+            m[6] * m[6] - m[7] * m[7],
+        ),
+    );
     // … rows likewise (focal of a).
-    let f0 = pick((-(m[2] * m[5]), m[0] * m[3] + m[1] * m[4]), (m[5] * m[5] - m[2] * m[2], m[0] * m[0] + m[1] * m[1] - m[3] * m[3] - m[4] * m[4]));
+    let f0 = pick(
+        (-(m[2] * m[5]), m[0] * m[3] + m[1] * m[4]),
+        (
+            m[5] * m[5] - m[2] * m[2],
+            m[0] * m[0] + m[1] * m[1] - m[3] * m[3] - m[4] * m[4],
+        ),
+    );
     match (f0, f1) {
         (Some(a), Some(b)) => Some((a * b).sqrt().sqrt()),
         (Some(a), None) | (None, Some(a)) => Some(a.sqrt()),
@@ -472,11 +540,21 @@ struct PairData {
 }
 
 fn base_placement(f: &ImageFeatures, projection: Projection, focal: f64, k1: f64) -> Placement {
-    Placement { projection, focal, center: [f.w as f64 / 2.0, f.h as f64 / 2.0], k1, h: Homography::IDENTITY }
+    Placement {
+        projection,
+        focal,
+        center: [f.w as f64 / 2.0, f.h as f64 / 2.0],
+        k1,
+        h: Homography::IDENTITY,
+    }
 }
 
 /// Aligns images from their features. `None` when fewer than two images connect.
-pub fn align(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOptions) -> Option<Alignment> {
+pub fn align(
+    feats: &[ImageFeatures],
+    matches: &[PairMatch],
+    opts: &AlignOptions,
+) -> Option<Alignment> {
     let n = feats.len();
     if n < 2 || matches.is_empty() {
         return None;
@@ -486,14 +564,22 @@ pub fn align(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOptions
             .iter()
             .filter_map(|m| {
                 let (fa, fb) = (&feats[m.a], &feats[m.b]);
-                focal_from_homography(&m.homography, [fa.w as f64 / 2.0, fa.h as f64 / 2.0], [fb.w as f64 / 2.0, fb.h as f64 / 2.0])
+                focal_from_homography(
+                    &m.homography,
+                    [fa.w as f64 / 2.0, fa.h as f64 / 2.0],
+                    [fb.w as f64 / 2.0, fb.h as f64 / 2.0],
+                )
             })
             .filter(|f| f.is_finite())
             .collect();
         let side = feats.iter().map(|f| f.w.max(f.h)).max().unwrap_or(1) as f64;
         fs.retain(|f| *f > side * 0.2 && *f < side * 20.0);
         fs.sort_by(f64::total_cmp);
-        if fs.is_empty() { side } else { fs[fs.len() / 2] }
+        if fs.is_empty() {
+            side
+        } else {
+            fs[fs.len() / 2]
+        }
     });
     if opts.layout != Layout::Auto {
         return align_layout(feats, matches, opts, opts.layout, focal);
@@ -502,7 +588,10 @@ pub fn align(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOptions
     // or spherical when the panorama is also tall.
     if let Some(a) = align_layout(feats, matches, opts, Layout::Perspective, focal) {
         if !too_stretched(feats, &a) {
-            return Some(Alignment { layout: Layout::Perspective, ..a });
+            return Some(Alignment {
+                layout: Layout::Perspective,
+                ..a
+            });
         }
     }
     let cyl = align_layout(feats, matches, opts, Layout::Cylindrical, focal)?;
@@ -527,9 +616,15 @@ fn too_stretched(feats: &[ImageFeatures], a: &Alignment) -> bool {
     for (p, f) in a.placements.iter().zip(feats) {
         let Some(p) = p else { continue };
         let (w, h) = (f.w as f64, f.h as f64);
-        let c: Vec<(f64, f64)> = [(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)].iter().map(|&(x, y)| p.forward(x, y)).collect();
+        let c: Vec<(f64, f64)> = [(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)]
+            .iter()
+            .map(|&(x, y)| p.forward(x, y))
+            .collect();
         // Signed area (shoelace); orientation must be preserved.
-        let area: f64 = (0..4).map(|i| c[i].0 * c[(i + 1) % 4].1 - c[(i + 1) % 4].0 * c[i].1).sum::<f64>() / 2.0;
+        let area: f64 = (0..4)
+            .map(|i| c[i].0 * c[(i + 1) % 4].1 - c[(i + 1) % 4].0 * c[i].1)
+            .sum::<f64>()
+            / 2.0;
         let ratio = area / (w * h);
         if !ratio.is_finite() || !(0.3..=3.0).contains(&ratio) {
             return true;
@@ -551,7 +646,13 @@ fn too_stretched(feats: &[ImageFeatures], a: &Alignment) -> bool {
     fov > 110f64.to_radians()
 }
 
-fn align_layout(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOptions, layout: Layout, focal: f64) -> Option<Alignment> {
+fn align_layout(
+    feats: &[ImageFeatures],
+    matches: &[PairMatch],
+    opts: &AlignOptions,
+    layout: Layout,
+    focal: f64,
+) -> Option<Alignment> {
     let n = feats.len();
     let projection = layout.projection();
     let motion = layout.motion();
@@ -559,11 +660,17 @@ fn align_layout(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOpti
     let mut pairs: Vec<PairData> = Vec::new();
     let mut edges: Vec<(usize, usize, usize, Homography)> = Vec::new();
     for m in matches {
-        let (pa, pb) = (base_placement(&feats[m.a], projection, focal, 0.0), base_placement(&feats[m.b], projection, focal, 0.0));
+        let (pa, pb) = (
+            base_placement(&feats[m.a], projection, focal, 0.0),
+            base_placement(&feats[m.b], projection, focal, 0.0),
+        );
         let qa: Vec<[f64; 2]> = m.pts_a.iter().map(|p| pa.project(p[0], p[1])).collect();
         let qb: Vec<[f64; 2]> = m.pts_b.iter().map(|p| pb.project(p[0], p[1])).collect();
         let thr = (feats[m.a].w.max(feats[m.a].h) as f64 / 250.0).clamp(2.0, 5.0);
-        let Some((hm, inl)) = ransac_motion(motion, &qb, &qa, 600, thr, (m.a * 977 + m.b) as u64) else { continue };
+        let Some((hm, inl)) = ransac_motion(motion, &qb, &qa, 600, thr, (m.a * 977 + m.b) as u64)
+        else {
+            continue;
+        };
         if inl.len() < 8 || (inl.len() as f64) < 0.5 * m.pts_a.len() as f64 {
             continue;
         }
@@ -571,7 +678,12 @@ fn align_layout(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOpti
         // Bundle adjustment uses at most 80 evenly spread inliers per pair.
         let step = inl.len().div_ceil(80).max(1);
         let sel: Vec<usize> = inl.iter().step_by(step).copied().collect();
-        pairs.push(PairData { a: m.a, b: m.b, pa: sel.iter().map(|&i| m.pts_a[i]).collect(), pb: sel.iter().map(|&i| m.pts_b[i]).collect() });
+        pairs.push(PairData {
+            a: m.a,
+            b: m.b,
+            pa: sel.iter().map(|&i| m.pts_a[i]).collect(),
+            pb: sel.iter().map(|&i| m.pts_b[i]).collect(),
+        });
     }
     if edges.is_empty() {
         return None;
@@ -583,12 +695,25 @@ fn align_layout(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOpti
     }
     let reference = opts.reference.filter(|r| *r < n).unwrap_or_else(|| {
         // Best connected; ties go to the middle image.
-        (0..n).max_by(|&i, &j| degree[i].cmp(&degree[j]).then_with(|| (j as i64 - n as i64 / 2).abs().cmp(&(i as i64 - n as i64 / 2).abs()))).unwrap_or(0)
+        (0..n)
+            .max_by(|&i, &j| {
+                degree[i].cmp(&degree[j]).then_with(|| {
+                    (j as i64 - n as i64 / 2)
+                        .abs()
+                        .cmp(&(i as i64 - n as i64 / 2).abs())
+                })
+            })
+            .unwrap_or(0)
     });
     // Maximum spanning tree (Prim) from the reference; transforms map projected → panorama.
     let mut tf: Vec<Option<Homography>> = vec![None; n];
-    let rc = [feats[reference].w as f64 / 2.0, feats[reference].h as f64 / 2.0];
-    tf[reference] = Some(Homography([1.0, 0.0, rc[0], 0.0, 1.0, rc[1], 0.0, 0.0, 1.0]));
+    let rc = [
+        feats[reference].w as f64 / 2.0,
+        feats[reference].h as f64 / 2.0,
+    ];
+    tf[reference] = Some(Homography([
+        1.0, 0.0, rc[0], 0.0, 1.0, rc[1], 0.0, 0.0, 1.0,
+    ]));
     loop {
         let mut best: Option<(usize, usize, Homography)> = None;
         for e in &edges {
@@ -616,7 +741,11 @@ fn align_layout(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOpti
     let mp = motion.n_params();
     let refine_focal = projection != Projection::Plane;
     let n_glob = usize::from(opts.geometric) + usize::from(refine_focal);
-    let mut params: Vec<f64> = movable.iter().filter_map(|&i| tf[i].as_ref()).flat_map(|t| motion.to_params(t)).collect();
+    let mut params: Vec<f64> = movable
+        .iter()
+        .filter_map(|&i| tf[i].as_ref())
+        .flat_map(|t| motion.to_params(t))
+        .collect();
     if opts.geometric {
         params.push(0.0);
     }
@@ -625,8 +754,16 @@ fn align_layout(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOpti
     }
     let n_par = params.len();
     let decode = |p: &[f64]| -> Vec<Option<Placement>> {
-        let k1 = if opts.geometric { p[movable.len() * mp] } else { 0.0 };
-        let f = if refine_focal { p[n_par - 1].exp() } else { focal };
+        let k1 = if opts.geometric {
+            p[movable.len() * mp]
+        } else {
+            0.0
+        };
+        let f = if refine_focal {
+            p[n_par - 1].exp()
+        } else {
+            focal
+        };
         (0..n)
             .map(|i| {
                 let h = if i == reference {
@@ -635,7 +772,10 @@ fn align_layout(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOpti
                     let k = movable.iter().position(|&m| m == i)?;
                     motion.to_homography(&p[k * mp..(k + 1) * mp])
                 };
-                Some(Placement { h, ..base_placement(&feats[i], projection, f, k1) })
+                Some(Placement {
+                    h,
+                    ..base_placement(&feats[i], projection, f, k1)
+                })
             })
             .collect()
     };
@@ -643,7 +783,9 @@ fn align_layout(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOpti
         let pl = decode(p);
         let mut r = Vec::new();
         for pd in &pairs {
-            let (Some(a), Some(b)) = (&pl[pd.a], &pl[pd.b]) else { continue };
+            let (Some(a), Some(b)) = (&pl[pd.a], &pl[pd.b]) else {
+                continue;
+            };
             for (qa, qb) in pd.pa.iter().zip(&pd.pb) {
                 let (ua, va) = a.forward(qa[0], qa[1]);
                 let (ub, vb) = b.forward(qb[0], qb[1]);
@@ -715,9 +857,25 @@ fn align_layout(feats: &[ImageFeatures], matches: &[PairMatch], opts: &AlignOpti
     let placements = decode(&params);
     let n_res = pairs.iter().map(|p| p.pa.len()).sum::<usize>().max(1);
     let rms = (cost(&cur[..(cur.len() - n_glob).min(cur.len())]) / n_res as f64).sqrt();
-    let k1 = if opts.geometric { params[movable.len() * mp] } else { 0.0 };
-    let focal = if refine_focal { params[n_par - 1].exp() } else { focal };
-    Some(Alignment { layout, reference, placements, focal, k1, pairs: edges.iter().map(|e| (e.0, e.1, e.2)).collect(), rms })
+    let k1 = if opts.geometric {
+        params[movable.len() * mp]
+    } else {
+        0.0
+    };
+    let focal = if refine_focal {
+        params[n_par - 1].exp()
+    } else {
+        focal
+    };
+    Some(Alignment {
+        layout,
+        reference,
+        placements,
+        focal,
+        k1,
+        pairs: edges.iter().map(|e| (e.0, e.1, e.2)).collect(),
+        rms,
+    })
 }
 
 // ---------- photometric ----------
@@ -739,7 +897,8 @@ pub struct RoiImage {
 impl RoiImage {
     fn at(&self, x: i32, y: i32) -> Option<usize> {
         let (lx, ly) = (x - self.x0, y - self.y0);
-        (lx >= 0 && ly >= 0 && (lx as usize) < self.w && (ly as usize) < self.h).then(|| ly as usize * self.w + lx as usize)
+        (lx >= 0 && ly >= 0 && (lx as usize) < self.w && (ly as usize) < self.h)
+            .then(|| ly as usize * self.w + lx as usize)
     }
 }
 
@@ -765,11 +924,19 @@ impl Photometric {
 /// Estimates exposure gains (`gain`) and a shared vignetting falloff (`vignette`) from the
 /// overlaps of `imgs` (`placements`/`sizes` give each panorama pixel's source radius).
 /// Without `geometry` (placements and source sizes) the vignetting model is not estimated.
-pub fn photometric(imgs: &[RoiImage], geometry: Option<Geometry>, gain: bool, vignette: bool) -> Photometric {
+pub fn photometric(
+    imgs: &[RoiImage],
+    geometry: Option<Geometry>,
+    gain: bool,
+    vignette: bool,
+) -> Photometric {
     let vignette = vignette && geometry.is_some();
     let n = imgs.len();
     let ch = imgs.first().map_or(1, |i| i.ch);
-    let identity = Photometric { gains: vec![vec![1.0; ch]; n], vignette: [0.0, 0.0] };
+    let identity = Photometric {
+        gains: vec![vec![1.0; ch]; n],
+        vignette: [0.0, 0.0],
+    };
     if n == 0 || (!gain && !vignette) {
         return identity;
     }
@@ -781,9 +948,13 @@ pub fn photometric(imgs: &[RoiImage], geometry: Option<Geometry>, gain: bool, vi
         x1 = x1.max(im.x0 + im.w as i32);
         y1 = y1.max(im.y0 + im.h as i32);
     }
-    let step = (((x1 - x0) as i64 * (y1 - y0) as i64 / 40_000).max(1) as f64).sqrt().ceil() as i32;
+    let step = (((x1 - x0) as i64 * (y1 - y0) as i64 / 40_000).max(1) as f64)
+        .sqrt()
+        .ceil() as i32;
     let r2_of = |i: usize, u: i32, v: i32| -> Option<f64> {
-        let Some((placements, sizes)) = geometry else { return Some(0.0) };
+        let Some((placements, sizes)) = geometry else {
+            return Some(0.0);
+        };
         let (sx, sy) = placements[i].inverse(u as f64 + 0.5, v as f64 + 0.5)?;
         let (w, h) = (sizes[i].0 as f64, sizes[i].1 as f64);
         let (dx, dy) = (sx - w / 2.0, sy - h / 2.0);
@@ -795,7 +966,14 @@ pub fn photometric(imgs: &[RoiImage], geometry: Option<Geometry>, gain: bool, vi
     while y < y1 {
         let mut x = x0;
         while x < x1 {
-            let cover: Vec<(usize, usize)> = (0..n).filter_map(|i| imgs[i].at(x, y).filter(|&k| imgs[i].alpha[k] > 0.999).map(|k| (i, k))).collect();
+            let cover: Vec<(usize, usize)> = (0..n)
+                .filter_map(|i| {
+                    imgs[i]
+                        .at(x, y)
+                        .filter(|&k| imgs[i].alpha[k] > 0.999)
+                        .map(|k| (i, k))
+                })
+                .collect();
             for p in 0..cover.len() {
                 for q in p + 1..cover.len() {
                     let ((a, ka), (b, kb)) = (cover[p], cover[q]);
@@ -808,7 +986,9 @@ pub fn photometric(imgs: &[RoiImage], geometry: Option<Geometry>, gain: bool, vi
                     if ca.iter().zip(&cb).any(|(x, y)| (x / y).ln().abs() > 1.0) {
                         continue;
                     }
-                    let (Some(ra), Some(rb)) = (r2_of(a, x, y), r2_of(b, x, y)) else { continue };
+                    let (Some(ra), Some(rb)) = (r2_of(a, x, y), r2_of(b, x, y)) else {
+                        continue;
+                    };
                     samples.push((a, b, ca, cb, ra, rb));
                 }
             }
@@ -854,7 +1034,11 @@ pub fn photometric(imgs: &[RoiImage], geometry: Option<Geometry>, gain: bool, vi
             for (a, b, ca, cb, ra, rb) in &samples {
                 let va = out.vignette[0] * ra + out.vignette[1] * ra * ra;
                 let vb = out.vignette[0] * rb + out.vignette[1] * rb * rb;
-                ne.add(&[(*a, 1.0), (*b, -1.0)], ((ca[c] as f64).ln() - va) - ((cb[c] as f64).ln() - vb), 1.0 / sigma_n);
+                ne.add(
+                    &[(*a, 1.0), (*b, -1.0)],
+                    ((ca[c] as f64).ln() - va) - ((cb[c] as f64).ln() - vb),
+                    1.0 / sigma_n,
+                );
             }
             for i in 0..n {
                 ne.add(&[(i, 1.0)], 0.0, 1.0 / sigma_g);
@@ -874,7 +1058,13 @@ pub fn photometric(imgs: &[RoiImage], geometry: Option<Geometry>, gain: bool, vi
 /// Seam labels on a `w × h` grid (`-1` = no image): images are added in `order`; each new image
 /// takes the part of its overlap with the composite that lies on its side of the cheapest path
 /// through the overlap (cost = colour difference).
-pub fn seam_labels(w: usize, h: usize, luma: &[Vec<f32>], cover: &[Vec<bool>], order: &[usize]) -> Vec<i32> {
+pub fn seam_labels(
+    w: usize,
+    h: usize,
+    luma: &[Vec<f32>],
+    cover: &[Vec<bool>],
+    order: &[usize],
+) -> Vec<i32> {
     let mut label = vec![-1i32; w * h];
     for &img in order {
         let cov = &cover[img];
@@ -952,7 +1142,12 @@ pub fn seam_labels(w: usize, h: usize, luma: &[Vec<f32>], cover: &[Vec<bool>], o
             if seam[line] != usize::MAX {
                 continue;
             }
-            let Some(k) = (0..len).filter(|&k| overlap[idx(line, k)]).min_by(|&a, &b| acc[idx(line, a)].total_cmp(&acc[idx(line, b)])) else { continue };
+            let Some(k) = (0..len)
+                .filter(|&k| overlap[idx(line, k)])
+                .min_by(|&a, &b| acc[idx(line, a)].total_cmp(&acc[idx(line, b)]))
+            else {
+                continue;
+            };
             let (mut l, mut k) = (line, k);
             loop {
                 seam[l] = k;
@@ -1098,7 +1293,13 @@ fn push_pull(w: usize, h: usize, ch: usize, px: &mut [f32], wt: &[f32]) {
 /// Multi-band blend of `imgs` into a `w × h` panorama (origin 0,0) with one weight map per image
 /// over the same grid as its ROI (`weights[i]` has `w_i × h_i` entries). Returns the colour
 /// channels (`ch` per pixel) and the total coverage.
-pub fn multiband(w: usize, h: usize, imgs: &[RoiImage], weights: &[Vec<f32>], levels: usize) -> (Vec<f32>, Vec<f32>) {
+pub fn multiband(
+    w: usize,
+    h: usize,
+    imgs: &[RoiImage],
+    weights: &[Vec<f32>],
+    levels: usize,
+) -> (Vec<f32>, Vec<f32>) {
     let ch = imgs.first().map_or(1, |i| i.ch);
     let levels = levels.max(1);
     let align = 1i32 << (levels - 1);
@@ -1108,7 +1309,10 @@ pub fn multiband(w: usize, h: usize, imgs: &[RoiImage], weights: &[Vec<f32>], le
         let Some(&(pw, ph)) = sizes.last() else { break };
         sizes.push((pw.div_ceil(2), ph.div_ceil(2)));
     }
-    let mut acc: Vec<Vec<f32>> = sizes.iter().map(|&(lw, lh)| vec![0.0; lw * lh * ch]).collect();
+    let mut acc: Vec<Vec<f32>> = sizes
+        .iter()
+        .map(|&(lw, lh)| vec![0.0; lw * lh * ch])
+        .collect();
     let mut wsum: Vec<Vec<f32>> = sizes.iter().map(|&(lw, lh)| vec![0.0; lw * lh]).collect();
     let margin = align * 4;
     // Each image on its ROI grown by a margin and aligned to the coarsest level's grid.
@@ -1134,7 +1338,10 @@ pub fn multiband(w: usize, h: usize, imgs: &[RoiImage], weights: &[Vec<f32>], le
                 px[g * ch..(g + 1) * ch].copy_from_slice(&im.px[i * ch..(i + 1) * ch]);
             }
         }
-        let bin: Vec<f32> = cov.iter().map(|a| if *a > 0.5 { 1.0 } else { 0.0 }).collect();
+        let bin: Vec<f32> = cov
+            .iter()
+            .map(|a| if *a > 0.5 { 1.0 } else { 0.0 })
+            .collect();
         push_pull(gw, gh, ch, &mut px, &bin);
         // Laplacian of the colours, Gaussian of the weights.
         let mut lap: Vec<(usize, usize, Vec<f32>)> = Vec::new();
@@ -1190,13 +1397,19 @@ pub fn multiband(w: usize, h: usize, imgs: &[RoiImage], weights: &[Vec<f32>], le
         for p in 0..pw * ph {
             let k = wsum[l][p];
             for c in 0..ch {
-                acc[l][p * ch + c] = if k > 1e-8 { acc[l][p * ch + c] / k } else { 0.0 };
+                acc[l][p * ch + c] = if k > 1e-8 {
+                    acc[l][p * ch + c] / k
+                } else {
+                    0.0
+                };
             }
         }
     }
     // Collapse.
     // `levels ≥ 1`, so there is always a coarsest level.
-    let Some(mut cur) = acc.pop() else { return (vec![0.0; w * h * ch], vec![0.0; w * h]) };
+    let Some(mut cur) = acc.pop() else {
+        return (vec![0.0; w * h * ch], vec![0.0; w * h]);
+    };
     for l in (0..levels - 1).rev() {
         let (pw, ph) = sizes[l];
         let (sw, sh) = sizes[l + 1];
@@ -1227,7 +1440,9 @@ mod tests {
     /// Smooth random texture: blobs over a gradient (bounded detail so Harris finds corners).
     pub(crate) fn scene(w: usize, h: usize, seed: u64) -> Vec<f32> {
         let mut rng = Rng(seed);
-        let mut img: Vec<f32> = (0..w * h).map(|i| 0.25 + 0.2 * ((i % w) as f32 / w as f32)).collect();
+        let mut img: Vec<f32> = (0..w * h)
+            .map(|i| 0.25 + 0.2 * ((i % w) as f32 / w as f32))
+            .collect();
         for _ in 0..(w * h / 900).max(40) {
             let cx = (rng.next() % w as u64) as f64;
             let cy = (rng.next() % h as u64) as f64;
@@ -1239,7 +1454,11 @@ mod tests {
             for y in y0..y1 {
                 for x in x0..x1 {
                     let (dx, dy) = (x as f64 - cx, y as f64 - cy);
-                    if if sq { dx.abs() < r && dy.abs() < r * 0.6 } else { dx.hypot(dy) < r } {
+                    if if sq {
+                        dx.abs() < r && dy.abs() < r * 0.6
+                    } else {
+                        dx.hypot(dy) < r
+                    } {
                         img[y * w + x] = v;
                     }
                 }
@@ -1252,11 +1471,20 @@ mod tests {
         if x < 0.0 || y < 0.0 || x > (w - 1) as f64 || y > (h - 1) as f64 {
             return None;
         }
-        Some(crate::photo_util::bilinear(img, w, h, 1, 0, x as f32, y as f32))
+        Some(crate::photo_util::bilinear(
+            img, w, h, 1, 0, x as f32, y as f32,
+        ))
     }
 
     /// Crops `tw × th` views of a scene through `map` (view px → scene px).
-    fn view(scene: &[f32], sw: usize, sh: usize, tw: usize, th: usize, map: impl Fn(f64, f64) -> (f64, f64)) -> Vec<f32> {
+    fn view(
+        scene: &[f32],
+        sw: usize,
+        sh: usize,
+        tw: usize,
+        th: usize,
+        map: impl Fn(f64, f64) -> (f64, f64),
+    ) -> Vec<f32> {
         (0..tw * th)
             .map(|i| {
                 let (x, y) = map((i % tw) as f64, (i / tw) as f64);
@@ -1272,19 +1500,38 @@ mod tests {
         let (tw, th) = (260, 220);
         // Three overlapping crops at known offsets.
         let offs = [(20.0, 30.0), (190.0, 40.0), (360.0, 25.0)];
-        let imgs: Vec<Vec<f32>> = offs.iter().map(|&(ox, oy)| view(&sc, sw, sh, tw, th, |x, y| (x + ox, y + oy))).collect();
-        let feats: Vec<ImageFeatures> = imgs.iter().map(|im| detect(tw, th, im, None, 700)).collect();
+        let imgs: Vec<Vec<f32>> = offs
+            .iter()
+            .map(|&(ox, oy)| view(&sc, sw, sh, tw, th, |x, y| (x + ox, y + oy)))
+            .collect();
+        let feats: Vec<ImageFeatures> = imgs
+            .iter()
+            .map(|im| detect(tw, th, im, None, 700))
+            .collect();
         let matches = match_pairs(&feats);
         assert!(matches.len() >= 2, "{}", matches.len());
         for layout in [Layout::Reposition, Layout::Collage, Layout::Perspective] {
-            let a = align(&feats, &matches, &AlignOptions { layout, focal: None, reference: Some(1), geometric: false }).unwrap();
+            let a = align(
+                &feats,
+                &matches,
+                &AlignOptions {
+                    layout,
+                    focal: None,
+                    reference: Some(1),
+                    geometric: false,
+                },
+            )
+            .unwrap();
             assert_eq!(a.reference, 1);
             for (i, p) in a.placements.iter().enumerate() {
                 let p = p.as_ref().unwrap();
                 // A point at image px (50, 60) is scene (50+ox, 60+oy); relative to image 1.
                 let (u, v) = p.forward(50.0, 60.0);
                 let (eu, ev) = (50.0 + offs[i].0 - offs[1].0, 60.0 + offs[i].1 - offs[1].1);
-                assert!((u - eu).abs() < 1.0 && (v - ev).abs() < 1.0, "{layout:?} image {i}: ({u},{v}) vs ({eu},{ev})");
+                assert!(
+                    (u - eu).abs() < 1.0 && (v - ev).abs() < 1.0,
+                    "{layout:?} image {i}: ({u},{v}) vs ({eu},{ev})"
+                );
             }
             assert!(a.rms < 1.0, "{layout:?} rms {}", a.rms);
         }
@@ -1293,13 +1540,28 @@ mod tests {
         let im2 = view(&sc, sw, sh, tw, th, |x, y| hq.apply(x, y));
         let feats2 = vec![feats[0].clone(), detect(tw, th, &im2, None, 700)];
         let m2 = match_pairs(&feats2);
-        let a = align(&feats2, &m2, &AlignOptions { layout: Layout::Perspective, focal: None, reference: Some(0), geometric: false }).unwrap();
+        let a = align(
+            &feats2,
+            &m2,
+            &AlignOptions {
+                layout: Layout::Perspective,
+                focal: None,
+                reference: Some(0),
+                geometric: false,
+            },
+        )
+        .unwrap();
         let p = a.placements[1].as_ref().unwrap();
         // Points inside the overlap (extrapolation beyond it is loosely constrained).
         for (x, y) in [(20.0, 30.0), (70.0, 180.0), (40.0, 100.0)] {
             let (sx, sy) = hq.apply(x, y);
             let (u, v) = p.forward(x, y);
-            assert!((u - (sx - 20.0)).abs() < 1.5 && (v - (sy - 30.0)).abs() < 1.5, "({u},{v}) vs ({},{})", sx - 20.0, sy - 30.0);
+            assert!(
+                (u - (sx - 20.0)).abs() < 1.5 && (v - (sy - 30.0)).abs() < 1.5,
+                "({u},{v}) vs ({},{})",
+                sx - 20.0,
+                sy - 30.0
+            );
         }
     }
 
@@ -1322,12 +1584,31 @@ mod tests {
                 })
             })
             .collect();
-        let feats: Vec<ImageFeatures> = imgs.iter().map(|im| detect(tw, th, im, None, 700)).collect();
+        let feats: Vec<ImageFeatures> = imgs
+            .iter()
+            .map(|im| detect(tw, th, im, None, 700))
+            .collect();
         let matches = match_pairs(&feats);
         assert_eq!(matches.iter().filter(|m| m.b == m.a + 1).count(), 2);
-        let est: Vec<f64> = matches.iter().filter_map(|m| focal_from_homography(&m.homography, [160.0, 120.0], [160.0, 120.0])).collect();
-        assert!(est.iter().any(|e| (e - f).abs() / f < 0.15), "focal estimates {est:?}");
-        let a = align(&feats, &matches, &AlignOptions { layout: Layout::Cylindrical, focal: None, reference: Some(1), geometric: false }).unwrap();
+        let est: Vec<f64> = matches
+            .iter()
+            .filter_map(|m| focal_from_homography(&m.homography, [160.0, 120.0], [160.0, 120.0]))
+            .collect();
+        assert!(
+            est.iter().any(|e| (e - f).abs() / f < 0.15),
+            "focal estimates {est:?}"
+        );
+        let a = align(
+            &feats,
+            &matches,
+            &AlignOptions {
+                layout: Layout::Cylindrical,
+                focal: None,
+                reference: Some(1),
+                geometric: false,
+            },
+        )
+        .unwrap();
         assert!((a.focal - f).abs() / f < 0.1, "focal {}", a.focal);
         let p = a.placements[2].as_ref().unwrap();
         // The centre of the right image sits 25° along the cylinder.
@@ -1344,12 +1625,20 @@ mod tests {
     #[test]
     fn placement_round_trips_all_projections() {
         for projection in [Projection::Plane, Projection::Cylinder, Projection::Sphere] {
-            let p =
-                Placement { projection, focal: 400.0, center: [200.0, 150.0], k1: 0.05, h: Homography([0.98, -0.1, 30.0, 0.1, 0.98, -12.0, 0.0, 0.0, 1.0]) };
+            let p = Placement {
+                projection,
+                focal: 400.0,
+                center: [200.0, 150.0],
+                k1: 0.05,
+                h: Homography([0.98, -0.1, 30.0, 0.1, 0.98, -12.0, 0.0, 0.0, 1.0]),
+            };
             for (x, y) in [(0.0, 0.0), (390.0, 20.0), (123.0, 280.0)] {
                 let (u, v) = p.forward(x, y);
                 let (bx, by) = p.inverse(u, v).unwrap();
-                assert!((bx - x).abs() < 1e-6 && (by - y).abs() < 1e-6, "{projection:?}");
+                assert!(
+                    (bx - x).abs() < 1e-6 && (by - y).abs() < 1e-6,
+                    "{projection:?}"
+                );
             }
             let s = p.scaled(2.0);
             let (u, v) = p.forward(100.0, 50.0);
@@ -1362,7 +1651,8 @@ mod tests {
     fn photometric_recovers_gain_and_vignette() {
         // Two half-overlapping views of a flat-ish scene: the second one 30 % brighter.
         let (w, h) = (200usize, 100usize);
-        let base = |x: i32, y: i32| 0.3 + 0.2 * ((x as f32 * 0.05).sin() * (y as f32 * 0.07).cos()).abs();
+        let base =
+            |x: i32, y: i32| 0.3 + 0.2 * ((x as f32 * 0.05).sin() * (y as f32 * 0.07).cos()).abs();
         let mut imgs = Vec::new();
         let mut pls = Vec::new();
         for (k, (x0, g)) in [(0, 1.0f32), (100, 1.3f32)].into_iter().enumerate() {
@@ -1372,7 +1662,15 @@ mod tests {
                     px.push(base(x + x0, y) * g);
                 }
             }
-            imgs.push(RoiImage { x0, y0: 0, w, h, ch: 1, px, alpha: vec![1.0; w * h] });
+            imgs.push(RoiImage {
+                x0,
+                y0: 0,
+                w,
+                h,
+                ch: 1,
+                px,
+                alpha: vec![1.0; w * h],
+            });
             pls.push(Placement {
                 projection: Projection::Plane,
                 focal: 200.0,
@@ -1396,7 +1694,10 @@ mod tests {
         // "moving object" at x 50..58 that the first doesn't.
         let (w, h) = (120usize, 40usize);
         let mut luma = vec![vec![0.5f32; w * h], vec![0.5f32; w * h]];
-        let cover: Vec<Vec<bool>> = vec![(0..w * h).map(|i| i % w < 80).collect(), (0..w * h).map(|i| i % w >= 40).collect()];
+        let cover: Vec<Vec<bool>> = vec![
+            (0..w * h).map(|i| i % w < 80).collect(),
+            (0..w * h).map(|i| i % w >= 40).collect(),
+        ];
         for y in 0..h {
             for x in 50..58 {
                 luma[1][y * w + x] = 1.0;
@@ -1406,27 +1707,48 @@ mod tests {
         // The object column belongs to image 0 (the seam passes to its right), or entirely to 1.
         for y in 0..h {
             let owner: Vec<i32> = (50..58).map(|x| labels[y * w + x]).collect();
-            assert!(owner.iter().all(|o| *o == owner[0]), "row {y} split the object: {owner:?}");
+            assert!(
+                owner.iter().all(|o| *o == owner[0]),
+                "row {y} split the object: {owner:?}"
+            );
         }
         assert_eq!(labels[5], 0);
         assert_eq!(labels[w - 1], 1);
         // Multi-band blend of two flat images at different levels joins smoothly.
-        let mk = |x0: i32, v: f32| RoiImage { x0, y0: 0, w: 80, h, ch: 1, px: vec![v; 80 * h], alpha: vec![1.0; 80 * h] };
+        let mk = |x0: i32, v: f32| RoiImage {
+            x0,
+            y0: 0,
+            w: 80,
+            h,
+            ch: 1,
+            px: vec![v; 80 * h],
+            alpha: vec![1.0; 80 * h],
+        };
         let imgs = [mk(0, 0.3), mk(40, 0.7)];
         let wts: Vec<Vec<f32>> = (0..2)
             .map(|k| {
                 (0..80 * h)
                     .map(|i| {
                         let x = (i % 80) as i32 + imgs[k].x0;
-                        if (x < 60) == (k == 0) { 1.0 } else { 0.0 }
+                        if (x < 60) == (k == 0) {
+                            1.0
+                        } else {
+                            0.0
+                        }
                     })
                     .collect()
             })
             .collect();
         let (out, cov) = multiband(w, h, &imgs, &wts, 4);
         let row: Vec<f32> = (0..w).map(|x| out[20 * w + x]).collect();
-        assert!((row[2] - 0.3).abs() < 0.02 && (row[w - 3] - 0.7).abs() < 0.02, "{row:?}");
-        let max_jump = row.windows(2).map(|p| (p[1] - p[0]).abs()).fold(0.0f32, f32::max);
+        assert!(
+            (row[2] - 0.3).abs() < 0.02 && (row[w - 3] - 0.7).abs() < 0.02,
+            "{row:?}"
+        );
+        let max_jump = row
+            .windows(2)
+            .map(|p| (p[1] - p[0]).abs())
+            .fold(0.0f32, f32::max);
         assert!(max_jump < 0.1, "max step {max_jump}");
         assert!(cov.iter().all(|c| *c == 1.0));
     }

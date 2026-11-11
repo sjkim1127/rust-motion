@@ -62,7 +62,9 @@ impl WarpStyle {
 
     /// Every style (none, custom, presets).
     pub fn all() -> impl Iterator<Item = WarpStyle> {
-        [WarpStyle::None, WarpStyle::Custom].into_iter().chain(Self::PRESETS)
+        [WarpStyle::None, WarpStyle::Custom]
+            .into_iter()
+            .chain(Self::PRESETS)
     }
 
     /// PSD `warpStyle` enum value (`warpArc`, `warpCustom`, `warpNone`…).
@@ -138,8 +140,13 @@ impl WarpStyle {
 
     /// Parses a short id, a PSD name or a label (case-insensitive, spaces ignored).
     pub fn parse(s: &str) -> Option<WarpStyle> {
-        let k: String = s.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_ascii_lowercase();
-        Self::all().find(|w| w.id().to_ascii_lowercase() == k || w.psd_name().to_ascii_lowercase() == k)
+        let k: String = s
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect::<String>()
+            .to_ascii_lowercase();
+        Self::all()
+            .find(|w| w.id().to_ascii_lowercase() == k || w.psd_name().to_ascii_lowercase() == k)
     }
 
     pub fn is_preset(self) -> bool {
@@ -163,7 +170,14 @@ type Grid = [[[f64; 2]; 4]; 4];
 impl StyleWarp {
     /// Prepares `style` with bend / distortions in percent (-100..100) for `[x0, y0, x1, y1]`.
     /// `None` for non-presets, an all-zero warp or an empty box.
-    pub fn new(style: WarpStyle, bend: f64, h_distort: f64, v_distort: f64, vertical: bool, bounds: [f64; 4]) -> Option<StyleWarp> {
+    pub fn new(
+        style: WarpStyle,
+        bend: f64,
+        h_distort: f64,
+        v_distort: f64,
+        vertical: bool,
+        bounds: [f64; 4],
+    ) -> Option<StyleWarp> {
         if !style.is_preset() {
             return None;
         }
@@ -172,13 +186,23 @@ impl StyleWarp {
         if !(hw > 0.0 && hh > 0.0) {
             return None;
         }
-        let pct = |v: f64| if v.is_finite() { (v / 100.0).clamp(-1.0, 1.0) } else { 0.0 };
+        let pct = |v: f64| {
+            if v.is_finite() {
+                (v / 100.0).clamp(-1.0, 1.0)
+            } else {
+                0.0
+            }
+        };
         let (b, hd, vd) = (pct(bend), pct(h_distort), pct(v_distort));
         if b == 0.0 && hd == 0.0 && vd == 0.0 {
             return None;
         }
         let grid = preset_grid(style, b, hd, vd, vertical, hh / hw);
-        Some(StyleWarp { grid, o: (x0, y0), size: (2.0 * hw, 2.0 * hh) })
+        Some(StyleWarp {
+            grid,
+            o: (x0, y0),
+            size: (2.0 * hw, 2.0 * hh),
+        })
     }
 
     /// Longest segment (px) worth sending through [`StyleWarp::apply`] unsplit.
@@ -202,8 +226,17 @@ impl StyleWarp {
 
     /// The style as one Bezier patch over its box (every preset is one exactly).
     pub fn mesh(&self) -> BezierMesh {
-        let points = self.grid.iter().flatten().map(|p| [self.o.0 + p[0] * self.size.0, self.o.1 + p[1] * self.size.1]).collect();
-        BezierMesh { us: vec![0.0, 1.0], vs: vec![0.0, 1.0], points }
+        let points = self
+            .grid
+            .iter()
+            .flatten()
+            .map(|p| [self.o.0 + p[0] * self.size.0, self.o.1 + p[1] * self.size.1])
+            .collect();
+        BezierMesh {
+            us: vec![0.0, 1.0],
+            vs: vec![0.0, 1.0],
+            points,
+        }
     }
 }
 
@@ -239,15 +272,29 @@ fn arc_grid(b: f64, h: f64) -> Grid {
     let r = 0.5 / (th / 2.0).sin();
     let k = 4.0 / 3.0 * (th / 4.0).tan();
     let s = if up { -1.0 } else { 1.0 };
-    let cy = if up { h + r * (th / 2.0).cos() } else { -r * (th / 2.0).cos() };
+    let cy = if up {
+        h + r * (th / 2.0).cos()
+    } else {
+        -r * (th / 2.0).cos()
+    };
     std::array::from_fn(|j| {
         let v = j as f64 / 3.0;
         let big = r + h * if up { 1.0 - v } else { v };
         let at = |a: f64| [0.5 + big * a.sin(), cy + s * big * a.cos()];
         let tangent = |a: f64| [a.cos(), -s * a.sin()];
-        let (p0, p3, t0, t1) = (at(-th / 2.0), at(th / 2.0), tangent(-th / 2.0), tangent(th / 2.0));
+        let (p0, p3, t0, t1) = (
+            at(-th / 2.0),
+            at(th / 2.0),
+            tangent(-th / 2.0),
+            tangent(th / 2.0),
+        );
         let l = k * big;
-        let pts = [p0, [p0[0] + l * t0[0], p0[1] + l * t0[1]], [p3[0] - l * t1[0], p3[1] - l * t1[1]], p3];
+        let pts = [
+            p0,
+            [p0[0] + l * t0[0], p0[1] + l * t0[1]],
+            [p3[0] - l * t1[0], p3[1] - l * t1[1]],
+            p3,
+        ];
         pts.map(|p| [p[0], p[1] / h])
     })
 }
@@ -256,7 +303,12 @@ fn arc_grid(b: f64, h: f64) -> Grid {
 fn blend_rows(top: [[f64; 2]; 4], bottom: [[f64; 2]; 4]) -> Grid {
     std::array::from_fn(|j| {
         let t = j as f64 / 3.0;
-        std::array::from_fn(|i| [top[i][0] + (bottom[i][0] - top[i][0]) * t, top[i][1] + (bottom[i][1] - top[i][1]) * t])
+        std::array::from_fn(|i| {
+            [
+                top[i][0] + (bottom[i][0] - top[i][0]) * t,
+                top[i][1] + (bottom[i][1] - top[i][1]) * t,
+            ]
+        })
     })
 }
 
@@ -319,14 +371,23 @@ fn preset_grid(style: WarpStyle, b: f64, hd: f64, vd: f64, vertical: bool, aspec
             }
         }
         WarpStyle::Fisheye => {
-            for (j, i, dx, dy) in [(1, 1, -1.0, -1.0), (1, 2, 1.0, -1.0), (2, 1, -1.0, 1.0), (2, 2, 1.0, 1.0)] {
+            for (j, i, dx, dy) in [
+                (1, 1, -1.0, -1.0),
+                (1, 2, 1.0, -1.0),
+                (2, 1, -1.0, 1.0),
+                (2, 2, 1.0, 1.0),
+            ] {
                 g[j][i][0] += dx * 2.0 / 3.0 * b;
                 g[j][i][1] += dy * 2.0 / 3.0 * b;
             }
         }
         // Edge midpoints move out (Inflate) or the sides in (Squeeze) by b/3, the inner points by b/9.
         WarpStyle::Inflate | WarpStyle::Squeeze => {
-            let s = if style == WarpStyle::Inflate { 1.0 } else { -1.0 };
+            let s = if style == WarpStyle::Inflate {
+                1.0
+            } else {
+                -1.0
+            };
             for p in &mut g[0][1..3] {
                 p[1] -= b / 3.0;
             }
@@ -337,7 +398,12 @@ fn preset_grid(style: WarpStyle, b: f64, hd: f64, vd: f64, vertical: bool, aspec
                 row[0][0] -= s * b / 3.0;
                 row[3][0] += s * b / 3.0;
             }
-            for (j, i, dx, dy) in [(1, 1, -1.0, -1.0), (1, 2, 1.0, -1.0), (2, 1, -1.0, 1.0), (2, 2, 1.0, 1.0)] {
+            for (j, i, dx, dy) in [
+                (1, 1, -1.0, -1.0),
+                (1, 2, 1.0, -1.0),
+                (2, 1, -1.0, 1.0),
+                (2, 2, 1.0, 1.0),
+            ] {
                 g[j][i][0] += s * dx * b / 9.0;
                 g[j][i][1] += dy * b / 9.0;
             }
@@ -364,7 +430,12 @@ fn preset_grid(style: WarpStyle, b: f64, hd: f64, vd: f64, vertical: bool, aspec
     if vd != 0.0 {
         let moved = |row: [[f64; 2]; 4], s: f64| -> [[f64; 2]; 4] {
             let m = [(row[0][0] + row[3][0]) / 2.0, (row[0][1] + row[3][1]) / 2.0];
-            std::array::from_fn(|i| [m[0] + (row[i][0] - m[0]) * s - row[i][0], m[1] + (row[i][1] - m[1]) * s - row[i][1]])
+            std::array::from_fn(|i| {
+                [
+                    m[0] + (row[i][0] - m[0]) * s - row[i][0],
+                    m[1] + (row[i][1] - m[1]) * s - row[i][1],
+                ]
+            })
         };
         let (d0, d3) = (moved(g[0], 1.0 - vd), moved(g[3], 1.0 + vd));
         for (j, row) in g.iter_mut().enumerate() {
@@ -379,7 +450,10 @@ fn preset_grid(style: WarpStyle, b: f64, hd: f64, vd: f64, vertical: bool, aspec
     if hd != 0.0 {
         for i in 0..4 {
             let s = 1.0 + hd * (2.0 * i as f64 / 3.0 - 1.0);
-            let m = [(g[0][i][0] + g[3][i][0]) / 2.0, (g[0][i][1] + g[3][i][1]) / 2.0];
+            let m = [
+                (g[0][i][0] + g[3][i][0]) / 2.0,
+                (g[0][i][1] + g[3][i][1]) / 2.0,
+            ];
             for row in &mut g {
                 row[i] = [m[0] + (row[i][0] - m[0]) * s, m[1] + (row[i][1] - m[1]) * s];
             }
@@ -414,7 +488,12 @@ fn split_cubic(p: [[f64; 2]; 4], t: f64) -> [[f64; 2]; 7] {
 
 /// Inverse of the Bernstein interpolation matrix at t = 0, 1/3, 2/3, 1 (rows: control point,
 /// columns: sample). Exact rational values.
-const BERN_INV: [[f64; 4]; 4] = [[1.0, 0.0, 0.0, 0.0], [-5.0 / 6.0, 3.0, -1.5, 1.0 / 3.0], [1.0 / 3.0, -1.5, 3.0, -5.0 / 6.0], [0.0, 0.0, 0.0, 1.0]];
+const BERN_INV: [[f64; 4]; 4] = [
+    [1.0, 0.0, 0.0, 0.0],
+    [-5.0 / 6.0, 3.0, -1.5, 1.0 / 3.0],
+    [1.0 / 3.0, -1.5, 3.0, -5.0 / 6.0],
+    [0.0, 0.0, 0.0, 1.0],
+];
 
 /// A grid of bicubic Bezier patches over the unit square of a source box.
 ///
@@ -435,7 +514,16 @@ impl BezierMesh {
         let (cols, rows) = (cols.clamp(1, 64), rows.clamp(1, 64));
         let us: Vec<f64> = (0..=cols).map(|i| i as f64 / cols as f64).collect();
         let vs: Vec<f64> = (0..=rows).map(|i| i as f64 / rows as f64).collect();
-        Self::fit(&|s, t| [bounds[0] + s * (bounds[2] - bounds[0]), bounds[1] + t * (bounds[3] - bounds[1])], us, vs)
+        Self::fit(
+            &|s, t| {
+                [
+                    bounds[0] + s * (bounds[2] - bounds[0]),
+                    bounds[1] + t * (bounds[3] - bounds[1]),
+                ]
+            },
+            us,
+            vs,
+        )
     }
 
     /// Fits a mesh with patch boundaries `us`/`vs` to the map `f` (normalised → output) by
@@ -486,11 +574,19 @@ impl BezierMesh {
 
     /// Checks the invariants (knots and point count); malformed data from files is rejected.
     pub fn is_valid(&self) -> bool {
-        let knots_ok = |k: &[f64]| k.len() >= 2 && k[0] == 0.0 && k[k.len() - 1] == 1.0 && k.windows(2).all(|w| w[1] > w[0]);
+        let knots_ok = |k: &[f64]| {
+            k.len() >= 2
+                && k[0] == 0.0
+                && k[k.len() - 1] == 1.0
+                && k.windows(2).all(|w| w[1] > w[0])
+        };
         knots_ok(&self.us)
             && knots_ok(&self.vs)
             && self.points.len() == self.nx() * self.ny()
-            && self.points.iter().all(|p| p[0].is_finite() && p[1].is_finite())
+            && self
+                .points
+                .iter()
+                .all(|p| p[0].is_finite() && p[1].is_finite())
     }
 
     fn locate(knots: &[f64], s: f64) -> (usize, f64) {
@@ -534,7 +630,12 @@ impl BezierMesh {
         for j in 0..ny {
             let row = &self.points[j * nx..(j + 1) * nx];
             pts.extend_from_slice(&row[..3 * pi]);
-            let seg = [row[3 * pi], row[3 * pi + 1], row[3 * pi + 2], row[3 * pi + 3]];
+            let seg = [
+                row[3 * pi],
+                row[3 * pi + 1],
+                row[3 * pi + 2],
+                row[3 * pi + 3],
+            ];
             pts.extend_from_slice(&split_cubic(seg, a));
             pts.extend_from_slice(&row[3 * pi + 4..]);
         }
@@ -566,8 +667,14 @@ impl BezierMesh {
             let row = &self.points[j * nx..(j + 1) * nx];
             let (p0, q1, r2, p3) = (row[c0], row[c0 + 1], row[c0 + 5], row[c0 + 6]);
             // De Casteljau inverse: q1 = lerp(p0, p1, a), r2 = lerp(p2, p3, a).
-            let p1 = [(q1[0] - (1.0 - a) * p0[0]) / a, (q1[1] - (1.0 - a) * p0[1]) / a];
-            let p2 = [(r2[0] - a * p3[0]) / (1.0 - a), (r2[1] - a * p3[1]) / (1.0 - a)];
+            let p1 = [
+                (q1[0] - (1.0 - a) * p0[0]) / a,
+                (q1[1] - (1.0 - a) * p0[1]) / a,
+            ];
+            let p2 = [
+                (r2[0] - a * p3[0]) / (1.0 - a),
+                (r2[1] - a * p3[1]) / (1.0 - a),
+            ];
             pts.extend_from_slice(&row[..c0]);
             pts.extend_from_slice(&[p0, p1, p2, p3]);
             pts.extend_from_slice(&row[c0 + 7..]);
@@ -599,7 +706,11 @@ impl BezierMesh {
 
     /// Applies `f` to every control point (exact for affine maps).
     pub fn map_points(&self, f: impl Fn([f64; 2]) -> [f64; 2]) -> BezierMesh {
-        BezierMesh { us: self.us.clone(), vs: self.vs.clone(), points: self.points.iter().map(|p| f(*p)).collect() }
+        BezierMesh {
+            us: self.us.clone(),
+            vs: self.vs.clone(),
+            points: self.points.iter().map(|p| f(*p)).collect(),
+        }
     }
 
     /// Normalised `(s, t)` whose surface point is nearest `p` (coarse search, then Newton
@@ -622,7 +733,12 @@ impl BezierMesh {
             let h = 1e-5;
             let q = self.eval(s, t);
             let (qs, qt) = (self.eval(s + h, t), self.eval(s, t + h));
-            let (a, b, c, d) = ((qs[0] - q[0]) / h, (qt[0] - q[0]) / h, (qs[1] - q[1]) / h, (qt[1] - q[1]) / h);
+            let (a, b, c, d) = (
+                (qs[0] - q[0]) / h,
+                (qt[0] - q[0]) / h,
+                (qs[1] - q[1]) / h,
+                (qt[1] - q[1]) / h,
+            );
             let det = a * d - b * c;
             if det.abs() < 1e-12 {
                 break;
@@ -660,14 +776,22 @@ impl BezierMesh {
         let (pj, b) = Self::locate(&self.vs, t);
         let (ba, bb) = (bernstein(a), bernstein(b));
         let nx = self.nx();
-        let anchor = |ai: usize, aj: usize| base.get(3 * aj * nx + 3 * ai).copied().unwrap_or([0.0; 2]);
+        let anchor =
+            |ai: usize, aj: usize| base.get(3 * aj * nx + 3 * ai).copied().unwrap_or([0.0; 2]);
         let at0 = self.eval(s, t);
         let target = [at0[0] + d[0], at0[1] + d[1]];
         // The grabbed patch's size and its "interior-ness": 1 in the middle, 0 on its edges.
         let mut size = 1.0f64;
         for k in 0..2 {
-            let vals = [anchor(pi, pj)[k], anchor(pi + 1, pj)[k], anchor(pi, pj + 1)[k], anchor(pi + 1, pj + 1)[k]];
-            let (lo, hi) = vals.iter().fold((f64::MAX, f64::MIN), |m, v| (m.0.min(*v), m.1.max(*v)));
+            let vals = [
+                anchor(pi, pj)[k],
+                anchor(pi + 1, pj)[k],
+                anchor(pi, pj + 1)[k],
+                anchor(pi + 1, pj + 1)[k],
+            ];
+            let (lo, hi) = vals
+                .iter()
+                .fold((f64::MAX, f64::MIN), |m, v| (m.0.min(*v), m.1.max(*v)));
             size = size.max(hi - lo);
         }
         let radius = REACH * size;
@@ -682,13 +806,21 @@ impl BezierMesh {
         let mesh_corner = |ai: usize, aj: usize| (ai == 0 || ai == cols) && (aj == 0 || aj == rows);
         let reach = |ai: usize, aj: usize, wa: f64, wb: f64| {
             let border = ai == 0 || ai == cols || aj == 0 || aj == rows;
-            if mesh_corner(ai, aj) { 0.0 } else { wa * wb * if border { near_border } else { 1.0 } }
+            if mesh_corner(ai, aj) {
+                0.0
+            } else {
+                wa * wb * if border { near_border } else { 1.0 }
+            }
         };
         let corner = [
             (pi, pj, reach(pi, pj, ba[0] + ba[1], bb[0] + bb[1])),
             (pi + 1, pj, reach(pi + 1, pj, ba[2] + ba[3], bb[0] + bb[1])),
             (pi, pj + 1, reach(pi, pj + 1, ba[0] + ba[1], bb[2] + bb[3])),
-            (pi + 1, pj + 1, reach(pi + 1, pj + 1, ba[2] + ba[3], bb[2] + bb[3])),
+            (
+                pi + 1,
+                pj + 1,
+                reach(pi + 1, pj + 1, ba[2] + ba[3], bb[2] + bb[3]),
+            ),
         ];
         // Share of `d` for each anchor.
         let mut share = vec![0.0f64; (cols + 1) * (rows + 1)];
@@ -731,11 +863,18 @@ impl BezierMesh {
         //   bends into a curve and its corners stay put.
         // Closing nudges the tangents across the grid lines, so they are evened out again and the
         // gap re-closed.
-        let norm: f64 = [1, 2].iter().flat_map(|j| [1, 2].iter().map(move |i| (ba[*i] * bb[*j]).powi(2))).sum();
+        let norm: f64 = [1, 2]
+            .iter()
+            .flat_map(|j| [1, 2].iter().map(move |i| (ba[*i] * bb[*j]).powi(2)))
+            .sum();
         let corner_norm: f64 = corner.iter().map(|c| c.2 * c.2).sum();
         // With no free corner to help (a one-patch grid, grabbed away from its border) the four
         // inner points do all of it.
-        let inner_part = if corner_norm > 1e-12 { (inner_w / 0.15).min(1.0) } else { 1.0 };
+        let inner_part = if corner_norm > 1e-12 {
+            (inner_w / 0.15).min(1.0)
+        } else {
+            1.0
+        };
         // Handles along the sides of the grabbed patch that lie on the picture's border.
         let mut edge: Vec<(usize, f64)> = Vec::new();
         for k in [1usize, 2] {
@@ -754,7 +893,10 @@ impl BezierMesh {
         }
         let edge_norm: f64 = edge.iter().map(|e| e.1 * e.1).sum();
         let edge_part = if edge_norm > 1e-12 { near_border } else { 0.0 };
-        let (inner_share, corner_share) = ((1.0 - edge_part) * inner_part, (1.0 - edge_part) * (1.0 - inner_part));
+        let (inner_share, corner_share) = (
+            (1.0 - edge_part) * inner_part,
+            (1.0 - edge_part) * (1.0 - inner_part),
+        );
         for _ in 0..60 {
             let now = self.eval(s, t);
             let rem = [target[0] - now[0], target[1] - now[1]];
@@ -796,7 +938,12 @@ impl BezierMesh {
                 }
             }
             for _ in 0..3 {
-                self.smooth_lines((3 * pi).saturating_sub(3), 3 * pi + 7, (3 * pj).saturating_sub(3), 3 * pj + 7);
+                self.smooth_lines(
+                    (3 * pi).saturating_sub(3),
+                    3 * pi + 7,
+                    (3 * pj).saturating_sub(3),
+                    3 * pj + 7,
+                );
             }
         }
     }
@@ -814,20 +961,35 @@ impl BezierMesh {
         for a in 1..self.us.len() - 1 {
             if 3 * a >= i0 && 3 * a < i1 {
                 for j in j0..j1 {
-                    triples.push((j * nx + 3 * a - 1, j * nx + 3 * a, j * nx + 3 * a + 1, hu(a - 1), hu(a)));
+                    triples.push((
+                        j * nx + 3 * a - 1,
+                        j * nx + 3 * a,
+                        j * nx + 3 * a + 1,
+                        hu(a - 1),
+                        hu(a),
+                    ));
                 }
             }
         }
         for b in 1..self.vs.len() - 1 {
             if 3 * b >= j0 && 3 * b < j1 {
                 for i in i0..i1 {
-                    triples.push(((3 * b - 1) * nx + i, 3 * b * nx + i, (3 * b + 1) * nx + i, hv(b - 1), hv(b)));
+                    triples.push((
+                        (3 * b - 1) * nx + i,
+                        3 * b * nx + i,
+                        (3 * b + 1) * nx + i,
+                        hv(b - 1),
+                        hv(b),
+                    ));
                 }
             }
         }
         for (l, c, r, hl, hr) in triples {
             let (pl, pc, pr) = (self.points[l], self.points[c], self.points[r]);
-            let tan = [((pc[0] - pl[0]) / hl + (pr[0] - pc[0]) / hr) / 2.0, ((pc[1] - pl[1]) / hl + (pr[1] - pc[1]) / hr) / 2.0];
+            let tan = [
+                ((pc[0] - pl[0]) / hl + (pr[0] - pc[0]) / hr) / 2.0,
+                ((pc[1] - pl[1]) / hl + (pr[1] - pc[1]) / hr) / 2.0,
+            ];
             self.points[l] = [pc[0] - tan[0] * hl, pc[1] - tan[1] * hl];
             self.points[r] = [pc[0] + tan[0] * hr, pc[1] + tan[1] * hr];
         }
@@ -840,7 +1002,10 @@ impl BezierMesh {
     ///   it on the same anchor turns the other way (with its two neighbours), so the line keeps
     ///   passing straight through the anchor instead of creasing there.
     pub fn drag_point(&mut self, base: &[[f64; 2]], index: usize, d: [f64; 2]) {
-        if base.len() != self.points.len() || index >= base.len() || !d.iter().all(|v| v.is_finite()) {
+        if base.len() != self.points.len()
+            || index >= base.len()
+            || !d.iter().all(|v| v.is_finite())
+        {
             return;
         }
         self.points.copy_from_slice(base);
@@ -855,7 +1020,10 @@ impl BezierMesh {
         };
         let (ii, jj) = (i as isize, j as isize);
         // Spans either side of interior knot `k`.
-        let span = |knots: &[f64], k: usize| (k > 0 && k + 1 < knots.len()).then(|| (knots[k] - knots[k - 1], knots[k + 1] - knots[k]));
+        let span = |knots: &[f64], k: usize| {
+            (k > 0 && k + 1 < knots.len())
+                .then(|| (knots[k] - knots[k - 1], knots[k + 1] - knots[k]))
+        };
         match (i % 3, j % 3) {
             (0, 0) => {
                 for dj in -1..=1 {
@@ -871,7 +1039,11 @@ impl BezierMesh {
                 }
                 // The opposite handle of the same anchor turns the other way.
                 if let Some((hl, hr)) = span(&self.vs, j / 3 + usize::from(r == 2)) {
-                    let (other, k) = if r == 1 { (jj - 2, hl / hr) } else { (jj + 2, hr / hl) };
+                    let (other, k) = if r == 1 {
+                        (jj - 2, hl / hr)
+                    } else {
+                        (jj + 2, hr / hl)
+                    };
                     for di in -1..=1 {
                         shift(ii + di, other, [-d[0] * k, -d[1] * k]);
                     }
@@ -883,7 +1055,11 @@ impl BezierMesh {
                     shift(ii, jj + dj, d);
                 }
                 if let Some((hl, hr)) = span(&self.us, i / 3 + usize::from(r == 2)) {
-                    let (other, k) = if r == 1 { (ii - 2, hl / hr) } else { (ii + 2, hr / hl) };
+                    let (other, k) = if r == 1 {
+                        (ii - 2, hl / hr)
+                    } else {
+                        (ii + 2, hr / hl)
+                    };
                     for dj in -1..=1 {
                         shift(other, jj + dj, [-d[0] * k, -d[1] * k]);
                     }
@@ -896,7 +1072,16 @@ impl BezierMesh {
 
     /// Bounding box of the control points (the surface lies inside it).
     pub fn control_bounds(&self) -> [f64; 4] {
-        self.points.iter().fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |b, p| [b[0].min(p[0]), b[1].min(p[1]), b[2].max(p[0]), b[3].max(p[1])])
+        self.points
+            .iter()
+            .fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |b, p| {
+                [
+                    b[0].min(p[0]),
+                    b[1].min(p[1]),
+                    b[2].max(p[0]),
+                    b[3].max(p[1]),
+                ]
+            })
     }
 }
 
@@ -925,21 +1110,44 @@ pub struct Warp {
 impl Warp {
     /// No warp over `bounds`.
     pub fn none(bounds: [f64; 4]) -> Warp {
-        Warp { style: WarpStyle::None, bend: 0.0, h_distort: 0.0, v_distort: 0.0, vertical: false, bounds, mesh: None }
+        Warp {
+            style: WarpStyle::None,
+            bend: 0.0,
+            h_distort: 0.0,
+            v_distort: 0.0,
+            vertical: false,
+            bounds,
+            mesh: None,
+        }
     }
 
     /// A preset style.
     pub fn preset(style: WarpStyle, bend: f64, bounds: [f64; 4]) -> Warp {
-        Warp { style, bend, ..Warp::none(bounds) }
+        Warp {
+            style,
+            bend,
+            ..Warp::none(bounds)
+        }
     }
 
     /// A custom warp from a mesh.
     pub fn custom(mesh: BezierMesh, bounds: [f64; 4]) -> Warp {
-        Warp { style: WarpStyle::Custom, mesh: Some(mesh), ..Warp::none(bounds) }
+        Warp {
+            style: WarpStyle::Custom,
+            mesh: Some(mesh),
+            ..Warp::none(bounds)
+        }
     }
 
     fn style_warp(&self) -> Option<StyleWarp> {
-        StyleWarp::new(self.style, self.bend, self.h_distort, self.v_distort, self.vertical, self.bounds)
+        StyleWarp::new(
+            self.style,
+            self.bend,
+            self.h_distort,
+            self.v_distort,
+            self.vertical,
+            self.bounds,
+        )
     }
 
     /// Whether the warp maps every point of its box onto itself (within `1e-9` px).
@@ -949,8 +1157,12 @@ impl Warp {
             WarpStyle::Custom => match &self.mesh {
                 None => true,
                 Some(m) => {
-                    let id = BezierMesh::fit(&|s, t| self.box_point(s, t), m.us.clone(), m.vs.clone());
-                    m.points.iter().zip(&id.points).all(|(a, b)| (a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9)
+                    let id =
+                        BezierMesh::fit(&|s, t| self.box_point(s, t), m.us.clone(), m.vs.clone());
+                    m.points
+                        .iter()
+                        .zip(&id.points)
+                        .all(|(a, b)| (a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9)
                 }
             },
             _ => self.style_warp().is_none(),
@@ -1019,7 +1231,12 @@ impl Warp {
     /// The same warp followed by the affine map `[a, b, c, d, e, f]` (`x' = a·x + c·y + e`,
     /// `y' = b·x + d·y + f`), as a custom mesh (exact for custom warps).
     pub fn then_affine(&self, m: [f64; 6]) -> Warp {
-        let mesh = self.to_mesh(4, 4).map_points(|p| [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]]);
+        let mesh = self.to_mesh(4, 4).map_points(|p| {
+            [
+                m[0] * p[0] + m[2] * p[1] + m[4],
+                m[1] * p[0] + m[3] * p[1] + m[5],
+            ]
+        });
         Warp::custom(mesh, self.bounds)
     }
 
@@ -1051,7 +1268,11 @@ mod tests {
         for a in 1..m.us.len() - 1 {
             let (hl, hr) = (m.us[a] - m.us[a - 1], m.us[a + 1] - m.us[a]);
             for j in 0..m.ny() {
-                let (l, c, r) = (m.points[j * nx + 3 * a - 1], m.points[j * nx + 3 * a], m.points[j * nx + 3 * a + 1]);
+                let (l, c, r) = (
+                    m.points[j * nx + 3 * a - 1],
+                    m.points[j * nx + 3 * a],
+                    m.points[j * nx + 3 * a + 1],
+                );
                 for k in 0..2 {
                     worst = worst.max(((c[k] - l[k]) / hl - (r[k] - c[k]) / hr).abs());
                 }
@@ -1060,7 +1281,11 @@ mod tests {
         for b in 1..m.vs.len() - 1 {
             let (hl, hr) = (m.vs[b] - m.vs[b - 1], m.vs[b + 1] - m.vs[b]);
             for i in 0..nx {
-                let (l, c, r) = (m.points[(3 * b - 1) * nx + i], m.points[3 * b * nx + i], m.points[(3 * b + 1) * nx + i]);
+                let (l, c, r) = (
+                    m.points[(3 * b - 1) * nx + i],
+                    m.points[3 * b * nx + i],
+                    m.points[(3 * b + 1) * nx + i],
+                );
                 for k in 0..2 {
                     worst = worst.max(((c[k] - l[k]) / hl - (r[k] - c[k]) / hr).abs());
                 }
@@ -1078,11 +1303,35 @@ mod tests {
         }
         let nx = base.nx();
         // Every kind of point on a grid line, interior and border: anchors, handles each way.
-        for (i, j) in [(6, 6), (7, 6), (5, 6), (6, 7), (6, 5), (3, 9), (9, 3), (0, 6), (6, 0), (4, 3), (3, 4), (12, 12)] {
+        for (i, j) in [
+            (6, 6),
+            (7, 6),
+            (5, 6),
+            (6, 7),
+            (6, 5),
+            (3, 9),
+            (9, 3),
+            (0, 6),
+            (6, 0),
+            (4, 3),
+            (3, 4),
+            (12, 12),
+        ] {
             let mut m = base.clone();
             m.drag_point(&base.points, j * nx + i, [23.0, -31.0]);
-            assert_eq!(m.points[j * nx + i], [base.points[j * nx + i][0] + 23.0, base.points[j * nx + i][1] - 31.0], "({i}, {j}) lands on the pointer");
-            assert!(tangent_defect(&m) < 1e-6, "({i}, {j}): {}", tangent_defect(&m));
+            assert_eq!(
+                m.points[j * nx + i],
+                [
+                    base.points[j * nx + i][0] + 23.0,
+                    base.points[j * nx + i][1] - 31.0
+                ],
+                "({i}, {j}) lands on the pointer"
+            );
+            assert!(
+                tangent_defect(&m) < 1e-6,
+                "({i}, {j}): {}",
+                tangent_defect(&m)
+            );
         }
     }
 
@@ -1107,11 +1356,29 @@ mod tests {
     fn a_pull_within_a_quarter_cell_never_folds_the_surface() {
         // 75 px cells: dragging a quarter of a cell, any direction, anywhere in the grid must not tear the picture.
         let base = BezierMesh::identity([0.0, 0.0, 300.0, 300.0], 4, 4);
-        for (s, t) in [(0.42, 0.42), (0.75, 0.2), (0.2, 0.2), (0.5, 0.5), (0.85, 0.7), (0.3, 0.7)] {
-            for (dx, dy) in [(-1.0, 0.0), (1.0, 0.0), (0.0, -1.0), (0.0, 1.0), (0.7, 0.7), (-0.7, 0.7)] {
+        for (s, t) in [
+            (0.42, 0.42),
+            (0.75, 0.2),
+            (0.2, 0.2),
+            (0.5, 0.5),
+            (0.85, 0.7),
+            (0.3, 0.7),
+        ] {
+            for (dx, dy) in [
+                (-1.0, 0.0),
+                (1.0, 0.0),
+                (0.0, -1.0),
+                (0.0, 1.0),
+                (0.7, 0.7),
+                (-0.7, 0.7),
+            ] {
                 let mut m = base.clone();
                 m.pull(&base.points, s, t, [dx * 19.0, dy * 19.0]);
-                assert_eq!(fold_fraction(&m), 0.0, "({s}, {t}) by ({dx}, {dy}) quarter cells");
+                assert_eq!(
+                    fold_fraction(&m),
+                    0.0,
+                    "({s}, {t}) by ({dx}, {dy}) quarter cells"
+                );
             }
         }
     }
@@ -1131,13 +1398,19 @@ mod tests {
             for i in 0..nx {
                 if on_border(i, j) {
                     let (a, b) = (m.points[j * nx + i], base.points[j * nx + i]);
-                    assert!((a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6, "border point ({i}, {j}) moved");
+                    assert!(
+                        (a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6,
+                        "border point ({i}, {j}) moved"
+                    );
                 }
             }
         }
         // The pull itself still lands exactly.
         let (before, after) = (base.eval(0.5, 0.5), m.eval(0.5, 0.5));
-        assert!((after[0] - before[0] + 180.0).abs() < 1e-4 && (after[1] - before[1] - 40.0).abs() < 1e-4);
+        assert!(
+            (after[0] - before[0] + 180.0).abs() < 1e-4
+                && (after[1] - before[1] - 40.0).abs() < 1e-4
+        );
     }
 
     #[test]
@@ -1148,7 +1421,14 @@ mod tests {
         assert!(cut.split_u(0.4) && cut.split_u(0.7) && cut.split_v(0.35) && cut.split_v(0.8));
         for base in [one, cut] {
             let (nx, ny) = (base.nx(), base.ny());
-            for (s, t) in [(0.5, 0.5), (0.2, 0.5), (0.8, 0.3), (0.3, 0.85), (0.14, 0.14), (0.86, 0.5)] {
+            for (s, t) in [
+                (0.5, 0.5),
+                (0.2, 0.5),
+                (0.8, 0.3),
+                (0.3, 0.85),
+                (0.14, 0.14),
+                (0.86, 0.5),
+            ] {
                 for d in [[-400.0, 0.0], [250.0, -90.0], [0.0, 300.0]] {
                     let mut m = base.clone();
                     m.pull(&base.points, s, t, d);
@@ -1156,12 +1436,19 @@ mod tests {
                         for i in 0..nx {
                             if i == 0 || j == 0 || i == nx - 1 || j == ny - 1 {
                                 let (a, b) = (m.points[j * nx + i], base.points[j * nx + i]);
-                                assert!((a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6, "({s}, {t}) by {d:?} moved border point ({i}, {j})");
+                                assert!(
+                                    (a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6,
+                                    "({s}, {t}) by {d:?} moved border point ({i}, {j})"
+                                );
                             }
                         }
                     }
                     let (before, after) = (base.eval(s, t), m.eval(s, t));
-                    assert!((after[0] - before[0] - d[0]).abs() < 1e-3 && (after[1] - before[1] - d[1]).abs() < 1e-3, "({s}, {t}) by {d:?}: {after:?}");
+                    assert!(
+                        (after[0] - before[0] - d[0]).abs() < 1e-3
+                            && (after[1] - before[1] - d[1]).abs() < 1e-3,
+                        "({s}, {t}) by {d:?}: {after:?}"
+                    );
                 }
             }
         }
@@ -1174,22 +1461,33 @@ mod tests {
         let mut m = base.clone();
         m.pull(&base.points, 1.0, 0.5, [170.0, 0.0]);
         let at = m.eval(1.0, 0.5);
-        assert!((at[0] - 970.0).abs() < 1e-3 && (at[1] - 600.0).abs() < 1e-3, "{at:?}");
+        assert!(
+            (at[0] - 970.0).abs() < 1e-3 && (at[1] - 600.0).abs() < 1e-3,
+            "{at:?}"
+        );
         for (s, t) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
             let (a, b) = (m.eval(s, t), base.eval(s, t));
-            assert!((a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6, "corner ({s}, {t}) moved");
+            assert!(
+                (a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6,
+                "corner ({s}, {t}) moved"
+            );
         }
         // The other three edges did not move.
         for k in 0..=10 {
             let u = k as f64 / 10.0;
             for (s, t) in [(0.0, u), (u, 0.0), (u, 1.0)] {
                 let (a, b) = (m.eval(s, t), base.eval(s, t));
-                assert!((a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6, "edge point ({s}, {t}) moved");
+                assert!(
+                    (a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6,
+                    "edge point ({s}, {t}) moved"
+                );
             }
         }
         // Only the right edge's two handles carry the pull.
         let nx = base.nx();
-        let moved: Vec<usize> = (0..m.points.len()).filter(|k| m.points[*k] != base.points[*k]).collect();
+        let moved: Vec<usize> = (0..m.points.len())
+            .filter(|k| m.points[*k] != base.points[*k])
+            .collect();
         assert_eq!(moved, vec![nx + 3, 2 * nx + 3], "{moved:?}");
         assert_eq!(fold_fraction(&m), 0.0);
     }
@@ -1203,13 +1501,25 @@ mod tests {
             assert!(base.split_v(s));
         }
         assert!(tangent_defect(&base) < 1e-9, "cuts are exact");
-        for (s, t, d) in [(0.42, 0.42, [60.0, -35.0]), (0.75, 0.2, [-40.0, 50.0]), (0.1, 0.95, [30.0, 30.0])] {
+        for (s, t, d) in [
+            (0.42, 0.42, [60.0, -35.0]),
+            (0.75, 0.2, [-40.0, 50.0]),
+            (0.1, 0.95, [30.0, 30.0]),
+        ] {
             let mut m = base.clone();
             m.pull(&base.points, s, t, d);
-            assert!(tangent_defect(&m) < 1e-6, "({s}, {t}): {}", tangent_defect(&m));
+            assert!(
+                tangent_defect(&m) < 1e-6,
+                "({s}, {t}): {}",
+                tangent_defect(&m)
+            );
             let before = base.eval(s, t);
             let after = m.eval(s, t);
-            assert!((after[0] - before[0] - d[0]).abs() < 1e-4 && (after[1] - before[1] - d[1]).abs() < 1e-4, "{after:?}");
+            assert!(
+                (after[0] - before[0] - d[0]).abs() < 1e-4
+                    && (after[1] - before[1] - d[1]).abs() < 1e-4,
+                "{after:?}"
+            );
         }
     }
 
@@ -1221,18 +1531,32 @@ mod tests {
             let before = base.eval(s, t);
             m.pull(&base.points, s, t, [7.0, -4.5]);
             let after = m.eval(s, t);
-            assert!((after[0] - before[0] - 7.0).abs() < 1e-4 && (after[1] - before[1] + 4.5).abs() < 1e-4, "({s}, {t}): {after:?}");
+            assert!(
+                (after[0] - before[0] - 7.0).abs() < 1e-4
+                    && (after[1] - before[1] + 4.5).abs() < 1e-4,
+                "({s}, {t}): {after:?}"
+            );
         }
         // The pull stays near the grabbed patch: the far end of the grid does not move.
         let mut m = base.clone();
         m.pull(&base.points, 0.1, 0.25, [5.0, 5.0]);
         let nx = base.nx();
-        let moved = |k: usize| (m.points[k][0] - base.points[k][0]).abs() > 1e-6 || (m.points[k][1] - base.points[k][1]).abs() > 1e-6;
-        assert!((0..base.ny()).all(|j| !moved(j * nx + nx - 1)), "last column stays put");
+        let moved = |k: usize| {
+            (m.points[k][0] - base.points[k][0]).abs() > 1e-6
+                || (m.points[k][1] - base.points[k][1]).abs() > 1e-6
+        };
+        assert!(
+            (0..base.ny()).all(|j| !moved(j * nx + nx - 1)),
+            "last column stays put"
+        );
         assert!((0..nx).any(moved), "something moved");
         // Pulling again from the same base replaces the pull (a drag is not cumulative).
         m.pull(&base.points, 0.5, 0.25, [0.0, 0.0]);
-        assert!(m.points.iter().zip(&base.points).all(|(a, b)| (a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9));
+        assert!(m
+            .points
+            .iter()
+            .zip(&base.points)
+            .all(|(a, b)| (a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9));
     }
 
     fn close(a: (f64, f64), b: (f64, f64), eps: f64) -> bool {
@@ -1280,19 +1604,28 @@ mod tests {
         let mut m = BezierMesh::identity(B, 1, 1);
         // Bend it: move an inner control point.
         m.points[5] = [50.0, 10.0];
-        let before: Vec<[f64; 2]> = (0..=10).flat_map(|j| (0..=10).map(move |i| (i, j))).map(|(i, j)| m.eval(i as f64 / 10.0, j as f64 / 10.0)).collect();
+        let before: Vec<[f64; 2]> = (0..=10)
+            .flat_map(|j| (0..=10).map(move |i| (i, j)))
+            .map(|(i, j)| m.eval(i as f64 / 10.0, j as f64 / 10.0))
+            .collect();
         let orig = m.clone();
         assert!(m.split_u(0.3));
         assert!(m.split_v(0.6));
         assert!(!m.split_u(0.3), "existing boundary");
         assert_eq!((m.nx(), m.ny()), (7, 7));
         assert!(m.is_valid());
-        let after: Vec<[f64; 2]> = (0..=10).flat_map(|j| (0..=10).map(move |i| (i, j))).map(|(i, j)| m.eval(i as f64 / 10.0, j as f64 / 10.0)).collect();
+        let after: Vec<[f64; 2]> = (0..=10)
+            .flat_map(|j| (0..=10).map(move |i| (i, j)))
+            .map(|(i, j)| m.eval(i as f64 / 10.0, j as f64 / 10.0))
+            .collect();
         for (a, b) in before.iter().zip(&after) {
             assert!((a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9);
         }
         let (ls, lt) = m.param_at(m.eval(0.42, 0.77));
-        assert!((ls - 0.42).abs() < 1e-6 && (lt - 0.77).abs() < 1e-6, "{ls},{lt}");
+        assert!(
+            (ls - 0.42).abs() < 1e-6 && (lt - 0.77).abs() < 1e-6,
+            "{ls},{lt}"
+        );
         assert!(m.remove_split_u(1));
         assert!(m.remove_split_v(1));
         assert_eq!(m.us, orig.us);
@@ -1312,38 +1645,215 @@ mod tests {
     fn presets_match_photoshop() {
         type Case = (WarpStyle, f64, f64, f64, bool, [([f64; 2], [f64; 2]); 3]);
         let cases: [Case; 9] = [
-            (WarpStyle::Arc, 50.0, 0.0, 0.0, false, [([272.5, 155.5], [296.5, 104.5]), ([331.5, 182.5], [424.5, 168.5]), ([259.5, 157.5], [264.5, 104.5])]),
-            (WarpStyle::Arc, -100.0, 0.0, 0.0, false, [([277.5, 354.5], [344.5, 472.5]), ([140.5, 218.5], [40.5, 168.5]), ([172.5, 237.5], [56.5, 264.5])]),
-            (WarpStyle::Flag, 50.0, 0.0, 0.0, false, [([136.5, 143.5], [136.5, 120.5]), ([136.5, 159.5], [136.5, 136.5]), ([136.5, 175.5], [136.5, 152.5])]),
-            (WarpStyle::Twist, -50.0, 0.0, 0.0, false, [([148.5, 205.5], [152.5, 216.5]), ([197.5, 212.5], [200.5, 232.5]), ([134.5, 212.5], [136.5, 216.5])]),
+            (
+                WarpStyle::Arc,
+                50.0,
+                0.0,
+                0.0,
+                false,
+                [
+                    ([272.5, 155.5], [296.5, 104.5]),
+                    ([331.5, 182.5], [424.5, 168.5]),
+                    ([259.5, 157.5], [264.5, 104.5]),
+                ],
+            ),
+            (
+                WarpStyle::Arc,
+                -100.0,
+                0.0,
+                0.0,
+                false,
+                [
+                    ([277.5, 354.5], [344.5, 472.5]),
+                    ([140.5, 218.5], [40.5, 168.5]),
+                    ([172.5, 237.5], [56.5, 264.5]),
+                ],
+            ),
+            (
+                WarpStyle::Flag,
+                50.0,
+                0.0,
+                0.0,
+                false,
+                [
+                    ([136.5, 143.5], [136.5, 120.5]),
+                    ([136.5, 159.5], [136.5, 136.5]),
+                    ([136.5, 175.5], [136.5, 152.5]),
+                ],
+            ),
+            (
+                WarpStyle::Twist,
+                -50.0,
+                0.0,
+                0.0,
+                false,
+                [
+                    ([148.5, 205.5], [152.5, 216.5]),
+                    ([197.5, 212.5], [200.5, 232.5]),
+                    ([134.5, 212.5], [136.5, 216.5]),
+                ],
+            ),
             (
                 WarpStyle::ShellLower,
                 50.0,
                 0.0,
                 0.0,
                 false,
-                [([248.5, 136.5], [248.5, 136.5]), ([264.5, 136.5], [264.5, 136.5]), ([232.5, 136.5], [232.5, 136.5])],
+                [
+                    ([248.5, 136.5], [248.5, 136.5]),
+                    ([264.5, 136.5], [264.5, 136.5]),
+                    ([232.5, 136.5], [232.5, 136.5]),
+                ],
             ),
-            (WarpStyle::Fish, -100.0, 0.0, 0.0, false, [([296.5, 355.5], [296.5, 440.5]), ([344.5, 298.5], [344.5, 344.5]), ([328.5, 356.5], [328.5, 472.5])]),
-            (WarpStyle::Bulge, 50.0, 50.0, 0.0, false, [([293.5, 147.5], [296.5, 88.5]), ([293.5, 375.5], [296.5, 440.5]), ([340.5, 281.5], [344.5, 296.5])]),
-            (WarpStyle::Arc, 50.0, 0.0, -50.0, false, [([181.5, 350.5], [184.5, 328.5]), ([291.5, 372.5], [280.5, 344.5]), ([232.5, 349.5], [232.5, 312.5])]),
-            (WarpStyle::Arc, 50.0, 0.0, 0.0, true, [([155.5, 272.5], [104.5, 296.5]), ([182.5, 331.5], [168.5, 424.5]), ([157.5, 259.5], [104.5, 264.5])]),
+            (
+                WarpStyle::Fish,
+                -100.0,
+                0.0,
+                0.0,
+                false,
+                [
+                    ([296.5, 355.5], [296.5, 440.5]),
+                    ([344.5, 298.5], [344.5, 344.5]),
+                    ([328.5, 356.5], [328.5, 472.5]),
+                ],
+            ),
+            (
+                WarpStyle::Bulge,
+                50.0,
+                50.0,
+                0.0,
+                false,
+                [
+                    ([293.5, 147.5], [296.5, 88.5]),
+                    ([293.5, 375.5], [296.5, 440.5]),
+                    ([340.5, 281.5], [344.5, 296.5]),
+                ],
+            ),
+            (
+                WarpStyle::Arc,
+                50.0,
+                0.0,
+                -50.0,
+                false,
+                [
+                    ([181.5, 350.5], [184.5, 328.5]),
+                    ([291.5, 372.5], [280.5, 344.5]),
+                    ([232.5, 349.5], [232.5, 312.5]),
+                ],
+            ),
+            (
+                WarpStyle::Arc,
+                50.0,
+                0.0,
+                0.0,
+                true,
+                [
+                    ([155.5, 272.5], [104.5, 296.5]),
+                    ([182.5, 331.5], [168.5, 424.5]),
+                    ([157.5, 259.5], [104.5, 264.5]),
+                ],
+            ),
         ];
         // Wide (256 × 96 at 128, 208) and tall (96 × 256 at 208, 128) boxes, and a vertical warp
         // with distortion.
-        type Boxed = (WarpStyle, f64, f64, f64, bool, [f64; 4], [([f64; 2], [f64; 2]); 2]);
+        type Boxed = (
+            WarpStyle,
+            f64,
+            f64,
+            f64,
+            bool,
+            [f64; 4],
+            [([f64; 2], [f64; 2]); 2],
+        );
         let boxed: [Boxed; 6] = [
-            (WarpStyle::Arc, 50.0, 0.0, 0.0, false, WIDE, [([144.5, 269.6], [120.5, 264.5]), ([271.5, 220.42], [280.5, 168.5])]),
-            (WarpStyle::Bulge, 50.0, 0.0, 0.0, false, TALL, [([249.11, 374.5], [248.5, 392.5]), ([249.11, 360.5], [248.5, 376.5])]),
-            (WarpStyle::Flag, 50.0, 0.0, 0.0, true, WIDE, [([137.5, 296.42], [184.5, 296.5]), ([153.5, 296.42], [200.5, 296.5])]),
-            (WarpStyle::Rise, 50.0, 0.0, 0.0, true, TALL, [([250.97, 152.5], [344.5, 152.5]), ([301.26, 264.5], [344.5, 264.5])]),
-            (WarpStyle::Bulge, 60.0, 20.0, -10.0, false, WIDE, [([208.5, 224.15], [200.5, 184.5]), ([219.5, 277.42], [216.5, 296.5])]),
-            (WarpStyle::Arc, 50.0, 30.0, 0.0, true, SQUARE, [([331.5, 327.5], [296.5, 360.5]), ([318.5, 240.5], [264.5, 232.5])]),
+            (
+                WarpStyle::Arc,
+                50.0,
+                0.0,
+                0.0,
+                false,
+                WIDE,
+                [
+                    ([144.5, 269.6], [120.5, 264.5]),
+                    ([271.5, 220.42], [280.5, 168.5]),
+                ],
+            ),
+            (
+                WarpStyle::Bulge,
+                50.0,
+                0.0,
+                0.0,
+                false,
+                TALL,
+                [
+                    ([249.11, 374.5], [248.5, 392.5]),
+                    ([249.11, 360.5], [248.5, 376.5]),
+                ],
+            ),
+            (
+                WarpStyle::Flag,
+                50.0,
+                0.0,
+                0.0,
+                true,
+                WIDE,
+                [
+                    ([137.5, 296.42], [184.5, 296.5]),
+                    ([153.5, 296.42], [200.5, 296.5]),
+                ],
+            ),
+            (
+                WarpStyle::Rise,
+                50.0,
+                0.0,
+                0.0,
+                true,
+                TALL,
+                [
+                    ([250.97, 152.5], [344.5, 152.5]),
+                    ([301.26, 264.5], [344.5, 264.5]),
+                ],
+            ),
+            (
+                WarpStyle::Bulge,
+                60.0,
+                20.0,
+                -10.0,
+                false,
+                WIDE,
+                [
+                    ([208.5, 224.15], [200.5, 184.5]),
+                    ([219.5, 277.42], [216.5, 296.5]),
+                ],
+            ),
+            (
+                WarpStyle::Arc,
+                50.0,
+                30.0,
+                0.0,
+                true,
+                SQUARE,
+                [
+                    ([331.5, 327.5], [296.5, 360.5]),
+                    ([318.5, 240.5], [264.5, 232.5]),
+                ],
+            ),
         ];
-        let all =
-            cases.iter().map(|c| (c.0, c.1, c.2, c.3, c.4, SQUARE, c.5.to_vec())).chain(boxed.iter().map(|c| (c.0, c.1, c.2, c.3, c.4, c.5, c.6.to_vec())));
+        let all = cases
+            .iter()
+            .map(|c| (c.0, c.1, c.2, c.3, c.4, SQUARE, c.5.to_vec()))
+            .chain(
+                boxed
+                    .iter()
+                    .map(|c| (c.0, c.1, c.2, c.3, c.4, c.5, c.6.to_vec())),
+            );
         for (style, bend, hd, vd, vertical, bounds, pairs) in all {
-            let w = Warp { h_distort: hd, v_distort: vd, vertical, ..Warp::preset(style, bend, bounds) };
+            let w = Warp {
+                h_distort: hd,
+                v_distort: vd,
+                vertical,
+                ..Warp::preset(style, bend, bounds)
+            };
             for (src, want) in pairs {
                 let got = w.map(src[0], src[1]);
                 let d = (got.0 - want[0]).hypot(got.1 - want[1]);
@@ -1357,9 +1867,15 @@ mod tests {
         let w = Warp::preset(WarpStyle::Bulge, 40.0, B);
         let m = Warp::custom(w.to_mesh(4, 4), B);
         for (x, y) in [(20.0, 30.0), (60.0, 45.0), (100.0, 65.0)] {
-            assert!(close(w.map(x, y), m.map(x, y), 0.5), "{:?} vs {:?}", w.map(x, y), m.map(x, y));
+            assert!(
+                close(w.map(x, y), m.map(x, y), 0.5),
+                "{:?} vs {:?}",
+                w.map(x, y),
+                m.map(x, y)
+            );
         }
-        let t = Warp::custom(BezierMesh::identity(B, 1, 1), B).then_affine([1.0, 0.0, 0.0, 1.0, 5.0, -2.0]);
+        let t = Warp::custom(BezierMesh::identity(B, 1, 1), B)
+            .then_affine([1.0, 0.0, 0.0, 1.0, 5.0, -2.0]);
         assert!(close(t.map(50.0, 50.0), (55.0, 48.0), 1e-9));
         let ob = Warp::none(B).output_bounds();
         assert!((ob[0] - 10.0).abs() < 1e-9 && (ob[3] - 70.0).abs() < 1e-9);

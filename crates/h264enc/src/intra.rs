@@ -26,7 +26,13 @@ pub fn mode_available(mode: u8, has_top: bool, has_left: bool, has_tl: bool) -> 
 
 /// Generic directional prediction for an NxN block given (already filtered, for 8x8) neighbours.
 /// `t(x)` = p[x,-1] for x in -1..2N, `l(y)` = p[-1,y] for y in -1..N.
-fn pred_dir<const N: usize>(mode: u8, t: &dyn Fn(i32) -> i32, l: &dyn Fn(i32) -> i32, dc: i32, out: &mut [u8]) {
+fn pred_dir<const N: usize>(
+    mode: u8,
+    t: &dyn Fn(i32) -> i32,
+    l: &dyn Fn(i32) -> i32,
+    dc: i32,
+    out: &mut [u8],
+) {
     let n = N as i32;
     for y in 0..n {
         for x in 0..n {
@@ -103,7 +109,12 @@ fn pred_dir<const N: usize>(mode: u8, t: &dyn Fn(i32) -> i32, l: &dyn Fn(i32) ->
 /// Intra 4x4 prediction. `e.top[4..8]` must already be substituted with top[3] when top-right is unavailable.
 pub fn pred4x4(mode: u8, e: &Edge4, out: &mut [u8; 16]) {
     let dc = match (e.has_top, e.has_left) {
-        (true, true) => (e.top[..4].iter().map(|&v| v as i32).sum::<i32>() + e.left.iter().map(|&v| v as i32).sum::<i32>() + 4) >> 3,
+        (true, true) => {
+            (e.top[..4].iter().map(|&v| v as i32).sum::<i32>()
+                + e.left.iter().map(|&v| v as i32).sum::<i32>()
+                + 4)
+                >> 3
+        }
         (true, false) => (e.top[..4].iter().map(|&v| v as i32).sum::<i32>() + 2) >> 2,
         (false, true) => (e.left.iter().map(|&v| v as i32).sum::<i32>() + 2) >> 2,
         _ => 128,
@@ -112,8 +123,20 @@ pub fn pred4x4(mode: u8, e: &Edge4, out: &mut [u8; 16]) {
         out.fill(dc as u8);
         return;
     }
-    let t = |x: i32| if x < 0 { e.tl as i32 } else { e.top[x as usize] as i32 };
-    let l = |y: i32| if y < 0 { e.tl as i32 } else { e.left[y as usize] as i32 };
+    let t = |x: i32| {
+        if x < 0 {
+            e.tl as i32
+        } else {
+            e.top[x as usize] as i32
+        }
+    };
+    let l = |y: i32| {
+        if y < 0 {
+            e.tl as i32
+        } else {
+            e.left[y as usize] as i32
+        }
+    };
     pred_dir::<4>(mode, &t, &l, dc, out);
 }
 
@@ -122,7 +145,11 @@ pub fn filter8(e: &Edge8) -> Edge8 {
     let mut f = *e;
     if e.has_top {
         let p = |x: usize| e.top[x] as u32;
-        f.top[0] = if e.has_tl { ((e.tl as u32 + 2 * p(0) + p(1) + 2) >> 2) as u8 } else { ((3 * p(0) + p(1) + 2) >> 2) as u8 };
+        f.top[0] = if e.has_tl {
+            ((e.tl as u32 + 2 * p(0) + p(1) + 2) >> 2) as u8
+        } else {
+            ((3 * p(0) + p(1) + 2) >> 2) as u8
+        };
         for x in 1..15 {
             f.top[x] = ((p(x - 1) + 2 * p(x) + p(x + 1) + 2) >> 2) as u8;
         }
@@ -144,7 +171,11 @@ pub fn filter8(e: &Edge8) -> Edge8 {
     }
     if e.has_left {
         let p = |y: usize| e.left[y] as u32;
-        f.left[0] = if e.has_tl { ((e.tl as u32 + 2 * p(0) + p(1) + 2) >> 2) as u8 } else { ((3 * p(0) + p(1) + 2) >> 2) as u8 };
+        f.left[0] = if e.has_tl {
+            ((e.tl as u32 + 2 * p(0) + p(1) + 2) >> 2) as u8
+        } else {
+            ((3 * p(0) + p(1) + 2) >> 2) as u8
+        };
         for y in 1..7 {
             f.left[y] = ((p(y - 1) + 2 * p(y) + p(y + 1) + 2) >> 2) as u8;
         }
@@ -156,7 +187,12 @@ pub fn filter8(e: &Edge8) -> Edge8 {
 /// Intra 8x8 prediction from *filtered* neighbours.
 pub fn pred8x8(mode: u8, f: &Edge8, out: &mut [u8; 64]) {
     let dc = match (f.has_top, f.has_left) {
-        (true, true) => (f.top[..8].iter().map(|&v| v as i32).sum::<i32>() + f.left.iter().map(|&v| v as i32).sum::<i32>() + 8) >> 4,
+        (true, true) => {
+            (f.top[..8].iter().map(|&v| v as i32).sum::<i32>()
+                + f.left.iter().map(|&v| v as i32).sum::<i32>()
+                + 8)
+                >> 4
+        }
         (true, false) => (f.top[..8].iter().map(|&v| v as i32).sum::<i32>() + 4) >> 3,
         (false, true) => (f.left.iter().map(|&v| v as i32).sum::<i32>() + 4) >> 3,
         _ => 128,
@@ -165,13 +201,33 @@ pub fn pred8x8(mode: u8, f: &Edge8, out: &mut [u8; 64]) {
         out.fill(dc as u8);
         return;
     }
-    let t = |x: i32| if x < 0 { f.tl as i32 } else { f.top[x as usize] as i32 };
-    let l = |y: i32| if y < 0 { f.tl as i32 } else { f.left[y as usize] as i32 };
+    let t = |x: i32| {
+        if x < 0 {
+            f.tl as i32
+        } else {
+            f.top[x as usize] as i32
+        }
+    };
+    let l = |y: i32| {
+        if y < 0 {
+            f.tl as i32
+        } else {
+            f.left[y as usize] as i32
+        }
+    };
     pred_dir::<8>(mode, &t, &l, dc, out);
 }
 
 /// Intra 16x16 prediction. Modes: 0 V, 1 H, 2 DC, 3 plane.
-pub fn pred16x16(mode: u8, top: &[u8; 16], left: &[u8; 16], tl: u8, has_top: bool, has_left: bool, out: &mut [u8; 256]) {
+pub fn pred16x16(
+    mode: u8,
+    top: &[u8; 16],
+    left: &[u8; 16],
+    tl: u8,
+    has_top: bool,
+    has_left: bool,
+    out: &mut [u8; 256],
+) {
     match mode {
         0 => {
             for y in 0..16 {
@@ -195,8 +251,20 @@ pub fn pred16x16(mode: u8, top: &[u8; 16], left: &[u8; 16], tl: u8, has_top: boo
             out.fill(dc as u8);
         }
         _ => {
-            let p_t = |x: i32| if x < 0 { tl as i32 } else { top[x as usize] as i32 };
-            let p_l = |y: i32| if y < 0 { tl as i32 } else { left[y as usize] as i32 };
+            let p_t = |x: i32| {
+                if x < 0 {
+                    tl as i32
+                } else {
+                    top[x as usize] as i32
+                }
+            };
+            let p_l = |y: i32| {
+                if y < 0 {
+                    tl as i32
+                } else {
+                    left[y as usize] as i32
+                }
+            };
             let mut h = 0;
             let mut v = 0;
             for i in 0..8 {
@@ -208,7 +276,8 @@ pub fn pred16x16(mode: u8, top: &[u8; 16], left: &[u8; 16], tl: u8, has_top: boo
             let c = (5 * v + 32) >> 6;
             for y in 0..16 {
                 for x in 0..16 {
-                    out[y * 16 + x] = ((a + b * (x as i32 - 7) + c * (y as i32 - 7) + 16) >> 5).clamp(0, 255) as u8;
+                    out[y * 16 + x] = ((a + b * (x as i32 - 7) + c * (y as i32 - 7) + 16) >> 5)
+                        .clamp(0, 255) as u8;
                 }
             }
         }
@@ -216,7 +285,15 @@ pub fn pred16x16(mode: u8, top: &[u8; 16], left: &[u8; 16], tl: u8, has_top: boo
 }
 
 /// Chroma 8x8 prediction (4:2:0). Modes: 0 DC, 1 H, 2 V, 3 plane.
-pub fn pred_chroma(mode: u8, top: &[u8; 8], left: &[u8; 8], tl: u8, has_top: bool, has_left: bool, out: &mut [u8; 64]) {
+pub fn pred_chroma(
+    mode: u8,
+    top: &[u8; 8],
+    left: &[u8; 8],
+    tl: u8,
+    has_top: bool,
+    has_left: bool,
+    out: &mut [u8; 64],
+) {
     match mode {
         0 => {
             for by in 0..2 {
@@ -264,8 +341,20 @@ pub fn pred_chroma(mode: u8, top: &[u8; 8], left: &[u8; 8], tl: u8, has_top: boo
             }
         }
         _ => {
-            let p_t = |x: i32| if x < 0 { tl as i32 } else { top[x as usize] as i32 };
-            let p_l = |y: i32| if y < 0 { tl as i32 } else { left[y as usize] as i32 };
+            let p_t = |x: i32| {
+                if x < 0 {
+                    tl as i32
+                } else {
+                    top[x as usize] as i32
+                }
+            };
+            let p_l = |y: i32| {
+                if y < 0 {
+                    tl as i32
+                } else {
+                    left[y as usize] as i32
+                }
+            };
             let mut h = 0;
             let mut v = 0;
             for i in 0..4 {
@@ -277,7 +366,8 @@ pub fn pred_chroma(mode: u8, top: &[u8; 8], left: &[u8; 8], tl: u8, has_top: boo
             let c = (34 * v + 32) >> 6;
             for y in 0..8 {
                 for x in 0..8 {
-                    out[y * 8 + x] = ((a + b * (x as i32 - 3) + c * (y as i32 - 3) + 16) >> 5).clamp(0, 255) as u8;
+                    out[y * 8 + x] = ((a + b * (x as i32 - 3) + c * (y as i32 - 3) + 16) >> 5)
+                        .clamp(0, 255) as u8;
                 }
             }
         }
@@ -290,7 +380,14 @@ mod tests {
 
     #[test]
     fn dc_and_vertical() {
-        let e = Edge4 { top: [10, 20, 30, 40, 40, 40, 40, 40], left: [1, 2, 3, 4], tl: 5, has_top: true, has_left: true, has_tl: true };
+        let e = Edge4 {
+            top: [10, 20, 30, 40, 40, 40, 40, 40],
+            left: [1, 2, 3, 4],
+            tl: 5,
+            has_top: true,
+            has_left: true,
+            has_tl: true,
+        };
         let mut o = [0u8; 16];
         pred4x4(0, &e, &mut o);
         assert_eq!(&o[12..16], &[10, 20, 30, 40]);

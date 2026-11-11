@@ -13,7 +13,13 @@ pub struct Smoothed {
 impl Smoothed {
     /// `ramp_samples` = length of a full transition (0 = no smoothing).
     pub fn new(value: f32, ramp_samples: u32) -> Self {
-        Smoothed { current: value as f64, target: value as f64, step: 0.0, remaining: 0, ramp: ramp_samples }
+        Smoothed {
+            current: value as f64,
+            target: value as f64,
+            step: 0.0,
+            remaining: 0,
+            ramp: ramp_samples,
+        }
     }
     /// Convenience: ramp length from a time in milliseconds.
     pub fn with_ms(value: f32, sample_rate: f32, ms: f32) -> Self {

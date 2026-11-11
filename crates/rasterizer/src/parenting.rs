@@ -154,10 +154,22 @@ impl Matrix4 {
     pub fn invert(&self) -> Option<Self> {
         let m = &self.m;
 
-        let a00 = m[0][0]; let a01 = m[0][1]; let a02 = m[0][2]; let a03 = m[0][3];
-        let a10 = m[1][0]; let a11 = m[1][1]; let a12 = m[1][2]; let a13 = m[1][3];
-        let a20 = m[2][0]; let a21 = m[2][1]; let a22 = m[2][2]; let a23 = m[2][3];
-        let a30 = m[3][0]; let a31 = m[3][1]; let a32 = m[3][2]; let a33 = m[3][3];
+        let a00 = m[0][0];
+        let a01 = m[0][1];
+        let a02 = m[0][2];
+        let a03 = m[0][3];
+        let a10 = m[1][0];
+        let a11 = m[1][1];
+        let a12 = m[1][2];
+        let a13 = m[1][3];
+        let a20 = m[2][0];
+        let a21 = m[2][1];
+        let a22 = m[2][2];
+        let a23 = m[2][3];
+        let a30 = m[3][0];
+        let a31 = m[3][1];
+        let a32 = m[3][2];
+        let a33 = m[3][3];
 
         let b00 = a00 * a11 - a01 * a10;
         let b01 = a00 * a12 - a02 * a10;
@@ -279,7 +291,12 @@ impl Default for LayerTransform {
 
 impl LayerTransform {
     /// Convenience 2D constructor.
-    pub fn new_2d(position: (f32, f32), anchor: (f32, f32), scale: (f32, f32), rotation_deg: f32) -> Self {
+    pub fn new_2d(
+        position: (f32, f32),
+        anchor: (f32, f32),
+        scale: (f32, f32),
+        rotation_deg: f32,
+    ) -> Self {
         Self {
             anchor_point: [anchor.0, anchor.1, 0.0],
             position: [position.0, position.1, 0.0],
@@ -509,9 +526,9 @@ impl ParentingGraph {
             };
 
             // 3. Invert parent matrix: M_parent_world^-1
-            let parent_inv = parent_world
-                .invert()
-                .ok_or_else(|| ParentingError::SingularMatrix(new_parent_id.unwrap_or("root").to_string()))?;
+            let parent_inv = parent_world.invert().ok_or_else(|| {
+                ParentingError::SingularMatrix(new_parent_id.unwrap_or("root").to_string())
+            })?;
 
             // 4. New local matrix: M'_child_local = M_parent_world^-1 * M_child_world
             let new_local_matrix = parent_inv * child_world;
@@ -645,11 +662,13 @@ mod tests {
         let mut graph = ParentingGraph::new();
 
         // Controller / Parent layer
-        let parent_transform = LayerTransform::new_2d((400.0, 300.0), (50.0, 50.0), (1.5, 1.5), 30.0);
+        let parent_transform =
+            LayerTransform::new_2d((400.0, 300.0), (50.0, 50.0), (1.5, 1.5), 30.0);
         graph.add_layer("controller", None, parent_transform);
 
         // Free layer in world space
-        let child_transform = LayerTransform::new_2d((600.0, 450.0), (20.0, 20.0), (2.0, 2.0), 45.0);
+        let child_transform =
+            LayerTransform::new_2d((600.0, 450.0), (20.0, 20.0), (2.0, 2.0), 45.0);
         graph.add_layer("item", None, child_transform);
 
         // World position before reparenting

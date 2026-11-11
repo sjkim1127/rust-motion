@@ -6,9 +6,7 @@ use image::{ImageBuffer, Rgba};
 use rust_motion_psd::PsdFile;
 
 use crate::backend::{FrameConfig, RasterError, RasterizerBackend};
-use crate::scene::{
-    BlendMode, Color, ImageFit, MaskMode, Scene, SceneFilter, SceneNode,
-};
+use crate::scene::{BlendMode, Color, ImageFit, MaskMode, Scene, SceneFilter, SceneNode};
 
 /// Encode raw RGBA8 pixels into a PNG data URI.
 pub fn rgba_to_png_data_uri(width: u32, height: u32, rgba: &[u8]) -> Result<String, RasterError> {
@@ -19,8 +17,9 @@ pub fn rgba_to_png_data_uri(width: u32, height: u32, rgba: &[u8]) -> Result<Stri
     if rgba.len() < expected {
         return Err(RasterError::Scene("insufficient RGBA pixel data".into()));
     }
-    let img: ImageBuffer<Rgba<u8>, _> = ImageBuffer::from_raw(width, height, rgba[..expected].to_vec())
-        .ok_or_else(|| RasterError::Scene("invalid image dimensions".into()))?;
+    let img: ImageBuffer<Rgba<u8>, _> =
+        ImageBuffer::from_raw(width, height, rgba[..expected].to_vec())
+            .ok_or_else(|| RasterError::Scene("invalid image dimensions".into()))?;
     let mut bytes = std::io::Cursor::new(Vec::new());
     img.write_to(&mut bytes, image::ImageFormat::Png)
         .map_err(|e| RasterError::Scene(format!("failed to encode PNG: {e}")))?;
@@ -148,8 +147,8 @@ pub fn render_psd_to_pixmap(data: &[u8]) -> Result<tiny_skia::Pixmap, RasterErro
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rust_motion_psd::builder::{LayerSpec, PixelData, PsdBuilder};
     use rust_motion_psd::blend::BlendMode as PsdBlendMode;
+    use rust_motion_psd::builder::{LayerSpec, PixelData, PsdBuilder};
 
     #[test]
     fn test_psd_builder_render_with_blend_modes() {
@@ -163,7 +162,14 @@ mod tests {
 
         // Top layer: solid green with Multiply
         let green_pixels = vec![0, 255, 0, 255].repeat(100 * 100);
-        let mut l2 = LayerSpec::new("Multiply Layer", 0, 0, 100, 100, PixelData::Rgba8(green_pixels));
+        let mut l2 = LayerSpec::new(
+            "Multiply Layer",
+            0,
+            0,
+            100,
+            100,
+            PixelData::Rgba8(green_pixels),
+        );
         l2.blend_mode = PsdBlendMode::Multiply;
         builder.push_layer(l2);
 
@@ -253,7 +259,9 @@ mod tests {
             frame: 0,
             fps: 30.0,
         };
-        let img = backend.render_frame(&scene, &config).expect("render scene with adjustment filters");
+        let img = backend
+            .render_frame(&scene, &config)
+            .expect("render scene with adjustment filters");
         assert_eq!(img.width(), 50);
         assert_eq!(img.height(), 50);
         let pixel = img.get_pixel(25, 25);

@@ -2,7 +2,7 @@
 //! leading, the paragraph alignment and the first baseline. Layout (line breaks in frames, kerning,
 //! OpenType features) is left to the importing application.
 
-use crate::model::{Affine, Align, Point, Reader, Text, TextRun, rect};
+use crate::model::{rect, Affine, Align, Point, Reader, Text, TextRun};
 use crate::paint::{self, Paint};
 use crate::stream::{ObjId, Value};
 
@@ -41,20 +41,34 @@ pub(crate) fn read(r: &mut Reader, id: ObjId, world: Affine) -> Option<Text> {
             break;
         }
         let mut start = 0usize;
-        for run in s.obj(block, b"GAtt").map(|g| s.objs(g, b"Runs")).unwrap_or_default() {
+        for run in s
+            .obj(block, b"GAtt")
+            .map(|g| s.objs(g, b"Runs"))
+            .unwrap_or_default()
+        {
             let end = usize::try_from(s.int(run, b"Indx")?).ok()?.min(chars.len());
             if end <= start {
                 continue;
             }
-            let text: String = chars.get(start..end)?.iter().filter(|c| **c != '\0' && **c != '\u{FFFC}').collect();
+            let text: String = chars
+                .get(start..end)?
+                .iter()
+                .filter(|c| **c != '\0' && **c != '\u{FFFC}')
+                .collect();
             start = end;
-            let Some(attrs) = s.obj(run, b"Item") else { continue };
+            let Some(attrs) = s.obj(run, b"Item") else {
+                continue;
+            };
             if !text.is_empty() {
                 runs.push(run_attrs(r, attrs, text, world));
             }
         }
         if align.is_none() {
-            align = s.obj(block, b"PAtt").and_then(|p| s.objs(p, b"Runs").first().copied()).and_then(|run| s.obj(run, b"Item")).map(|p| paragraph_align(r, p));
+            align = s
+                .obj(block, b"PAtt")
+                .and_then(|p| s.objs(p, b"Runs").first().copied())
+                .and_then(|run| s.obj(run, b"Item"))
+                .map(|p| paragraph_align(r, p));
         }
     }
     if placeholders {
@@ -68,14 +82,25 @@ pub(crate) fn read(r: &mut Reader, id: ObjId, world: Affine) -> Option<Text> {
         _ => bounds.x0,
     };
     if !artistic {
-        if s.objs(frame, b"ColW").len() > 1 || matches!(s.field(frame, b"ColW"), Some(Value::Array(a)) if a.len() > 1) {
+        if s.objs(frame, b"ColW").len() > 1
+            || matches!(s.field(frame, b"ColW"), Some(Value::Array(a)) if a.len() > 1)
+        {
             r.warn("text frames with several columns (imported as one column)");
         }
         if s.class(id) == Some(crate::stream::Tag::of(b"TxtC")) {
             r.warn("text frames with a curved outline (imported as rectangular frames)");
         }
     }
-    Some(Text { runs, align, anchor: Point { x: anchor_x, y: first_baseline }, frame: if artistic { None } else { Some(bounds) }, transform: world })
+    Some(Text {
+        runs,
+        align,
+        anchor: Point {
+            x: anchor_x,
+            y: first_baseline,
+        },
+        frame: if artistic { None } else { Some(bounds) },
+        transform: world,
+    })
 }
 
 fn slot<T: Copy>(v: Option<&Value>, i: usize, f: impl Fn(&Value) -> Option<T>) -> Option<T> {
@@ -104,22 +129,45 @@ fn run_attrs(r: &mut Reader, attrs: ObjId, text: String, world: Affine) -> TextR
     let s = r.s;
     let doubles = s.field(attrs, b"Doub");
     let ints = s.field(attrs, b"Ints");
-    let size = slot(doubles, 0, float).filter(|v| *v > 0.0 && *v < 1e6).unwrap_or(12.0 * r.dpi / 72.0);
+    let size = slot(doubles, 0, float)
+        .filter(|v| *v > 0.0 && *v < 1e6)
+        .unwrap_or(12.0 * r.dpi / 72.0);
     let tracking = slot(doubles, 4, float).unwrap_or(0.0);
-    let leading = (slot(ints, 4, int) == Some(1)).then(|| slot(doubles, 13, float)).flatten().filter(|v| *v > 0.0);
+    let leading = (slot(ints, 4, int) == Some(1))
+        .then(|| slot(doubles, 13, float))
+        .flatten()
+        .filter(|v| *v > 0.0);
     let objects = match s.field(attrs, b"Objs") {
-        Some(Value::Array(a)) => a.iter().map(|v| if let Value::Obj(o) = v { *o } else { None }).collect(),
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|v| if let Value::Obj(o) = v { *o } else { None })
+            .collect(),
         _ => Vec::new(),
     };
-    let fill = objects.first().copied().flatten().and_then(|f| paint::descriptor(r, f, world)).unwrap_or(Paint::None);
-    if objects.get(1).copied().flatten().and_then(|f| paint::descriptor(r, f, world)).is_some_and(|p| p != Paint::None) {
+    let fill = objects
+        .first()
+        .copied()
+        .flatten()
+        .and_then(|f| paint::descriptor(r, f, world))
+        .unwrap_or(Paint::None);
+    if objects
+        .get(1)
+        .copied()
+        .flatten()
+        .and_then(|f| paint::descriptor(r, f, world))
+        .is_some_and(|p| p != Paint::None)
+    {
         r.warn("outlined (stroked) text");
     }
     if slot(doubles, 10, float).is_some_and(|h| (h - 1.0).abs() > 1e-3) {
         r.warn("horizontally scaled text");
     }
     let font = s.obj(attrs, b"DFnt");
-    let get = |tag: &[u8; 4]| font.and_then(|f| s.str(f, tag)).unwrap_or_default().to_string();
+    let get = |tag: &[u8; 4]| {
+        font.and_then(|f| s.str(f, tag))
+            .unwrap_or_default()
+            .to_string()
+    };
     TextRun {
         text,
         postscript: get(b"Post"),

@@ -15,7 +15,17 @@
 //!
 //! Layer L0: no dependencies beyond `std`, no `unsafe`, builds for `wasm32-unknown-unknown`.
 
-#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
 
 mod read;
 mod write;
@@ -104,7 +114,11 @@ fn upper(u: u16) -> u16 {
 pub fn compare_names(a: &str, b: &str) -> Ordering {
     let ua: Vec<u16> = a.encode_utf16().collect();
     let ub: Vec<u16> = b.encode_utf16().collect();
-    ua.len().cmp(&ub.len()).then_with(|| ua.iter().map(|&u| upper(u)).cmp(ub.iter().map(|&u| upper(u))))
+    ua.len().cmp(&ub.len()).then_with(|| {
+        ua.iter()
+            .map(|&u| upper(u))
+            .cmp(ub.iter().map(|&u| upper(u)))
+    })
 }
 
 /// Check a directory entry name (§2.6.1): 1–31 UTF-16 code units, none of `/ \ : !`.

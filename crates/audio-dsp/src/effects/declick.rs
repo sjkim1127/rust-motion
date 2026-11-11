@@ -9,7 +9,7 @@
 //! maximum click length are left alone (they are transients, not clicks). Latency is one block
 //! plus the look-ahead.
 
-use crate::{AudioEffect, ParamSpec, ParamValues, Unit, block_len, param_plumbing};
+use crate::{block_len, param_plumbing, AudioEffect, ParamSpec, ParamValues, Unit};
 
 const BLOCK: usize = 512;
 const CONTEXT: usize = 512;
@@ -26,7 +26,11 @@ struct Chan {
 
 impl Chan {
     fn new() -> Chan {
-        Chan { buf: vec![0.0; SPAN], out: vec![0.0; BLOCK], pos: 0 }
+        Chan {
+            buf: vec![0.0; SPAN],
+            out: vec![0.0; BLOCK],
+            pos: 0,
+        }
     }
     fn reset(&mut self) {
         self.buf.iter_mut().for_each(|v| *v = 0.0);
@@ -88,15 +92,28 @@ pub struct ClickRemover {
 }
 
 impl ClickRemover {
-    pub const PARAMS: &'static [ParamSpec] =
-        &[ParamSpec::new("threshold", "Threshold", 1.0, 100.0, 30.0, Unit::None), ParamSpec::new("complexity", "Complexity", 1.0, 100.0, 16.0, Unit::None)];
+    pub const PARAMS: &'static [ParamSpec] = &[
+        ParamSpec::new("threshold", "Threshold", 1.0, 100.0, 30.0, Unit::None),
+        ParamSpec::new("complexity", "Complexity", 1.0, 100.0, 16.0, Unit::None),
+    ];
 
     pub fn new(_sample_rate: f32, channels: usize) -> Self {
-        let win = (0..SPAN).map(|i| (0.5 - 0.5 * (2.0 * std::f64::consts::PI * (i as f64 + 0.5) / SPAN as f64).cos()) as f32).collect();
+        let win = (0..SPAN)
+            .map(|i| {
+                (0.5 - 0.5 * (2.0 * std::f64::consts::PI * (i as f64 + 0.5) / SPAN as f64).cos())
+                    as f32
+            })
+            .collect();
         ClickRemover {
             pv: ParamValues::new(Self::PARAMS),
             ch: vec![Chan::new(); channels.max(1)],
-            s: Scratch { win, xw: vec![0.0; SPAN], resid: vec![0.0; SPAN], sorted: vec![0.0; SPAN], marks: vec![false; SPAN] },
+            s: Scratch {
+                win,
+                xw: vec![0.0; SPAN],
+                resid: vec![0.0; SPAN],
+                sorted: vec![0.0; SPAN],
+                marks: vec![false; SPAN],
+            },
             repaired: 0,
         }
     }
@@ -177,7 +194,11 @@ impl ClickRemover {
                 let i = start + t;
                 let mut pred = 0.0f64;
                 for j in 1..=p {
-                    let v = if i - j >= start { fwd[i - j - start] } else { buf[i - j] };
+                    let v = if i - j >= start {
+                        fwd[i - j - start]
+                    } else {
+                        buf[i - j]
+                    };
                     pred += a[j] * v as f64;
                 }
                 fwd[t] = pred as f32;
@@ -187,7 +208,11 @@ impl ClickRemover {
                 let i = start + t;
                 let mut pred = 0.0f64;
                 for j in 1..=p {
-                    let v = if i + j < end { bwd[i + j - start] } else { buf[i + j] };
+                    let v = if i + j < end {
+                        bwd[i + j - start]
+                    } else {
+                        buf[i + j]
+                    };
                     pred += a[j] * v as f64;
                 }
                 bwd[t] = pred as f32;

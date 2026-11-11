@@ -92,7 +92,14 @@ gallery! {
 }
 
 /// The gallery's folders, in order.
-pub const GALLERY_CATEGORIES: [&str; 6] = ["Artistic", "Brush Strokes", "Distort", "Sketch", "Stylize", "Texture"];
+pub const GALLERY_CATEGORIES: [&str; 6] = [
+    "Artistic",
+    "Brush Strokes",
+    "Distort",
+    "Sketch",
+    "Stylize",
+    "Texture",
+];
 
 /// One parameter of a gallery filter.
 #[derive(Clone, Debug, PartialEq)]
@@ -118,7 +125,10 @@ impl GalleryFilter {
     /// Looks a filter up by key (`coloredPencil`), command id or display name.
     pub fn from_key(k: &str) -> Option<GalleryFilter> {
         let k = k.strip_prefix("filter.gallery.").unwrap_or(k);
-        Self::ALL.iter().copied().find(|f| f.key() == k || f.name().eq_ignore_ascii_case(k))
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|f| f.key() == k || f.name().eq_ignore_ascii_case(k))
     }
 
     /// The numeric / choice / bool parameters (colours are not listed; they are fields of
@@ -128,7 +138,9 @@ impl GalleryFilter {
         let inner = doc.trim().trim_start_matches('{').trim_end_matches('}');
         let mut out = Vec::new();
         for part in inner.split(',') {
-            let Some((k, v)) = part.split_once(':') else { continue };
+            let Some((k, v)) = part.split_once(':') else {
+                continue;
+            };
             let key = k.trim().trim_matches('"');
             let v = v.trim();
             let kind = if let Some(body) = v.strip_prefix('"') {
@@ -138,7 +150,11 @@ impl GalleryFilter {
             } else if let Some((range, def)) = v.split_once('=') {
                 let (lo, hi) = range.split_once("..").unwrap_or(("0", "1"));
                 let p = |s: &str| s.trim().parse::<f32>().unwrap_or(0.0);
-                GalleryParamKind::Range { min: p(lo), max: p(hi), default: p(def) }
+                GalleryParamKind::Range {
+                    min: p(lo),
+                    max: p(hi),
+                    default: p(def),
+                }
             } else {
                 continue; // json (colours)
             };
@@ -152,7 +168,9 @@ impl GalleryFilter {
     /// colours without listing them (issue #709): Colored Pencil uses the
     /// background as paper tint, Neon Glow mixes foreground over background.
     pub fn uses_colours(self) -> bool {
-        matches!(self, Self::ColoredPencil | Self::NeonGlow) || self.params_doc().contains("\"foreground\"") || self.params_doc().contains("\"background\"")
+        matches!(self, Self::ColoredPencil | Self::NeonGlow)
+            || self.params_doc().contains("\"foreground\"")
+            || self.params_doc().contains("\"background\"")
     }
 }
 
@@ -197,7 +215,13 @@ impl GalleryEffect {
             };
             values.insert(p.key.to_string(), v);
         }
-        GalleryEffect { filter, values, foreground: black(), background: white(), color: neon() }
+        GalleryEffect {
+            filter,
+            values,
+            foreground: black(),
+            background: white(),
+            color: neon(),
+        }
     }
 
     /// Sets a numeric value (clamped to its range), a choice by index, or a bool.
@@ -214,7 +238,15 @@ impl GalleryEffect {
 
     /// Sets a choice by name; false if the name is not one of the choices.
     pub fn set_choice(&mut self, key: &str, name: &str) -> bool {
-        let Some(GalleryParamKind::Choice(c)) = self.filter.params().into_iter().find(|p| p.key == key).map(|p| p.kind) else { return false };
+        let Some(GalleryParamKind::Choice(c)) = self
+            .filter
+            .params()
+            .into_iter()
+            .find(|p| p.key == key)
+            .map(|p| p.kind)
+        else {
+            return false;
+        };
         match c.iter().position(|n| n.eq_ignore_ascii_case(name)) {
             Some(i) => {
                 self.values.insert(key.to_string(), i as f32);
@@ -229,7 +261,13 @@ impl GalleryEffect {
         if let Some(v) = self.values.get(key) {
             return *v;
         }
-        match self.filter.params().into_iter().find(|p| p.key == key).map(|p| p.kind) {
+        match self
+            .filter
+            .params()
+            .into_iter()
+            .find(|p| p.key == key)
+            .map(|p| p.kind)
+        {
             Some(GalleryParamKind::Range { default, .. }) => default,
             Some(GalleryParamKind::Bool(b)) => b as u8 as f32,
             _ => 0.0,
@@ -243,8 +281,17 @@ impl GalleryEffect {
 
     /// The chosen name of a choice parameter.
     pub fn choice(&self, key: &str) -> &'static str {
-        match self.filter.params().into_iter().find(|p| p.key == key).map(|p| p.kind) {
-            Some(GalleryParamKind::Choice(c)) => c.get(self.get(key).max(0.0) as usize).copied().unwrap_or(c[0]),
+        match self
+            .filter
+            .params()
+            .into_iter()
+            .find(|p| p.key == key)
+            .map(|p| p.kind)
+        {
+            Some(GalleryParamKind::Choice(c)) => c
+                .get(self.get(key).max(0.0) as usize)
+                .copied()
+                .unwrap_or(c[0]),
             _ => "",
         }
     }

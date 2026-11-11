@@ -97,7 +97,11 @@ pub fn expand(l: &Level, ch: usize, w: usize, h: usize) -> Vec<f32> {
 
 /// Gaussian pyramid with `levels` levels (level 0 = the input).
 pub fn gaussian(w: usize, h: usize, ch: usize, px: &[f32], levels: usize) -> Vec<Level> {
-    let mut out = vec![Level { w, h, px: px.to_vec() }];
+    let mut out = vec![Level {
+        w,
+        h,
+        px: px.to_vec(),
+    }];
     while out.len() < levels.max(1) {
         let Some(last) = out.last() else { break };
         if last.w <= 1 && last.h <= 1 {
@@ -118,7 +122,11 @@ pub fn laplacian(w: usize, h: usize, ch: usize, px: &[f32], levels: usize) -> Ve
             out.push(g[i].clone());
         } else {
             let up = expand(&g[i + 1], ch, g[i].w, g[i].h);
-            out.push(Level { w: g[i].w, h: g[i].h, px: g[i].px.iter().zip(&up).map(|(a, b)| a - b).collect() });
+            out.push(Level {
+                w: g[i].w,
+                h: g[i].h,
+                px: g[i].px.iter().zip(&up).map(|(a, b)| a - b).collect(),
+            });
         }
     }
     out
@@ -126,10 +134,18 @@ pub fn laplacian(w: usize, h: usize, ch: usize, px: &[f32], levels: usize) -> Ve
 
 /// Rebuild an image from its Laplacian pyramid.
 pub fn collapse(pyr: &[Level], ch: usize) -> Vec<f32> {
-    let mut cur = pyr.last().cloned().unwrap_or(Level { w: 0, h: 0, px: Vec::new() });
+    let mut cur = pyr.last().cloned().unwrap_or(Level {
+        w: 0,
+        h: 0,
+        px: Vec::new(),
+    });
     for l in pyr.iter().rev().skip(1) {
         let up = expand(&cur, ch, l.w, l.h);
-        cur = Level { w: l.w, h: l.h, px: l.px.iter().zip(&up).map(|(a, b)| a + b).collect() };
+        cur = Level {
+            w: l.w,
+            h: l.h,
+            px: l.px.iter().zip(&up).map(|(a, b)| a + b).collect(),
+        };
     }
     cur.px
 }
@@ -146,7 +162,14 @@ pub fn auto_levels(w: usize, h: usize) -> usize {
 }
 
 /// Blend `images` with per-pixel `weights` (any non-negative values; normalised per level).
-pub fn blend(w: usize, h: usize, ch: usize, images: &[&[f32]], weights: &[Vec<f32>], levels: usize) -> Vec<f32> {
+pub fn blend(
+    w: usize,
+    h: usize,
+    ch: usize,
+    images: &[&[f32]],
+    weights: &[Vec<f32>],
+    levels: usize,
+) -> Vec<f32> {
     assert_eq!(images.len(), weights.len());
     let levels = levels.max(1);
     let mut acc: Option<Vec<Level>> = None;
@@ -154,8 +177,24 @@ pub fn blend(w: usize, h: usize, ch: usize, images: &[&[f32]], weights: &[Vec<f3
     for (img, wt) in images.iter().zip(weights) {
         let lp = laplacian(w, h, ch, img, levels);
         let gp = gaussian(w, h, 1, wt, levels);
-        let a = acc.get_or_insert_with(|| lp.iter().map(|l| Level { w: l.w, h: l.h, px: vec![0.0; l.px.len()] }).collect());
-        let s = wsum.get_or_insert_with(|| gp.iter().map(|l| Level { w: l.w, h: l.h, px: vec![0.0; l.px.len()] }).collect());
+        let a = acc.get_or_insert_with(|| {
+            lp.iter()
+                .map(|l| Level {
+                    w: l.w,
+                    h: l.h,
+                    px: vec![0.0; l.px.len()],
+                })
+                .collect()
+        });
+        let s = wsum.get_or_insert_with(|| {
+            gp.iter()
+                .map(|l| Level {
+                    w: l.w,
+                    h: l.h,
+                    px: vec![0.0; l.px.len()],
+                })
+                .collect()
+        });
         for (li, (l, g)) in lp.iter().zip(&gp).enumerate() {
             for i in 0..l.w * l.h {
                 let k = g.px[i];
@@ -166,7 +205,9 @@ pub fn blend(w: usize, h: usize, ch: usize, images: &[&[f32]], weights: &[Vec<f3
             }
         }
     }
-    let (Some(mut a), Some(s)) = (acc, wsum) else { return vec![0.0; w * h * ch] };
+    let (Some(mut a), Some(s)) = (acc, wsum) else {
+        return vec![0.0; w * h * ch];
+    };
     for (l, sl) in a.iter_mut().zip(&s) {
         for i in 0..l.w * l.h {
             let k = sl.px[i];
@@ -175,7 +216,10 @@ pub fn blend(w: usize, h: usize, ch: usize, images: &[&[f32]], weights: &[Vec<f3
             }
         }
     }
-    collapse(&a, ch).into_iter().map(|v| v.clamp(0.0, 1.0)).collect()
+    collapse(&a, ch)
+        .into_iter()
+        .map(|v| v.clamp(0.0, 1.0))
+        .collect()
 }
 
 /// Focus-stack fusion settings for [`fuse_stack`].
@@ -197,7 +241,12 @@ pub struct StackFusion {
 
 impl Default for StackFusion {
     fn default() -> Self {
-        StackFusion { energy_radius: 1, halo: 2.0, guide: 2, levels: None }
+        StackFusion {
+            energy_radius: 1,
+            halo: 2.0,
+            guide: 2,
+            levels: None,
+        }
     }
 }
 
@@ -230,7 +279,9 @@ pub fn stack_levels(w: usize, h: usize) -> usize {
 /// The weight a coarse coefficient gets from the guide's region energy `re` at hardness `p`:
 /// `((re + floor) / ref)^p`, its exponent clamped to ±60.
 fn halo_weight(re: f32, p: f32) -> f32 {
-    (p * ((re.max(0.0) + HALO_FLOOR) / HALO_REF).ln()).clamp(-60.0, 60.0).exp()
+    (p * ((re.max(0.0) + HALO_FLOOR) / HALO_REF).ln())
+        .clamp(-60.0, 60.0)
+        .exp()
 }
 
 /// Binomial window weights of radius `r` (row 2r of Pascal's triangle / 4^r).
@@ -256,7 +307,11 @@ fn window_sum(w: usize, h: usize, src: &[f32], wt: &[f32]) -> Vec<f32> {
     par_rows(&mut tmp, w, 1, |y, row| {
         let s = &src[y * w..y * w + w];
         for (x, o) in row.iter_mut().enumerate() {
-            *o = wt.iter().enumerate().map(|(t, k)| k * s[(x + t).saturating_sub(r).min(w - 1)]).sum();
+            *o = wt
+                .iter()
+                .enumerate()
+                .map(|(t, k)| k * s[(x + t).saturating_sub(r).min(w - 1)])
+                .sum();
         }
     });
     let mut out = vec![0.0f32; w * h];
@@ -341,9 +396,16 @@ struct Residual {
 /// is the mean of the non-dominated images. Images that do not cover the pixel are left out
 /// unless none does.
 fn fuse_residuals(tops: &[Residual], ch: usize) -> Level {
-    let Some(t0) = tops.first() else { return Level { w: 0, h: 0, px: Vec::new() } };
+    let Some(t0) = tops.first() else {
+        return Level {
+            w: 0,
+            h: 0,
+            px: Vec::new(),
+        };
+    };
     let (w, h, n) = (t0.px.w, t0.px.h, tops.len());
-    let measures: Vec<(Vec<f32>, Vec<f32>)> = par_map(n, |k| deviation_entropy(w, h, &tops[k].luma));
+    let measures: Vec<(Vec<f32>, Vec<f32>)> =
+        par_map(n, |k| deviation_entropy(w, h, &tops[k].luma));
     let mut out = vec![0.0f32; w * h * ch];
     let mut keep = vec![false; n];
     for i in 0..w * h {
@@ -373,7 +435,14 @@ fn fuse_residuals(tops: &[Residual], ch: usize) -> Level {
 /// Halo control: fold the levels coarser than the guide `g` as `Σ w·L` and `Σ w`, the guide's
 /// weights `wgt` REDUCEd to each level's size. `src` is the image's pyramid; `None` scales the
 /// first image's levels, already in `acc`, in place.
-fn fold_halo(acc: &mut [Level], wsum: &mut Vec<Vec<f32>>, src: Option<&[Level]>, g: usize, mut wgt: Level, ch: usize) {
+fn fold_halo(
+    acc: &mut [Level],
+    wsum: &mut Vec<Vec<f32>>,
+    src: Option<&[Level]>,
+    g: usize,
+    mut wgt: Level,
+    ch: usize,
+) {
     for li in g + 1..acc.len() {
         wgt = reduce(&wgt, 1);
         let a = &mut acc[li];
@@ -426,7 +495,15 @@ fn fold_halo(acc: &mut [Level], wsum: &mut Vec<Vec<f32>>, src: Option<&[Level]>,
 ///
 /// Images are folded in one at a time: only the running fused pyramid, one best-energy (or
 /// weight-sum) plane per level and the small residuals are held. Output is clamped to 0..=1.
-pub fn fuse_stack(w: usize, h: usize, ch: usize, images: &[&[f32]], luma: &[Vec<f32>], alpha: &[Vec<f32>], p: StackFusion) -> Vec<f32> {
+pub fn fuse_stack(
+    w: usize,
+    h: usize,
+    ch: usize,
+    images: &[&[f32]],
+    luma: &[Vec<f32>],
+    alpha: &[Vec<f32>],
+    p: StackFusion,
+) -> Vec<f32> {
     // Levels the pyramid can actually have (REDUCE stops at 1 × 1).
     let levels = {
         let want = p.levels.unwrap_or_else(|| stack_levels(w, h)).max(1);
@@ -451,16 +528,30 @@ pub fn fuse_stack(w: usize, h: usize, ch: usize, images: &[&[f32]], luma: &[Vec<
         let lp = laplacian(w, h, ch, img, levels);
         let ll = laplacian(w, h, 1, lm, levels);
         let ga = gaussian(w, h, 1, al, levels);
-        let (Some(top), Some(tl), Some(ta)) = (lp.last(), ll.last(), ga.last()) else { continue };
+        let (Some(top), Some(tl), Some(ta)) = (lp.last(), ll.last(), ga.last()) else {
+            continue;
+        };
         if lp.len() != levels || ll.len() != levels || ga.len() != levels {
             continue;
         }
         if halo.is_none() {
-            tops.push(Residual { px: top.clone(), luma: tl.px.clone(), cover: ta.px.clone() });
+            tops.push(Residual {
+                px: top.clone(),
+                luma: tl.px.clone(),
+                cover: ta.px.clone(),
+            });
         }
-        let energies: Vec<Vec<f32>> = (0..nsel).map(|li| region_energy(&ll[li], &ga[li], &win)).collect();
-        let wgt =
-            halo.map(|(g, hard)| Level { w: ll[g].w, h: ll[g].h, px: energies[g].iter().map(|&e| if e < 0.0 { 0.0 } else { halo_weight(e, hard) }).collect() });
+        let energies: Vec<Vec<f32>> = (0..nsel)
+            .map(|li| region_energy(&ll[li], &ga[li], &win))
+            .collect();
+        let wgt = halo.map(|(g, hard)| Level {
+            w: ll[g].w,
+            h: ll[g].h,
+            px: energies[g]
+                .iter()
+                .map(|&e| if e < 0.0 { 0.0 } else { halo_weight(e, hard) })
+                .collect(),
+        });
         if acc.is_empty() {
             acc = lp;
             best = energies;
@@ -507,7 +598,8 @@ pub fn fuse_stack(w: usize, h: usize, ch: usize, images: &[&[f32]], luma: &[Vec<
                 par_rows(&mut a.px, aw, ch, |y, row| {
                     for (x, px) in row.chunks_mut(ch).enumerate() {
                         let k = s[y * aw + x];
-                        px.iter_mut().for_each(|v| *v = if k > 0.0 { *v / k } else { 0.0 });
+                        px.iter_mut()
+                            .for_each(|v| *v = if k > 0.0 { *v / k } else { 0.0 });
                     }
                 });
             }
@@ -518,7 +610,10 @@ pub fn fuse_stack(w: usize, h: usize, ch: usize, images: &[&[f32]], luma: &[Vec<
             }
         }
     }
-    collapse(&acc, ch).into_iter().map(|v| v.clamp(0.0, 1.0)).collect()
+    collapse(&acc, ch)
+        .into_iter()
+        .map(|v| v.clamp(0.0, 1.0))
+        .collect()
 }
 
 fn box_blur1(w: usize, h: usize, v: &[f32], r: usize) -> Vec<f32> {
@@ -528,11 +623,19 @@ fn box_blur1(w: usize, h: usize, v: &[f32], r: usize) -> Vec<f32> {
         for line in 0..n {
             let at = |k: i64| {
                 let k = k.clamp(0, m as i64 - 1) as usize;
-                if horizontal { src[line * w + k] } else { src[k * w + line] }
+                if horizontal {
+                    src[line * w + k]
+                } else {
+                    src[k * w + line]
+                }
             };
             let mut s: f32 = (-(r as i64)..=r as i64).map(at).sum();
             for k in 0..m {
-                let i = if horizontal { line * w + k } else { k * w + line };
+                let i = if horizontal {
+                    line * w + k
+                } else {
+                    k * w + line
+                };
                 dst[i] = s / (2 * r + 1) as f32;
                 s += at(k as i64 + r as i64 + 1) - at(k as i64 - r as i64);
             }
@@ -571,11 +674,21 @@ pub fn stack_weights(w: usize, h: usize, luma: &[Vec<f32>], alpha: &[Vec<f32>]) 
             for y in 0..h {
                 for x in 0..w {
                     let p = |xx: usize, yy: usize| l[yy * w + xx];
-                    let (xl, xr, yu, yd) = (x.saturating_sub(1), (x + 1).min(w - 1), y.saturating_sub(1), (y + 1).min(h - 1));
-                    lap[y * w + x] = (p(xl, y) + p(xr, y) + p(x, yu) + p(x, yd) - 4.0 * p(x, y)).abs();
+                    let (xl, xr, yu, yd) = (
+                        x.saturating_sub(1),
+                        (x + 1).min(w - 1),
+                        y.saturating_sub(1),
+                        (y + 1).min(h - 1),
+                    );
+                    lap[y * w + x] =
+                        (p(xl, y) + p(xr, y) + p(x, yu) + p(x, yd) - 4.0 * p(x, y)).abs();
                 }
             }
-            box_blur1(w, h, &lap, radius).iter().zip(a).map(|(s, a)| if *a > 0.5 { *s } else { -1.0 }).collect()
+            box_blur1(w, h, &lap, radius)
+                .iter()
+                .zip(a)
+                .map(|(s, a)| if *a > 0.5 { *s } else { -1.0 })
+                .collect()
         })
         .collect();
     winner_take_all(&scores, w * h)
@@ -590,22 +703,38 @@ pub fn panorama_weights(w: usize, h: usize, alpha: &[Vec<f32>]) -> Vec<Vec<f32>>
             // Two-pass 3-4 chamfer distance transform from transparent pixels / the border.
             let inf = 1.0e9f32;
             let mut d: Vec<f32> = a.iter().map(|v| if *v > 0.5 { inf } else { 0.0 }).collect();
-            let at = |d: &[f32], x: i64, y: i64| if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 { 0.0 } else { d[y as usize * w + x as usize] };
+            let at = |d: &[f32], x: i64, y: i64| {
+                if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 {
+                    0.0
+                } else {
+                    d[y as usize * w + x as usize]
+                }
+            };
             for y in 0..h as i64 {
                 for x in 0..w as i64 {
                     let i = y as usize * w + x as usize;
-                    let m = d[i].min(at(&d, x - 1, y) + 3.0).min(at(&d, x, y - 1) + 3.0).min(at(&d, x - 1, y - 1) + 4.0).min(at(&d, x + 1, y - 1) + 4.0);
+                    let m = d[i]
+                        .min(at(&d, x - 1, y) + 3.0)
+                        .min(at(&d, x, y - 1) + 3.0)
+                        .min(at(&d, x - 1, y - 1) + 4.0)
+                        .min(at(&d, x + 1, y - 1) + 4.0);
                     d[i] = m;
                 }
             }
             for y in (0..h as i64).rev() {
                 for x in (0..w as i64).rev() {
                     let i = y as usize * w + x as usize;
-                    let m = d[i].min(at(&d, x + 1, y) + 3.0).min(at(&d, x, y + 1) + 3.0).min(at(&d, x + 1, y + 1) + 4.0).min(at(&d, x - 1, y + 1) + 4.0);
+                    let m = d[i]
+                        .min(at(&d, x + 1, y) + 3.0)
+                        .min(at(&d, x, y + 1) + 3.0)
+                        .min(at(&d, x + 1, y + 1) + 4.0)
+                        .min(at(&d, x - 1, y + 1) + 4.0);
                     d[i] = m;
                 }
             }
-            d.iter().map(|v| if *v <= 0.0 { -1.0 } else { *v }).collect()
+            d.iter()
+                .map(|v| if *v <= 0.0 { -1.0 } else { *v })
+                .collect()
         })
         .collect();
     winner_take_all(&scores, w * h)
@@ -618,7 +747,9 @@ mod tests {
     #[test]
     fn laplacian_round_trip_is_exact() {
         let (w, h) = (37, 23);
-        let img: Vec<f32> = (0..w * h * 2).map(|i| ((i * 37 % 101) as f32) / 101.0).collect();
+        let img: Vec<f32> = (0..w * h * 2)
+            .map(|i| ((i * 37 % 101) as f32) / 101.0)
+            .collect();
         let pyr = laplacian(w, h, 2, &img, 5);
         assert_eq!(pyr.len(), 5);
         let back = collapse(&pyr, 2);
@@ -630,7 +761,9 @@ mod tests {
         let (w, h) = (64, 32);
         let a = vec![0.2f32; w * h];
         let b = vec![0.8f32; w * h];
-        let wa: Vec<f32> = (0..w * h).map(|i| if i % w < 32 { 1.0 } else { 0.0 }).collect();
+        let wa: Vec<f32> = (0..w * h)
+            .map(|i| if i % w < 32 { 1.0 } else { 0.0 })
+            .collect();
         let wb: Vec<f32> = wa.iter().map(|v| 1.0 - v).collect();
         let out = blend(w, h, 1, &[&a, &b], &[wa, wb], auto_levels(w, h));
         assert!((out[5 * w + 2] - 0.2).abs() < 1e-3);
@@ -644,9 +777,31 @@ mod tests {
     fn stack_picks_the_sharp_image() {
         let (w, h) = (48, 48);
         // Image 0 is sharp on the left (checker), image 1 on the right.
-        let checker = |x: usize, y: usize| if (x / 2 + y / 2).is_multiple_of(2) { 0.1 } else { 0.9 };
-        let i0: Vec<f32> = (0..w * h).map(|i| if i % w < 24 { checker(i % w, i / w) } else { 0.5 }).collect();
-        let i1: Vec<f32> = (0..w * h).map(|i| if i % w >= 24 { checker(i % w, i / w) } else { 0.5 }).collect();
+        let checker = |x: usize, y: usize| {
+            if (x / 2 + y / 2).is_multiple_of(2) {
+                0.1
+            } else {
+                0.9
+            }
+        };
+        let i0: Vec<f32> = (0..w * h)
+            .map(|i| {
+                if i % w < 24 {
+                    checker(i % w, i / w)
+                } else {
+                    0.5
+                }
+            })
+            .collect();
+        let i1: Vec<f32> = (0..w * h)
+            .map(|i| {
+                if i % w >= 24 {
+                    checker(i % w, i / w)
+                } else {
+                    0.5
+                }
+            })
+            .collect();
         let ones = vec![1.0f32; w * h];
         let wts = stack_weights(w, h, &[i0, i1], &[ones.clone(), ones]);
         assert_eq!(wts[0][20 * w + 4], 1.0);
@@ -656,8 +811,12 @@ mod tests {
     #[test]
     fn panorama_splits_the_overlap() {
         let (w, h) = (60, 20);
-        let a: Vec<f32> = (0..w * h).map(|i| if i % w < 40 { 1.0 } else { 0.0 }).collect();
-        let b: Vec<f32> = (0..w * h).map(|i| if i % w >= 20 { 1.0 } else { 0.0 }).collect();
+        let a: Vec<f32> = (0..w * h)
+            .map(|i| if i % w < 40 { 1.0 } else { 0.0 })
+            .collect();
+        let b: Vec<f32> = (0..w * h)
+            .map(|i| if i % w >= 20 { 1.0 } else { 0.0 })
+            .collect();
         let wts = panorama_weights(w, h, &[a, b]);
         assert_eq!(wts[0][10 * w + 5], 1.0);
         assert_eq!(wts[1][10 * w + 55], 1.0);
@@ -670,7 +829,11 @@ mod tests {
         let mut px = vec![0.0f32; w * h * ch];
         for y in 0..h {
             for x in 0..w {
-                let v = if ((x / cell) + (y / cell)).is_multiple_of(2) { 0.2 } else { 0.8 };
+                let v = if ((x / cell) + (y / cell)).is_multiple_of(2) {
+                    0.2
+                } else {
+                    0.8
+                };
                 let p = &mut px[(y * w + x) * ch..(y * w + x + 1) * ch];
                 for (c, o) in p.iter_mut().enumerate() {
                     *o = match c {
@@ -686,12 +849,22 @@ mod tests {
     }
 
     fn luma_of(w: usize, h: usize, ch: usize, px: &[f32]) -> Vec<f32> {
-        (0..w * h).map(|i| if ch >= 3 { 0.2126 * px[i * ch] + 0.7152 * px[i * ch + 1] + 0.0722 * px[i * ch + 2] } else { px[i * ch] }).collect()
+        (0..w * h)
+            .map(|i| {
+                if ch >= 3 {
+                    0.2126 * px[i * ch] + 0.7152 * px[i * ch + 1] + 0.0722 * px[i * ch + 2]
+                } else {
+                    px[i * ch]
+                }
+            })
+            .collect()
     }
 
     /// Blur every channel with the 5-tap kernel `passes` times (no decimation).
     fn blur_img(w: usize, h: usize, ch: usize, px: &[f32], passes: usize) -> Vec<f32> {
-        let mut planes: Vec<Vec<f32>> = (0..ch).map(|c| (0..w * h).map(|i| px[i * ch + c]).collect()).collect();
+        let mut planes: Vec<Vec<f32>> = (0..ch)
+            .map(|c| (0..w * h).map(|i| px[i * ch + c]).collect())
+            .collect();
         for _ in 0..passes {
             for p in planes.iter_mut() {
                 *p = window_sum(w, h, p, &K);
@@ -701,7 +874,12 @@ mod tests {
     }
 
     fn rms(a: &[f32], b: &[f32]) -> f32 {
-        (a.iter().zip(b).map(|(x, y)| ((x - y) * (x - y)) as f64).sum::<f64>() / a.len() as f64).sqrt() as f32
+        (a.iter()
+            .zip(b)
+            .map(|(x, y)| ((x - y) * (x - y)) as f64)
+            .sum::<f64>()
+            / a.len() as f64)
+            .sqrt() as f32
     }
 
     #[test]
@@ -717,9 +895,17 @@ mod tests {
     fn binomial_window_and_window_sum() {
         assert_eq!(binomial(0), vec![1.0]);
         assert_eq!(binomial(1), vec![0.25, 0.5, 0.25]);
-        assert!(binomial(2).iter().zip(&K).all(|(a, k)| (a - k).abs() < 1e-6));
+        assert!(binomial(2)
+            .iter()
+            .zip(&K)
+            .all(|(a, k)| (a - k).abs() < 1e-6));
         let flat = vec![0.3f32; 7 * 5];
-        assert!(window_sum(7, 5, &flat, &binomial(1)).iter().all(|v| (v - 0.3).abs() < 1e-6), "a window sum of unit weight keeps a flat plane");
+        assert!(
+            window_sum(7, 5, &flat, &binomial(1))
+                .iter()
+                .all(|v| (v - 0.3).abs() < 1e-6),
+            "a window sum of unit weight keeps a flat plane"
+        );
         assert_eq!(window_sum(7, 5, &flat, &binomial(0)), flat);
     }
 
@@ -731,7 +917,12 @@ mod tests {
         assert!(d.iter().all(|v| *v == 0.0) && e.iter().all(|v| *v == 0.0));
         let check = luma_of(w, h, 1, &checker_img(w, h, 1, 1));
         let (d, e) = deviation_entropy(w, h, &check);
-        assert!(d[10 * w + 10] > 0.08 && e[10 * w + 10] > 0.6, "{} {}", d[10 * w + 10], e[10 * w + 10]);
+        assert!(
+            d[10 * w + 10] > 0.08 && e[10 * w + 10] > 0.6,
+            "{} {}",
+            d[10 * w + 10],
+            e[10 * w + 10]
+        );
     }
 
     #[test]
@@ -740,16 +931,54 @@ mod tests {
         let im = checker_img(w, h, 7, ch);
         let lm = luma_of(w, h, ch, &im);
         let ones = vec![1.0f32; w * h];
-        let three = StackFusion { levels: Some(3), ..Default::default() };
-        for p in [three, StackFusion { halo: 0.0, ..three }, StackFusion { guide: 1, ..three }, StackFusion { energy_radius: 0, ..three }] {
-            let out = fuse_stack(w, h, ch, &[&im, &im, &im], &[lm.clone(), lm.clone(), lm.clone()], &[ones.clone(), ones.clone(), ones.clone()], p);
+        let three = StackFusion {
+            levels: Some(3),
+            ..Default::default()
+        };
+        for p in [
+            three,
+            StackFusion { halo: 0.0, ..three },
+            StackFusion { guide: 1, ..three },
+            StackFusion {
+                energy_radius: 0,
+                ..three
+            },
+        ] {
+            let out = fuse_stack(
+                w,
+                h,
+                ch,
+                &[&im, &im, &im],
+                &[lm.clone(), lm.clone(), lm.clone()],
+                &[ones.clone(), ones.clone(), ones.clone()],
+                p,
+            );
             assert!(rms(&out, &im) < 1e-5, "{p:?}: {}", rms(&out, &im));
         }
         // One image, and none, are fine too.
-        assert!(rms(&fuse_stack(w, h, ch, &[&im], std::slice::from_ref(&lm), std::slice::from_ref(&ones), three), &im) < 1e-5);
-        assert_eq!(fuse_stack(w, h, ch, &[], &[], &[], three), vec![0.0; w * h * ch]);
+        assert!(
+            rms(
+                &fuse_stack(
+                    w,
+                    h,
+                    ch,
+                    &[&im],
+                    std::slice::from_ref(&lm),
+                    std::slice::from_ref(&ones),
+                    three
+                ),
+                &im
+            ) < 1e-5
+        );
+        assert_eq!(
+            fuse_stack(w, h, ch, &[], &[], &[], three),
+            vec![0.0; w * h * ch]
+        );
         // More levels than the image has are clamped.
-        let many = StackFusion { levels: Some(40), ..Default::default() };
+        let many = StackFusion {
+            levels: Some(40),
+            ..Default::default()
+        };
         assert!(rms(&fuse_stack(w, h, ch, &[&im], &[lm], &[ones], many), &im) < 1e-5);
     }
 
@@ -772,28 +1001,67 @@ mod tests {
         let (la, lb) = (luma_of(w, h, ch, &a), luma_of(w, h, ch, &b));
         let ones = vec![1.0f32; w * h];
         for p in [
-            StackFusion { halo: 0.0, ..Default::default() },
-            StackFusion { halo: 0.0, energy_radius: 0, ..Default::default() },
-            StackFusion { guide: 0, ..Default::default() },
+            StackFusion {
+                halo: 0.0,
+                ..Default::default()
+            },
+            StackFusion {
+                halo: 0.0,
+                energy_radius: 0,
+                ..Default::default()
+            },
+            StackFusion {
+                guide: 0,
+                ..Default::default()
+            },
         ] {
-            let out = fuse_stack(w, h, ch, &[&a, &b], &[la.clone(), lb.clone()], &[ones.clone(), ones.clone()], p);
+            let out = fuse_stack(
+                w,
+                h,
+                ch,
+                &[&a, &b],
+                &[la.clone(), lb.clone()],
+                &[ones.clone(), ones.clone()],
+                p,
+            );
             let err = rms(&out, &sharp);
             assert!(err < 0.3 * rms(&a, &sharp), "{p:?}: fused rms {err}");
-            assert!(out.iter().skip(3).step_by(ch).all(|a| (a - 1.0).abs() < 1e-4), "alpha stays opaque");
+            assert!(
+                out.iter()
+                    .skip(3)
+                    .step_by(ch)
+                    .all(|a| (a - 1.0).abs() < 1e-4),
+                "alpha stays opaque"
+            );
             // Away from the seam each side is the sharp image. Without halo control the residual
             // (one REDUCE here) averages where the blurred side's entropy beats the checker's, so
             // the finer scales are exact and the whole is within a few percent; with halo control
             // the guide's energy weighs the residual too.
-            let (e1, e2) = ((out[(20 * w + 10) * ch] - sharp[(20 * w + 10) * ch]).abs(), (out[(20 * w + 85) * ch + 1] - sharp[(20 * w + 85) * ch + 1]).abs());
+            let (e1, e2) = (
+                (out[(20 * w + 10) * ch] - sharp[(20 * w + 10) * ch]).abs(),
+                (out[(20 * w + 85) * ch + 1] - sharp[(20 * w + 85) * ch + 1]).abs(),
+            );
             let tol = if p.halo > 0.0 { 1e-3 } else { 0.1 };
             assert!(e1 < tol && e2 < tol, "{p:?}: {e1} {e2}");
         }
         // The old full-resolution weights and spline blend do worse on the same pair.
         let wts = stack_weights(w, h, &[la, lb], &[ones.clone(), ones]);
         let old = blend(w, h, ch, &[&a, &b], &wts, auto_levels(w, h));
-        let new =
-            fuse_stack(w, h, ch, &[&a, &b], &[luma_of(w, h, ch, &a), luma_of(w, h, ch, &b)], &[vec![1.0; w * h], vec![1.0; w * h]], StackFusion::default());
-        assert!(rms(&new, &sharp) <= rms(&old, &sharp), "new {} old {}", rms(&new, &sharp), rms(&old, &sharp));
+        let new = fuse_stack(
+            w,
+            h,
+            ch,
+            &[&a, &b],
+            &[luma_of(w, h, ch, &a), luma_of(w, h, ch, &b)],
+            &[vec![1.0; w * h], vec![1.0; w * h]],
+            StackFusion::default(),
+        );
+        assert!(
+            rms(&new, &sharp) <= rms(&old, &sharp),
+            "new {} old {}",
+            rms(&new, &sharp),
+            rms(&old, &sharp)
+        );
     }
 
     #[test]
@@ -802,7 +1070,9 @@ mod tests {
         let sharp = checker_img(w, h, 6, ch);
         // Image A: flat gray everywhere. Image B: the sharp checker on the left half, garbage
         // (opaque white in the colour channels, alpha 0) on the right.
-        let a: Vec<f32> = (0..w * h * ch).map(|i| if i % ch == 3 { 1.0 } else { 0.5 }).collect();
+        let a: Vec<f32> = (0..w * h * ch)
+            .map(|i| if i % ch == 3 { 1.0 } else { 0.5 })
+            .collect();
         let b: Vec<f32> = (0..w * h * ch)
             .map(|i| {
                 if (i / ch) % w < w / 2 {
@@ -814,15 +1084,40 @@ mod tests {
                 }
             })
             .collect();
-        let alpha_b: Vec<f32> = (0..w * h).map(|i| if i % w < w / 2 { 1.0 } else { 0.0 }).collect();
+        let alpha_b: Vec<f32> = (0..w * h)
+            .map(|i| if i % w < w / 2 { 1.0 } else { 0.0 })
+            .collect();
         let (la, lb) = (luma_of(w, h, ch, &a), luma_of(w, h, ch, &b));
-        for p in [StackFusion { halo: 0.0, ..Default::default() }, StackFusion { guide: 0, ..Default::default() }] {
-            let out = fuse_stack(w, h, ch, &[&a, &b], &[la.clone(), lb.clone()], &[vec![1.0; w * h], alpha_b.clone()], p);
+        for p in [
+            StackFusion {
+                halo: 0.0,
+                ..Default::default()
+            },
+            StackFusion {
+                guide: 0,
+                ..Default::default()
+            },
+        ] {
+            let out = fuse_stack(
+                w,
+                h,
+                ch,
+                &[&a, &b],
+                &[la.clone(), lb.clone()],
+                &[vec![1.0; w * h], alpha_b.clone()],
+                p,
+            );
             // Left: the checker; right: A's gray, not B's white.
-            assert!((out[(30 * w + 12) * ch] - sharp[(30 * w + 12) * ch]).abs() < 0.05, "{p:?}");
+            assert!(
+                (out[(30 * w + 12) * ch] - sharp[(30 * w + 12) * ch]).abs() < 0.05,
+                "{p:?}"
+            );
             for x in [60, 70, 90] {
                 let px = &out[(30 * w + x) * ch..(30 * w + x + 1) * ch];
-                assert!(px[..3].iter().all(|v| (v - 0.5).abs() < 0.03), "{p:?}: x {x} {px:?}");
+                assert!(
+                    px[..3].iter().all(|v| (v - 0.5).abs() < 0.03),
+                    "{p:?}: x {x} {px:?}"
+                );
             }
         }
     }
@@ -850,10 +1145,26 @@ mod tests {
         let ones = vec![1.0f32; w * h];
         let fuse = |halo: f32, imgs: [&[f32]; 2]| {
             let l = [luma_of(w, h, ch, imgs[0]), luma_of(w, h, ch, imgs[1])];
-            fuse_stack(w, h, ch, &imgs, &l, &[ones.clone(), ones.clone()], StackFusion { halo, guide: 2, levels: Some(5), ..Default::default() })
+            fuse_stack(
+                w,
+                h,
+                ch,
+                &imgs,
+                &l,
+                &[ones.clone(), ones.clone()],
+                StackFusion {
+                    halo,
+                    guide: 2,
+                    levels: Some(5),
+                    ..Default::default()
+                },
+            )
         };
         let off = rms(&fuse(0.0, [&a, &b]), &a);
-        assert!(off > 0.05, "without halo control the bump gets in: rms {off}");
+        assert!(
+            off > 0.05,
+            "without halo control the bump gets in: rms {off}"
+        );
         for halo in [1.0, 2.0, 4.0, 8.0, 100.0] {
             let on = rms(&fuse(halo, [&a, &b]), &a);
             assert!(on < 0.15 * off, "halo {halo}: rms {on} vs {off} without");
@@ -874,11 +1185,31 @@ mod tests {
         let a = checker_img(w, h, 2, ch);
         let b = vec![0.5f32; w * h * ch];
         let ones = vec![1.0f32; w * h];
-        let one = StackFusion { levels: Some(1), halo: 0.0, ..Default::default() };
-        let out = fuse_stack(w, h, ch, &[&b, &a], &[luma_of(w, h, ch, &b), luma_of(w, h, ch, &a)], &[ones.clone(), ones.clone()], one);
+        let one = StackFusion {
+            levels: Some(1),
+            halo: 0.0,
+            ..Default::default()
+        };
+        let out = fuse_stack(
+            w,
+            h,
+            ch,
+            &[&b, &a],
+            &[luma_of(w, h, ch, &b), luma_of(w, h, ch, &a)],
+            &[ones.clone(), ones.clone()],
+            one,
+        );
         assert!(rms(&out, &a) < 1e-6);
         // Identical measures average (the Pareto rule keeps both).
-        let out = fuse_stack(w, h, ch, &[&b, &a], &[luma_of(w, h, ch, &a), luma_of(w, h, ch, &a)], &[ones.clone(), ones], one);
+        let out = fuse_stack(
+            w,
+            h,
+            ch,
+            &[&b, &a],
+            &[luma_of(w, h, ch, &a), luma_of(w, h, ch, &a)],
+            &[ones.clone(), ones],
+            one,
+        );
         let mean: Vec<f32> = a.iter().zip(&b).map(|(x, y)| (x + y) / 2.0).collect();
         assert!(rms(&out, &mean) < 1e-6);
     }

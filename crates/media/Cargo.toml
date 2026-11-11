@@ -1,6 +1,6 @@
 [package]
 name        = "rust-motion-media"
-description = "Media components for Rust Motion — Img, Video, Audio"
+description = "Native media decoders, metadata extractors, and audio visualization for Rust Motion"
 version.workspace     = true
 edition.workspace     = true
 authors.workspace     = true
@@ -9,8 +9,6 @@ repository.workspace  = true
 readme.workspace      = true
 
 [dependencies]
-dioxus             = { workspace = true, optional = true }
-rust-motion-core     = { workspace = true, optional = true }
 rust-motion-composition = { workspace = true }
 rust-motion-rasterizer  = { workspace = true }
 rust-motion-audio-dsp   = { workspace = true }
@@ -21,7 +19,3 @@ hound              = { workspace = true }
 image              = { workspace = true }
 symphonia          = { workspace = true }
 thiserror          = { workspace = true }
-
-[features]
-default = ["dioxus"]
-dioxus = ["dep:dioxus", "dep:rust-motion-core"]

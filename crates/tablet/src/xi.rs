@@ -69,7 +69,11 @@ impl Axis {
             };
         }
         let span = self.max - self.min;
-        let unit = if span.is_finite() && span > 0.0 { ((v - self.min) / span).clamp(0.0, 1.0) } else { v.clamp(0.0, 1.0) };
+        let unit = if span.is_finite() && span > 0.0 {
+            ((v - self.min) / span).clamp(0.0, 1.0)
+        } else {
+            v.clamp(0.0, 1.0)
+        };
         match self.kind {
             AxisKind::Pressure => unit as f32,
             AxisKind::TiltX | AxisKind::TiltY => {
@@ -97,14 +101,29 @@ pub struct Device {
 impl Device {
     /// Build from what `XIQueryDevice` reports: the name and each valuator's (number, label,
     /// min, max).
-    pub fn new(id: u16, name: &str, valuators: impl IntoIterator<Item = (u16, String, f64, f64)>) -> Self {
+    pub fn new(
+        id: u16,
+        name: &str,
+        valuators: impl IntoIterator<Item = (u16, String, f64, f64)>,
+    ) -> Self {
         let axes = valuators
             .into_iter()
             .filter(|(n, ..)| usize::from(*n) < MAX_AXES)
-            .filter_map(|(number, label, min, max)| Some(Axis { kind: AxisKind::from_label(&label)?, number, min, max }))
+            .filter_map(|(number, label, min, max)| {
+                Some(Axis {
+                    kind: AxisKind::from_label(&label)?,
+                    number,
+                    min,
+                    max,
+                })
+            })
             .take(MAX_AXES)
             .collect();
-        Self { id, eraser: name.to_ascii_lowercase().contains("eraser"), axes }
+        Self {
+            id,
+            eraser: name.to_ascii_lowercase().contains("eraser"),
+            axes,
+        }
     }
 
     /// A pen (tip or eraser): has a pressure axis.
@@ -116,11 +135,14 @@ impl Device {
 /// The values a raw event carries: valuator numbers set in `mask` (32 per word, LSB first)
 /// paired, in order, with `values`. Extra mask bits beyond the values are ignored.
 pub fn valuators<'a>(mask: &'a [u32], values: &'a [f64]) -> impl Iterator<Item = (u16, f64)> + 'a {
-    let numbers = mask
-        .iter()
-        .enumerate()
-        .flat_map(|(w, bits)| (0..32u32).filter(move |b| bits & (1 << b) != 0).map(move |b| w.saturating_mul(32).saturating_add(b as usize)));
-    numbers.zip(values.iter().copied()).filter_map(|(n, v)| u16::try_from(n).ok().map(|n| (n, v)))
+    let numbers = mask.iter().enumerate().flat_map(|(w, bits)| {
+        (0..32u32)
+            .filter(move |b| bits & (1 << b) != 0)
+            .map(move |b| w.saturating_mul(32).saturating_add(b as usize))
+    });
+    numbers
+        .zip(values.iter().copied())
+        .filter_map(|(n, v)| u16::try_from(n).ok().map(|n| (n, v)))
 }
 
 /// Devices and the last value of each pen axis.
@@ -133,7 +155,11 @@ pub struct State {
 impl State {
     /// Replace the device list (after `XIQueryDevice`, on start and hierarchy changes).
     pub fn set_devices(&mut self, devices: impl IntoIterator<Item = Device>) {
-        self.devices = devices.into_iter().take(MAX_DEVICES).map(|d| (d.id, d)).collect();
+        self.devices = devices
+            .into_iter()
+            .take(MAX_DEVICES)
+            .map(|d| (d.id, d))
+            .collect();
         self.last.retain(|id, _| self.devices.contains_key(id));
     }
 
@@ -145,7 +171,9 @@ impl State {
     /// Tablet devices give a sample; other known pointers mean a mouse; unknown ids (masters,
     /// devices added since the last query) change nothing.
     pub fn handle(&mut self, id: u16, valuators: impl IntoIterator<Item = (u16, f64)>) -> Update {
-        let Some(dev) = self.devices.get(&id) else { return Update::Keep };
+        let Some(dev) = self.devices.get(&id) else {
+            return Update::Keep;
+        };
         if !dev.is_tablet() {
             return Update::Set(None);
         }
@@ -202,7 +230,14 @@ mod tests {
     }
 
     fn mouse(id: u16) -> Device {
-        Device::new(id, "Logitech USB Optical Mouse", [(0, "Rel X".to_string(), -1.0, -1.0), (1, "Rel Y".to_string(), -1.0, -1.0)])
+        Device::new(
+            id,
+            "Logitech USB Optical Mouse",
+            [
+                (0, "Rel X".to_string(), -1.0, -1.0),
+                (1, "Rel Y".to_string(), -1.0, -1.0),
+            ],
+        )
     }
 
     fn sample(u: Update) -> Sample {
@@ -228,7 +263,11 @@ mod tests {
         assert!(wacom(10, "Wacom Intuos Pro M Pen eraser").eraser);
         assert!(wacom(11, "HUION Kamvas Pen Eraser (0x1)").eraser);
         assert!(!mouse(12).is_tablet());
-        let pad = Device::new(13, "Wacom Intuos Pro M Pad pad", [(5, "Abs Wheel".to_string(), 0.0, 71.0)]);
+        let pad = Device::new(
+            13,
+            "Wacom Intuos Pro M Pad pad",
+            [(5, "Abs Wheel".to_string(), 0.0, 71.0)],
+        );
         assert!(!pad.is_tablet() && pad.axes.is_empty());
     }
 
@@ -236,7 +275,10 @@ mod tests {
     fn valuators_normalise_to_pressure_degrees_and_rotation() {
         let mut st = State::default();
         st.set_devices([wacom(9, "Pen stylus"), wacom(10, "Pen eraser"), mouse(12)]);
-        let s = sample(st.handle(9, [(0, 100.0), (2, 32767.5), (3, -30.0), (4, 45.0), (5, 0.0)]));
+        let s = sample(st.handle(
+            9,
+            [(0, 100.0), (2, 32767.5), (3, -30.0), (4, 45.0), (5, 0.0)],
+        ));
         assert_eq!(s.pressure, 0.5);
         assert_eq!((s.tilt_x, s.tilt_y), (-30.0, 45.0));
         assert!((s.rotation - 180.0).abs() < 0.2, "{}", s.rotation);
@@ -254,8 +296,15 @@ mod tests {
 
     #[test]
     fn tilt_ranges_that_are_not_degrees_are_scaled() {
-        let d =
-            Device::new(1, "pen", [(2, "Abs Pressure".into(), 0.0, 1023.0), (3, "Abs Tilt X".into(), 0.0, 127.0), (4, "Abs Tilt Y".into(), -1000.0, 1000.0)]);
+        let d = Device::new(
+            1,
+            "pen",
+            [
+                (2, "Abs Pressure".into(), 0.0, 1023.0),
+                (3, "Abs Tilt X".into(), 0.0, 127.0),
+                (4, "Abs Tilt Y".into(), -1000.0, 1000.0),
+            ],
+        );
         let mut st = State::default();
         st.set_devices([d]);
         let s = sample(st.handle(1, [(3, 127.0), (4, -1000.0)]));
@@ -279,10 +328,21 @@ mod tests {
         );
         assert_eq!(d.axes.len(), 4, "out-of-range valuator numbers are dropped");
         st.set_devices([d]);
-        for v in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, f64::MAX, f64::MIN, -0.0, 1e300] {
+        for v in [
+            f64::NAN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::MAX,
+            f64::MIN,
+            -0.0,
+            1e300,
+        ] {
             let s = sample(st.handle(1, [(2, v), (3, v), (4, v), (5, v)]));
             assert!((0.0..=1.0).contains(&s.pressure), "{v}: {s:?}");
-            assert!((-90.0..=90.0).contains(&s.tilt_x) && (-90.0..=90.0).contains(&s.tilt_y), "{v}: {s:?}");
+            assert!(
+                (-90.0..=90.0).contains(&s.tilt_x) && (-90.0..=90.0).contains(&s.tilt_y),
+                "{v}: {s:?}"
+            );
             assert!((0.0..360.0).contains(&s.rotation), "{v}: {s:?}");
         }
         // Lots of devices are capped.
@@ -290,7 +350,10 @@ mod tests {
         assert!(st.devices.len() <= MAX_DEVICES);
         // Valuator values with no matching device axis are ignored.
         st.set_devices([wacom(3, "pen")]);
-        let s = sample(st.handle(3, valuators(&[u32::MAX; 2048], &[0.5; 4096]).collect::<Vec<_>>()));
+        let s = sample(st.handle(
+            3,
+            valuators(&[u32::MAX; 2048], &[0.5; 4096]).collect::<Vec<_>>(),
+        ));
         assert!(s.pressure < 0.001);
     }
 

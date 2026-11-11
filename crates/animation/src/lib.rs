@@ -24,7 +24,7 @@ pub use chop::{AudioEnvelopeChop, LagChop, LfoChop, LfoWave, MathChop, MathOp};
 pub use easing::{bezier, EasingFn};
 pub use expressions::{
     ease, ease_in, ease_out, linear, look_at, loop_in, loop_out, value_at_time, velocity_at_time,
-    wiggle, wiggle_2d, wiggle_3d, ExpressionControllers, ExpressionContext, LoopType,
+    wiggle, wiggle_2d, wiggle_3d, ExpressionContext, ExpressionControllers, LoopType,
 };
 pub use interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
 pub use interpolate_colors::{interpolate_colors, interpolate_colors_range};

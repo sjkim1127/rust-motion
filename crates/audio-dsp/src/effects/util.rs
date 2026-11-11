@@ -7,7 +7,11 @@ use std::f64::consts::PI;
 /// One-pole smoothing coefficient for a time constant in ms (0 → instant).
 #[inline]
 pub(crate) fn coef(ms: f32, sr: f32) -> f32 {
-    if ms <= 0.0 { 0.0 } else { (-1.0 / (ms * 0.001 * sr)).exp() }
+    if ms <= 0.0 {
+        0.0
+    } else {
+        (-1.0 / (ms * 0.001 * sr)).exp()
+    }
 }
 
 /// Linear → dB with a −200 dB floor.
@@ -26,7 +30,10 @@ pub(crate) struct DelayLine {
 impl DelayLine {
     /// A line that can delay by up to `max` samples.
     pub(crate) fn new(max: usize) -> Self {
-        DelayLine { buf: vec![0.0; max + 3], w: 0 }
+        DelayLine {
+            buf: vec![0.0; max + 3],
+            w: 0,
+        }
     }
     pub(crate) fn reset(&mut self) {
         self.buf.iter_mut().for_each(|v| *v = 0.0);
@@ -96,7 +103,11 @@ pub(crate) fn uni_sine(phase: f64) -> f32 {
 /// Triangle of a phase in cycles, 0..1.
 #[inline]
 pub(crate) fn uni_tri(phase: f64) -> f32 {
-    (if phase < 0.5 { 2.0 * phase } else { 2.0 - 2.0 * phase }) as f32
+    (if phase < 0.5 {
+        2.0 * phase
+    } else {
+        2.0 - 2.0 * phase
+    }) as f32
 }
 
 /// One-pole low-pass (`y += a (x − y)`), coefficient from a cutoff frequency.

@@ -10,7 +10,14 @@ use crate::tables::{DST_MATRIX, TRANS_MATRIX};
 /// are most of them, cost nothing), with the size a compile-time constant so the inner loops over
 /// contiguous basis rows vectorise. Integer sums are exact (|sum| < 2^27), so the result equals the
 /// direct matrix product of 8.6.4.2 in any summation order.
-pub fn inverse_transform(c: &mut [i32], n: usize, dst: bool, max_x: usize, max_y: usize, bd_shift: u32) {
+pub fn inverse_transform(
+    c: &mut [i32],
+    n: usize,
+    dst: bool,
+    max_x: usize,
+    max_y: usize,
+    bd_shift: u32,
+) {
     match n {
         4 => inverse::<4>(c, dst, max_x, max_y, bd_shift),
         8 => inverse::<8>(c, false, max_x, max_y, bd_shift),
@@ -23,7 +30,13 @@ pub fn inverse_transform(c: &mut [i32], n: usize, dst: bool, max_x: usize, max_y
 fn inverse<const N: usize>(c: &mut [i32], dst: bool, max_x: usize, max_y: usize, bd_shift: u32) {
     let step = 32 / N;
     // basis function of coefficient index j (row j of the transform matrix, N samples)
-    let basis = |j: usize| -> &[i8] { if dst { &DST_MATRIX[j][..N] } else { &TRANS_MATRIX[j * step][..N] } };
+    let basis = |j: usize| -> &[i8] {
+        if dst {
+            &DST_MATRIX[j][..N]
+        } else {
+            &TRANS_MATRIX[j * step][..N]
+        }
+    };
     // 1. columns (8-297 ... first stage): e[x][y] = sum_j M[j][y] * d[x][j], stored transposed
     //    (col[x][y]) so each coefficient adds one contiguous basis row.
     let mut col = [[0i32; N]; N];
@@ -86,7 +99,11 @@ mod tests {
             for y in 0..n {
                 let mut s = 0i32;
                 for j in 0..=max_y {
-                    let m = if dst { DST_MATRIX[j][y] as i32 } else { TRANS_MATRIX[j * step][y] as i32 };
+                    let m = if dst {
+                        DST_MATRIX[j][y] as i32
+                    } else {
+                        TRANS_MATRIX[j * step][y] as i32
+                    };
                     s += m * c[j * n + x];
                 }
                 tmp[y * n + x] = ((s + 64) >> 7).clamp(-32768, 32767);
@@ -97,7 +114,11 @@ mod tests {
             for x in 0..n {
                 let mut s = 0i32;
                 for j in 0..=max_x {
-                    let m = if dst { DST_MATRIX[j][x] as i32 } else { TRANS_MATRIX[j * step][x] as i32 };
+                    let m = if dst {
+                        DST_MATRIX[j][x] as i32
+                    } else {
+                        TRANS_MATRIX[j * step][x] as i32
+                    };
                     s += m * tmp[y * n + j];
                 }
                 c[y * n + x] = (s + round) >> bd_shift;
@@ -115,7 +136,13 @@ mod tests {
             rng ^= rng << 17;
             rng
         };
-        for &(n, dst) in &[(4usize, true), (4, false), (8, false), (16, false), (32, false)] {
+        for &(n, dst) in &[
+            (4usize, true),
+            (4, false),
+            (8, false),
+            (16, false),
+            (32, false),
+        ] {
             for case in 0..400 {
                 let (max_x, max_y) = ((next() as usize) % n, (next() as usize) % n);
                 let density = [2u64, 8, 50, 100][case % 4];
@@ -135,7 +162,10 @@ mod tests {
                     let (mut a, mut b) = (c.clone(), c.clone());
                     inverse_transform(&mut a, n, dst, max_x, max_y, bd_shift);
                     reference(&mut b, n, dst, max_x, max_y, bd_shift);
-                    assert_eq!(a, b, "n {n} dst {dst} max ({max_x}, {max_y}) shift {bd_shift}");
+                    assert_eq!(
+                        a, b,
+                        "n {n} dst {dst} max ({max_x}, {max_y}) shift {bd_shift}"
+                    );
                 }
             }
         }

@@ -1,6 +1,6 @@
 //! CABAC arithmetic decoding engine (9.3.4.3) and context initialisation (9.3.2.2).
 
-use crate::error::{Result, ensure};
+use crate::error::{ensure, Result};
 use crate::spec_tables::{CABAC_INIT, NUM_CTX};
 
 /// Table 9-52 (same values as H.264) rangeTabLPS[pStateIdx][qCodIRangeIdx].
@@ -74,7 +74,11 @@ pub fn init_contexts(ctx: &mut Contexts, slice_qp: i32, init_type: usize) {
         let m = slope * 5 - 45;
         let n = (offset << 3) - 16;
         let pre = (((m * qp) >> 4) + n).clamp(1, 126);
-        *c = if pre <= 63 { ((63 - pre) << 1) as u8 } else { (((pre - 64) << 1) | 1) as u8 };
+        *c = if pre <= 63 {
+            ((63 - pre) << 1) as u8
+        } else {
+            (((pre - 64) << 1) | 1) as u8
+        };
     }
 }
 
@@ -94,7 +98,14 @@ impl<'a> Cabac<'a> {
     /// Create an engine over `data` starting at byte `pos`, with contexts initialised for `slice_qp`
     /// and `init_type`.
     pub fn new(data: &'a [u8], pos: usize, slice_qp: i32, init_type: usize) -> Result<Self> {
-        let mut c = Cabac { data, next_byte: pos, range: 0, value: 0, bits: 0, ctx: [0; CTX_SLOTS] };
+        let mut c = Cabac {
+            data,
+            next_byte: pos,
+            range: 0,
+            value: 0,
+            bits: 0,
+            ctx: [0; CTX_SLOTS],
+        };
         init_contexts(&mut c.ctx, slice_qp, init_type);
         c.init_engine()?;
         Ok(c)
@@ -107,7 +118,10 @@ impl<'a> Cabac<'a> {
         self.bits = 0;
         self.refill();
         self.bits -= 9;
-        ensure!((self.value >> self.bits) < 510, "invalid CABAC offset at init");
+        ensure!(
+            (self.value >> self.bits) < 510,
+            "invalid CABAC offset at init"
+        );
         Ok(())
     }
 
@@ -232,7 +246,14 @@ mod tests {
     }
     impl Enc {
         fn new(ctx: &[u8]) -> Self {
-            Enc { low: 0, range: 510, outstanding: 0, first: true, bits: vec![], ctx: ctx.to_vec() }
+            Enc {
+                low: 0,
+                range: 510,
+                outstanding: 0,
+                first: true,
+                bits: vec![],
+                ctx: ctx.to_vec(),
+            }
         }
         fn put(&mut self, b: bool) {
             if self.first {
@@ -303,7 +324,10 @@ mod tests {
             while !self.bits.len().is_multiple_of(8) {
                 self.bits.push(false);
             }
-            self.bits.chunks(8).map(|c| c.iter().fold(0u8, |a, &b| (a << 1) | b as u8)).collect()
+            self.bits
+                .chunks(8)
+                .map(|c| c.iter().fold(0u8, |a, &b| (a << 1) | b as u8))
+                .collect()
         }
     }
 
@@ -333,7 +357,11 @@ mod tests {
             let kind = rnd() % 4;
             let ctx = (rnd() % 16) as usize;
             // skewed bins so contexts adapt
-            let bin = if rnd() % 10 < 8 { (ctx & 1) as u32 } else { 1 - (ctx & 1) as u32 };
+            let bin = if rnd() % 10 < 8 {
+                (ctx & 1) as u32
+            } else {
+                1 - (ctx & 1) as u32
+            };
             if kind == 0 {
                 enc.bypass(bin);
             } else {
@@ -344,7 +372,11 @@ mod tests {
         let bytes = enc.terminate_flush();
         let mut dec = Cabac::new(&bytes, 0, 30, 1).unwrap();
         for (i, &(kind, ctx, bin)) in ops.iter().enumerate() {
-            let got = if kind == 0 { dec.decode_bypass() } else { dec.decode_decision(ctx) };
+            let got = if kind == 0 {
+                dec.decode_bypass()
+            } else {
+                dec.decode_decision(ctx)
+            };
             assert_eq!(got, bin, "bin {i}");
         }
         assert_eq!(dec.decode_terminate(), 1);

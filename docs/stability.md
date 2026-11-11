@@ -18,12 +18,13 @@ Changes to these surfaces will be strictly backward-compatible across minor and 
 
 | Surface | Modules / Crates | Scope |
 |---|---|---|
-| **Core Types** | `rust-motion-core` | `Scene`, `SceneNode`, `SceneFilter`, `Transform2D`, `Color`, composition contexts, and lifecycle hooks (`use_current_frame`, `use_video_config`). |
+| **Core Types** | `rust-motion-rasterizer` | `Scene`, `SceneNode`, `SceneFilter`, `Transform2D`, `Color`. |
 | **Composition** | `rust-motion-composition` | Composition emitters (`SceneEmitter`), temporal containers (`SceneSequence`, `SceneSeries`, `SceneLoop`, `SceneTransitionSeries`), and named markers (`TimeEvent`, `NamedTimeEvent`). |
 | **Media Emitters** | `rust-motion-media` | Native media nodes (`SceneVideo`, `SceneAudio`, `SceneImage`, `SceneGif`), and media metadata probing. |
 | **Project Schema** | `rust-motion-project` | `Project`, `ProjectSettings`, `Track`, `Clip`, `Asset`, `NamedTimeEvent`, project file loading, editing, saving, and local asset resolution. |
 | **Renderer** | `rust-motion-renderer` | Headless render invocation, render options, frame progress callbacks, and cancellation signals. |
 | **CLI** | `rust-motion-cli` (`rust-motion`) | Stable commands: `render`, `render-project`, `validate`, `inspect`, `doctor`, `probe`, `serve`. Stable JSON modes and exit codes. |
+| **TypeScript Bindings** | `rust-motion-ts` (`@rust-motion/remotion`) | Remotion-compatible TypeScript hooks, components, interpolation, springs, and renderer bridge. |
 | **Python Bindings** | `rust-motion` (PyPI) | Python module exports, composition contexts, project rendering functions, and CLI invocation. |
 
 ### 2.2 Experimental Capabilities

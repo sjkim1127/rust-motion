@@ -52,7 +52,17 @@ pub struct DepthParams {
 
 impl Default for DepthParams {
     fn default() -> Self {
-        DepthParams { scale: 1, r_in: 1, r_out: 3, agg_radius: 3, agg_eps: 1e-4, lambda: 3.0, sigma_c: 0.04, gate: 1.0, robust: 1.0 }
+        DepthParams {
+            scale: 1,
+            r_in: 1,
+            r_out: 3,
+            agg_radius: 3,
+            agg_eps: 1e-4,
+            lambda: 3.0,
+            sigma_c: 0.04,
+            gate: 1.0,
+            robust: 1.0,
+        }
     }
 }
 
@@ -92,7 +102,14 @@ pub fn block_mean(src: &[f32], w: usize, h: usize, k: usize) -> (Vec<f32>, usize
 
 /// Bilinear resampling of a working-grid plane (block size `k`, samples at block centres) to
 /// `w × h`.
-pub fn upsample_bilinear(g: &[f32], dw: usize, dh: usize, w: usize, h: usize, k: usize) -> Vec<f32> {
+pub fn upsample_bilinear(
+    g: &[f32],
+    dw: usize,
+    dh: usize,
+    w: usize,
+    h: usize,
+    k: usize,
+) -> Vec<f32> {
     let mut out = vec![0.0f32; w * h];
     if dw == 0 || dh == 0 {
         return out;
@@ -164,7 +181,11 @@ impl BoxFilter {
             }
         }
         for y in 0..h {
-            for ((o, a), c) in out[y * w..y * w + w].iter_mut().zip(&acc).zip(&self.inv_count[y * w..y * w + w]) {
+            for ((o, a), c) in out[y * w..y * w + w]
+                .iter_mut()
+                .zip(&acc)
+                .zip(&self.inv_count[y * w..y * w + w])
+            {
                 *o = *a as f32 * c;
             }
             if y + r + 1 < h {
@@ -197,8 +218,19 @@ impl GuidedFilter {
         let bf = BoxFilter::new(w, h, r);
         let mean_i = bf.mean(&guide);
         let ii: Vec<f32> = guide.iter().map(|v| v * v).collect();
-        let var_i: Vec<f32> = bf.mean(&ii).iter().zip(&mean_i).map(|(v, m)| (v - m * m).max(0.0)).collect();
-        GuidedFilter { guide, mean_i, var_i, bf, eps }
+        let var_i: Vec<f32> = bf
+            .mean(&ii)
+            .iter()
+            .zip(&mean_i)
+            .map(|(v, m)| (v - m * m).max(0.0))
+            .collect();
+        GuidedFilter {
+            guide,
+            mean_i,
+            var_i,
+            bf,
+            eps,
+        }
     }
 
     /// The box-averaged linear coefficients `(ā, b̄)` such that `q ≈ ā·I + b̄`.
@@ -237,8 +269,14 @@ fn rdf_taps(r_in: usize, r_out: usize) -> Vec<(i64, i64, f32)> {
             }
         }
     }
-    let (wd, wr) = (1.0 / disk.len().max(1) as f32, -1.0 / ring.len().max(1) as f32);
-    disk.into_iter().map(|(y, x)| (y, x, wd)).chain(ring.into_iter().map(|(y, x)| (y, x, wr))).collect()
+    let (wd, wr) = (
+        1.0 / disk.len().max(1) as f32,
+        -1.0 / ring.len().max(1) as f32,
+    );
+    disk.into_iter()
+        .map(|(y, x)| (y, x, wd))
+        .chain(ring.into_iter().map(|(y, x)| (y, x, wr)))
+        .collect()
 }
 
 /// Per-pixel focus measure of a luminance plane: the magnitude of the ring difference filter,
@@ -300,7 +338,23 @@ struct PeakTracker {
 
 impl PeakTracker {
     fn new(n: usize) -> PeakTracker {
-        PeakTracker { px: vec![Px { c1: -1.0, l1: -1.0, r1: -1.0, i1: 0, c2: -1.0, prev: 0.0, prev2: 0.0, sum: 0.0, cmin: f32::INFINITY }; n], m: 0 }
+        PeakTracker {
+            px: vec![
+                Px {
+                    c1: -1.0,
+                    l1: -1.0,
+                    r1: -1.0,
+                    i1: 0,
+                    c2: -1.0,
+                    prev: 0.0,
+                    prev2: 0.0,
+                    sum: 0.0,
+                    cmin: f32::INFINITY
+                };
+                n
+            ],
+            m: 0,
+        }
     }
 
     /// Fold the next slice (aggregated focus values ≥ 0).
@@ -331,7 +385,12 @@ impl PeakTracker {
             }
         }
         // The noise floor: the median of the per-pixel profile minimum (subsampled).
-        let mut mins: Vec<f32> = self.px.iter().step_by(7).map(|p| if p.cmin.is_finite() { p.cmin } else { 0.0 }).collect();
+        let mut mins: Vec<f32> = self
+            .px
+            .iter()
+            .step_by(7)
+            .map(|p| if p.cmin.is_finite() { p.cmin } else { 0.0 })
+            .collect();
         let floor = if mins.is_empty() {
             0.0
         } else {
@@ -354,8 +413,16 @@ impl PeakTracker {
             let conf = if c1 > 0.0 {
                 let prom = (1.0 - p.sum * inv_n / c1).clamp(0.0, 1.0);
                 // A rival local maximum of similar height means an ambiguous profile.
-                let pkr = if p.c2 >= 0.0 { (1.0 - p.c2 / c1).clamp(0.0, 1.0) } else { 1.0 };
-                let g = if gate > 0.0 && floor > 0.0 { ((c1 - floor) / (gate * floor)).clamp(0.0, 1.0) } else { 1.0 };
+                let pkr = if p.c2 >= 0.0 {
+                    (1.0 - p.c2 / c1).clamp(0.0, 1.0)
+                } else {
+                    1.0
+                };
+                let g = if gate > 0.0 && floor > 0.0 {
+                    ((c1 - floor) / (gate * floor)).clamp(0.0, 1.0)
+                } else {
+                    1.0
+                };
                 prom * pkr * g
             } else {
                 0.0
@@ -388,7 +455,11 @@ fn median3(src: &[f32], w: usize, h: usize) -> Vec<f32> {
         let mut v = [0.0f32; 9];
         for (x, o) in row.iter_mut().enumerate() {
             let xs = [x.saturating_sub(1), x, (x + 1).min(w - 1)];
-            for (k, (yy, xx)) in ys.iter().flat_map(|yy| xs.iter().map(move |xx| (*yy, *xx))).enumerate() {
+            for (k, (yy, xx)) in ys
+                .iter()
+                .flat_map(|yy| xs.iter().map(move |xx| (*yy, *xx)))
+                .enumerate()
+            {
                 v[k] = src[yy * w + xx];
             }
             v.sort_unstable_by(|a, b| a.total_cmp(b));
@@ -433,7 +504,11 @@ fn solve_line(u: &mut [f32], f: &[f32], wd: &[f32], a: &[f32], lam: f32, scratch
         let diag = wd[i] + lam * (prev_a + ai);
         let lower = -lam * prev_a;
         let upper = -lam * ai;
-        let (c0, d0) = if i > 0 { (cp[i - 1], dp[i - 1]) } else { (0.0, 0.0) };
+        let (c0, d0) = if i > 0 {
+            (cp[i - 1], dp[i - 1])
+        } else {
+            (0.0, 0.0)
+        };
         let m = diag - lower * c0;
         let m = if m.abs() < 1e-12 { 1e-12 } else { m };
         cp[i] = upper / m;
@@ -451,7 +526,14 @@ fn solve_rows(u: &mut [f32], f: &[f32], wd: &[f32], ax: &[f32], w: usize, lam: f
     par_rows(u, w, 1, |y, row| {
         let o = y * w;
         let mut scratch = vec![0.0f32; 2 * w];
-        solve_line(row, &f[o..o + w], &wd[o..o + w], &ax[o..o + w], lam, &mut scratch);
+        solve_line(
+            row,
+            &f[o..o + w],
+            &wd[o..o + w],
+            &ax[o..o + w],
+            lam,
+            &mut scratch,
+        );
     });
 }
 
@@ -479,7 +561,15 @@ fn solve_cols(u: &mut [f32], f: &[f32], wd: &[f32], ay: &[f32], w: usize, h: usi
 /// The fast global smoother's three separable passes with the `λ_t` schedule of Min et al.
 /// 2014, the first pass carrying the data weights so holes are filled by interpolation, the
 /// later ones the previous output: the initial guess of [`wls_solve`].
-fn sweeps(d: &[f32], wd: &[f32], ex: &[f32], ey: &[f32], w: usize, h: usize, lambda: f32) -> Vec<f32> {
+fn sweeps(
+    d: &[f32],
+    wd: &[f32],
+    ex: &[f32],
+    ey: &[f32],
+    w: usize,
+    h: usize,
+    lambda: f32,
+) -> Vec<f32> {
     const T: i32 = 3;
     let ones = vec![1.0f32; w * h];
     let mut u = vec![0.0f32; w * h];
@@ -526,7 +616,17 @@ const MG_MIN: usize = 16;
 impl MgLevel {
     fn new(w: usize, h: usize) -> MgLevel {
         let n = w * h;
-        MgLevel { w, h, wd: vec![0.0; n], ax: vec![0.0; n], ay: vec![0.0; n], dinv: vec![0.0; n], x: vec![0.0; n], b: vec![0.0; n], r: vec![0.0; n] }
+        MgLevel {
+            w,
+            h,
+            wd: vec![0.0; n],
+            ax: vec![0.0; n],
+            ay: vec![0.0; n],
+            dinv: vec![0.0; n],
+            x: vec![0.0; n],
+            b: vec![0.0; n],
+            r: vec![0.0; n],
+        }
     }
 
     /// `out_i = f(i, (A x)_i)` over the grid.
@@ -618,7 +718,9 @@ impl MgLevel {
             if yy + 1 < ch {
                 let y = 2 * yy + 1;
                 for (xx, o) in row.iter_mut().enumerate() {
-                    *o = ay[y * w..y * w + w][2 * xx..(2 * xx + 2).min(w)].iter().sum::<f32>();
+                    *o = ay[y * w..y * w + w][2 * xx..(2 * xx + 2).min(w)]
+                        .iter()
+                        .sum::<f32>();
                 }
             }
         });
@@ -634,7 +736,9 @@ impl MgLevel {
             row.fill(0.0);
             for y in 2 * yy..(2 * yy + 2).min(h) {
                 for (xx, o) in row.iter_mut().enumerate() {
-                    *o += wd[y * w..y * w + w][2 * xx..(2 * xx + 2).min(w)].iter().sum::<f32>();
+                    *o += wd[y * w..y * w + w][2 * xx..(2 * xx + 2).min(w)]
+                        .iter()
+                        .sum::<f32>();
                 }
             }
         });
@@ -666,7 +770,9 @@ fn restrict(r: &[f32], w: usize, h: usize, bc: &mut [f32], cw: usize) {
 
 /// One V-cycle from `levels[0]` (whose `b` is set) into its `x`.
 fn vcycle(levels: &mut [MgLevel]) {
-    let Some((top, rest)) = levels.split_first_mut() else { return };
+    let Some((top, rest)) = levels.split_first_mut() else {
+        return;
+    };
     let Some(next) = rest.first_mut() else {
         for k in 0..MG_COARSE {
             top.jacobi(k == 0);
@@ -722,7 +828,14 @@ impl WlsSolver {
             let c = last.coarsen();
             levels.push(c);
         }
-        WlsSolver { w, h, lambda, ex, ey, levels }
+        WlsSolver {
+            w,
+            h,
+            lambda,
+            ex,
+            ey,
+            levels,
+        }
     }
 
     /// The data weights: the confidence (plus a floor so the system is definite where nothing
@@ -749,12 +862,19 @@ impl WlsSolver {
     fn solve(&mut self, d: &[f32], max_iters: usize) -> (Vec<f32>, f32) {
         let (w, h, lambda) = (self.w, self.h, self.lambda);
         let n = w * h;
-        let Some(top) = self.levels.first() else { return (vec![0.0; n], 0.0) };
+        let Some(top) = self.levels.first() else {
+            return (vec![0.0; n], 0.0);
+        };
         let mut u = sweeps(d, &top.wd, &self.ex, &self.ey, w, h, lambda);
         if w == 1 || h == 1 || n == 0 {
             return (u, 0.0);
         }
-        let dot = |a: &[f32], b: &[f32]| -> f64 { a.iter().zip(b).map(|(x, y)| f64::from(*x) * f64::from(*y)).sum() };
+        let dot = |a: &[f32], b: &[f32]| -> f64 {
+            a.iter()
+                .zip(b)
+                .map(|(x, y)| f64::from(*x) * f64::from(*y))
+                .sum()
+        };
         let b: Vec<f32> = top.wd.iter().zip(d).map(|(w, d)| w * d).collect();
         let bnorm = dot(&b, &b).sqrt().max(1e-30);
         let mut r = vec![0.0f32; n];
@@ -778,7 +898,9 @@ impl WlsSolver {
             if rel < 1e-5 {
                 break;
             }
-            let Some(top) = self.levels.first() else { break };
+            let Some(top) = self.levels.first() else {
+                break;
+            };
             top.apply(&p, &mut ap, |_, v| v);
             let pap = dot(&p, &ap);
             if pap <= 0.0 {
@@ -813,11 +935,23 @@ const CG_ITERS: usize = 200;
 /// Depth from focus over the `n` layers' luminance planes `luma` (`w × h`, aligned), guided by
 /// the all-in-focus luminance `guide` of the same size. Without layers, or when `guide` or a
 /// plane is not `w × h` long, the map is empty: depth 0 and confidence 0 everywhere.
-pub fn depth_from_focus(luma: &[&[f32]], guide: &[f32], w: usize, h: usize, p: &DepthParams) -> DepthMap {
+pub fn depth_from_focus(
+    luma: &[&[f32]],
+    guide: &[f32],
+    w: usize,
+    h: usize,
+    p: &DepthParams,
+) -> DepthMap {
     let n = luma.len();
-    let empty = n == 0 || w == 0 || h == 0 || guide.len() != w * h || luma.iter().any(|l| l.len() != w * h);
+    let empty =
+        n == 0 || w == 0 || h == 0 || guide.len() != w * h || luma.iter().any(|l| l.len() != w * h);
     if empty {
-        return DepthMap { depth: vec![0.0; w * h], conf: vec![0.0; w * h], w, h };
+        return DepthMap {
+            depth: vec![0.0; w * h],
+            conf: vec![0.0; w * h],
+            w,
+            h,
+        };
     }
     let k = 1usize << p.scale.min(8);
     let (g, dw, dh) = block_mean(guide, w, h, k);
@@ -842,7 +976,12 @@ pub fn depth_from_focus(luma: &[&[f32]], guide: &[f32], w: usize, h: usize, p: &
         let (u, _) = solver.solve(&depth_w, CG_ITERS);
         if p.robust > 0.0 {
             // One reweighted step with a Huber loss on the data residual.
-            let wd2: Vec<f32> = conf.iter().zip(&depth_w).zip(&u).map(|((c, d), u)| c * (p.robust / (d - u).abs().max(1e-6)).min(1.0)).collect();
+            let wd2: Vec<f32> = conf
+                .iter()
+                .zip(&depth_w)
+                .zip(&u)
+                .map(|((c, d), u)| c * (p.robust / (d - u).abs().max(1e-6)).min(1.0))
+                .collect();
             solver.set_weights(&wd2);
             solver.solve(&depth_w, CG_ITERS).0
         } else {
@@ -862,7 +1001,11 @@ pub fn depth_from_focus(luma: &[&[f32]], guide: &[f32], w: usize, h: usize, p: &
         (0..w * h).map(|i| a[i] * guide[i] + b[i]).collect()
     };
     let depth = depth.into_iter().map(|v| v.clamp(0.0, max_d)).collect();
-    let conf = if k == 1 { conf } else { upsample_bilinear(&conf, dw, dh, w, h, k) };
+    let conf = if k == 1 {
+        conf
+    } else {
+        upsample_bilinear(&conf, dw, dh, w, h, k)
+    };
     DepthMap { depth, conf, w, h }
 }
 
@@ -871,7 +1014,9 @@ mod tests {
     use super::*;
 
     fn lcg(seed: &mut u64) -> f32 {
-        *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        *seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((*seed >> 33) % 10000) as f32 / 10000.0
     }
 
@@ -911,12 +1056,30 @@ mod tests {
         let taps = rdf_taps(1, 3);
         assert!(taps.iter().map(|t| t.2).sum::<f32>().abs() < 1e-6);
         let (w, h) = (32, 32);
-        assert!(focus_measure(&vec![0.4; w * h], w, h, 1, 3).iter().all(|v| v.abs() < 1e-6));
-        let check: Vec<f32> = (0..w * h).map(|i| if ((i % w) / 2 + (i / w) / 2).is_multiple_of(2) { 0.2 } else { 0.8 }).collect();
-        assert!(focus_measure(&check, w, h, 1, 3).iter().cloned().fold(0.0, f32::max) > 0.1);
+        assert!(focus_measure(&vec![0.4; w * h], w, h, 1, 3)
+            .iter()
+            .all(|v| v.abs() < 1e-6));
+        let check: Vec<f32> = (0..w * h)
+            .map(|i| {
+                if ((i % w) / 2 + (i / w) / 2).is_multiple_of(2) {
+                    0.2
+                } else {
+                    0.8
+                }
+            })
+            .collect();
+        assert!(
+            focus_measure(&check, w, h, 1, 3)
+                .iter()
+                .cloned()
+                .fold(0.0, f32::max)
+                > 0.1
+        );
         let (m, dw, dh) = block_mean(&check, w, h, 2);
         assert_eq!((dw, dh, m.len()), (16, 16, 256));
-        assert!(m.iter().all(|v| (v - 0.2).abs() < 1e-6 || (v - 0.8).abs() < 1e-6));
+        assert!(m
+            .iter()
+            .all(|v| (v - 0.2).abs() < 1e-6 || (v - 0.8).abs() < 1e-6));
         let up = upsample_bilinear(&m, dw, dh, w, h, 2);
         assert_eq!(up.len(), w * h);
     }
@@ -938,7 +1101,9 @@ mod tests {
     fn smoothing_fills_holes_and_respects_edges() {
         let (w, h) = (40, 20);
         // A guide with a hard edge at x = 20; data known only at two pixels, one per side.
-        let guide: Vec<f32> = (0..w * h).map(|i| if i % w < 20 { 0.0 } else { 1.0 }).collect();
+        let guide: Vec<f32> = (0..w * h)
+            .map(|i| if i % w < 20 { 0.0 } else { 1.0 })
+            .collect();
         let mut d = vec![0.0f32; w * h];
         let mut wd = vec![1e-4f32; w * h];
         (d[10 * w + 5], wd[10 * w + 5]) = (1.0, 1.0);
@@ -949,9 +1114,22 @@ mod tests {
         assert!(rel < 1e-4, "residual {rel}");
         // Each side follows its own sample (the data floor on the unknown pixels pulls a little
         // toward zero), and the edge keeps them apart.
-        assert!((u[3 * w + 15] - 1.0).abs() < 0.15, "left side follows its sample: {}", u[3 * w + 15]);
-        assert!((u[15 * w + 25] - 5.0).abs() < 0.6, "right side follows its sample: {}", u[15 * w + 25]);
-        assert!(u[10 * w + 19] < 1.5 && u[10 * w + 20] > 4.0, "the edge holds: {} | {}", u[10 * w + 19], u[10 * w + 20]);
+        assert!(
+            (u[3 * w + 15] - 1.0).abs() < 0.15,
+            "left side follows its sample: {}",
+            u[3 * w + 15]
+        );
+        assert!(
+            (u[15 * w + 25] - 5.0).abs() < 0.6,
+            "right side follows its sample: {}",
+            u[15 * w + 25]
+        );
+        assert!(
+            u[10 * w + 19] < 1.5 && u[10 * w + 20] > 4.0,
+            "the edge holds: {} | {}",
+            u[10 * w + 19],
+            u[10 * w + 20]
+        );
         // The sweeps alone leave the holes near zero; the solve fills them.
         let guess = sweeps(&d, &wd, &solver.ex, &solver.ey, w, h, 3.0);
         assert!(guess[3 * w + 15] < 0.5);
@@ -963,9 +1141,27 @@ mod tests {
     #[test]
     fn depth_from_focus_finds_the_sharp_layer() {
         let (w, h) = (96, 48);
-        let texture = |x: usize, y: usize| if ((x / 2) + (y / 2)).is_multiple_of(2) { 0.2 } else { 0.8 };
+        let texture = |x: usize, y: usize| {
+            if ((x / 2) + (y / 2)).is_multiple_of(2) {
+                0.2
+            } else {
+                0.8
+            }
+        };
         let flat = 0.5;
-        let layers: Vec<Vec<f32>> = (0..3).map(|k| (0..w * h).map(|i| if (i % w) / 32 == k { texture(i % w, i / w) } else { flat }).collect()).collect();
+        let layers: Vec<Vec<f32>> = (0..3)
+            .map(|k| {
+                (0..w * h)
+                    .map(|i| {
+                        if (i % w) / 32 == k {
+                            texture(i % w, i / w)
+                        } else {
+                            flat
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
         let guide: Vec<f32> = (0..w * h).map(|i| texture(i % w, i / w)).collect();
         let refs: Vec<&[f32]> = layers.iter().map(Vec::as_slice).collect();
         let dm = depth_from_focus(&refs, &guide, w, h, &DepthParams::default());
@@ -973,17 +1169,38 @@ mod tests {
         for (x, want) in [(8, 0.0), (48, 1.0), (88, 2.0)] {
             let d = dm.depth[24 * w + x];
             assert!((d - want).abs() < 0.35, "x {x}: depth {d}, want {want}");
-            assert!(dm.conf[24 * w + x] > 0.3, "x {x}: conf {}", dm.conf[24 * w + x]);
+            assert!(
+                dm.conf[24 * w + x] > 0.3,
+                "x {x}: conf {}",
+                dm.conf[24 * w + x]
+            );
         }
         assert!(dm.depth.iter().all(|v| (0.0..=2.0).contains(v)));
         // Degenerate inputs are fine.
-        assert_eq!(depth_from_focus(&[], &guide, w, h, &DepthParams::default()).depth, vec![0.0; w * h]);
+        assert_eq!(
+            depth_from_focus(&[], &guide, w, h, &DepthParams::default()).depth,
+            vec![0.0; w * h]
+        );
         // A guide or a plane of the wrong length is no input: the empty map, never a panic.
-        let empty = DepthMap { depth: vec![0.0; w * h], conf: vec![0.0; w * h], w, h };
-        assert_eq!(depth_from_focus(&refs, &guide[1..], w, h, &DepthParams::default()), empty);
+        let empty = DepthMap {
+            depth: vec![0.0; w * h],
+            conf: vec![0.0; w * h],
+            w,
+            h,
+        };
+        assert_eq!(
+            depth_from_focus(&refs, &guide[1..], w, h, &DepthParams::default()),
+            empty
+        );
         let short = &refs[0][..w * h - 1];
-        assert_eq!(depth_from_focus(&[refs[0], short], &guide, w, h, &DepthParams::default()), empty);
-        assert_eq!(depth_from_focus(&refs, &guide, w + 1, h, &DepthParams::default()).w, w + 1);
+        assert_eq!(
+            depth_from_focus(&[refs[0], short], &guide, w, h, &DepthParams::default()),
+            empty
+        );
+        assert_eq!(
+            depth_from_focus(&refs, &guide, w + 1, h, &DepthParams::default()).w,
+            w + 1
+        );
         let one = depth_from_focus(&refs[..1], &guide, w, h, &DepthParams::default());
         assert!(one.depth.iter().all(|v| *v == 0.0));
     }

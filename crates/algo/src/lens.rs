@@ -167,10 +167,17 @@ pub struct LensMap {
 
 impl LensMap {
     pub fn new(lc: &LensCorrection, frame: Rect) -> LensMap {
-        let c = [(frame.x0 + frame.x1) as f64 / 2.0, (frame.y0 + frame.y1) as f64 / 2.0];
+        let c = [
+            (frame.x0 + frame.x1) as f64 / 2.0,
+            (frame.y0 + frame.y1) as f64 / 2.0,
+        ];
         let r = (frame.width() as f64).hypot(frame.height() as f64).max(2.0) / 2.0;
         let prof = lc.profile.clone().unwrap_or_default();
-        let (pk1, pk2, pp1, pp2) = if lc.correct_distortion { (prof.k1, prof.k2, prof.p1, prof.p2) } else { (0.0, 0.0, 0.0, 0.0) };
+        let (pk1, pk2, pp1, pp2) = if lc.correct_distortion {
+            (prof.k1, prof.k2, prof.p1, prof.p2)
+        } else {
+            (0.0, 0.0, 0.0, 0.0)
+        };
         // Keystone x' = x / (1 + h x + g y), y' = y / (1 + h x + g y) (normalised by r).
         let g = -lc.vertical / 100.0 * 0.5;
         let h = -lc.horizontal / 100.0 * 0.5;
@@ -186,7 +193,11 @@ impl LensMap {
             p2: pp2,
             ca_r: if lc.correct_ca { prof.ca_red } else { 0.0 } - lc.red_cyan * 4e-5,
             ca_b: if lc.correct_ca { prof.ca_blue } else { 0.0 } - lc.blue_yellow * 4e-5,
-            vig_profile: if lc.correct_vignette { prof.vignette } else { [0.0; 3] },
+            vig_profile: if lc.correct_vignette {
+                prof.vignette
+            } else {
+                [0.0; 3]
+            },
             vig_amount: lc.vignette_amount / 100.0,
             vig_mid: lc.vignette_midpoint.clamp(0.0, 100.0) / 100.0,
             hinv,
@@ -223,20 +234,48 @@ impl LensMap {
         let t = ((rs2.sqrt() - start) / (1.0 - start + 1e-9)).clamp(0.0, 1.0);
         let ramp = t * t * (3.0 - 2.0 * t);
         let gain = 2f64.powf(self.vig_amount * 1.5 * ramp) / falloff;
-        Some(Sample { p: to_px(1.0), pr: to_px(1.0 + self.ca_r), pb: to_px(1.0 + self.ca_b), gain: gain as f32 })
+        Some(Sample {
+            p: to_px(1.0),
+            pr: to_px(1.0 + self.ca_r),
+            pb: to_px(1.0 + self.ca_b),
+            gain: gain as f32,
+        })
     }
 }
 
 /// Smallest scale (percent) at which the corrected image covers the whole frame (Auto Scale).
 pub fn auto_scale(lc: &LensCorrection, frame: Rect) -> f64 {
     let covers = |scale: f64| {
-        let m = LensMap::new(&LensCorrection { scale, ..lc.clone() }, frame);
-        let (x0, y0, x1, y1) = (frame.x0 as f64, frame.y0 as f64, frame.x1 as f64, frame.y1 as f64);
+        let m = LensMap::new(
+            &LensCorrection {
+                scale,
+                ..lc.clone()
+            },
+            frame,
+        );
+        let (x0, y0, x1, y1) = (
+            frame.x0 as f64,
+            frame.y0 as f64,
+            frame.x1 as f64,
+            frame.y1 as f64,
+        );
         (0..=40).all(|i| {
             let t = i as f64 / 40.0;
-            [(x0 + t * (x1 - x0), y0), (x0 + t * (x1 - x0), y1), (x0, y0 + t * (y1 - y0)), (x1, y0 + t * (y1 - y0))]
-                .iter()
-                .all(|&(x, y)| m.sample(x, y).is_some_and(|s| s.p[0] >= x0 - 0.5 && s.p[0] <= x1 + 0.5 && s.p[1] >= y0 - 0.5 && s.p[1] <= y1 + 0.5))
+            [
+                (x0 + t * (x1 - x0), y0),
+                (x0 + t * (x1 - x0), y1),
+                (x0, y0 + t * (y1 - y0)),
+                (x1, y0 + t * (y1 - y0)),
+            ]
+            .iter()
+            .all(|&(x, y)| {
+                m.sample(x, y).is_some_and(|s| {
+                    s.p[0] >= x0 - 0.5
+                        && s.p[0] <= x1 + 0.5
+                        && s.p[1] >= y0 - 0.5
+                        && s.p[1] <= y1 + 0.5
+                })
+            })
         })
     };
     if covers(lc.scale) {
@@ -249,7 +288,11 @@ pub fn auto_scale(lc: &LensCorrection, frame: Rect) -> f64 {
     }
     for _ in 0..30 {
         let mid = (lo + hi) / 2.0;
-        if covers(mid) { hi = mid } else { lo = mid }
+        if covers(mid) {
+            hi = mid
+        } else {
+            lo = mid
+        }
     }
     hi
 }
@@ -268,14 +311,31 @@ const TILE: i32 = 128;
 /// Resamples `src` through an inverse map over `out_area`. `frame` is the image the map refers
 /// to: samples clamp to it, and pixels mapping outside it take the edge mode. `map` returns where
 /// each output pixel centre samples (`None` = outside).
-pub fn remap(src: &Surface, frame: Rect, out_area: Rect, edge: EdgeMode, map: &(dyn Fn(f64, f64) -> Option<Sample> + Sync)) -> Surface {
+pub fn remap(
+    src: &Surface,
+    frame: Rect,
+    out_area: Rect,
+    edge: EdgeMode,
+    map: &(dyn Fn(f64, f64) -> Option<Sample> + Sync),
+) -> Surface {
     remap_impl(src, frame, out_area, edge, map, true)
 }
 
-fn remap_impl(src: &Surface, frame: Rect, out_area: Rect, edge: EdgeMode, map: &(dyn Fn(f64, f64) -> Option<Sample> + Sync), shared: bool) -> Surface {
+fn remap_impl(
+    src: &Surface,
+    frame: Rect,
+    out_area: Rect,
+    edge: EdgeMode,
+    map: &(dyn Fn(f64, f64) -> Option<Sample> + Sync),
+    shared: bool,
+) -> Surface {
     let sfmt = src.format();
     let needs_alpha = matches!(edge, EdgeMode::Transparency) && !sfmt.alpha;
-    let ofmt = if needs_alpha { PixelFormat::new(sfmt.mode, sfmt.sample, true) } else { sfmt };
+    let ofmt = if needs_alpha {
+        PixelFormat::new(sfmt.mode, sfmt.sample, true)
+    } else {
+        sfmt
+    };
     let mut out = Surface::new(ofmt);
     if out_area.is_empty() || frame.is_empty() {
         return out;
@@ -295,7 +355,12 @@ fn remap_impl(src: &Surface, frame: Rect, out_area: Rect, edge: EdgeMode, map: &
     while ty < out_area.y1 {
         let mut tx = out_area.x0;
         while tx < out_area.x1 {
-            tiles.push(Rect::new(tx, ty, (tx + TILE).min(out_area.x1), (ty + TILE).min(out_area.y1)));
+            tiles.push(Rect::new(
+                tx,
+                ty,
+                (tx + TILE).min(out_area.x1),
+                (ty + TILE).min(out_area.y1),
+            ));
             tx += TILE;
         }
         ty += TILE;
@@ -303,7 +368,14 @@ fn remap_impl(src: &Surface, frame: Rect, out_area: Rect, edge: EdgeMode, map: &
     let results = par_map(tiles.len(), |k| {
         let t = tiles[k];
         let (tw, th) = (t.width() as usize, t.height() as usize);
-        let samples: Vec<Option<Sample>> = (0..tw * th).map(|i| map(t.x0 as f64 + (i % tw) as f64 + 0.5, t.y0 as f64 + (i / tw) as f64 + 0.5)).collect();
+        let samples: Vec<Option<Sample>> = (0..tw * th)
+            .map(|i| {
+                map(
+                    t.x0 as f64 + (i % tw) as f64 + 0.5,
+                    t.y0 as f64 + (i / tw) as f64 + 0.5,
+                )
+            })
+            .collect();
         // Source window: bbox of every sample, clamped to the frame.
         let (mut bx0, mut by0, mut bx1, mut by1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
         for s in samples.iter().flatten() {
@@ -320,10 +392,19 @@ fn remap_impl(src: &Surface, frame: Rect, out_area: Rect, edge: EdgeMode, map: &
         } else {
             let clamp_x = |v: f64| (v as i32).clamp(frame.x0, frame.x1);
             let clamp_y = |v: f64| (v as i32).clamp(frame.y0, frame.y1);
-            Rect::new(clamp_x(bx0.floor() - 3.0), clamp_y(by0.floor() - 3.0), clamp_x(bx1.ceil() + 4.0), clamp_y(by1.ceil() + 4.0))
+            Rect::new(
+                clamp_x(bx0.floor() - 3.0),
+                clamp_y(by0.floor() - 3.0),
+                clamp_x(bx1.ceil() + 4.0),
+                clamp_y(by1.ceil() + 4.0),
+            )
         };
         let (ww, wh) = (win.width() as usize, win.height() as usize);
-        let mut buf = if win.is_empty() { Vec::new() } else { src.read_region(win) };
+        let mut buf = if win.is_empty() {
+            Vec::new()
+        } else {
+            src.read_region(win)
+        };
         // Premultiply colour by alpha so transparent pixels don't bleed.
         if sfmt.alpha {
             for px in buf.chunks_exact_mut(n_in) {
@@ -347,7 +428,8 @@ fn remap_impl(src: &Surface, frame: Rect, out_area: Rect, edge: EdgeMode, map: &
             for (j, wyv) in wy.iter().enumerate() {
                 let yy = ((yi as i32 + j as i32 - 1).clamp(win.y0, win.y1 - 1) - win.y0) as usize;
                 for (i, wxv) in wx.iter().enumerate() {
-                    let xx = ((xi as i32 + i as i32 - 1).clamp(win.x0, win.x1 - 1) - win.x0) as usize;
+                    let xx =
+                        ((xi as i32 + i as i32 - 1).clamp(win.x0, win.x1 - 1) - win.x0) as usize;
                     acc += wxv * wyv * buf[(yy * ww + xx) * n_in + c];
                 }
             }
@@ -369,12 +451,23 @@ fn remap_impl(src: &Surface, frame: Rect, out_area: Rect, edge: EdgeMode, map: &
             };
             // Color channels and coverage usually sample the same location. Prepare the 16
             // tap addresses and weights once; each channel keeps its original summation order.
-            let center = if shared && (!rgb || (s.pr == s.p && s.pb == s.p)) { sample_channels(&buf, win, frame, n_in, s.p) } else { None };
+            let center = if shared && (!rgb || (s.pr == s.p && s.pb == s.p)) {
+                sample_channels(&buf, win, frame, n_in, s.p)
+            } else {
+                None
+            };
             let sample = |c: usize, p: [f64; 2]| {
                 let cached = if p == s.p { center.as_ref() } else { None };
-                cached.and_then(|v| v.get(c)).copied().unwrap_or_else(|| bicubic(c, p))
+                cached
+                    .and_then(|v| v.get(c))
+                    .copied()
+                    .unwrap_or_else(|| bicubic(c, p))
             };
-            let alpha = if sfmt.alpha { sample(n_in - 1, s.p).clamp(0.0, 1.0) } else { 1.0 };
+            let alpha = if sfmt.alpha {
+                sample(n_in - 1, s.p).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
             let mut col = [0.0f32; 8];
             for (c, v) in col.iter_mut().enumerate().take(cc) {
                 let p = if rgb && c == 0 {
@@ -385,12 +478,24 @@ fn remap_impl(src: &Surface, frame: Rect, out_area: Rect, edge: EdgeMode, map: &
                     s.p
                 };
                 let pm = sample(c, p);
-                let straight = if sfmt.alpha { if alpha > 1e-6 { pm / alpha } else { 0.0 } } else { pm };
+                let straight = if sfmt.alpha {
+                    if alpha > 1e-6 {
+                        pm / alpha
+                    } else {
+                        0.0
+                    }
+                } else {
+                    pm
+                };
                 let g = s.gain;
                 *v = if subtractive {
                     1.0 - (1.0 - straight) * g
                 } else if lab {
-                    if c == 0 { straight * g } else { straight }
+                    if c == 0 {
+                        straight * g
+                    } else {
+                        straight
+                    }
                 } else {
                     straight * g
                 };
@@ -440,7 +545,12 @@ fn sample_channels(buf: &[f32], win: Rect, frame: Rect, n: usize, p: [f64; 2]) -
         _ => None,
     }
 }
-fn sample_channels_impl<const N: usize>(buf: &[f32], win: Rect, frame: Rect, p: [f64; 2]) -> Option<[f32; 8]> {
+fn sample_channels_impl<const N: usize>(
+    buf: &[f32],
+    win: Rect,
+    frame: Rect,
+    p: [f64; 2],
+) -> Option<[f32; 8]> {
     if N == 0 || N > 8 || win.is_empty() || frame.is_empty() || !p.iter().all(|v| v.is_finite()) {
         return None;
     }
@@ -453,7 +563,10 @@ fn sample_channels_impl<const N: usize>(buf: &[f32], win: Rect, frame: Rect, p: 
         let yy = ((yi as i32 + j as i32 - 1).clamp(win.y0, win.y1 - 1) - win.y0) as usize;
         for (i, wxv) in wx.iter().enumerate() {
             let xx = ((xi as i32 + i as i32 - 1).clamp(win.x0, win.x1 - 1) - win.x0) as usize;
-            let start = yy.checked_mul(win.width() as usize)?.checked_add(xx)?.checked_mul(N)?;
+            let start = yy
+                .checked_mul(win.width() as usize)?
+                .checked_add(xx)?
+                .checked_mul(N)?;
             let px = buf.get(start..start.checked_add(N)?)?.first_chunk::<N>()?;
             let weight = wxv * wyv;
             for (a, v) in acc.iter_mut().zip(px) {
@@ -496,8 +609,15 @@ mod tests {
             let fmt = PixelFormat::new(ColorMode::Rgb, sample, true);
             let s = grid_surface(fmt, 96, 64);
             let out = correct(&s, Rect::new(0, 0, 96, 64), &LensCorrection::default());
-            let (a, b) = (s.read_region(Rect::new(0, 0, 96, 64)), out.read_region(Rect::new(0, 0, 96, 64)));
-            let err = a.iter().zip(&b).map(|(x, y)| (x - y).abs()).fold(0.0f32, f32::max);
+            let (a, b) = (
+                s.read_region(Rect::new(0, 0, 96, 64)),
+                out.read_region(Rect::new(0, 0, 96, 64)),
+            );
+            let err = a
+                .iter()
+                .zip(&b)
+                .map(|(x, y)| (x - y).abs())
+                .fold(0.0f32, f32::max);
             assert!(err < 2.0 / 255.0, "{sample:?}: {err}");
         }
     }
@@ -506,7 +626,10 @@ mod tests {
     fn distortion_round_trip_and_edges() {
         let frame = Rect::new(0, 0, 200, 100);
         // A barrel-distorting profile then its correction map back the centre exactly.
-        let lc = LensCorrection { distortion: 50.0, ..Default::default() };
+        let lc = LensCorrection {
+            distortion: 50.0,
+            ..Default::default()
+        };
         let m = LensMap::new(&lc, frame);
         let s = m.sample(100.0, 50.0).unwrap();
         assert!((s.p[0] - 100.0).abs() < 1e-9 && (s.p[1] - 50.0).abs() < 1e-9);
@@ -514,14 +637,35 @@ mod tests {
         let c = m.sample(0.0, 0.0).unwrap();
         assert!(c.p[0] > 5.0 && c.p[1] > 2.0, "{c:?}");
         // Transparency leaves the uncovered corners clear; extension and colour fill them.
-        let src = grid_surface(PixelFormat::new(ColorMode::Rgb, SampleType::U8, false), 200, 100);
-        let neg = LensCorrection { distortion: -60.0, ..Default::default() };
+        let src = grid_surface(
+            PixelFormat::new(ColorMode::Rgb, SampleType::U8, false),
+            200,
+            100,
+        );
+        let neg = LensCorrection {
+            distortion: -60.0,
+            ..Default::default()
+        };
         let t = correct(&src, frame, &neg);
         assert!(t.format().alpha);
         assert!(t.pixel(0, 0)[3] < 0.01 && t.pixel(100, 50)[3] > 0.99);
-        let e = correct(&src, frame, &LensCorrection { edge: EdgeMode::Extension, ..neg.clone() });
+        let e = correct(
+            &src,
+            frame,
+            &LensCorrection {
+                edge: EdgeMode::Extension,
+                ..neg.clone()
+            },
+        );
         assert!(!e.format().alpha);
-        let col = correct(&src, frame, &LensCorrection { edge: EdgeMode::Color([1.0, 0.0, 0.0, 1.0]), ..neg });
+        let col = correct(
+            &src,
+            frame,
+            &LensCorrection {
+                edge: EdgeMode::Color([1.0, 0.0, 0.0, 1.0]),
+                ..neg
+            },
+        );
         let p = col.pixel(0, 0);
         assert!(p[0] > 0.99 && p[1] < 0.01, "{p:?}");
     }
@@ -529,24 +673,64 @@ mod tests {
     #[test]
     fn vignette_ca_perspective_and_straighten() {
         let frame = Rect::new(0, 0, 300, 200);
-        let m = LensMap::new(&LensCorrection { vignette_amount: 100.0, ..Default::default() }, frame);
+        let m = LensMap::new(
+            &LensCorrection {
+                vignette_amount: 100.0,
+                ..Default::default()
+            },
+            frame,
+        );
         assert!((m.sample(150.0, 100.0).unwrap().gain - 1.0).abs() < 1e-6);
         assert!(m.sample(1.0, 1.0).unwrap().gain > 2.0);
-        let d = LensMap::new(&LensCorrection { vignette_amount: -100.0, ..Default::default() }, frame);
+        let d = LensMap::new(
+            &LensCorrection {
+                vignette_amount: -100.0,
+                ..Default::default()
+            },
+            frame,
+        );
         assert!(d.sample(1.0, 1.0).unwrap().gain < 0.5);
         // Lateral CA scales red outward relative to green.
-        let ca = LensMap::new(&LensCorrection { red_cyan: -100.0, ..Default::default() }, frame).sample(10.0, 10.0).unwrap();
+        let ca = LensMap::new(
+            &LensCorrection {
+                red_cyan: -100.0,
+                ..Default::default()
+            },
+            frame,
+        )
+        .sample(10.0, 10.0)
+        .unwrap();
         assert!(ca.pr[0] < ca.p[0]);
         // Vertical perspective −: the top edge samples a narrower source span (widens the top).
-        let v = LensMap::new(&LensCorrection { vertical: -50.0, ..Default::default() }, frame);
-        let (tl, tr) = (v.sample(0.0, 0.0).unwrap().p, v.sample(300.0, 0.0).unwrap().p);
-        let (bl, br) = (v.sample(0.0, 200.0).unwrap().p, v.sample(300.0, 200.0).unwrap().p);
-        assert!(tr[0] - tl[0] < br[0] - bl[0], "top {} bottom {}", tr[0] - tl[0], br[0] - bl[0]);
+        let v = LensMap::new(
+            &LensCorrection {
+                vertical: -50.0,
+                ..Default::default()
+            },
+            frame,
+        );
+        let (tl, tr) = (
+            v.sample(0.0, 0.0).unwrap().p,
+            v.sample(300.0, 0.0).unwrap().p,
+        );
+        let (bl, br) = (
+            v.sample(0.0, 200.0).unwrap().p,
+            v.sample(300.0, 200.0).unwrap().p,
+        );
+        assert!(
+            tr[0] - tl[0] < br[0] - bl[0],
+            "top {} bottom {}",
+            tr[0] - tl[0],
+            br[0] - bl[0]
+        );
         // Straighten a line tilted by 5° → −5° correction, and Auto Scale hides the corners.
         let a = straighten_angle([0.0, 0.0], [100.0, 100.0 * 5f64.to_radians().tan()]);
         assert!((a + 5.0).abs() < 1e-9, "{a}");
         assert!((straighten_angle([0.0, 0.0], [3.0, 100.0]) - 1.718).abs() < 0.01);
-        let lc = LensCorrection { angle: 5.0, ..Default::default() };
+        let lc = LensCorrection {
+            angle: 5.0,
+            ..Default::default()
+        };
         let s = auto_scale(&lc, frame);
         assert!(s > 105.0 && s < 130.0, "{s}");
         let rot = LensMap::new(&LensCorrection { scale: s, ..lc }, frame);
@@ -564,8 +748,20 @@ mod tests {
         let fmt = PixelFormat::new(ColorMode::Cmyk, SampleType::U8, false);
         let mut s = Surface::new(fmt);
         s.fill_rect(Rect::new(0, 0, 40, 40), &[0.5, 0.5, 0.5, 0.5]);
-        let out = correct(&s, Rect::new(0, 0, 40, 40), &LensCorrection { vignette_amount: 100.0, edge: EdgeMode::Extension, ..Default::default() });
-        assert!(out.pixel(0, 0)[0] < 0.4 && (out.pixel(20, 20)[0] - 0.5).abs() < 0.02, "{:?}", out.pixel(0, 0));
+        let out = correct(
+            &s,
+            Rect::new(0, 0, 40, 40),
+            &LensCorrection {
+                vignette_amount: 100.0,
+                edge: EdgeMode::Extension,
+                ..Default::default()
+            },
+        );
+        assert!(
+            out.pixel(0, 0)[0] < 0.4 && (out.pixel(20, 20)[0] - 0.5).abs() < 0.02,
+            "{:?}",
+            out.pixel(0, 0)
+        );
     }
 }
 

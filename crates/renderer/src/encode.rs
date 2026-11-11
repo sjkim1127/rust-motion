@@ -183,7 +183,9 @@ pub fn encode_h264_pure_rust(config: &EncodeConfig) -> Result<(), RenderError> {
     for entry in entries {
         let entry = entry.map_err(|e| RenderError::Encode(e.to_string()))?;
         let p = entry.path();
-        if p.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("png")) {
+        if p.extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("png"))
+        {
             frame_paths.push(p);
         }
     }
@@ -193,7 +195,9 @@ pub fn encode_h264_pure_rust(config: &EncodeConfig) -> Result<(), RenderError> {
     }
 
     let first_img = image::open(&frame_paths[0])
-        .map_err(|e| RenderError::Encode(format!("Failed to open image {:?}: {e}", frame_paths[0])))?
+        .map_err(|e| {
+            RenderError::Encode(format!("Failed to open image {:?}: {e}", frame_paths[0]))
+        })?
         .to_rgba8();
     let width = config.width.unwrap_or(first_img.width());
     let height = config.height.unwrap_or(first_img.height());
@@ -226,7 +230,12 @@ pub fn encode_h264_pure_rust(config: &EncodeConfig) -> Result<(), RenderError> {
             .to_rgba8();
 
         let img = if raw_img.width() != width || raw_img.height() != height {
-            image::imageops::resize(&raw_img, width, height, image::imageops::FilterType::Nearest)
+            image::imageops::resize(
+                &raw_img,
+                width,
+                height,
+                image::imageops::FilterType::Nearest,
+            )
         } else {
             raw_img
         };
@@ -256,27 +265,34 @@ pub fn encode_h264_pure_rust(config: &EncodeConfig) -> Result<(), RenderError> {
             uv_stride,
         };
 
-        let packets = encoder.encode(&yuv, f_idx as i64)
+        let packets = encoder
+            .encode(&yuv, f_idx as i64)
             .map_err(|e| RenderError::Encode(format!("H.264 encode error: {e}")))?;
         for pkt in packets {
-            out_file.write_all(&pkt.data)
+            out_file
+                .write_all(&pkt.data)
                 .map_err(|e| RenderError::Encode(e.to_string()))?;
         }
     }
 
     let flushed = encoder.flush();
     for pkt in flushed {
-        out_file.write_all(&pkt.data)
+        out_file
+            .write_all(&pkt.data)
             .map_err(|e| RenderError::Encode(e.to_string()))?;
     }
-    out_file.flush()
+    out_file
+        .flush()
         .map_err(|e| RenderError::Encode(e.to_string()))?;
 
     if config.cleanup_after_encode {
         cleanup_frames(&config.frames_dir)?;
     }
 
-    tracing::info!("Pure Rust H.264 encode complete -> {}", config.output.display());
+    tracing::info!(
+        "Pure Rust H.264 encode complete -> {}",
+        config.output.display()
+    );
     Ok(())
 }
 
@@ -458,8 +474,14 @@ mod tests {
 
         let res = encode_mp4(&config).await;
         assert!(res.is_ok(), "encode_mp4 pure-rust failed: {res:?}");
-        assert!(output_h264.exists(), "Output pure-rust H.264 file was not created");
-        assert!(output_h264.metadata().unwrap().len() > 0, "Output file is empty");
+        assert!(
+            output_h264.exists(),
+            "Output pure-rust H.264 file was not created"
+        );
+        assert!(
+            output_h264.metadata().unwrap().len() > 0,
+            "Output file is empty"
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

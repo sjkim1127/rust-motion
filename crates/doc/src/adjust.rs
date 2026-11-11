@@ -27,9 +27,16 @@ pub fn curve_map(outputs: &[f32]) -> Vec<CurvePoint> {
     let mut prev = 0.0;
     (0..CURVE_MAP_LEN)
         .map(|k| {
-            let out = outputs.get(k).copied().filter(|v| v.is_finite()).map_or(prev, |v| v.clamp(0.0, 1.0));
+            let out = outputs
+                .get(k)
+                .copied()
+                .filter(|v| v.is_finite())
+                .map_or(prev, |v| v.clamp(0.0, 1.0));
             prev = out;
-            CurvePoint { input: k as f32 / last, output: out }
+            CurvePoint {
+                input: k as f32 / last,
+                output: out,
+            }
         })
         .collect()
 }
@@ -37,7 +44,11 @@ pub fn curve_map(outputs: &[f32]) -> Vec<CurvePoint> {
 /// The [`CURVE_MAP_LEN`] outputs (0..=1) of `points` read as a pencil-mode curve: straight
 /// segments between the points, constant outside the first/last (identity without two points).
 pub fn curve_map_outputs(points: &[CurvePoint]) -> Vec<f32> {
-    let mut pts: Vec<(f32, f32)> = points.iter().filter(|p| p.input.is_finite() && p.output.is_finite()).map(|p| (p.input, p.output)).collect();
+    let mut pts: Vec<(f32, f32)> = points
+        .iter()
+        .filter(|p| p.input.is_finite() && p.output.is_finite())
+        .map(|p| (p.input, p.output))
+        .collect();
     pts.sort_by(|a, b| a.0.total_cmp(&b.0));
     let last = (CURVE_MAP_LEN - 1) as f32;
     (0..CURVE_MAP_LEN)
@@ -52,7 +63,9 @@ pub fn curve_map_outputs(points: &[CurvePoint]) -> Vec<f32> {
                     } else {
                         let i = pts.partition_point(|p| p.0 < x);
                         match (pts.get(i.wrapping_sub(1)), pts.get(i)) {
-                            (Some(p0), Some(p1)) if p1.0 > p0.0 => p0.1 + (p1.1 - p0.1) * (x - p0.0) / (p1.0 - p0.0),
+                            (Some(p0), Some(p1)) if p1.0 > p0.0 => {
+                                p0.1 + (p1.1 - p0.1) * (x - p0.0) / (p1.0 - p0.0)
+                            }
                             (_, Some(p1)) => p1.1,
                             _ => b.1,
                         }
@@ -85,7 +98,13 @@ pub struct LevelsChannel {
 
 impl Default for LevelsChannel {
     fn default() -> Self {
-        Self { in_black: 0.0, in_white: 1.0, gamma: 1.0, out_black: 0.0, out_white: 1.0 }
+        Self {
+            in_black: 0.0,
+            in_white: 1.0,
+            gamma: 1.0,
+            out_black: 0.0,
+            out_white: 1.0,
+        }
     }
 }
 
@@ -125,7 +144,12 @@ impl HueRange {
     /// for 30° around its centre, fading over 30° each side.
     pub fn neutral(i: usize) -> Self {
         let c = 60.0 * i as f32;
-        Self { hue: 0.0, saturation: 0.0, lightness: 0.0, bounds: [c - 45.0, c - 15.0, c + 15.0, c + 45.0] }
+        Self {
+            hue: 0.0,
+            saturation: 0.0,
+            lightness: 0.0,
+            bounds: [c - 45.0, c - 15.0, c + 15.0, c + 45.0],
+        }
     }
 
     pub fn defaults() -> [HueRange; 6] {
@@ -155,17 +179,31 @@ impl HueRange {
     pub fn weight(&self, deg: f32) -> f32 {
         let [a, b, c, d] = self.bounds;
         // Measure from the range's start so wrap-around ranges (reds) work.
-        let rel = |x: f32| if x.is_finite() { (x - a).rem_euclid(360.0) } else { 0.0 };
+        let rel = |x: f32| {
+            if x.is_finite() {
+                (x - a).rem_euclid(360.0)
+            } else {
+                0.0
+            }
+        };
         let b = rel(b);
         let c = rel(c).max(b);
         let d = rel(d).max(c);
         let h = rel(deg);
         if h <= b {
-            if b <= 0.0 { 1.0 } else { h / b }
+            if b <= 0.0 {
+                1.0
+            } else {
+                h / b
+            }
         } else if h <= c {
             1.0
         } else if h <= d {
-            if d <= c { 1.0 } else { (d - h) / (d - c) }
+            if d <= c {
+                1.0
+            } else {
+                (d - h) / (d - c)
+            }
         } else {
             0.0
         }
@@ -312,16 +350,44 @@ impl Adjustment {
     }
 
     pub fn default_hue_saturation() -> Self {
-        Adjustment::HueSaturation { hue: 0.0, saturation: 0.0, lightness: 0.0, colorize: false, ranges: HueRange::defaults() }
+        Adjustment::HueSaturation {
+            hue: 0.0,
+            saturation: 0.0,
+            lightness: 0.0,
+            colorize: false,
+            ranges: HueRange::defaults(),
+        }
     }
 
     pub fn identity_curves() -> Self {
-        let line = || vec![CurvePoint { input: 0.0, output: 0.0 }, CurvePoint { input: 1.0, output: 1.0 }];
-        Adjustment::Curves { master: line(), per_channel: [line(), line(), line()], space: ToneSpace::Rgb, black: Vec::new(), pencil: false }
+        let line = || {
+            vec![
+                CurvePoint {
+                    input: 0.0,
+                    output: 0.0,
+                },
+                CurvePoint {
+                    input: 1.0,
+                    output: 1.0,
+                },
+            ]
+        };
+        Adjustment::Curves {
+            master: line(),
+            per_channel: [line(), line(), line()],
+            space: ToneSpace::Rgb,
+            black: Vec::new(),
+            pencil: false,
+        }
     }
 
     pub fn identity_levels() -> Self {
-        Adjustment::Levels { master: LevelsChannel::default(), per_channel: Default::default(), space: ToneSpace::Rgb, black: LevelsChannel::default() }
+        Adjustment::Levels {
+            master: LevelsChannel::default(),
+            per_channel: Default::default(),
+            space: ToneSpace::Rgb,
+            black: LevelsChannel::default(),
+        }
     }
 }
 
@@ -342,19 +408,39 @@ mod tests {
         assert_eq!(blues.weight(240.0), 1.0);
         assert_eq!(blues.weight(120.0), 0.0);
         // Degenerate bounds never divide by zero.
-        let odd = HueRange { bounds: [10.0, 10.0, 10.0, 10.0], ..HueRange::neutral(0) };
+        let odd = HueRange {
+            bounds: [10.0, 10.0, 10.0, 10.0],
+            ..HueRange::neutral(0)
+        };
         assert!(odd.weight(10.0).is_finite() && odd.weight(200.0).is_finite());
-        let nan = HueRange { bounds: [f32::NAN; 4], ..HueRange::neutral(0) };
+        let nan = HueRange {
+            bounds: [f32::NAN; 4],
+            ..HueRange::neutral(0)
+        };
         assert!(nan.weight(10.0).is_finite());
     }
 
     #[test]
     fn old_files_get_neutral_new_fields() {
-        let a: Adjustment = serde_json::from_str(r#"{"HueSaturation":{"hue":1.0,"saturation":2.0,"lightness":3.0,"colorize":false}}"#).unwrap();
-        assert!(matches!(a, Adjustment::HueSaturation { ranges, .. } if ranges == HueRange::defaults()));
-        let c: Adjustment = serde_json::from_str(r#"{"Curves":{"master":[],"per_channel":[[],[],[]]}}"#).unwrap();
-        assert!(matches!(c, Adjustment::Curves { space: ToneSpace::Rgb, pencil: false, .. }));
-        let g: Adjustment = serde_json::from_str(r#"{"GradientMap":{"stops":[],"reverse":true}}"#).unwrap();
+        let a: Adjustment = serde_json::from_str(
+            r#"{"HueSaturation":{"hue":1.0,"saturation":2.0,"lightness":3.0,"colorize":false}}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(a, Adjustment::HueSaturation { ranges, .. } if ranges == HueRange::defaults())
+        );
+        let c: Adjustment =
+            serde_json::from_str(r#"{"Curves":{"master":[],"per_channel":[[],[],[]]}}"#).unwrap();
+        assert!(matches!(
+            c,
+            Adjustment::Curves {
+                space: ToneSpace::Rgb,
+                pencil: false,
+                ..
+            }
+        ));
+        let g: Adjustment =
+            serde_json::from_str(r#"{"GradientMap":{"stops":[],"reverse":true}}"#).unwrap();
         assert!(matches!(g, Adjustment::GradientMap { dither: false, .. }));
     }
 

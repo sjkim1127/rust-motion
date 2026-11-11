@@ -99,13 +99,7 @@ pub fn apply_film_emulation(
 }
 
 /// Extract specular highlights, diffuse with a warm glow, and screen blend back onto the pixmap.
-fn apply_halation(
-    pixmap: &mut Pixmap,
-    intensity: f32,
-    threshold: f32,
-    radius: f32,
-    tint: [u8; 4],
-) {
+fn apply_halation(pixmap: &mut Pixmap, intensity: f32, threshold: f32, radius: f32, tint: [u8; 4]) {
     let width = pixmap.width() as usize;
     let height = pixmap.height() as usize;
 

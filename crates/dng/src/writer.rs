@@ -50,19 +50,33 @@ impl Value {
             Value::Ascii(s) => s.bytes().chain([0]).collect(),
             Value::Short(v) => v.iter().flat_map(|&x| w16(x)).collect(),
             Value::Long(v) => v.iter().flat_map(|&x| w32(x)).collect(),
-            Value::Rational(v) => v.iter().flat_map(|&(n, d)| w32(n).into_iter().chain(w32(d))).collect(),
-            Value::SRational(v) => v.iter().flat_map(|&(n, d)| w32(n as u32).into_iter().chain(w32(d as u32))).collect(),
+            Value::Rational(v) => v
+                .iter()
+                .flat_map(|&(n, d)| w32(n).into_iter().chain(w32(d)))
+                .collect(),
+            Value::SRational(v) => v
+                .iter()
+                .flat_map(|&(n, d)| w32(n as u32).into_iter().chain(w32(d as u32)))
+                .collect(),
         }
     }
 
     /// Signed rationals with denominator 10000 from floats (colour matrices and the like).
     pub fn srationals(v: &[f64]) -> Value {
-        Value::SRational(v.iter().map(|&x| ((x * 10_000.0).round() as i32, 10_000)).collect())
+        Value::SRational(
+            v.iter()
+                .map(|&x| ((x * 10_000.0).round() as i32, 10_000))
+                .collect(),
+        )
     }
 
     /// Unsigned rationals with denominator 10000.
     pub fn rationals(v: &[f64]) -> Value {
-        Value::Rational(v.iter().map(|&x| ((x * 10_000.0).round().max(0.0) as u32, 10_000)).collect())
+        Value::Rational(
+            v.iter()
+                .map(|&x| ((x * 10_000.0).round().max(0.0) as u32, 10_000))
+                .collect(),
+        )
     }
 }
 
@@ -132,7 +146,12 @@ pub fn pack(samples: &[u16], per_row: usize, bits: u32, be: bool) -> Vec<u8> {
     for row in samples.chunks(per_row.max(1)) {
         match bits {
             8 => out.extend(row.iter().map(|&v| v as u8)),
-            16 => out.extend(row.iter().flat_map(|&v| if be { v.to_be_bytes() } else { v.to_le_bytes() })),
+            16 => {
+                out.extend(
+                    row.iter()
+                        .flat_map(|&v| if be { v.to_be_bytes() } else { v.to_le_bytes() }),
+                )
+            }
             _ => {
                 let (mut acc, mut n) = (0u32, 0u32);
                 for &v in row {
@@ -186,7 +205,16 @@ impl BitOut {
 }
 
 /// Encode `samples` (`width` × `height` × `comps`, interleaved) as lossless JPEG.
-pub fn lj92(samples: &[u16], width: usize, height: usize, comps: usize, precision: u8, predictor: u8, restart_lines: usize, pt: u8) -> Vec<u8> {
+pub fn lj92(
+    samples: &[u16],
+    width: usize,
+    height: usize,
+    comps: usize,
+    precision: u8,
+    predictor: u8,
+    restart_lines: usize,
+    pt: u8,
+) -> Vec<u8> {
     let comps = comps.clamp(1, 4);
     let row = width * comps;
     let initial = 1i32 << (precision - pt - 1);
@@ -195,7 +223,8 @@ pub fn lj92(samples: &[u16], width: usize, height: usize, comps: usize, precisio
     let mut coded: Vec<(usize, u32, u32, i32)> = Vec::with_capacity(samples.len()); // (comp, ssss, extra, line)
     let s = |i: usize| i32::from(samples.get(i).copied().unwrap_or(0) >> pt);
     for y in 0..height {
-        let first_line = restart_lines == 0 && y == 0 || restart_lines != 0 && y % restart_lines == 0;
+        let first_line =
+            restart_lines == 0 && y == 0 || restart_lines != 0 && y % restart_lines == 0;
         for x in 0..width {
             for c in 0..comps {
                 let i = y * row + x * comps + c;
@@ -214,7 +243,11 @@ pub fn lj92(samples: &[u16], width: usize, height: usize, comps: usize, precisio
                 } else {
                     let d = if d16 >= 32_768 { d16 - 65_536 } else { d16 };
                     let ssss = 32 - d.unsigned_abs().leading_zeros();
-                    let extra = if d >= 0 { d as u32 } else { (d + (1 << ssss) - 1) as u32 };
+                    let extra = if d >= 0 {
+                        d as u32
+                    } else {
+                        (d + (1 << ssss) - 1) as u32
+                    };
                     (ssss, extra)
                 };
                 cats[c][ssss as usize] += 1;
@@ -232,7 +265,11 @@ pub fn lj92(samples: &[u16], width: usize, height: usize, comps: usize, precisio
         }
         let mut code_of = [(0u32, 0u32); 17];
         for (i, &k) in syms.iter().enumerate() {
-            code_of[usize::from(k)] = if i < 3 { (i as u32, 2) } else { (0b110000 + (i as u32 - 3), 6) };
+            code_of[usize::from(k)] = if i < 3 {
+                (i as u32, 2)
+            } else {
+                (0b110000 + (i as u32 - 3), 6)
+            };
         }
         let mut bits = [0u8; 16];
         bits[1] = syms.len().min(3) as u8;
@@ -241,7 +278,14 @@ pub fn lj92(samples: &[u16], width: usize, height: usize, comps: usize, precisio
     }
     let mut out = vec![0xFF, 0xD8];
     // SOF3
-    let mut sof = vec![precision, (height >> 8) as u8, height as u8, (width >> 8) as u8, width as u8, comps as u8];
+    let mut sof = vec![
+        precision,
+        (height >> 8) as u8,
+        height as u8,
+        (width >> 8) as u8,
+        width as u8,
+        comps as u8,
+    ];
     for c in 0..comps {
         sof.extend([c as u8, 0x11, 0]);
     }
@@ -348,15 +392,34 @@ fn put_chunks(buf: &mut Vec<u8>, samples: &[u16], o: &Options) -> (Vec<u32>, Vec
                 for c in 0..cw {
                     let x = (tx + c).min(o.width - 1);
                     for s in 0..spp {
-                        chunk.push(samples.get((y * o.width + x) * spp + s).copied().unwrap_or(0));
+                        chunk.push(
+                            samples
+                                .get((y * o.width + x) * spp + s)
+                                .copied()
+                                .unwrap_or(0),
+                        );
                     }
                 }
             }
             let data = match o.compression {
                 Compression::None => pack(&chunk, cw * spp, o.bits, o.big_endian),
-                Compression::LosslessJpeg { predictor, components, restart_lines, pt } => {
+                Compression::LosslessJpeg {
+                    predictor,
+                    components,
+                    restart_lines,
+                    pt,
+                } => {
                     let comps = components.max(1);
-                    lj92(&chunk, cw * spp / comps, rows, comps, o.bits as u8, predictor, restart_lines, pt)
+                    lj92(
+                        &chunk,
+                        cw * spp / comps,
+                        rows,
+                        comps,
+                        o.bits as u8,
+                        predictor,
+                        restart_lines,
+                        pt,
+                    )
                 }
             };
             if buf.len() % 2 == 1 {
@@ -373,15 +436,32 @@ fn put_chunks(buf: &mut Vec<u8>, samples: &[u16], o: &Options) -> (Vec<u32>, Vec
 /// Write a DNG holding `samples` (`width` × `height` × `samples_per_pixel`, interleaved).
 pub fn write(samples: &[u16], o: &Options) -> Vec<u8> {
     let be = o.big_endian;
-    let mut buf = if be { b"MM\0*\0\0\0\0".to_vec() } else { b"II*\0\0\0\0\0".to_vec() };
+    let mut buf = if be {
+        b"MM\0*\0\0\0\0".to_vec()
+    } else {
+        b"II*\0\0\0\0\0".to_vec()
+    };
     let (offs, counts) = put_chunks(&mut buf, samples, o);
     let mut raw = vec![
         (tags::NEW_SUBFILE_TYPE, Value::Long(vec![0])),
         (tags::IMAGE_WIDTH, Value::Long(vec![o.width as u32])),
         (tags::IMAGE_LENGTH, Value::Long(vec![o.height as u32])),
-        (tags::BITS_PER_SAMPLE, Value::Short(vec![o.bits as u16; o.samples_per_pixel])),
-        (tags::COMPRESSION, Value::Short(vec![if o.compression == Compression::None { 1 } else { 7 }])),
-        (tags::SAMPLES_PER_PIXEL, Value::Short(vec![o.samples_per_pixel as u16])),
+        (
+            tags::BITS_PER_SAMPLE,
+            Value::Short(vec![o.bits as u16; o.samples_per_pixel]),
+        ),
+        (
+            tags::COMPRESSION,
+            Value::Short(vec![if o.compression == Compression::None {
+                1
+            } else {
+                7
+            }]),
+        ),
+        (
+            tags::SAMPLES_PER_PIXEL,
+            Value::Short(vec![o.samples_per_pixel as u16]),
+        ),
         (tags::PLANAR_CONFIGURATION, Value::Short(vec![1])),
     ];
     match o.layout {
@@ -400,7 +480,10 @@ pub fn write(samples: &[u16], o: &Options) -> Vec<u8> {
     match &o.cfa {
         Some((r, c, p)) => {
             raw.push((tags::PHOTOMETRIC, Value::Short(vec![32803])));
-            raw.push((tags::CFA_REPEAT_PATTERN_DIM, Value::Short(vec![*r as u16, *c as u16])));
+            raw.push((
+                tags::CFA_REPEAT_PATTERN_DIM,
+                Value::Short(vec![*r as u16, *c as u16]),
+            ));
             raw.push((tags::CFA_PATTERN, Value::Byte(p.clone())));
         }
         None => raw.push((tags::PHOTOMETRIC, Value::Short(vec![34892]))),
@@ -413,7 +496,13 @@ pub fn write(samples: &[u16], o: &Options) -> Vec<u8> {
         }
     };
     merge(&mut raw, &o.raw_tags);
-    let mut main = vec![(tags::DNG_VERSION, Value::Byte(vec![1, 4, 0, 0])), (tags::UNIQUE_CAMERA_MODEL, Value::Ascii("FilmCraft Synthetic".into()))];
+    let mut main = vec![
+        (tags::DNG_VERSION, Value::Byte(vec![1, 4, 0, 0])),
+        (
+            tags::UNIQUE_CAMERA_MODEL,
+            Value::Ascii("FilmCraft Synthetic".into()),
+        ),
+    ];
     let ifd0 = if o.preview {
         let raw_at = put_ifd(&mut buf, raw, be);
         // a 2 × 2 RGB preview
@@ -443,7 +532,11 @@ pub fn write(samples: &[u16], o: &Options) -> Vec<u8> {
         merge(&mut raw, &o.main_tags);
         put_ifd(&mut buf, raw, be)
     };
-    let off = if be { ifd0.to_be_bytes() } else { ifd0.to_le_bytes() };
+    let off = if be {
+        ifd0.to_be_bytes()
+    } else {
+        ifd0.to_le_bytes()
+    };
     buf[4..8].copy_from_slice(&off);
     buf
 }

@@ -34,16 +34,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       # ── 3. System dependencies ─────────────────────────────────────────────
-      - name: Install FFmpeg, ffprobe, and Linux desktop dependencies
+      - name: Install FFmpeg, ffprobe, and system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            ffmpeg \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev
+          sudo apt-get install -y ffmpeg libssl-dev
 
       # ── 4. Build CLI binary ────────────────────────────────────────────────
       - name: Build rust-motion CLI binary

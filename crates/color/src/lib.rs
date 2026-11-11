@@ -3,7 +3,17 @@
 //! Bit depth and colour model are *runtime data* (see `plan/architecture.md` §1.1):
 //! nothing in the engine assumes 8-bit or RGB.
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
 
 extern crate rust_motion_cms as rust_motion_cms;
 
@@ -86,15 +96,43 @@ pub struct PixelFormat {
 }
 
 impl PixelFormat {
-    pub const RGBA8: PixelFormat = PixelFormat { mode: ColorMode::Rgb, sample: SampleType::U8, alpha: true };
-    pub const RGBA16: PixelFormat = PixelFormat { mode: ColorMode::Rgb, sample: SampleType::U16, alpha: true };
-    pub const RGBA32F: PixelFormat = PixelFormat { mode: ColorMode::Rgb, sample: SampleType::F32, alpha: true };
-    pub const GRAY8: PixelFormat = PixelFormat { mode: ColorMode::Grayscale, sample: SampleType::U8, alpha: false };
-    pub const GRAYA8: PixelFormat = PixelFormat { mode: ColorMode::Grayscale, sample: SampleType::U8, alpha: true };
-    pub const CMYKA8: PixelFormat = PixelFormat { mode: ColorMode::Cmyk, sample: SampleType::U8, alpha: true };
+    pub const RGBA8: PixelFormat = PixelFormat {
+        mode: ColorMode::Rgb,
+        sample: SampleType::U8,
+        alpha: true,
+    };
+    pub const RGBA16: PixelFormat = PixelFormat {
+        mode: ColorMode::Rgb,
+        sample: SampleType::U16,
+        alpha: true,
+    };
+    pub const RGBA32F: PixelFormat = PixelFormat {
+        mode: ColorMode::Rgb,
+        sample: SampleType::F32,
+        alpha: true,
+    };
+    pub const GRAY8: PixelFormat = PixelFormat {
+        mode: ColorMode::Grayscale,
+        sample: SampleType::U8,
+        alpha: false,
+    };
+    pub const GRAYA8: PixelFormat = PixelFormat {
+        mode: ColorMode::Grayscale,
+        sample: SampleType::U8,
+        alpha: true,
+    };
+    pub const CMYKA8: PixelFormat = PixelFormat {
+        mode: ColorMode::Cmyk,
+        sample: SampleType::U8,
+        alpha: true,
+    };
 
     pub const fn new(mode: ColorMode, sample: SampleType, alpha: bool) -> Self {
-        Self { mode, sample, alpha }
+        Self {
+            mode,
+            sample,
+            alpha,
+        }
     }
     pub const fn channels(&self) -> usize {
         self.mode.color_channels() + self.alpha as usize
@@ -152,13 +190,25 @@ pub struct Color {
 
 impl Color {
     pub const fn rgb(r: f32, g: f32, b: f32) -> Self {
-        Self { mode: ColorMode::Rgb, c: [r, g, b, 0.0], alpha: 1.0 }
+        Self {
+            mode: ColorMode::Rgb,
+            c: [r, g, b, 0.0],
+            alpha: 1.0,
+        }
     }
     pub const fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
-        Self { mode: ColorMode::Rgb, c: [r, g, b, 0.0], alpha: a }
+        Self {
+            mode: ColorMode::Rgb,
+            c: [r, g, b, 0.0],
+            alpha: a,
+        }
     }
     pub const fn gray(v: f32) -> Self {
-        Self { mode: ColorMode::Grayscale, c: [v, 0.0, 0.0, 0.0], alpha: 1.0 }
+        Self {
+            mode: ColorMode::Grayscale,
+            c: [v, 0.0, 0.0, 0.0],
+            alpha: 1.0,
+        }
     }
     pub const BLACK: Color = Color::rgb(0.0, 0.0, 0.0);
     pub const WHITE: Color = Color::rgb(1.0, 1.0, 1.0);
@@ -167,10 +217,16 @@ impl Color {
     /// Convert to sRGB (CMYK through the built-in CMYK profile, Lab via D50 formulas).
     pub fn to_rgb(&self) -> [f32; 3] {
         match self.mode {
-            ColorMode::Rgb | ColorMode::Indexed | ColorMode::Multichannel => [self.c[0], self.c[1], self.c[2]],
+            ColorMode::Rgb | ColorMode::Indexed | ColorMode::Multichannel => {
+                [self.c[0], self.c[1], self.c[2]]
+            }
             ColorMode::Grayscale | ColorMode::Bitmap | ColorMode::Duotone => [self.c[0]; 3],
             ColorMode::Cmyk => convert::cmyk_to_rgb([self.c[0], self.c[1], self.c[2], self.c[3]]),
-            ColorMode::Lab => convert::lab_to_srgb([self.c[0] * 100.0, self.c[1] * 255.0 - 128.0, self.c[2] * 255.0 - 128.0]),
+            ColorMode::Lab => convert::lab_to_srgb([
+                self.c[0] * 100.0,
+                self.c[1] * 255.0 - 128.0,
+                self.c[2] * 255.0 - 128.0,
+            ]),
         }
     }
 
@@ -178,21 +234,42 @@ impl Color {
     /// are (through sRGB); unchanged when it is already in `mode`. Indexed and Multichannel
     /// documents keep RGB colours, as [`Color::to_rgb`] reads them.
     pub fn in_mode(self, mode: ColorMode) -> Color {
-        let rgb_like = |m: ColorMode| matches!(m, ColorMode::Rgb | ColorMode::Indexed | ColorMode::Multichannel);
+        let rgb_like = |m: ColorMode| {
+            matches!(
+                m,
+                ColorMode::Rgb | ColorMode::Indexed | ColorMode::Multichannel
+            )
+        };
         if self.mode == mode || (rgb_like(self.mode) && rgb_like(mode)) {
             return self;
         }
         let rgb = self.to_rgb();
         let (mode, c) = match mode {
-            ColorMode::Rgb | ColorMode::Indexed | ColorMode::Multichannel => (ColorMode::Rgb, [rgb[0], rgb[1], rgb[2], 0.0]),
-            ColorMode::Grayscale | ColorMode::Bitmap | ColorMode::Duotone => (mode, [convert::rgb_to_gray(rgb), 0.0, 0.0, 0.0]),
+            ColorMode::Rgb | ColorMode::Indexed | ColorMode::Multichannel => {
+                (ColorMode::Rgb, [rgb[0], rgb[1], rgb[2], 0.0])
+            }
+            ColorMode::Grayscale | ColorMode::Bitmap | ColorMode::Duotone => {
+                (mode, [convert::rgb_to_gray(rgb), 0.0, 0.0, 0.0])
+            }
             ColorMode::Cmyk => (mode, convert::rgb_to_cmyk(rgb)),
             ColorMode::Lab => {
                 let l = convert::srgb_to_lab(rgb);
-                (mode, [l[0] / 100.0, (l[1] + 128.0) / 255.0, (l[2] + 128.0) / 255.0, 0.0])
+                (
+                    mode,
+                    [
+                        l[0] / 100.0,
+                        (l[1] + 128.0) / 255.0,
+                        (l[2] + 128.0) / 255.0,
+                        0.0,
+                    ],
+                )
             }
         };
-        Color { mode, c, alpha: self.alpha }
+        Color {
+            mode,
+            c,
+            alpha: self.alpha,
+        }
     }
 
     pub fn to_rgba8(&self) -> [u8; 4] {
@@ -220,7 +297,11 @@ mod tests {
             assert_eq!(c.mode, mode);
             let back = c.in_mode(ColorMode::Rgb);
             assert_eq!(back.mode, ColorMode::Rgb);
-            assert_eq!(back.to_rgb(), c.to_rgb(), "{mode:?}: back to RGB shows the same colour");
+            assert_eq!(
+                back.to_rgb(),
+                c.to_rgb(),
+                "{mode:?}: back to RGB shows the same colour"
+            );
         }
     }
 
@@ -269,9 +350,21 @@ mod tests {
     fn color_to_rgba8() {
         assert_eq!(Color::WHITE.to_rgba8(), [255, 255, 255, 255]);
         assert_eq!(Color::gray(0.5).to_rgba8(), [128, 128, 128, 255]);
-        let w = Color { mode: ColorMode::Cmyk, c: [0.0; 4], alpha: 1.0 };
+        let w = Color {
+            mode: ColorMode::Cmyk,
+            c: [0.0; 4],
+            alpha: 1.0,
+        };
         assert_eq!(w.to_rgba8(), [255, 255, 255, 255]);
-        let k = Color { mode: ColorMode::Cmyk, c: [0.75, 0.68, 0.67, 0.9], alpha: 1.0 };
-        assert!(k.to_rgba8()[..3].iter().all(|v| *v < 20), "{:?}", k.to_rgba8());
+        let k = Color {
+            mode: ColorMode::Cmyk,
+            c: [0.75, 0.68, 0.67, 0.9],
+            alpha: 1.0,
+        };
+        assert!(
+            k.to_rgba8()[..3].iter().all(|v| *v < 20),
+            "{:?}",
+            k.to_rgba8()
+        );
     }
 }

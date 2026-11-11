@@ -57,10 +57,16 @@ impl C {
         C::new(self.abs().ln(), self.im.atan2(self.re))
     }
     pub fn cos(self) -> C {
-        C::new(self.re.cos() * self.im.cosh(), -self.re.sin() * self.im.sinh())
+        C::new(
+            self.re.cos() * self.im.cosh(),
+            -self.re.sin() * self.im.sinh(),
+        )
     }
     pub fn sin(self) -> C {
-        C::new(self.re.sin() * self.im.cosh(), self.re.cos() * self.im.sinh())
+        C::new(
+            self.re.sin() * self.im.cosh(),
+            self.re.cos() * self.im.sinh(),
+        )
     }
     /// acos(w) = −j·ln(w + j·√(1 − w²)).
     pub fn acos(self) -> C {
@@ -88,7 +94,10 @@ impl Sub for C {
 impl Mul for C {
     type Output = C;
     fn mul(self, o: C) -> C {
-        C::new(self.re * o.re - self.im * o.im, self.re * o.im + self.im * o.re)
+        C::new(
+            self.re * o.re - self.im * o.im,
+            self.re * o.im + self.im * o.re,
+        )
     }
 }
 
@@ -96,7 +105,10 @@ impl Div for C {
     type Output = C;
     fn div(self, o: C) -> C {
         let d = o.re * o.re + o.im * o.im;
-        C::new((self.re * o.re + self.im * o.im) / d, (self.im * o.re - self.re * o.im) / d)
+        C::new(
+            (self.re * o.re + self.im * o.im) / d,
+            (self.im * o.re - self.re * o.im) / d,
+        )
     }
 }
 
@@ -116,7 +128,10 @@ struct Roots {
 
 impl Roots {
     const fn new() -> Roots {
-        Roots { v: [C { re: 0.0, im: 0.0 }; MAX_ROOTS], n: 0 }
+        Roots {
+            v: [C { re: 0.0, im: 0.0 }; MAX_ROOTS],
+            n: 0,
+        }
     }
     fn push(&mut self, c: C) {
         if self.n < MAX_ROOTS {
@@ -128,7 +143,9 @@ impl Roots {
         &self.v[..self.n]
     }
     fn prod_neg(&self) -> C {
-        self.as_slice().iter().fold(C::real(1.0), |a, &r| a.mul(r.neg()))
+        self.as_slice()
+            .iter()
+            .fold(C::real(1.0), |a, &r| a.mul(r.neg()))
     }
 }
 
@@ -171,7 +188,10 @@ impl Sections {
     }
     /// Magnitude of the cascade in dB.
     pub fn magnitude_db(&self, freq: f64, sample_rate: f64) -> f64 {
-        self.as_slice().iter().map(|c| c.magnitude_db(freq, sample_rate)).sum()
+        self.as_slice()
+            .iter()
+            .map(|c| c.magnitude_db(freq, sample_rate))
+            .sum()
     }
 }
 
@@ -183,7 +203,11 @@ fn butterworth(n: usize) -> Zpk {
         let a = PI * (2 * k + n + 1) as f64 / (2 * n) as f64;
         p.push(C::new(a.cos(), a.sin()));
     }
-    Zpk { z: Roots::new(), p, k: 1.0 }
+    Zpk {
+        z: Roots::new(),
+        p,
+        k: 1.0,
+    }
 }
 
 fn chebyshev1(n: usize, rp: f64) -> Zpk {
@@ -198,7 +222,11 @@ fn chebyshev1(n: usize, rp: f64) -> Zpk {
     if n.is_multiple_of(2) {
         k /= (1.0 + eps * eps).sqrt();
     }
-    Zpk { z: Roots::new(), p, k }
+    Zpk {
+        z: Roots::new(),
+        p,
+        k,
+    }
 }
 
 /// Roots of a monic polynomial (`c[i]` = coefficient of sⁱ, `c[n]` = 1) by Durand–Kerner.
@@ -212,7 +240,11 @@ fn poly_roots(c: &[f64], out: &mut Roots) {
         acc
     };
     // Initial guesses on a circle of the Cauchy-bound radius.
-    let radius = 1.0 + c[..n].iter().fold(0.0f64, |m, v| m.max(v.abs())).powf(1.0 / n as f64);
+    let radius = 1.0
+        + c[..n]
+            .iter()
+            .fold(0.0f64, |m, v| m.max(v.abs()))
+            .powf(1.0 / n as f64);
     let mut r = [C::default(); MAX_ROOTS];
     for (i, ri) in r.iter_mut().enumerate().take(n) {
         let a = 2.0 * PI * i as f64 / n as f64 + 0.4;
@@ -254,19 +286,32 @@ fn bessel(n: usize) -> Zpk {
     let a0 = c[0];
     let mag = |w: f64| -> f64 {
         let s = C::new(0.0, w);
-        p.as_slice().iter().fold(C::real(1.0), |acc, &r| acc.mul(s.sub(r))).abs().recip() * a0
+        p.as_slice()
+            .iter()
+            .fold(C::real(1.0), |acc, &r| acc.mul(s.sub(r)))
+            .abs()
+            .recip()
+            * a0
     };
     let (mut lo, mut hi) = (1e-3f64, 100.0f64);
     for _ in 0..200 {
         let mid = (lo * hi).sqrt();
-        if mag(mid) > std::f64::consts::FRAC_1_SQRT_2 { lo = mid } else { hi = mid }
+        if mag(mid) > std::f64::consts::FRAC_1_SQRT_2 {
+            lo = mid
+        } else {
+            hi = mid
+        }
     }
     let w3 = (lo * hi).sqrt();
     for r in &mut p.v[..p.n] {
         *r = r.scale(1.0 / w3);
     }
     let k = p.prod_neg().re;
-    Zpk { z: Roots::new(), p, k }
+    Zpk {
+        z: Roots::new(),
+        p,
+        k,
+    }
 }
 
 // ---- Jacobi elliptic functions via Landen transformations (normalised argument u·K).
@@ -380,7 +425,11 @@ fn elliptic(n: usize, rp: f64, rs: f64) -> Zpk {
         }
     }
     // Gain: H(0) = 1 (odd N) or 1/√(1+εp²) (even N).
-    let h0 = if n % 2 == 1 { 1.0 } else { 1.0 / (1.0 + ep * ep).sqrt() };
+    let h0 = if n % 2 == 1 {
+        1.0
+    } else {
+        1.0 / (1.0 + ep * ep).sqrt()
+    };
     let num = z.prod_neg();
     let den = p.prod_neg();
     let k = h0 * den.div(num).re;
@@ -459,8 +508,14 @@ fn lp_to_bs(f: &mut Zpk, w0: f64, bw: f64) {
 fn bilinear(f: &mut Zpk, fs: f64) {
     let fs2 = 2.0 * fs;
     let degree = f.p.n - f.z.n;
-    let num = f.z.as_slice().iter().fold(C::real(1.0), |a, &r| a.mul(C::real(fs2).sub(r)));
-    let den = f.p.as_slice().iter().fold(C::real(1.0), |a, &r| a.mul(C::real(fs2).sub(r)));
+    let num =
+        f.z.as_slice()
+            .iter()
+            .fold(C::real(1.0), |a, &r| a.mul(C::real(fs2).sub(r)));
+    let den =
+        f.p.as_slice()
+            .iter()
+            .fold(C::real(1.0), |a, &r| a.mul(C::real(fs2).sub(r)));
     for r in &mut f.z.v[..f.z.n] {
         *r = C::real(fs2).add(*r).div(C::real(fs2).sub(*r));
     }
@@ -510,16 +565,27 @@ fn take_closest(r: &mut Roots, to: C) -> C {
 fn into_sections(f: &Zpk) -> Sections {
     let (mut pp, mut pr) = split(&f.p);
     let (mut zp, mut zr) = split(&f.z);
-    let mut out = Sections { c: [Coeffs::IDENTITY; MAX_SECTIONS], n: 0 };
+    let mut out = Sections {
+        c: [Coeffs::IDENTITY; MAX_SECTIONS],
+        n: 0,
+    };
     let mut push = |b: [f64; 3], a: [f64; 2]| {
         if out.n < MAX_SECTIONS {
-            out.c[out.n] = Coeffs { b0: b[0], b1: b[1], b2: b[2], a1: a[0], a2: a[1] };
+            out.c[out.n] = Coeffs {
+                b0: b[0],
+                b1: b[1],
+                b2: b[2],
+                a1: a[0],
+                a2: a[1],
+            };
             out.n += 1;
         }
     };
     // An odd real pole first (it needs a single real zero).
     if pr.n % 2 == 1 {
-        let i = (0..pr.n).max_by(|&a, &b| pr.v[a].re.abs().total_cmp(&pr.v[b].re.abs())).unwrap_or(0);
+        let i = (0..pr.n)
+            .max_by(|&a, &b| pr.v[a].re.abs().total_cmp(&pr.v[b].re.abs()))
+            .unwrap_or(0);
         let p = take(&mut pr, i);
         let b = match closest(&zr, p) {
             Some(j) => {
@@ -533,7 +599,9 @@ fn into_sections(f: &Zpk) -> Sections {
     // Second-order sections, highest-Q (closest to the unit circle) first.
     loop {
         let pole_pair = if pp.n > 0 {
-            let i = (0..pp.n).max_by(|&a, &b| pp.v[a].abs().total_cmp(&pp.v[b].abs())).unwrap_or(0);
+            let i = (0..pp.n)
+                .max_by(|&a, &b| pp.v[a].abs().total_cmp(&pp.v[b].abs()))
+                .unwrap_or(0);
             let p = take(&mut pp, i);
             Some([-2.0 * p.re, p.re * p.re + p.im * p.im, p.re, p.im])
         } else if pr.n >= 2 {
@@ -543,11 +611,15 @@ fn into_sections(f: &Zpk) -> Sections {
         } else {
             None
         };
-        let Some([a1, a2, cre, cim]) = pole_pair else { break };
+        let Some([a1, a2, cre, cim]) = pole_pair else {
+            break;
+        };
         let centre = C::new(cre, cim);
         // Zeros: best complex pair, else two reals, else none.
         let b = if let Some(j) = closest(&zp, centre) {
-            let use_pair = zr.n < 2 || zp.v[j].sub(centre).abs() <= closest(&zr, centre).map_or(f64::INFINITY, |k| zr.v[k].sub(centre).abs());
+            let use_pair = zr.n < 2
+                || zp.v[j].sub(centre).abs()
+                    <= closest(&zr, centre).map_or(f64::INFINITY, |k| zr.v[k].sub(centre).abs());
             if use_pair {
                 let z = take(&mut zp, j);
                 [1.0, -2.0 * z.re, z.re * z.re + z.im * z.im]
@@ -624,7 +696,11 @@ pub fn realize(proto: &Prototype, band: Band, f1: f64, f2: f64, sample_rate: f64
             let hi = hi.max(lo * 1.001);
             let (w1, w2) = (warp(lo), warp(hi));
             let (w0, bw) = ((w1 * w2).sqrt(), (w2 - w1).max(1e-6));
-            if band == Band::BandPass { lp_to_bp(&mut f, w0, bw) } else { lp_to_bs(&mut f, w0, bw) }
+            if band == Band::BandPass {
+                lp_to_bp(&mut f, w0, bw)
+            } else {
+                lp_to_bs(&mut f, w0, bw)
+            }
         }
     }
     bilinear(&mut f, sample_rate);
@@ -633,7 +709,13 @@ pub fn realize(proto: &Prototype, band: Band, f1: f64, f2: f64, sample_rate: f64
 
 /// Design a digital filter at `sample_rate`.
 pub fn design(spec: &Spec, sample_rate: f64) -> Sections {
-    realize(&prototype(spec.family, spec.order, spec.ripple_db, spec.stop_db), spec.band, spec.f1, spec.f2, sample_rate)
+    realize(
+        &prototype(spec.family, spec.order, spec.ripple_db, spec.stop_db),
+        spec.band,
+        spec.f1,
+        spec.f2,
+        sample_rate,
+    )
 }
 
 #[cfg(test)]
@@ -643,14 +725,25 @@ mod tests {
     const SR: f64 = 48000.0;
 
     fn spec(family: Family, band: Band, order: usize, f1: f64, f2: f64) -> Spec {
-        Spec { family, band, order, f1, f2, ripple_db: 1.0, stop_db: 60.0 }
+        Spec {
+            family,
+            band,
+            order,
+            f1,
+            f2,
+            ripple_db: 1.0,
+            stop_db: 60.0,
+        }
     }
 
     #[test]
     fn butterworth_matches_closed_form() {
         // |H| = 1/√(1 + (Ωa/Ωc)^(2N)) with pre-warped analog frequencies.
         for n in 1..=8 {
-            let s = design(&spec(Family::Butterworth, Band::LowPass, n, 1000.0, 0.0), SR);
+            let s = design(
+                &spec(Family::Butterworth, Band::LowPass, n, 1000.0, 0.0),
+                SR,
+            );
             let wa = |f: f64| (PI * f / SR).tan();
             for f in [100.0, 500.0, 1000.0, 2000.0, 8000.0] {
                 let want = -10.0 * (1.0 + (wa(f) / wa(1000.0)).powi(2 * n as i32)).log10();
@@ -664,8 +757,16 @@ mod tests {
     fn bessel_is_minus_3db_at_cutoff_and_monotonic() {
         for n in 1..=10 {
             let s = design(&spec(Family::Bessel, Band::LowPass, n, 2000.0, 0.0), SR);
-            assert!((s.magnitude_db(2000.0, SR) + 3.0103).abs() < 0.02, "n={n}: {}", s.magnitude_db(2000.0, SR));
-            assert!(s.magnitude_db(1.0, SR).abs() < 1e-5, "n={n}: {}", s.magnitude_db(1.0, SR));
+            assert!(
+                (s.magnitude_db(2000.0, SR) + 3.0103).abs() < 0.02,
+                "n={n}: {}",
+                s.magnitude_db(2000.0, SR)
+            );
+            assert!(
+                s.magnitude_db(1.0, SR).abs() < 1e-5,
+                "n={n}: {}",
+                s.magnitude_db(1.0, SR)
+            );
             let mut last = 1.0;
             for i in 1..200 {
                 let m = s.magnitude_db(i as f64 * 100.0, SR);
@@ -678,7 +779,13 @@ mod tests {
     #[test]
     fn chebyshev_ripple_bounds() {
         for n in 2..=8 {
-            let s = design(&Spec { ripple_db: 0.5, ..spec(Family::Chebyshev, Band::LowPass, n, 1000.0, 0.0) }, SR);
+            let s = design(
+                &Spec {
+                    ripple_db: 0.5,
+                    ..spec(Family::Chebyshev, Band::LowPass, n, 1000.0, 0.0)
+                },
+                SR,
+            );
             let mut min = f64::INFINITY;
             let mut max = f64::NEG_INFINITY;
             for i in 1..100 {
@@ -696,7 +803,14 @@ mod tests {
     fn elliptic_meets_ripple_and_stopband() {
         for n in 2..=8 {
             for (rp, rs) in [(1.0, 60.0), (0.1, 40.0), (0.5, 80.0)] {
-                let s = design(&Spec { ripple_db: rp, stop_db: rs, ..spec(Family::Elliptic, Band::LowPass, n, 1000.0, 0.0) }, SR);
+                let s = design(
+                    &Spec {
+                        ripple_db: rp,
+                        stop_db: rs,
+                        ..spec(Family::Elliptic, Band::LowPass, n, 1000.0, 0.0)
+                    },
+                    SR,
+                );
                 let mut max = f64::NEG_INFINITY;
                 let mut min = f64::INFINITY;
                 for i in 1..=100 {
@@ -704,7 +818,10 @@ mod tests {
                     min = min.min(m);
                     max = max.max(m);
                 }
-                assert!(max < 1e-6 && min > -rp - 1e-3, "n={n} rp={rp}: {min}..{max}");
+                assert!(
+                    max < 1e-6 && min > -rp - 1e-3,
+                    "n={n} rp={rp}: {min}..{max}"
+                );
                 // Once the response first drops below −As it never rises above it again.
                 let mut below = false;
                 for i in 1..2390 {
@@ -722,22 +839,44 @@ mod tests {
         }
         // Sharper than Butterworth of the same order.
         let e = design(&spec(Family::Elliptic, Band::LowPass, 4, 1000.0, 0.0), SR);
-        let b = design(&spec(Family::Butterworth, Band::LowPass, 4, 1000.0, 0.0), SR);
+        let b = design(
+            &spec(Family::Butterworth, Band::LowPass, 4, 1000.0, 0.0),
+            SR,
+        );
         assert!(e.magnitude_db(1500.0, SR) < b.magnitude_db(1500.0, SR) - 10.0);
     }
 
     #[test]
     fn highpass_bandpass_bandstop_shapes() {
-        for fam in [Family::Butterworth, Family::Chebyshev, Family::Elliptic, Family::Bessel] {
+        for fam in [
+            Family::Butterworth,
+            Family::Chebyshev,
+            Family::Elliptic,
+            Family::Bessel,
+        ] {
             let hp = design(&spec(fam, Band::HighPass, 4, 1000.0, 0.0), SR);
             assert!(hp.magnitude_db(10000.0, SR) > -1.1, "{fam:?} hp pass");
             assert!(hp.magnitude_db(100.0, SR) < -40.0, "{fam:?} hp stop");
             let bp = design(&spec(fam, Band::BandPass, 3, 500.0, 2000.0), SR);
-            assert!(bp.magnitude_db(1000.0, SR) > -3.5, "{fam:?} bp centre {}", bp.magnitude_db(1000.0, SR));
-            assert!(bp.magnitude_db(50.0, SR) < -30.0 && bp.magnitude_db(15000.0, SR) < -25.0, "{fam:?} bp stop");
+            assert!(
+                bp.magnitude_db(1000.0, SR) > -3.5,
+                "{fam:?} bp centre {}",
+                bp.magnitude_db(1000.0, SR)
+            );
+            assert!(
+                bp.magnitude_db(50.0, SR) < -30.0 && bp.magnitude_db(15000.0, SR) < -25.0,
+                "{fam:?} bp stop"
+            );
             let bs = design(&spec(fam, Band::BandStop, 3, 500.0, 2000.0), SR);
-            assert!(bs.magnitude_db(1000.0, SR) < -20.0, "{fam:?} bs centre {}", bs.magnitude_db(1000.0, SR));
-            assert!(bs.magnitude_db(30.0, SR) > -1.1 && bs.magnitude_db(18000.0, SR) > -1.1, "{fam:?} bs pass");
+            assert!(
+                bs.magnitude_db(1000.0, SR) < -20.0,
+                "{fam:?} bs centre {}",
+                bs.magnitude_db(1000.0, SR)
+            );
+            assert!(
+                bs.magnitude_db(30.0, SR) > -1.1 && bs.magnitude_db(18000.0, SR) > -1.1,
+                "{fam:?} bs pass"
+            );
         }
     }
 

@@ -24,7 +24,10 @@ pub struct Pattern {
 
 impl Pattern {
     pub fn color(&self, x: usize, y: usize) -> u8 {
-        self.colors.get((y % self.rows) * self.cols + x % self.cols).copied().unwrap_or(1)
+        self.colors
+            .get((y % self.rows) * self.cols + x % self.cols)
+            .copied()
+            .unwrap_or(1)
     }
 
     /// Whether this is a 2 × 2 Bayer pattern.
@@ -32,10 +35,15 @@ impl Pattern {
         if (self.rows, self.cols) != (2, 2) {
             return false;
         }
-        let [a, b, c, d] = self.colors[..] else { return false };
+        let [a, b, c, d] = self.colors[..] else {
+            return false;
+        };
         let count = |k: u8| [a, b, c, d].iter().filter(|&&v| v == k).count();
         // the two greens sit on a diagonal
-        count(0) == 1 && count(1) == 2 && count(2) == 1 && ((a == 1 && d == 1) || (b == 1 && c == 1))
+        count(0) == 1
+            && count(1) == 2
+            && count(2) == 1
+            && ((a == 1 && d == 1) || (b == 1 && c == 1))
     }
 }
 
@@ -85,9 +93,13 @@ pub fn demosaic(plane: &[f32], w: usize, h: usize, pattern: &Pattern) -> Vec<f32
         }
     };
     #[cfg(feature = "threads")]
-    out.par_chunks_mut(w * 3).enumerate().for_each(|(y, o)| row(y, o));
+    out.par_chunks_mut(w * 3)
+        .enumerate()
+        .for_each(|(y, o)| row(y, o));
     #[cfg(not(feature = "threads"))]
-    out.chunks_mut(w * 3).enumerate().for_each(|(y, o)| row(y, o));
+    out.chunks_mut(w * 3)
+        .enumerate()
+        .for_each(|(y, o)| row(y, o));
     out
 }
 
@@ -95,7 +107,9 @@ fn malvar_row(p: &[f32], pw: usize, y: usize, w: usize, pat: &Pattern, out: &mut
     let py = y + PAD;
     for x in 0..w {
         let px = x + PAD;
-        let at = |dx: isize, dy: isize| p[((py as isize + dy) as usize) * pw + (px as isize + dx) as usize];
+        let at = |dx: isize, dy: isize| {
+            p[((py as isize + dy) as usize) * pw + (px as isize + dx) as usize]
+        };
         let c = at(0, 0);
         let cross1 = at(-1, 0) + at(1, 0) + at(0, -1) + at(0, 1);
         let cross2 = at(-2, 0) + at(2, 0) + at(0, -2) + at(0, 2);
@@ -110,12 +124,20 @@ fn malvar_row(p: &[f32], pw: usize, y: usize, w: usize, pat: &Pattern, out: &mut
                 // colour along the row and along the column
                 let along_row = (5.0 * c + 4.0 * h1 - h2 - diag + 0.5 * v2) / 8.0;
                 let along_col = (5.0 * c + 4.0 * v1 - v2 - diag + 0.5 * h2) / 8.0;
-                if pat.color(x + 1, y) == 0 { [along_row, c, along_col] } else { [along_col, c, along_row] }
+                if pat.color(x + 1, y) == 0 {
+                    [along_row, c, along_col]
+                } else {
+                    [along_col, c, along_row]
+                }
             }
             _ => {
                 let g = (4.0 * c + 2.0 * cross1 - cross2) / 8.0;
                 let other = (6.0 * c + 2.0 * diag - 1.5 * cross2) / 8.0;
-                if me == 0 { [c, g, other] } else { [other, g, c] }
+                if me == 0 {
+                    [c, g, other]
+                } else {
+                    [other, g, c]
+                }
             }
         };
         if let Some(o) = out.get_mut(x * 3..x * 3 + 3) {
@@ -124,7 +146,15 @@ fn malvar_row(p: &[f32], pw: usize, y: usize, w: usize, pat: &Pattern, out: &mut
     }
 }
 
-fn bilinear_row(p: &[f32], pw: usize, y: usize, w: usize, h: usize, pat: &Pattern, out: &mut [f32]) {
+fn bilinear_row(
+    p: &[f32],
+    pw: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+    pat: &Pattern,
+    out: &mut [f32],
+) {
     for x in 0..w {
         let me = pat.color(x, y);
         let mut rgb = [0f32; 3];
@@ -163,36 +193,86 @@ mod tests {
     use super::*;
 
     fn rggb() -> Pattern {
-        Pattern { rows: 2, cols: 2, colors: vec![0, 1, 1, 2] }
+        Pattern {
+            rows: 2,
+            cols: 2,
+            colors: vec![0, 1, 1, 2],
+        }
     }
 
     /// A mosaic of an RGB picture given per pixel.
-    fn mosaic(w: usize, h: usize, pat: &Pattern, rgb: impl Fn(usize, usize) -> [f32; 3]) -> Vec<f32> {
-        (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| rgb(x, y)[usize::from(pat.color(x, y))]).collect()
+    fn mosaic(
+        w: usize,
+        h: usize,
+        pat: &Pattern,
+        rgb: impl Fn(usize, usize) -> [f32; 3],
+    ) -> Vec<f32> {
+        (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .map(|(x, y)| rgb(x, y)[usize::from(pat.color(x, y))])
+            .collect()
     }
 
     #[test]
     fn bayer_detection() {
         assert!(rggb().is_bayer());
         for c in [[1, 0, 2, 1], [1, 2, 0, 1], [2, 1, 1, 0]] {
-            assert!(Pattern { rows: 2, cols: 2, colors: c.to_vec() }.is_bayer(), "{c:?}");
+            assert!(
+                Pattern {
+                    rows: 2,
+                    cols: 2,
+                    colors: c.to_vec()
+                }
+                .is_bayer(),
+                "{c:?}"
+            );
         }
-        assert!(!Pattern { rows: 2, cols: 2, colors: vec![0, 1, 2, 1] }.is_bayer(), "greens side by side");
-        assert!(!Pattern { rows: 2, cols: 2, colors: vec![0, 0, 1, 2] }.is_bayer());
-        assert!(!Pattern { rows: 1, cols: 3, colors: vec![0, 1, 2] }.is_bayer());
+        assert!(
+            !Pattern {
+                rows: 2,
+                cols: 2,
+                colors: vec![0, 1, 2, 1]
+            }
+            .is_bayer(),
+            "greens side by side"
+        );
+        assert!(!Pattern {
+            rows: 2,
+            cols: 2,
+            colors: vec![0, 0, 1, 2]
+        }
+        .is_bayer());
+        assert!(!Pattern {
+            rows: 1,
+            cols: 3,
+            colors: vec![0, 1, 2]
+        }
+        .is_bayer());
     }
 
     #[test]
     fn flat_fields_stay_flat_for_every_bayer_phase_and_other_patterns() {
-        let pats = [[0, 1, 1, 2], [1, 0, 2, 1], [1, 2, 0, 1], [2, 1, 1, 0]].map(|c| Pattern { rows: 2, cols: 2, colors: c.to_vec() });
-        let stripes = Pattern { rows: 1, cols: 3, colors: vec![0, 1, 2] };
+        let pats = [[0, 1, 1, 2], [1, 0, 2, 1], [1, 2, 0, 1], [2, 1, 1, 0]].map(|c| Pattern {
+            rows: 2,
+            cols: 2,
+            colors: c.to_vec(),
+        });
+        let stripes = Pattern {
+            rows: 1,
+            cols: 3,
+            colors: vec![0, 1, 2],
+        };
         for pat in pats.iter().chain([&stripes]) {
             let (w, h) = (9, 7);
             let m = mosaic(w, h, pat, |_, _| [0.25, 0.5, 0.75]);
             let out = demosaic(&m, w, h, pat);
             for (i, px) in out.chunks(3).enumerate() {
                 for (k, want) in [0.25, 0.5, 0.75].iter().enumerate() {
-                    assert!((px[k] - want).abs() < 1e-6, "{pat:?} pixel {i} channel {k}: {}", px[k]);
+                    assert!(
+                        (px[k] - want).abs() < 1e-6,
+                        "{pat:?} pixel {i} channel {k}: {}",
+                        px[k]
+                    );
                 }
             }
         }
@@ -218,7 +298,12 @@ mod tests {
                 if (2..w - 2).contains(&x) {
                     let want = f(x, y);
                     for k in 0..3 {
-                        assert!((px[k] - want[k]).abs() < 1e-5, "({x},{y}) ch {k}: {} vs {}", px[k], want[k]);
+                        assert!(
+                            (px[k] - want[k]).abs() < 1e-5,
+                            "({x},{y}) ch {k}: {} vs {}",
+                            px[k],
+                            want[k]
+                        );
                     }
                 }
             }
@@ -236,7 +321,10 @@ mod tests {
             for x in (0..3).chain(9..12) {
                 let want = if x < 6 { 1.0 } else { 0.0 };
                 for k in 0..3 {
-                    assert!((out[(y * w + x) * 3 + k] - want).abs() < 1e-6, "({x},{y}) ch {k}");
+                    assert!(
+                        (out[(y * w + x) * 3 + k] - want).abs() < 1e-6,
+                        "({x},{y}) ch {k}"
+                    );
                 }
             }
         }

@@ -21,7 +21,11 @@ fn test_vector_boolean_operations_and_rendering() {
     let cov = path_coverage(&path, rect);
 
     // Centre of hole (50, 50) should have 0 coverage
-    assert_eq!(cov[50 * 100 + 50], 0.0, "Subtracted interior must be 0 coverage");
+    assert_eq!(
+        cov[50 * 100 + 50],
+        0.0,
+        "Subtracted interior must be 0 coverage"
+    );
     // Outer wall (20, 20) should have 1.0 coverage
     assert_eq!(cov[20 * 100 + 20], 1.0, "Outer body must have 1.0 coverage");
 
@@ -38,14 +42,19 @@ fn test_vector_boolean_operations_and_rendering() {
         }],
     };
 
-    let frame = backend.render_frame(&scene, &config).expect("render failed");
+    let frame = backend
+        .render_frame(&scene, &config)
+        .expect("render failed");
     // Pixel (20, 20): Red > 200, Alpha > 200
     let px_wall = frame.get_pixel(20, 20);
     assert!(px_wall[0] > 200 && px_wall[3] > 200);
 
     // Pixel (50, 50): Transparent hole Alpha == 0
     let px_hole = frame.get_pixel(50, 50);
-    assert_eq!(px_hole[3], 0, "Hole must be fully transparent in rendered frame");
+    assert_eq!(
+        px_hole[3], 0,
+        "Hole must be fully transparent in rendered frame"
+    );
 }
 
 #[test]
@@ -82,8 +91,16 @@ fn test_non_affine_mesh_warp_of_vector_path() {
     );
 
     let (_x0, y0, x1, _y1) = warped.control_bounds().expect("bounds");
-    assert!(y0 < 0.0, "Parabolic arch must push top edge upward (y0 = {})", y0);
-    assert!(x1 > 100.0, "Perspective flare must widen bottom edge (x1 = {})", x1);
+    assert!(
+        y0 < 0.0,
+        "Parabolic arch must push top edge upward (y0 = {})",
+        y0
+    );
+    assert!(
+        x1 > 100.0,
+        "Perspective flare must widen bottom edge (x1 = {})",
+        x1
+    );
 }
 
 #[test]
@@ -102,8 +119,14 @@ fn test_contour_auto_tracing_make_work_path() {
     let rect = Rect::new(0, 0, w as i32, h as i32);
     let traced_path = trace_mask(&mask, rect, 0.0, 0.5);
 
-    assert!(!traced_path.subpaths.is_empty(), "Tracing must produce at least one subpath");
-    assert!(traced_path.subpaths[0].closed, "Traced contour must be closed");
+    assert!(
+        !traced_path.subpaths.is_empty(),
+        "Tracing must produce at least one subpath"
+    );
+    assert!(
+        traced_path.subpaths[0].closed,
+        "Traced contour must be closed"
+    );
 
     // Check bounds of traced path closely match the 15..45 rectangle (±1px tolerance)
     let (tx0, ty0, tx1, ty1) = traced_path.control_bounds().expect("traced bounds");

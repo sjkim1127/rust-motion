@@ -33,7 +33,7 @@ pub fn default_toning_data() -> Vec<u8> {
     out.put_u32(3);
     out.put(&0.23f32.to_be_bytes());
     out.put_u32(2); // toning method
-    // Preset name: Unicode string (UTF-16 code units including the terminator).
+                    // Preset name: Unicode string (UTF-16 code units including the terminator).
     let name: Vec<u16> = "Linear".encode_utf16().chain(std::iter::once(0)).collect();
     out.put_u32(name.len() as u32);
     for u in name {
@@ -70,7 +70,11 @@ pub fn default_toning_data() -> Vec<u8> {
 /// records for 32-bit files, nothing otherwise (indexed and duotone data come
 /// from the document).
 pub fn color_mode_data_for_depth(depth: u16) -> Vec<u8> {
-    if depth == 32 { default_toning_data() } else { Vec::new() }
+    if depth == 32 {
+        default_toning_data()
+    } else {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

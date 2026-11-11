@@ -5,7 +5,7 @@
 //! Parsing and writing are exact: `write(parse(b)) == b` for well-formed input.
 
 use crate::error::{PsdError, Result};
-use crate::io::{Reader, WriteExt, read_unicode_units, write_unicode_units};
+use crate::io::{read_unicode_units, write_unicode_units, Reader, WriteExt};
 
 /// Maximum nesting depth accepted when parsing (fuzz safety).
 pub const MAX_DEPTH: usize = 64;
@@ -84,7 +84,11 @@ impl Id {
     }
     pub(crate) fn read(r: &mut Reader<'_>) -> Result<Self> {
         let n = r.u32()?;
-        if n == 0 { Ok(Id::Code(r.array()?)) } else { Ok(Id::Str(r.bytes_u64(u64::from(n))?.to_vec())) }
+        if n == 0 {
+            Ok(Id::Code(r.array()?))
+        } else {
+            Ok(Id::Str(r.bytes_u64(u64::from(n))?.to_vec()))
+        }
     }
     pub(crate) fn write(&self, out: &mut Vec<u8>) {
         match self {
@@ -112,7 +116,10 @@ pub struct Class {
 
 impl Class {
     fn read(r: &mut Reader<'_>) -> Result<Self> {
-        Ok(Class { name: UnicodeString::read(r)?, class_id: Id::read(r)? })
+        Ok(Class {
+            name: UnicodeString::read(r)?,
+            class_id: Id::read(r)?,
+        })
     }
     fn write(&self, out: &mut Vec<u8>) {
         self.name.write(out);
@@ -262,7 +269,11 @@ impl Default for Descriptor {
 impl Descriptor {
     /// Creates an empty descriptor of the given class.
     pub fn new(class_id: &str) -> Self {
-        Descriptor { name: UnicodeString::default(), class_id: Id::new(class_id), items: Vec::new() }
+        Descriptor {
+            name: UnicodeString::default(),
+            class_id: Id::new(class_id),
+            items: Vec::new(),
+        }
     }
 
     /// Builder-style item append.
@@ -321,14 +332,19 @@ pub struct VersionedDescriptor {
 impl VersionedDescriptor {
     /// Wraps a descriptor with version 16.
     pub fn new(descriptor: Descriptor) -> Self {
-        VersionedDescriptor { version: 16, descriptor }
+        VersionedDescriptor {
+            version: 16,
+            descriptor,
+        }
     }
     /// Parses from bytes (must be fully consumed).
     pub fn from_bytes(data: &[u8]) -> Result<Self> {
         let mut r = Reader::new(data);
         let v = Self::read(&mut r)?;
         if !r.is_empty() {
-            return Err(PsdError::invalid("trailing bytes after versioned descriptor"));
+            return Err(PsdError::invalid(
+                "trailing bytes after versioned descriptor",
+            ));
         }
         Ok(v)
     }
@@ -349,9 +365,14 @@ impl VersionedDescriptor {
     pub(crate) fn read(r: &mut Reader<'_>) -> Result<Self> {
         let version = r.u32()?;
         if version != 16 {
-            return Err(PsdError::invalid(format!("descriptor version {version}, expected 16")));
+            return Err(PsdError::invalid(format!(
+                "descriptor version {version}, expected 16"
+            )));
         }
-        Ok(VersionedDescriptor { version, descriptor: Descriptor::read(r)? })
+        Ok(VersionedDescriptor {
+            version,
+            descriptor: Descriptor::read(r)?,
+        })
     }
     pub(crate) fn write(&self, out: &mut Vec<u8>) {
         out.put_u32(self.version);
@@ -383,7 +404,11 @@ fn read_descriptor(r: &mut Reader<'_>, depth: usize) -> Result<Descriptor> {
         let v = read_value(r, depth + 1)?;
         items.push((key, v));
     }
-    Ok(Descriptor { name, class_id, items })
+    Ok(Descriptor {
+        name,
+        class_id,
+        items,
+    })
 }
 
 fn read_value(r: &mut Reader<'_>, depth: usize) -> Result<Value> {
@@ -417,7 +442,10 @@ fn read_typed_value(r: &mut Reader<'_>, ty: &[u8; 4], depth: usize) -> Result<Va
             Value::List(items)
         }
         b"doub" => Value::Double(r.f64()?),
-        b"UntF" => Value::UnitFloat { unit: r.array()?, value: r.f64()? },
+        b"UntF" => Value::UnitFloat {
+            unit: r.array()?,
+            value: r.f64()?,
+        },
         b"UnFl" => {
             let unit = r.array()?;
             let n = r.u32()?;
@@ -429,7 +457,10 @@ fn read_typed_value(r: &mut Reader<'_>, ty: &[u8; 4], depth: usize) -> Result<Va
             Value::UnitFloats { unit, values }
         }
         b"TEXT" => Value::Text(UnicodeString::read(r)?),
-        b"enum" => Value::Enumerated { type_id: Id::read(r)?, value: Id::read(r)? },
+        b"enum" => Value::Enumerated {
+            type_id: Id::read(r)?,
+            value: Id::read(r)?,
+        },
         b"long" => Value::Integer(r.i32()?),
         b"comp" => Value::LargeInteger(r.i64()?),
         b"bool" => Value::Boolean(r.u8()? != 0),
@@ -449,10 +480,16 @@ fn read_typed_value(r: &mut Reader<'_>, ty: &[u8; 4], depth: usize) -> Result<Va
         }
         b"ObAr" => {
             let prefix = r.u32()?;
-            Value::ObjectArray(ObjectArray { prefix, body: read_descriptor(r, depth + 1)? })
+            Value::ObjectArray(ObjectArray {
+                prefix,
+                body: read_descriptor(r, depth + 1)?,
+            })
         }
         other => {
-            return Err(PsdError::Unsupported(format!("descriptor OSType {:?}", String::from_utf8_lossy(other))));
+            return Err(PsdError::Unsupported(format!(
+                "descriptor OSType {:?}",
+                String::from_utf8_lossy(other)
+            )));
         }
     })
 }
@@ -460,15 +497,37 @@ fn read_typed_value(r: &mut Reader<'_>, ty: &[u8; 4], depth: usize) -> Result<Va
 fn read_reference_item(r: &mut Reader<'_>) -> Result<ReferenceItem> {
     let ty = r.array::<4>()?;
     Ok(match &ty {
-        b"prop" => ReferenceItem::Property { class: Class::read(r)?, key: Id::read(r)? },
+        b"prop" => ReferenceItem::Property {
+            class: Class::read(r)?,
+            key: Id::read(r)?,
+        },
         b"Clss" => ReferenceItem::Class(Class::read(r)?),
-        b"Enmr" => ReferenceItem::Enumerated { class: Class::read(r)?, type_id: Id::read(r)?, value: Id::read(r)? },
-        b"rele" => ReferenceItem::Offset { class: Class::read(r)?, offset: r.i32()? },
-        b"Idnt" => ReferenceItem::Identifier { class: Class::read(r)?, id: r.u32()? },
-        b"indx" => ReferenceItem::Index { class: Class::read(r)?, index: r.u32()? },
-        b"name" => ReferenceItem::Name { class: Class::read(r)?, name: UnicodeString::read(r)? },
+        b"Enmr" => ReferenceItem::Enumerated {
+            class: Class::read(r)?,
+            type_id: Id::read(r)?,
+            value: Id::read(r)?,
+        },
+        b"rele" => ReferenceItem::Offset {
+            class: Class::read(r)?,
+            offset: r.i32()?,
+        },
+        b"Idnt" => ReferenceItem::Identifier {
+            class: Class::read(r)?,
+            id: r.u32()?,
+        },
+        b"indx" => ReferenceItem::Index {
+            class: Class::read(r)?,
+            index: r.u32()?,
+        },
+        b"name" => ReferenceItem::Name {
+            class: Class::read(r)?,
+            name: UnicodeString::read(r)?,
+        },
         other => {
-            return Err(PsdError::Unsupported(format!("reference item type {:?}", String::from_utf8_lossy(other))));
+            return Err(PsdError::Unsupported(format!(
+                "reference item type {:?}",
+                String::from_utf8_lossy(other)
+            )));
         }
     })
 }
@@ -555,7 +614,11 @@ fn write_reference_item(it: &ReferenceItem, out: &mut Vec<u8>) {
             out.put(b"Clss");
             c.write(out);
         }
-        ReferenceItem::Enumerated { class, type_id, value } => {
+        ReferenceItem::Enumerated {
+            class,
+            type_id,
+            value,
+        } => {
             out.put(b"Enmr");
             class.write(out);
             type_id.write(out);
@@ -589,7 +652,10 @@ mod tests {
     use super::*;
 
     fn class(name: &str, id: &str) -> Class {
-        Class { name: UnicodeString::new(name), class_id: Id::new(id) }
+        Class {
+            name: UnicodeString::new(name),
+            class_id: Id::new(id),
+        }
     }
 
     #[test]
@@ -610,25 +676,70 @@ mod tests {
 
     pub(crate) fn sample() -> Descriptor {
         Descriptor::new("null")
-            .with("Nm  ", Value::Text(UnicodeString::new_nul("Hello \u{1F600}")))
-            .with("Opct", Value::UnitFloat { unit: *b"#Prc", value: 75.5 })
+            .with(
+                "Nm  ",
+                Value::Text(UnicodeString::new_nul("Hello \u{1F600}")),
+            )
+            .with(
+                "Opct",
+                Value::UnitFloat {
+                    unit: *b"#Prc",
+                    value: 75.5,
+                },
+            )
             .with("enab", Value::Boolean(true))
             .with("long", Value::Integer(-5))
             .with("comp", Value::LargeInteger(1 << 40))
             .with("doub", Value::Double(0.25))
-            .with("Md  ", Value::Enumerated { type_id: Id::new("BlnM"), value: Id::new("Mltp") })
-            .with("artboardRect", Value::Descriptor(Descriptor::new("classFloatRect").with("Top ", Value::Double(1.0))))
-            .with("list", Value::List(vec![Value::Integer(1), Value::Text(UnicodeString::new("x"))]))
+            .with(
+                "Md  ",
+                Value::Enumerated {
+                    type_id: Id::new("BlnM"),
+                    value: Id::new("Mltp"),
+                },
+            )
+            .with(
+                "artboardRect",
+                Value::Descriptor(
+                    Descriptor::new("classFloatRect").with("Top ", Value::Double(1.0)),
+                ),
+            )
+            .with(
+                "list",
+                Value::List(vec![
+                    Value::Integer(1),
+                    Value::Text(UnicodeString::new("x")),
+                ]),
+            )
             .with(
                 "null",
                 Value::Reference(vec![
-                    ReferenceItem::Property { class: class("", "Lyr "), key: Id::new("Nm  ") },
+                    ReferenceItem::Property {
+                        class: class("", "Lyr "),
+                        key: Id::new("Nm  "),
+                    },
                     ReferenceItem::Class(class("", "Dcmn")),
-                    ReferenceItem::Enumerated { class: class("", "Lyr "), type_id: Id::new("Ordn"), value: Id::new("Trgt") },
-                    ReferenceItem::Offset { class: class("", "Lyr "), offset: -1 },
-                    ReferenceItem::Identifier { class: class("", "Lyr "), id: 7 },
-                    ReferenceItem::Index { class: class("\0", "Lyr "), index: 2 },
-                    ReferenceItem::Name { class: class("", "Lyr "), name: UnicodeString::new("Bg") },
+                    ReferenceItem::Enumerated {
+                        class: class("", "Lyr "),
+                        type_id: Id::new("Ordn"),
+                        value: Id::new("Trgt"),
+                    },
+                    ReferenceItem::Offset {
+                        class: class("", "Lyr "),
+                        offset: -1,
+                    },
+                    ReferenceItem::Identifier {
+                        class: class("", "Lyr "),
+                        id: 7,
+                    },
+                    ReferenceItem::Index {
+                        class: class("\0", "Lyr "),
+                        index: 2,
+                    },
+                    ReferenceItem::Name {
+                        class: class("", "Lyr "),
+                        name: UnicodeString::new("Bg"),
+                    },
                 ]),
             )
             .with("type", Value::Class(class("c", "Clr ")))
@@ -641,7 +752,13 @@ mod tests {
                 "ObAr",
                 Value::ObjectArray(ObjectArray {
                     prefix: 16,
-                    body: Descriptor::new("rationalPoint").with("Hrzn", Value::UnitFloats { unit: *b"#Pxl", values: vec![1.0, 2.0] }),
+                    body: Descriptor::new("rationalPoint").with(
+                        "Hrzn",
+                        Value::UnitFloats {
+                            unit: *b"#Pxl",
+                            values: vec![1.0, 2.0],
+                        },
+                    ),
                 }),
             )
     }
@@ -736,7 +853,10 @@ mod tests {
     #[test]
     fn unicode_lossy() {
         assert_eq!(UnicodeString::new_nul("ab").to_string_lossy(), "ab");
-        assert_eq!(UnicodeString(vec![0xd800, 0x41]).to_string_lossy(), "\u{fffd}A");
+        assert_eq!(
+            UnicodeString(vec![0xd800, 0x41]).to_string_lossy(),
+            "\u{fffd}A"
+        );
     }
 
     #[test]
@@ -761,7 +881,10 @@ mod tests {
         b[n - 1] = 1; // one item
         b.extend_from_slice(&[0, 0, 0, 0, b'k', b'e', b'y', b' ']);
         b.extend_from_slice(b"????");
-        assert!(matches!(Descriptor::from_bytes(&b), Err(PsdError::Unsupported(_))));
+        assert!(matches!(
+            Descriptor::from_bytes(&b),
+            Err(PsdError::Unsupported(_))
+        ));
     }
 
     #[test]
@@ -771,7 +894,10 @@ mod tests {
             d = Descriptor::new("null").with("in  ", Value::Descriptor(d));
         }
         let b = d.to_bytes();
-        assert!(matches!(Descriptor::from_bytes(&b), Err(PsdError::LimitExceeded(_))));
+        assert!(matches!(
+            Descriptor::from_bytes(&b),
+            Err(PsdError::LimitExceeded(_))
+        ));
     }
 
     #[test]
@@ -791,7 +917,10 @@ pub(crate) mod proptests {
     use proptest::prelude::*;
 
     fn arb_id() -> impl Strategy<Value = Id> {
-        prop_oneof![any::<[u8; 4]>().prop_map(Id::Code), proptest::collection::vec(any::<u8>(), 1..12).prop_map(Id::Str),]
+        prop_oneof![
+            any::<[u8; 4]>().prop_map(Id::Code),
+            proptest::collection::vec(any::<u8>(), 1..12).prop_map(Id::Str),
+        ]
     }
     fn arb_ustr() -> impl Strategy<Value = UnicodeString> {
         proptest::collection::vec(any::<u16>(), 0..8).prop_map(UnicodeString)
@@ -803,10 +932,19 @@ pub(crate) mod proptests {
         prop_oneof![
             (arb_class(), arb_id()).prop_map(|(class, key)| ReferenceItem::Property { class, key }),
             arb_class().prop_map(ReferenceItem::Class),
-            (arb_class(), arb_id(), arb_id()).prop_map(|(class, type_id, value)| ReferenceItem::Enumerated { class, type_id, value }),
-            (arb_class(), any::<i32>()).prop_map(|(class, offset)| ReferenceItem::Offset { class, offset }),
-            (arb_class(), any::<u32>()).prop_map(|(class, id)| ReferenceItem::Identifier { class, id }),
-            (arb_class(), any::<u32>()).prop_map(|(class, index)| ReferenceItem::Index { class, index }),
+            (arb_class(), arb_id(), arb_id()).prop_map(|(class, type_id, value)| {
+                ReferenceItem::Enumerated {
+                    class,
+                    type_id,
+                    value,
+                }
+            }),
+            (arb_class(), any::<i32>())
+                .prop_map(|(class, offset)| ReferenceItem::Offset { class, offset }),
+            (arb_class(), any::<u32>())
+                .prop_map(|(class, id)| ReferenceItem::Identifier { class, id }),
+            (arb_class(), any::<u32>())
+                .prop_map(|(class, index)| ReferenceItem::Index { class, index }),
             (arb_class(), arb_ustr()).prop_map(|(class, name)| ReferenceItem::Name { class, name }),
         ]
     }
@@ -817,7 +955,8 @@ pub(crate) mod proptests {
         prop_oneof![
             finite().prop_map(Value::Double),
             (any::<[u8; 4]>(), finite()).prop_map(|(unit, value)| Value::UnitFloat { unit, value }),
-            (any::<[u8; 4]>(), proptest::collection::vec(finite(), 0..4)).prop_map(|(unit, values)| Value::UnitFloats { unit, values }),
+            (any::<[u8; 4]>(), proptest::collection::vec(finite(), 0..4))
+                .prop_map(|(unit, values)| Value::UnitFloats { unit, values }),
             arb_ustr().prop_map(Value::Text),
             (arb_id(), arb_id()).prop_map(|(type_id, value)| Value::Enumerated { type_id, value }),
             any::<i32>().prop_map(Value::Integer),
@@ -836,17 +975,55 @@ pub(crate) mod proptests {
         let value = leaf.prop_recursive(3, 24, 4, |inner| {
             prop_oneof![
                 proptest::collection::vec(inner.clone(), 0..4).prop_map(Value::List),
-                (arb_ustr(), arb_id(), proptest::collection::vec((arb_id(), inner.clone()), 0..4))
-                    .prop_map(|(name, id, items)| Value::Descriptor(Descriptor { name, class_id: id, items })),
-                (arb_ustr(), arb_id(), proptest::collection::vec((arb_id(), inner.clone()), 0..3))
-                    .prop_map(|(name, id, items)| Value::GlobalObject(Descriptor { name, class_id: id, items })),
-                (any::<u32>(), arb_id(), proptest::collection::vec((arb_id(), inner), 0..3)).prop_map(|(prefix, id, items)| Value::ObjectArray(ObjectArray {
-                    prefix,
-                    body: Descriptor { name: UnicodeString::default(), class_id: id, items }
-                })),
+                (
+                    arb_ustr(),
+                    arb_id(),
+                    proptest::collection::vec((arb_id(), inner.clone()), 0..4)
+                )
+                    .prop_map(|(name, id, items)| Value::Descriptor(Descriptor {
+                        name,
+                        class_id: id,
+                        items
+                    })),
+                (
+                    arb_ustr(),
+                    arb_id(),
+                    proptest::collection::vec((arb_id(), inner.clone()), 0..3)
+                )
+                    .prop_map(|(name, id, items)| Value::GlobalObject(
+                        Descriptor {
+                            name,
+                            class_id: id,
+                            items
+                        }
+                    )),
+                (
+                    any::<u32>(),
+                    arb_id(),
+                    proptest::collection::vec((arb_id(), inner), 0..3)
+                )
+                    .prop_map(|(prefix, id, items)| Value::ObjectArray(
+                        ObjectArray {
+                            prefix,
+                            body: Descriptor {
+                                name: UnicodeString::default(),
+                                class_id: id,
+                                items
+                            }
+                        }
+                    )),
             ]
         });
-        (arb_ustr(), arb_id(), proptest::collection::vec((arb_id(), value), 0..6)).prop_map(|(name, id, items)| Descriptor { name, class_id: id, items })
+        (
+            arb_ustr(),
+            arb_id(),
+            proptest::collection::vec((arb_id(), value), 0..6),
+        )
+            .prop_map(|(name, id, items)| Descriptor {
+                name,
+                class_id: id,
+                items,
+            })
     }
 
     proptest! {

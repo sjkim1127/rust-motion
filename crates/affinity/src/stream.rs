@@ -2,8 +2,8 @@
 //! a type code and a four-character tag. Parsing needs no schema; unknown fields are kept, so the
 //! document mapping can name what it could not import.
 
-use crate::Error;
 use crate::container::Cursor;
+use crate::Error;
 
 /// A four-character tag in its readable order (`Desc`, `Chld`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -123,13 +123,27 @@ pub fn parse(bytes: &[u8]) -> Result<Stream, Error> {
     if version == 2 {
         c.u32()?;
     }
-    let mut p = Parser { c, objects: Vec::new(), shared: std::collections::HashMap::new(), depth: 0, values: 0 };
-    let root = p.push(Object { class, kind: Kind::Root, chain: vec![class], fields: Vec::new() })?;
+    let mut p = Parser {
+        c,
+        objects: Vec::new(),
+        shared: std::collections::HashMap::new(),
+        depth: 0,
+        values: 0,
+    };
+    let root = p.push(Object {
+        class,
+        kind: Kind::Root,
+        chain: vec![class],
+        fields: Vec::new(),
+    })?;
     let fields = p.fields(true, class)?;
     if let Some(o) = p.objects.get_mut(root) {
         o.fields = fields;
     }
-    Ok(Stream { root, objects: p.objects })
+    Ok(Stream {
+        root,
+        objects: p.objects,
+    })
 }
 
 impl Parser<'_> {
@@ -143,7 +157,11 @@ impl Parser<'_> {
 
     /// Counts `n` more values against [`MAX_VALUES`], before anything is allocated for them.
     fn spend(&mut self, n: usize) -> Result<(), Error> {
-        self.values = self.values.checked_add(n).filter(|&v| v <= MAX_VALUES).ok_or(Error::Limit("too many values in the document stream"))?;
+        self.values = self
+            .values
+            .checked_add(n)
+            .filter(|&v| v <= MAX_VALUES)
+            .ok_or(Error::Limit("too many values in the document stream"))?;
         Ok(())
     }
 
@@ -152,7 +170,8 @@ impl Parser<'_> {
     fn vec<T>(&mut self, n: usize) -> Result<Vec<T>, Error> {
         self.spend(n)?;
         let mut v = Vec::new();
-        v.try_reserve_exact(n).map_err(|_| Error::Limit("not enough memory for the document stream"))?;
+        v.try_reserve_exact(n)
+            .map_err(|_| Error::Limit("not enough memory for the document stream"))?;
         Ok(v)
     }
 
@@ -160,7 +179,9 @@ impl Parser<'_> {
     /// remaining input cannot hold is rejected before anything is allocated.
     fn count(&mut self, min: usize) -> Result<usize, Error> {
         let n = usize::try_from(self.c.u32()?).map_err(|_| Error::Malformed("array length"))?;
-        if n.checked_mul(min.max(1)).is_none_or(|bytes| bytes > self.c.remaining()) {
+        if n.checked_mul(min.max(1))
+            .is_none_or(|bytes| bytes > self.c.remaining())
+        {
             return Err(Error::Malformed("array longer than its data"));
         }
         Ok(n)
@@ -180,7 +201,11 @@ impl Parser<'_> {
             }
             self.spend(1)?;
             let tag = if tagged { Tag(self.c.u32()?) } else { Tag(0) };
-            let v = if t & 0x80 != 0 { self.array(code, class)? } else { self.scalar(code, tagged, class)? };
+            let v = if t & 0x80 != 0 {
+                self.array(code, class)?
+            } else {
+                self.scalar(code, tagged, class)?
+            };
             out.push((tag, v));
         }
         self.depth -= 1;
@@ -195,7 +220,11 @@ impl Parser<'_> {
     fn floats(&mut self, n: usize, wide: bool) -> Result<Value, Error> {
         let mut v = Vec::with_capacity(n);
         for _ in 0..n {
-            v.push(if wide { f64::from_le_bytes(self.c.array()?) } else { f64::from(f32::from_le_bytes(self.c.array()?)) });
+            v.push(if wide {
+                f64::from_le_bytes(self.c.array()?)
+            } else {
+                f64::from(f32::from_le_bytes(self.c.array()?))
+            });
         }
         Ok(Value::Floats(v))
     }
@@ -224,7 +253,10 @@ impl Parser<'_> {
             0x1f..=0x23 => return self.floats(usize::from(code - 0x1d), false),
             0x24..=0x28 => return self.floats(usize::from(code - 0x22), true),
             0x29 => Value::Bool(c.u8()? != 0),
-            0x2a => Value::Enum { id: c.u16()?, version: c.u16()? },
+            0x2a => Value::Enum {
+                id: c.u16()?,
+                version: c.u16()?,
+            },
             0x2b | 0x2e => Value::Str(self.string()?),
             0x2c => {
                 let n = usize::from(c.u16()?);
@@ -237,7 +269,8 @@ impl Parser<'_> {
             }
             0x33 => {
                 c.u32()?;
-                let n = usize::try_from(c.u32()?).map_err(|_| Error::Malformed("entry name length"))?;
+                let n =
+                    usize::try_from(c.u32()?).map_err(|_| Error::Malformed("entry name length"))?;
                 Value::Entry(String::from_utf8_lossy(c.take(n)?).into_owned())
             }
             0x75 => {
@@ -247,12 +280,19 @@ impl Parser<'_> {
                     return Err(Error::Malformed("flags wider than 64 bits"));
                 }
                 let mut b = [0u8; 8];
-                b.get_mut(..n).ok_or(Error::Malformed("flags"))?.copy_from_slice(c.take(n)?);
+                b.get_mut(..n)
+                    .ok_or(Error::Malformed("flags"))?
+                    .copy_from_slice(c.take(n)?);
                 Value::Flags(u64::from_le_bytes(b))
             }
             0x30 => {
                 let fields = self.fields(false, class)?;
-                let id = self.push(Object { class, kind: Kind::Positional, chain: Vec::new(), fields })?;
+                let id = self.push(Object {
+                    class,
+                    kind: Kind::Positional,
+                    chain: Vec::new(),
+                    fields,
+                })?;
                 Value::Obj(Some(id))
             }
             0x31 | 0x32 if !tagged => return Err(Error::Malformed("object without a field tag")),
@@ -276,10 +316,15 @@ impl Parser<'_> {
         };
         match code {
             0x29 => {
-                let n = usize::try_from(self.c.u32()?).map_err(|_| Error::Malformed("array length"))?;
+                let n =
+                    usize::try_from(self.c.u32()?).map_err(|_| Error::Malformed("array length"))?;
                 let bits = self.c.take(n.div_ceil(8))?;
                 let mut v = self.vec(n)?;
-                v.extend((0..n).map(|i| Value::Bool(bits.get(i / 8).is_some_and(|b| b >> (i % 8) & 1 != 0))));
+                v.extend(
+                    (0..n).map(|i| {
+                        Value::Bool(bits.get(i / 8).is_some_and(|b| b >> (i % 8) & 1 != 0))
+                    }),
+                );
                 Ok(Value::Array(v))
             }
             0x2a => {
@@ -287,7 +332,10 @@ impl Parser<'_> {
                 let version = self.c.u16()?;
                 let mut v = self.vec(n)?;
                 for _ in 0..n {
-                    v.push(Value::Enum { id: self.c.u16()?, version });
+                    v.push(Value::Enum {
+                        id: self.c.u16()?,
+                        version,
+                    });
                 }
                 Ok(Value::Array(v))
             }
@@ -301,7 +349,8 @@ impl Parser<'_> {
                 Ok(Value::Array(v))
             }
             0x2c => {
-                let n = usize::try_from(self.c.u32()?).map_err(|_| Error::Malformed("array length"))?;
+                let n =
+                    usize::try_from(self.c.u32()?).map_err(|_| Error::Malformed("array length"))?;
                 let size = usize::from(self.c.u16()?);
                 if n.checked_mul(size).is_none_or(|b| b > self.c.remaining()) {
                     return Err(Error::Malformed("array longer than its data"));
@@ -350,7 +399,12 @@ impl Parser<'_> {
             }
         };
         let fields = self.fields(true, class)?;
-        let id = self.push(Object { class, kind: Kind::Inline, chain: vec![class], fields })?;
+        let id = self.push(Object {
+            class,
+            kind: Kind::Inline,
+            chain: vec![class],
+            fields,
+        })?;
         Ok(Value::Obj(Some(id)))
     }
 
@@ -361,7 +415,13 @@ impl Parser<'_> {
         }
         let key = self.c.u32()?;
         match flag {
-            2 => return self.shared.get(&key).map(|id| Value::Obj(Some(*id))).ok_or(Error::Malformed("reference to an undefined object")),
+            2 => {
+                return self
+                    .shared
+                    .get(&key)
+                    .map(|id| Value::Obj(Some(*id)))
+                    .ok_or(Error::Malformed("reference to an undefined object"))
+            }
             1 => {}
             _ => return Err(Error::Malformed("object marker")),
         }
@@ -369,7 +429,12 @@ impl Parser<'_> {
             return Err(Error::Malformed("object defined twice"));
         }
         // Register before the fields: an object's own fields may refer back to it.
-        let id = self.push(Object { class: Tag(0), kind: Kind::Shared, chain: Vec::new(), fields: Vec::new() })?;
+        let id = self.push(Object {
+            class: Tag(0),
+            kind: Kind::Shared,
+            chain: Vec::new(),
+            fields: Vec::new(),
+        })?;
         self.shared.insert(key, id);
         let mut chain = Vec::new();
         let mut fields = Vec::new();
@@ -395,7 +460,12 @@ impl Parser<'_> {
         let class = chain.first().copied().unwrap_or(Tag(0));
         fields.extend(self.fields(true, class)?);
         if let Some(o) = self.objects.get_mut(id) {
-            *o = Object { class, kind: Kind::Shared, chain, fields };
+            *o = Object {
+                class,
+                kind: Kind::Shared,
+                chain,
+                fields,
+            };
         }
         Ok(Value::Obj(Some(id)))
     }

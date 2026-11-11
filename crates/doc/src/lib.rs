@@ -6,7 +6,17 @@
 //! Non-destructive kinds (adjustment, fill, text, shape, smart object) and colour modes beyond RGB are
 //! part of the model from day one, even where rendering support lands later (architecture §1.1).
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
 
 pub mod adjust;
 pub mod advanced;
@@ -23,8 +33,8 @@ pub mod variables;
 pub mod vector;
 pub mod video;
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 pub use adjust::Adjustment;
 pub use advanced::{AdvancedBlending, Knockout};
@@ -32,8 +42,9 @@ pub use analysis::{CountGroup, Measurement, MeasurementScale, Note, Ruler};
 pub use blend_if::{BlendIf, BlendRange};
 pub use comps::{Artboard, ArtboardBackground, CompAppearance, CompLayerState, LayerComp};
 pub use effects::{
-    Bevel, BevelContour, BevelStyle, BevelTechnique, BevelTexture, Contour, Effect, FxCommon, FxPaint, GlobalLight, Glow, GlowSource, GlowTechnique, Gradient,
-    GradientStyle, Satin, Shadow, StrokeFx, StrokePosition,
+    Bevel, BevelContour, BevelStyle, BevelTechnique, BevelTexture, Contour, Effect, FxCommon,
+    FxPaint, GlobalLight, Glow, GlowSource, GlowTechnique, Gradient, GradientStyle, Satin, Shadow,
+    StrokeFx, StrokePosition,
 };
 pub use mode::{ColorTable, Duotone, DuotoneInk, StackMode};
 pub use pattern::Pattern;
@@ -45,7 +56,8 @@ pub use slices::{Slice, SliceKind, SliceOrigin, Slices};
 pub use text_styles::TextStyles;
 pub use variables::{DataSet, DataValue, PixelAlign, PixelMethod, VarKind, VariableDef, Variables};
 pub use vector::{
-    ClippingPath, FillRule, Knot, LineCap, LineJoin, LiveShape, NamedPath, Path, PathOp, ShapeLayer, ShapeStroke, StrokeAlign, Subpath, VectorMask,
+    ClippingPath, FillRule, Knot, LineCap, LineJoin, LiveShape, NamedPath, Path, PathOp,
+    ShapeLayer, ShapeStroke, StrokeAlign, Subpath, VectorMask,
 };
 pub use video::{Timeline, VideoData, VideoSource};
 
@@ -228,11 +240,17 @@ mod label_color_tests {
             ("Gray", LabelColor::Gray),
         ] {
             assert_eq!(serde_json::to_value(color).unwrap(), name);
-            assert_eq!(serde_json::from_value::<LabelColor>(serde_json::json!(name)).unwrap(), color);
+            assert_eq!(
+                serde_json::from_value::<LabelColor>(serde_json::json!(name)).unwrap(),
+                color
+            );
         }
         for c in LabelColor::ALL {
             assert_eq!(LabelColor::from_id(c.id()), Some(c));
-            assert_eq!(serde_json::from_value::<LabelColor>(serde_json::to_value(c).unwrap()).unwrap(), c);
+            assert_eq!(
+                serde_json::from_value::<LabelColor>(serde_json::to_value(c).unwrap()).unwrap(),
+                c
+            );
         }
         for id in ["", "Red", "0", "unknown", "🔴"] {
             assert_eq!(LabelColor::from_id(id), None);
@@ -253,10 +271,19 @@ pub struct LayerMask {
 
 impl LayerMask {
     pub fn reveal_all() -> Self {
-        Self { surface: Surface::with_default(PixelFormat::GRAY8, &[1.0]), enabled: true, linked: true, density: 1.0, feather: 0.0 }
+        Self {
+            surface: Surface::with_default(PixelFormat::GRAY8, &[1.0]),
+            enabled: true,
+            linked: true,
+            density: 1.0,
+            feather: 0.0,
+        }
     }
     pub fn hide_all() -> Self {
-        Self { surface: Surface::with_default(PixelFormat::GRAY8, &[0.0]), ..Self::reveal_all() }
+        Self {
+            surface: Surface::with_default(PixelFormat::GRAY8, &[0.0]),
+            ..Self::reveal_all()
+        }
     }
     /// Effective mask value at a pixel, including density.
     pub fn value(&self, x: i32, y: i32) -> f32 {
@@ -370,8 +397,25 @@ pub enum Fill {
 impl Fill {
     /// A gradient fill with the classic settings: opaque stops at their alpha, 50 % midpoints,
     /// centred, no dither, aligned with the layer.
-    pub fn gradient(stops: Vec<(f32, Color)>, angle: f32, scale: f32, style: GradientStyle, reverse: bool) -> Fill {
-        Fill::Gradient { stops, angle, scale, style, reverse, opacity_stops: Vec::new(), midpoints: Vec::new(), offset: (0.0, 0.0), dither: false, align: true }
+    pub fn gradient(
+        stops: Vec<(f32, Color)>,
+        angle: f32,
+        scale: f32,
+        style: GradientStyle,
+        reverse: bool,
+    ) -> Fill {
+        Fill::Gradient {
+            stops,
+            angle,
+            scale,
+            style,
+            reverse,
+            opacity_stops: Vec::new(),
+            midpoints: Vec::new(),
+            offset: (0.0, 0.0),
+            dither: false,
+            align: true,
+        }
     }
 
     /// This fill with its colours in `mode`'s model (see [`Color::in_mode`]): a fill layer's
@@ -379,7 +423,9 @@ impl Fill {
     pub fn in_mode(mut self, mode: ColorMode) -> Fill {
         match &mut self {
             Fill::Solid(c) => *c = c.in_mode(mode),
-            Fill::Gradient { stops, .. } => stops.iter_mut().for_each(|(_, c)| *c = c.in_mode(mode)),
+            Fill::Gradient { stops, .. } => {
+                stops.iter_mut().for_each(|(_, c)| *c = c.in_mode(mode))
+            }
             Fill::Pattern { .. } => {}
         }
         self
@@ -434,28 +480,49 @@ impl Default for TextLayer {
 impl TextLayer {
     /// Character runs covering exactly `text.len()` bytes, each on a char boundary.
     pub fn char_runs(&self) -> Vec<text::TextRun> {
-        let base = text::CharStyle { font_family: self.font_family.clone(), size_pt: self.size_pt, color: self.color, ..Default::default() };
-        normalize_runs(&self.text, self.runs.iter().map(|r| (r.len, r.style.clone())).collect(), base)
-            .into_iter()
-            .map(|(len, style)| text::TextRun { len, style })
-            .collect()
+        let base = text::CharStyle {
+            font_family: self.font_family.clone(),
+            size_pt: self.size_pt,
+            color: self.color,
+            ..Default::default()
+        };
+        normalize_runs(
+            &self.text,
+            self.runs.iter().map(|r| (r.len, r.style.clone())).collect(),
+            base,
+        )
+        .into_iter()
+        .map(|(len, style)| text::TextRun { len, style })
+        .collect()
     }
     /// Paragraph runs covering exactly `text.len()` bytes, with an optional zero-length
     /// final run for an empty paragraph after a trailing line break.
     pub fn paragraph_runs(&self) -> Vec<text::ParagraphRun> {
-        let mut runs = normalize_runs(&self.text, self.paragraphs.iter().map(|r| (r.len, r.style.clone())).collect(), text::ParagraphStyle::default());
+        let mut runs = normalize_runs(
+            &self.text,
+            self.paragraphs
+                .iter()
+                .map(|r| (r.len, r.style.clone()))
+                .collect(),
+            text::ParagraphStyle::default(),
+        );
         // The final empty paragraph owns the synthetic terminal paragraph marker in PSD
         // text. Its formatting has no source bytes; do not lose that last run when normalizing.
         if self.text.ends_with(['\r', '\n']) {
             if let Some((last, preceding)) = self.paragraphs.split_last() {
                 if last.len <= 1
-                    && preceding.iter().try_fold(0usize, |n, r| n.checked_add(r.len)) == Some(self.text.len())
+                    && preceding
+                        .iter()
+                        .try_fold(0usize, |n, r| n.checked_add(r.len))
+                        == Some(self.text.len())
                 {
                     runs.push((0, last.style.clone()));
                 }
             }
         }
-        runs.into_iter().map(|(len, style)| text::ParagraphRun { len, style }).collect()
+        runs.into_iter()
+            .map(|(len, style)| text::ParagraphRun { len, style })
+            .collect()
     }
     /// Copies the first run's family, size and colour into the summary fields.
     pub fn sync_summary(&mut self) {
@@ -553,8 +620,13 @@ impl SmartObject {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SmartSource {
-    Embedded { file_name: String, bytes: Arc<Vec<u8>> },
-    Linked { path: String },
+    Embedded {
+        file_name: String,
+        bytes: Arc<Vec<u8>>,
+    },
+    Linked {
+        path: String,
+    },
 }
 
 /// A filter applied non-destructively: a command id plus its parameters (data, not code).
@@ -668,7 +740,10 @@ impl Layer {
     /// transparency and position locked. Only the bottom layer of a document with them is the
     /// Background: use [`Document::background`] / [`Document::is_background`] to identify it.
     pub fn has_background_traits(&self) -> bool {
-        self.locks.transparency && self.locks.position && !self.clipped && matches!(self.content, LayerContent::Raster(_))
+        self.locks.transparency
+            && self.locks.position
+            && !self.clipped
+            && matches!(self.content, LayerContent::Raster(_))
     }
 
     pub fn new(name: impl Into<String>, content: LayerContent) -> Self {
@@ -683,7 +758,10 @@ impl Layer {
             clipped: false,
             mask: None,
             vector_mask: None,
-            effects: Effects { enabled: true, ..Default::default() },
+            effects: Effects {
+                enabled: true,
+                ..Default::default()
+            },
             label: LabelColor::None,
             content,
             psd_blocks: Vec::new(),
@@ -700,7 +778,14 @@ impl Layer {
         Self::new(name, LayerContent::Raster(Surface::new(format)))
     }
     pub fn group(name: impl Into<String>, children: Vec<Layer>) -> Self {
-        let mut l = Self::new(name, LayerContent::Group(Group { children, expanded: true, artboard: None }));
+        let mut l = Self::new(
+            name,
+            LayerContent::Group(Group {
+                children,
+                expanded: true,
+                artboard: None,
+            }),
+        );
         l.blend = BlendMode::PassThrough;
         l
     }
@@ -778,21 +863,35 @@ pub struct GuideColor {
 impl Guides {
     /// The guide's own colour, if it has one.
     pub fn color(&self, vertical: bool, position: f64) -> Option<[u8; 3]> {
-        self.colors.iter().find(|c| c.vertical == vertical && c.position == position).map(|c| c.rgb)
+        self.colors
+            .iter()
+            .find(|c| c.vertical == vertical && c.position == position)
+            .map(|c| c.rgb)
     }
 
     /// Give the guide at `position` its own colour (`None` returns it to the preference colour).
     pub fn set_color(&mut self, vertical: bool, position: f64, rgb: Option<[u8; 3]>) {
-        self.colors.retain(|c| !(c.vertical == vertical && c.position == position));
+        self.colors
+            .retain(|c| !(c.vertical == vertical && c.position == position));
         if let Some(rgb) = rgb {
-            self.colors.push(GuideColor { vertical, position, rgb });
+            self.colors.push(GuideColor {
+                vertical,
+                position,
+                rgb,
+            });
         }
     }
 
     /// Drop colours whose guide no longer exists (after a guide moved, was deleted or cleared).
     pub fn prune_colors(&mut self) {
         let (h, v) = (&self.horizontal, &self.vertical);
-        self.colors.retain(|c| if c.vertical { v.contains(&c.position) } else { h.contains(&c.position) });
+        self.colors.retain(|c| {
+            if c.vertical {
+                v.contains(&c.position)
+            } else {
+                h.contains(&c.position)
+            }
+        });
     }
 }
 
@@ -828,13 +927,24 @@ impl AlphaChannel {
     pub const DEFAULT_COLOR: Color = Color::rgb(1.0, 0.0, 0.0);
 
     pub fn new(name: impl Into<String>, surface: Surface) -> Self {
-        Self { name: name.into(), surface, spot: None, color: Self::DEFAULT_COLOR, opacity: 0.5, indicates: ColorIndicates::MaskedAreas }
+        Self {
+            name: name.into(),
+            surface,
+            spot: None,
+            color: Self::DEFAULT_COLOR,
+            opacity: 0.5,
+            indicates: ColorIndicates::MaskedAreas,
+        }
     }
 
     /// Overlay coverage (0..1, before opacity) for channel value `v`: spot channels show ink
     /// where the channel is white, alpha channels follow [`ColorIndicates`].
     pub fn overlay_coverage(&self, v: f32) -> f32 {
-        if self.spot.is_some() || self.indicates == ColorIndicates::SelectedAreas { v } else { 1.0 - v }
+        if self.spot.is_some() || self.indicates == ColorIndicates::SelectedAreas {
+            v
+        } else {
+            1.0 - v
+        }
     }
 }
 
@@ -984,14 +1094,21 @@ impl Document {
     }
 
     /// New document with a filled "Background" layer (like File → New).
-    pub fn with_background(name: impl Into<String>, size: Size, mode: ColorMode, depth: SampleType, fill: Color) -> Self {
+    pub fn with_background(
+        name: impl Into<String>,
+        size: Size,
+        mode: ColorMode,
+        depth: SampleType,
+        fill: Color,
+    ) -> Self {
         let mut d = Self::new(name, size, mode, depth);
         let mut bg = Layer::raster("Background", d.pixel_format());
         bg.locks.transparency = true;
         bg.locks.position = true;
         if let Some(s) = bg.surface_mut() {
             let rgba = fill.to_rgb();
-            let px = rust_motion_raster::from_rgba(&s.format(), [rgba[0], rgba[1], rgba[2], fill.alpha]);
+            let px =
+                rust_motion_raster::from_rgba(&s.format(), [rgba[0], rgba[1], rgba[2], fill.alpha]);
             s.fill_rect(d.bounds(), &px);
         }
         d.layers.push(bg);
@@ -1035,7 +1152,11 @@ impl Document {
 
     /// Depth-first walk yielding `(path, depth, layer)` bottom-to-top.
     pub fn walk(&self) -> Vec<(LayerPath, usize, &Layer)> {
-        fn rec<'a>(layers: &'a [Layer], prefix: &mut LayerPath, out: &mut Vec<(LayerPath, usize, &'a Layer)>) {
+        fn rec<'a>(
+            layers: &'a [Layer],
+            prefix: &mut LayerPath,
+            out: &mut Vec<(LayerPath, usize, &'a Layer)>,
+        ) {
             for (i, l) in layers.iter().enumerate() {
                 prefix.push(i);
                 out.push((prefix.clone(), prefix.len() - 1, l));
@@ -1072,17 +1193,24 @@ impl Document {
     /// The locks in force on the layer at `path`: its own and those of every group around it,
     /// since locking a group locks its contents.
     pub fn locks_at(&self, path: &[usize]) -> Locks {
-        (1..=path.len()).filter_map(|n| self.layer_at(path.get(..n)?)).fold(Locks::default(), |a, l| a.union(l.locks))
+        (1..=path.len())
+            .filter_map(|n| self.layer_at(path.get(..n)?))
+            .fold(Locks::default(), |a, l| a.union(l.locks))
     }
 
     /// Whether the layer at `path` is shown: it and every group around it are visible.
     pub fn shown_at(&self, path: &[usize]) -> bool {
-        (1..=path.len()).all(|n| path.get(..n).and_then(|p| self.layer_at(p)).is_some_and(|l| l.visible))
+        (1..=path.len()).all(|n| {
+            path.get(..n)
+                .and_then(|p| self.layer_at(p))
+                .is_some_and(|l| l.visible)
+        })
     }
 
     /// [`Self::locks_at`] for the layer `id`.
     pub fn effective_locks(&self, id: LayerId) -> Locks {
-        self.path_of(id).map_or_else(Locks::default, |p| self.locks_at(&p))
+        self.path_of(id)
+            .map_or_else(Locks::default, |p| self.locks_at(&p))
     }
 
     /// The Background layer, identified structurally as Photoshop does, never by its name (a file
@@ -1091,12 +1219,16 @@ impl Document {
     /// stores it without a transparency channel and transparency-protected; File › New and opaque
     /// flat files create it the same way).
     pub fn background(&self) -> Option<&Layer> {
-        self.layers.first().filter(|l| Layer::has_background_traits(l))
+        self.layers
+            .first()
+            .filter(|l| Layer::has_background_traits(l))
     }
 
     /// [`Self::background`], mutably.
     pub fn background_mut(&mut self) -> Option<&mut Layer> {
-        self.layers.first_mut().filter(|l| Layer::has_background_traits(l))
+        self.layers
+            .first_mut()
+            .filter(|l| Layer::has_background_traits(l))
     }
 
     /// Whether `id` is the document's Background layer ([`Self::background`]).
@@ -1106,7 +1238,13 @@ impl Document {
 
     pub fn layer(&self, id: LayerId) -> Option<&Layer> {
         fn rec(layers: &[Layer], id: LayerId) -> Option<&Layer> {
-            layers.iter().find_map(|l| if l.id == id { Some(l) } else { l.children().and_then(|ch| rec(ch, id)) })
+            layers.iter().find_map(|l| {
+                if l.id == id {
+                    Some(l)
+                } else {
+                    l.children().and_then(|ch| rec(ch, id))
+                }
+            })
         }
         rec(&self.layers, id)
     }
@@ -1120,7 +1258,11 @@ impl Document {
     /// loaded file already holds `u64::MAX` (#961), the smallest free id from 1. Never wraps, so a
     /// new link can't join an unrelated group. `None` only if every id is taken.
     pub fn unused_link_group(&self) -> Option<u64> {
-        let mut used: Vec<u64> = self.walk().iter().filter_map(|(_, _, l)| l.link_group).collect();
+        let mut used: Vec<u64> = self
+            .walk()
+            .iter()
+            .filter_map(|(_, _, l)| l.link_group)
+            .collect();
         used.sort_unstable();
         used.dedup();
         if let Some(next) = used.last().map_or(Some(1), |g| g.checked_add(1)) {
@@ -1169,7 +1311,10 @@ impl Document {
     /// Insert `layer` directly above the layer `above` (or at the top of the root if None).
     pub fn insert_above(&mut self, above: Option<LayerId>, layer: Layer) -> LayerId {
         let id = layer.id;
-        match above.and_then(|a| self.path_of(a)).and_then(|path| self.siblings_mut(&path)) {
+        match above
+            .and_then(|a| self.path_of(a))
+            .and_then(|path| self.siblings_mut(&path))
+        {
             Some((sib, idx)) => sib.insert(idx + 1, layer),
             None => self.layers.push(layer),
         }
@@ -1179,7 +1324,10 @@ impl Document {
     /// Insert `layer` directly below the layer `below` (or at the bottom of the root if None).
     pub fn insert_below(&mut self, below: Option<LayerId>, layer: Layer) -> LayerId {
         let id = layer.id;
-        match below.and_then(|b| self.path_of(b)).and_then(|path| self.siblings_mut(&path)) {
+        match below
+            .and_then(|b| self.path_of(b))
+            .and_then(|path| self.siblings_mut(&path))
+        {
             Some((sib, idx)) => sib.insert(idx, layer),
             None => self.layers.insert(0, layer),
         }
@@ -1194,8 +1342,12 @@ impl Document {
 
     /// Move a layer up (+1) or down (-1) among its siblings. Returns false at the ends.
     pub fn shift(&mut self, id: LayerId, delta: i32) -> bool {
-        let Some(path) = self.path_of(id) else { return false };
-        let Some((sib, idx)) = self.siblings_mut(&path) else { return false };
+        let Some(path) = self.path_of(id) else {
+            return false;
+        };
+        let Some((sib, idx)) = self.siblings_mut(&path) else {
+            return false;
+        };
         let to = idx as i64 + delta as i64;
         if to < 0 || to >= sib.len() as i64 {
             return false;
@@ -1207,9 +1359,16 @@ impl Document {
 
     /// Next unused "Layer N" name.
     pub fn next_layer_name(&self, base: &str) -> String {
-        let names: std::collections::HashSet<&str> = self.walk().into_iter().map(|(_, _, l)| l.name.as_str()).collect();
+        let names: std::collections::HashSet<&str> = self
+            .walk()
+            .into_iter()
+            .map(|(_, _, l)| l.name.as_str())
+            .collect();
         // At most `names.len() + 1` candidates are needed, so the search always succeeds.
-        (1..=names.len() + 1).map(|n| format!("{base} {n}")).find(|n| !names.contains(n.as_str())).unwrap_or_else(|| base.to_string())
+        (1..=names.len() + 1)
+            .map(|n| format!("{base} {n}"))
+            .find(|n| !names.contains(n.as_str()))
+            .unwrap_or_else(|| base.to_string())
     }
 
     /// Name for a copy of a layer named `name`, unique in the document: "Layer 1 copy", then
@@ -1217,16 +1376,30 @@ impl Document {
     /// numbered from its root rather than growing another "copy".
     pub fn copy_name(&self, name: &str) -> String {
         let root = match name.rsplit_once(" copy") {
-            Some((root, rest)) if rest.is_empty() || rest.strip_prefix(' ').is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())) => root,
+            Some((root, rest))
+                if rest.is_empty()
+                    || rest.strip_prefix(' ').is_some_and(|n| {
+                        !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())
+                    }) =>
+            {
+                root
+            }
             _ => name,
         };
-        let names: std::collections::HashSet<&str> = self.walk().into_iter().map(|(_, _, l)| l.name.as_str()).collect();
+        let names: std::collections::HashSet<&str> = self
+            .walk()
+            .into_iter()
+            .map(|(_, _, l)| l.name.as_str())
+            .collect();
         let first = format!("{root} copy");
         if !names.contains(first.as_str()) {
             return first;
         }
         // At most `names.len() + 1` candidates are needed, so the search always succeeds.
-        (2..=names.len() + 2).map(|n| format!("{root} copy {n}")).find(|n| !names.contains(n.as_str())).unwrap_or(first)
+        (2..=names.len() + 2)
+            .map(|n| format!("{root} copy {n}"))
+            .find(|n| !names.contains(n.as_str()))
+            .unwrap_or(first)
     }
 
     /// Top-most layer id, useful as the default active layer.
@@ -1240,18 +1413,39 @@ mod tests {
     use super::*;
 
     fn doc() -> Document {
-        Document::with_background("t", Size::new(100, 50), ColorMode::Rgb, SampleType::U8, Color::WHITE)
+        Document::with_background(
+            "t",
+            Size::new(100, 50),
+            ColorMode::Rgb,
+            SampleType::U8,
+            Color::WHITE,
+        )
     }
 
     #[test]
     fn any_lock_counts_every_lock() {
         assert!(!Locks::default().any());
         let each = [
-            Locks { transparency: true, ..Locks::default() },
-            Locks { pixels: true, ..Locks::default() },
-            Locks { position: true, ..Locks::default() },
-            Locks { artboard: true, ..Locks::default() },
-            Locks { all: true, ..Locks::default() },
+            Locks {
+                transparency: true,
+                ..Locks::default()
+            },
+            Locks {
+                pixels: true,
+                ..Locks::default()
+            },
+            Locks {
+                position: true,
+                ..Locks::default()
+            },
+            Locks {
+                artboard: true,
+                ..Locks::default()
+            },
+            Locks {
+                all: true,
+                ..Locks::default()
+            },
         ];
         assert!(each.iter().all(|k| k.any()));
     }
@@ -1334,7 +1528,10 @@ mod tests {
     #[test]
     fn pixel_format_follows_mode_and_depth() {
         let d = Document::new("c", Size::new(1, 1), ColorMode::Cmyk, SampleType::U16);
-        assert_eq!(d.pixel_format(), PixelFormat::new(ColorMode::Cmyk, SampleType::U16, true));
+        assert_eq!(
+            d.pixel_format(),
+            PixelFormat::new(ColorMode::Cmyk, SampleType::U16, true)
+        );
         let b = Document::new("b", Size::new(1, 1), ColorMode::Bitmap, SampleType::U8);
         assert_eq!(b.pixel_format().mode, ColorMode::Grayscale);
     }
@@ -1344,12 +1541,30 @@ mod tests {
         let t = TextLayer {
             text: "ab".into(),
             runs: vec![
-                text::TextRun { len: 1, style: text::CharStyle::default() },
-                text::TextRun { len: usize::MAX, style: text::CharStyle { size_pt: 24.0, ..Default::default() } },
+                text::TextRun {
+                    len: 1,
+                    style: text::CharStyle::default(),
+                },
+                text::TextRun {
+                    len: usize::MAX,
+                    style: text::CharStyle {
+                        size_pt: 24.0,
+                        ..Default::default()
+                    },
+                },
             ],
             paragraphs: vec![
-                text::ParagraphRun { len: 1, style: text::ParagraphStyle::default() },
-                text::ParagraphRun { len: usize::MAX, style: text::ParagraphStyle { align: text::TextAlign::Center, ..Default::default() } },
+                text::ParagraphRun {
+                    len: 1,
+                    style: text::ParagraphStyle::default(),
+                },
+                text::ParagraphRun {
+                    len: usize::MAX,
+                    style: text::ParagraphStyle {
+                        align: text::TextAlign::Center,
+                        ..Default::default()
+                    },
+                },
             ],
             ..Default::default()
         };
@@ -1361,7 +1576,10 @@ mod tests {
         assert_eq!(chars[1].style.size_pt, 24.0);
 
         let paragraphs = t.paragraph_runs();
-        assert_eq!(paragraphs.iter().map(|r| r.len).sum::<usize>(), t.text.len());
+        assert_eq!(
+            paragraphs.iter().map(|r| r.len).sum::<usize>(),
+            t.text.len()
+        );
         assert_eq!(paragraphs.len(), 2);
         assert_eq!(paragraphs[1].len, 1);
         assert_eq!(paragraphs[1].style.align, text::TextAlign::Center);
@@ -1401,8 +1619,19 @@ mod tests {
         let inner_id = inner.id;
         let g = Layer::group("G", vec![inner]);
         let gid = d.insert_above(None, g);
-        let walk: Vec<_> = d.walk().into_iter().map(|(p, depth, l)| (p, depth, l.name.clone())).collect();
-        assert_eq!(walk, vec![(vec![0], 0, "Background".into()), (vec![1], 0, "G".into()), (vec![1, 0], 1, "inner".into())]);
+        let walk: Vec<_> = d
+            .walk()
+            .into_iter()
+            .map(|(p, depth, l)| (p, depth, l.name.clone()))
+            .collect();
+        assert_eq!(
+            walk,
+            vec![
+                (vec![0], 0, "Background".into()),
+                (vec![1], 0, "G".into()),
+                (vec![1, 0], 1, "inner".into())
+            ]
+        );
         assert_eq!(d.path_of(inner_id), Some(vec![1, 0]));
         assert_eq!(d.layer(gid).unwrap().blend, BlendMode::PassThrough);
         // insert above a nested layer stays inside the group
@@ -1418,10 +1647,21 @@ mod tests {
         let mut d = doc();
         let format = d.pixel_format();
         let leaf = |n: &str| Layer::raster(n, format);
-        let deep = Layer::group("A", vec![leaf("a0"), Layer::group("B", vec![leaf("b0"), Layer::group("C", vec![leaf("c0")]), leaf("b2")]), leaf("a2")]);
+        let deep = Layer::group(
+            "A",
+            vec![
+                leaf("a0"),
+                Layer::group(
+                    "B",
+                    vec![leaf("b0"), Layer::group("C", vec![leaf("c0")]), leaf("b2")],
+                ),
+                leaf("a2"),
+            ],
+        );
         d.insert_above(None, deep);
         d.insert_above(None, leaf("top"));
-        let walk: Vec<(LayerPath, LayerId)> = d.walk().into_iter().map(|(p, _, l)| (p, l.id)).collect();
+        let walk: Vec<(LayerPath, LayerId)> =
+            d.walk().into_iter().map(|(p, _, l)| (p, l.id)).collect();
         assert_eq!(walk.len(), 10);
         for (path, id) in &walk {
             assert_eq!(d.path_of(*id).as_ref(), Some(path));
@@ -1429,7 +1669,11 @@ mod tests {
             assert_eq!(d.layer_mut(*id).map(|l| l.id), Some(*id));
         }
         let missing = Layer::raster("elsewhere", d.pixel_format()).id;
-        assert!(d.path_of(missing).is_none() && d.layer(missing).is_none() && d.layer_mut(missing).is_none());
+        assert!(
+            d.path_of(missing).is_none()
+                && d.layer(missing).is_none()
+                && d.layer_mut(missing).is_none()
+        );
     }
 
     #[test]
@@ -1443,7 +1687,10 @@ mod tests {
         d.layer_mut(inner_id).unwrap().locks.pixels = true;
         let k = d.effective_locks(inner_id);
         assert!(k.position && k.pixels && !k.all);
-        assert!(!d.effective_locks(gid).pixels, "a child's lock doesn't lock its group");
+        assert!(
+            !d.effective_locks(gid).pixels,
+            "a child's lock doesn't lock its group"
+        );
         assert_eq!(d.effective_locks(LayerId(u64::MAX)), Locks::default());
     }
 
@@ -1489,16 +1736,34 @@ mod tests {
         let mut d = doc();
         let snap = d.clone();
         let bg = d.layers[0].id;
-        d.layer_mut(bg).unwrap().surface_mut().unwrap().write_pixel(0, 0, &[0.0, 0.0, 0.0, 1.0]);
+        d.layer_mut(bg)
+            .unwrap()
+            .surface_mut()
+            .unwrap()
+            .write_pixel(0, 0, &[0.0, 0.0, 0.0, 1.0]);
         assert_eq!(snap.layers[0].surface().unwrap().pixel(0, 0), vec![1.0; 4]);
     }
 
     #[test]
     fn layer_content_article_and_kind_name() {
         assert_eq!(LayerContent::Adjustment(Adjustment::Invert).article(), "an");
-        assert_eq!(LayerContent::Adjustment(Adjustment::Invert).kind_name(), "Adjustment");
-        assert_eq!(LayerContent::Raster(Surface::new(PixelFormat::RGBA8)).article(), "a");
-        assert_eq!(LayerContent::Group(Group { children: Vec::new(), expanded: true, artboard: None }).article(), "a");
+        assert_eq!(
+            LayerContent::Adjustment(Adjustment::Invert).kind_name(),
+            "Adjustment"
+        );
+        assert_eq!(
+            LayerContent::Raster(Surface::new(PixelFormat::RGBA8)).article(),
+            "a"
+        );
+        assert_eq!(
+            LayerContent::Group(Group {
+                children: Vec::new(),
+                expanded: true,
+                artboard: None
+            })
+            .article(),
+            "a"
+        );
     }
 }
 

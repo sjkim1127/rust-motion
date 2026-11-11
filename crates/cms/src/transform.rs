@@ -32,7 +32,11 @@ pub struct TransformOptions {
 
 impl Default for TransformOptions {
     fn default() -> Self {
-        Self { intent: Intent::RelativeColorimetric, bpc: true, precise_float: true }
+        Self {
+            intent: Intent::RelativeColorimetric,
+            bpc: true,
+            precise_float: true,
+        }
     }
 }
 
@@ -51,7 +55,11 @@ const PERCEPTUAL_BLACK: [f64; 3] = [0.00336, 0.0034731, 0.00287];
 enum Core {
     /// Input curves (sampled per input channel over `[0, 1]`, 4096+1 entries; 256 exact
     /// entries for 8-bit input) followed by an optional matrix.
-    Shaper { curves8: Vec<[f32; 256]>, curves: Vec<Vec<f32>>, matrix: Option<(usize, usize, Vec<f32>, Vec<f32>)> },
+    Shaper {
+        curves8: Vec<[f32; 256]>,
+        curves: Vec<Vec<f32>>,
+        matrix: Option<(usize, usize, Vec<f32>, Vec<f32>)>,
+    },
     /// Device link table over the input space.
     Grid(Clut),
     /// No acceleration possible: use the exact pipeline.
@@ -95,11 +103,28 @@ pub struct Transform {
 
 impl Transform {
     /// Transform from `src` to `dst` with `intent`, optionally with black point compensation.
-    pub fn new(src: &Profile, dst: &Profile, intent: Intent, bpc: bool) -> Result<Transform, CmsError> {
-        Self::with_options(src, dst, TransformOptions { intent, bpc, ..Default::default() })
+    pub fn new(
+        src: &Profile,
+        dst: &Profile,
+        intent: Intent,
+        bpc: bool,
+    ) -> Result<Transform, CmsError> {
+        Self::with_options(
+            src,
+            dst,
+            TransformOptions {
+                intent,
+                bpc,
+                ..Default::default()
+            },
+        )
     }
 
-    pub fn with_options(src: &Profile, dst: &Profile, opts: TransformOptions) -> Result<Transform, CmsError> {
+    pub fn with_options(
+        src: &Profile,
+        dst: &Profile,
+        opts: TransformOptions,
+    ) -> Result<Transform, CmsError> {
         let stages = link_stages(src, dst, opts.intent, opts.bpc)?;
         let mut t = Self::from_pipeline(Pipeline::new(src.channels(), stages), opts);
         if opts.intent != Intent::AbsoluteColorimetric {
@@ -112,12 +137,30 @@ impl Transform {
     /// apply to the document → proof step; the proof → display step is relative colorimetric
     /// with BPC, or absolute colorimetric without BPC when `simulate_paper` is set (paper
     /// colour and black ink simulated).
-    pub fn proof(src: &Profile, proof: &Profile, dst: &Profile, intent: Intent, bpc: bool, simulate_paper: bool) -> Result<Transform, CmsError> {
+    pub fn proof(
+        src: &Profile,
+        proof: &Profile,
+        dst: &Profile,
+        intent: Intent,
+        bpc: bool,
+        simulate_paper: bool,
+    ) -> Result<Transform, CmsError> {
         let mut stages = link_stages(src, proof, intent, bpc)?;
         stages.push(Stage::Clamp01);
-        let (i2, b2) = if simulate_paper { (Intent::AbsoluteColorimetric, false) } else { (Intent::RelativeColorimetric, true) };
+        let (i2, b2) = if simulate_paper {
+            (Intent::AbsoluteColorimetric, false)
+        } else {
+            (Intent::RelativeColorimetric, true)
+        };
         stages.extend(link_stages(proof, dst, i2, b2)?);
-        Ok(Self::from_pipeline(Pipeline::new(src.channels(), stages), TransformOptions { intent, bpc, precise_float: true }))
+        Ok(Self::from_pipeline(
+            Pipeline::new(src.channels(), stages),
+            TransformOptions {
+                intent,
+                bpc,
+                precise_float: true,
+            },
+        ))
     }
 
     /// Builds a transform from an arbitrary pipeline over normalised values.
@@ -129,39 +172,61 @@ impl Transform {
         let mut post = None;
         if let Some(Stage::InvCurves(cs)) = head.last() {
             if cs.len() == outputs {
-            let tables = cs
-                .iter()
-                .map(|c| {
-                    (0..OUT_TABLE)
-                        .map(|i| {
-                            let u = i as f64 / (OUT_TABLE - 1) as f64;
-                            c.eval_inverse64(u * u * u * u).clamp(0.0, 1.0) as f32
-                        })
-                        .collect()
-                })
-                .collect();
-            post = Some(Post { tables });
-            head.pop();
-            if matches!(head.last(), Some(Stage::Clamp01)) {
+                let tables = cs
+                    .iter()
+                    .map(|c| {
+                        (0..OUT_TABLE)
+                            .map(|i| {
+                                let u = i as f64 / (OUT_TABLE - 1) as f64;
+                                c.eval_inverse64(u * u * u * u).clamp(0.0, 1.0) as f32
+                            })
+                            .collect()
+                    })
+                    .collect();
+                post = Some(Post { tables });
                 head.pop();
+                if matches!(head.last(), Some(Stage::Clamp01)) {
+                    head.pop();
+                }
             }
         }
-    }
         let head_pipe = Pipeline::new(inputs, head.clone());
         let mid = head_pipe.outputs;
         let core = match head.as_slice() {
-            [] => Core::Shaper { curves8: Vec::new(), curves: Vec::new(), matrix: None },
+            [] => Core::Shaper {
+                curves8: Vec::new(),
+                curves: Vec::new(),
+                matrix: None,
+            },
             [Stage::Curves(cs)] if cs.len() == inputs => shaper(cs, None),
-            [Stage::Matrix { rows, cols, m, offset }] => shaper(&[], Some((*rows, *cols, m, offset))),
-            [Stage::Curves(cs), Stage::Matrix { rows, cols, m, offset }] if cs.len() == inputs => shaper(cs, Some((*rows, *cols, m, offset))),
+            [Stage::Matrix {
+                rows,
+                cols,
+                m,
+                offset,
+            }] => shaper(&[], Some((*rows, *cols, m, offset))),
+            [Stage::Curves(cs), Stage::Matrix {
+                rows,
+                cols,
+                m,
+                offset,
+            }] if cs.len() == inputs => shaper(cs, Some((*rows, *cols, m, offset))),
             // Purely analytic heads (Lab/XYZ maths, matrices, curves) are evaluated exactly:
             // a grid would amplify interpolation error through steep output curves.
             _ if !head.iter().any(|s| matches!(s, Stage::Clut(_))) => Core::Exact,
             _ => match inputs {
-                1 => Core::Grid(Clut::sample(vec![TABLE_1D], mid, |i, o| head_pipe.eval(i, o))),
-                3 => Core::Grid(Clut::sample(vec![GRID_3D; 3], mid, |i, o| head_pipe.eval(i, o))),
-                4 => Core::Grid(Clut::sample(vec![GRID_4D; 4], mid, |i, o| head_pipe.eval(i, o))),
-                2 => Core::Grid(Clut::sample(vec![GRID_3D; 2], mid, |i, o| head_pipe.eval(i, o))),
+                1 => Core::Grid(Clut::sample(vec![TABLE_1D], mid, |i, o| {
+                    head_pipe.eval(i, o)
+                })),
+                3 => Core::Grid(Clut::sample(vec![GRID_3D; 3], mid, |i, o| {
+                    head_pipe.eval(i, o)
+                })),
+                4 => Core::Grid(Clut::sample(vec![GRID_4D; 4], mid, |i, o| {
+                    head_pipe.eval(i, o)
+                })),
+                2 => Core::Grid(Clut::sample(vec![GRID_3D; 2], mid, |i, o| {
+                    head_pipe.eval(i, o)
+                })),
                 _ => Core::Exact,
             },
         };
@@ -169,7 +234,8 @@ impl Transform {
             Core::Grid(c) if c.inputs >= 2 => (0..c.inputs)
                 .map(|d| {
                     let n = c.grid[d];
-                    let stride = c.data.len() / c.outputs / c.grid[..=d].iter().product::<usize>() * c.outputs;
+                    let stride = c.data.len() / c.outputs / c.grid[..=d].iter().product::<usize>()
+                        * c.outputs;
                     std::array::from_fn(|v| {
                         let p = v as f32 / 255.0 * (n - 1) as f32;
                         let i = (p as usize).min(n - 2);
@@ -179,14 +245,24 @@ impl Transform {
                 .collect(),
             _ => Vec::new(),
         };
-        Transform { inputs, outputs, opts, pipeline, core, post, grid8 }
+        Transform {
+            inputs,
+            outputs,
+            opts,
+            pipeline,
+            core,
+            post,
+            grid8,
+        }
     }
 
     /// White preservation: the device-link node at the source's device white gets exactly the
     /// destination's device white, so paper/white survive table quantization (e.g. the PCS
     /// white is not a node of a legacy-encoded Lab grid).
     fn fix_white(&mut self, src: ColorSpace, dst: ColorSpace) {
-        let (Some(sw), Some(mut dw)) = (device_white(src), device_white(dst)) else { return };
+        let (Some(sw), Some(mut dw)) = (device_white(src), device_white(dst)) else {
+            return;
+        };
         if self.post.is_some() {
             // Output curves map 1 → 1 for additive spaces; the grid holds pre-curve values.
             if !matches!(dst, ColorSpace::Rgb | ColorSpace::Gray) {
@@ -194,7 +270,9 @@ impl Transform {
             }
             dw.iter_mut().for_each(|v| *v = 1.0);
         }
-        let Core::Grid(c) = &mut self.core else { return };
+        let Core::Grid(c) = &mut self.core else {
+            return;
+        };
         if c.inputs != sw.len() || c.outputs != dw.len() {
             return;
         }
@@ -248,7 +326,11 @@ impl Transform {
             Core::Shaper { curves, matrix, .. } => {
                 let mut v = [0.0f32; 16];
                 for k in 0..self.inputs {
-                    v[k] = if curves.is_empty() { input[k] } else { table(&curves[k], input[k]) };
+                    v[k] = if curves.is_empty() {
+                        input[k]
+                    } else {
+                        table(&curves[k], input[k])
+                    };
                 }
                 apply_matrix(matrix, &v, &mut mid, self.inputs);
             }
@@ -270,10 +352,19 @@ impl Transform {
 
     /// Converts float pixels. `src`/`dst` hold whole pixels of `src_stride`/`dst_stride`
     /// values; colour channels come first. Trailing channels are copied when `copy_extra`.
-    pub fn convert_f32(&self, src: &[f32], src_stride: usize, dst: &mut [f32], dst_stride: usize, copy_extra: bool) {
+    pub fn convert_f32(
+        &self,
+        src: &[f32],
+        src_stride: usize,
+        dst: &mut [f32],
+        dst_stride: usize,
+        copy_extra: bool,
+    ) {
         self.check(src_stride, dst_stride);
         let extra = extra_channels(self, src_stride, dst_stride, copy_extra);
-        par_rows(src, src_stride, dst, dst_stride, |s, d| self.run_f32(s, src_stride, d, dst_stride, extra));
+        par_rows(src, src_stride, dst, dst_stride, |s, d| {
+            self.run_f32(s, src_stride, d, dst_stride, extra)
+        });
     }
 
     fn run_f32(&self, s: &[f32], ss: usize, d: &mut [f32], ds: usize, extra: usize) {
@@ -309,10 +400,19 @@ impl Transform {
     }
 
     /// Converts 8-bit pixels (see [`Transform::convert_f32`] for the layout).
-    pub fn convert_u8(&self, src: &[u8], src_stride: usize, dst: &mut [u8], dst_stride: usize, copy_extra: bool) {
+    pub fn convert_u8(
+        &self,
+        src: &[u8],
+        src_stride: usize,
+        dst: &mut [u8],
+        dst_stride: usize,
+        copy_extra: bool,
+    ) {
         self.check(src_stride, dst_stride);
         let extra = extra_channels(self, src_stride, dst_stride, copy_extra);
-        par_rows(src, src_stride, dst, dst_stride, |s, d| self.run_u8(s, src_stride, d, dst_stride, extra));
+        par_rows(src, src_stride, dst, dst_stride, |s, d| {
+            self.run_u8(s, src_stride, d, dst_stride, extra)
+        });
     }
 
     fn run_u8(&self, s: &[u8], ss: usize, d: &mut [u8], ds: usize, extra: usize) {
@@ -326,7 +426,12 @@ impl Transform {
                 let s0 = s1 * c.grid[1];
                 for (sp, dp) in s.chunks_exact(ss).zip(d.chunks_exact_mut(ds)) {
                     let (a, b, cc) = (g0[sp[0] as usize], g1[sp[1] as usize], g2[sp[2] as usize]);
-                    c.tetra_pub((a.0 + b.0 + cc.0) as usize, [s0, s1, c.outputs], [a.1, b.1, cc.1], &mut mid);
+                    c.tetra_pub(
+                        (a.0 + b.0 + cc.0) as usize,
+                        [s0, s1, c.outputs],
+                        [a.1, b.1, cc.1],
+                        &mut mid,
+                    );
                     self.finish(&mid, &mut out);
                     for k in 0..self.outputs {
                         dp[k] = q(out[k]);
@@ -344,7 +449,12 @@ impl Transform {
                 let s0 = s1 * c.grid[1];
                 let mut hi = [0.0f32; 16];
                 for (sp, dp) in s.chunks_exact(ss).zip(d.chunks_exact_mut(ds)) {
-                    let (a, b, cc, k4) = (g[0][sp[0] as usize], g[1][sp[1] as usize], g[2][sp[2] as usize], g[3][sp[3] as usize]);
+                    let (a, b, cc, k4) = (
+                        g[0][sp[0] as usize],
+                        g[1][sp[1] as usize],
+                        g[2][sp[2] as usize],
+                        g[3][sp[3] as usize],
+                    );
                     let base = (a.0 + b.0 + cc.0 + k4.0) as usize;
                     c.tetra_pub(base, [s1, s2, s3], [b.1, cc.1, k4.1], &mut mid);
                     if a.1 > 0.0 {
@@ -362,11 +472,17 @@ impl Transform {
                     }
                 }
             }
-            Core::Shaper { curves8, matrix, .. } => {
+            Core::Shaper {
+                curves8, matrix, ..
+            } => {
                 let mut v = [0.0f32; 16];
                 for (sp, dp) in s.chunks_exact(ss).zip(d.chunks_exact_mut(ds)) {
                     for k in 0..self.inputs {
-                        v[k] = if curves8.is_empty() { sp[k] as f32 / 255.0 } else { curves8[k][sp[k] as usize] };
+                        v[k] = if curves8.is_empty() {
+                            sp[k] as f32 / 255.0
+                        } else {
+                            curves8[k][sp[k] as usize]
+                        };
                     }
                     apply_matrix(matrix, &v, &mut mid, self.inputs);
                     self.finish(&mid, &mut out);
@@ -397,10 +513,19 @@ impl Transform {
     }
 
     /// Converts 16-bit pixels (see [`Transform::convert_f32`] for the layout).
-    pub fn convert_u16(&self, src: &[u16], src_stride: usize, dst: &mut [u16], dst_stride: usize, copy_extra: bool) {
+    pub fn convert_u16(
+        &self,
+        src: &[u16],
+        src_stride: usize,
+        dst: &mut [u16],
+        dst_stride: usize,
+        copy_extra: bool,
+    ) {
         self.check(src_stride, dst_stride);
         let extra = extra_channels(self, src_stride, dst_stride, copy_extra);
-        par_rows(src, src_stride, dst, dst_stride, |s, d| self.run_u16(s, src_stride, d, dst_stride, extra));
+        par_rows(src, src_stride, dst, dst_stride, |s, d| {
+            self.run_u16(s, src_stride, d, dst_stride, extra)
+        });
     }
 
     fn run_u16(&self, s: &[u16], ss: usize, d: &mut [u16], ds: usize, extra: usize) {
@@ -423,22 +548,49 @@ impl Transform {
     /// Converts many independent buffers of native-endian samples in one parallel pass (e.g.
     /// all tiles of a surface): far cheaper than one parallel call per small buffer. Each job
     /// is `(src bytes, dst bytes)` holding whole pixels of `src_stride`/`dst_stride` samples.
-    pub fn convert_bytes_many(&self, sample: SampleKind, jobs: Vec<(&[u8], &mut [u8])>, src_stride: usize, dst_stride: usize, copy_extra: bool) {
+    pub fn convert_bytes_many(
+        &self,
+        sample: SampleKind,
+        jobs: Vec<(&[u8], &mut [u8])>,
+        src_stride: usize,
+        dst_stride: usize,
+        copy_extra: bool,
+    ) {
         self.check(src_stride, dst_stride);
         let extra = extra_channels(self, src_stride, dst_stride, copy_extra);
         let run = |(s, d): (&[u8], &mut [u8])| match sample {
             SampleKind::U8 => self.run_u8(s, src_stride, d, dst_stride, extra),
             SampleKind::U16 => {
-                let a: Vec<u16> = s.as_chunks::<2>().0.iter().map(|b| u16::from_ne_bytes([b[0], b[1]])).collect();
-                let mut o: Vec<u16> = d.as_chunks::<2>().0.iter().map(|b| u16::from_ne_bytes([b[0], b[1]])).collect();
+                let a: Vec<u16> = s
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|b| u16::from_ne_bytes([b[0], b[1]]))
+                    .collect();
+                let mut o: Vec<u16> = d
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|b| u16::from_ne_bytes([b[0], b[1]]))
+                    .collect();
                 self.run_u16(&a, src_stride, &mut o, dst_stride, extra);
                 for (b, v) in d.as_chunks_mut::<2>().0.iter_mut().zip(o) {
                     b.copy_from_slice(&v.to_ne_bytes());
                 }
             }
             SampleKind::F32 => {
-                let a: Vec<f32> = s.as_chunks::<4>().0.iter().map(|b| f32::from_ne_bytes([b[0], b[1], b[2], b[3]])).collect();
-                let mut o: Vec<f32> = d.as_chunks::<4>().0.iter().map(|b| f32::from_ne_bytes([b[0], b[1], b[2], b[3]])).collect();
+                let a: Vec<f32> = s
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|b| f32::from_ne_bytes([b[0], b[1], b[2], b[3]]))
+                    .collect();
+                let mut o: Vec<f32> = d
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|b| f32::from_ne_bytes([b[0], b[1], b[2], b[3]]))
+                    .collect();
                 self.run_f32(&a, src_stride, &mut o, dst_stride, extra);
                 for (b, v) in d.as_chunks_mut::<4>().0.iter_mut().zip(o) {
                     b.copy_from_slice(&v.to_ne_bytes());
@@ -455,7 +607,10 @@ impl Transform {
     }
 
     fn check(&self, ss: usize, ds: usize) {
-        assert!(ss >= self.inputs && ds >= self.outputs, "pixel stride smaller than the channel count");
+        assert!(
+            ss >= self.inputs && ds >= self.outputs,
+            "pixel stride smaller than the channel count"
+        );
     }
 }
 
@@ -471,14 +626,39 @@ fn device_white(cs: ColorSpace) -> Option<Vec<f32>> {
 }
 
 fn extra_channels(t: &Transform, ss: usize, ds: usize, copy: bool) -> usize {
-    if copy { (ss - t.inputs).min(ds - t.outputs) } else { 0 }
+    if copy {
+        (ss - t.inputs).min(ds - t.outputs)
+    } else {
+        0
+    }
 }
 
 fn shaper(cs: &[Curve], matrix: Option<(usize, usize, &Vec<f64>, &Vec<f64>)>) -> Core {
-    let curves8 = cs.iter().map(|c| std::array::from_fn(|i| c.eval64(i as f64 / 255.0) as f32)).collect();
-    let curves = cs.iter().map(|c| (0..=TABLE_1D).map(|i| c.eval64(i as f64 / TABLE_1D as f64) as f32).collect()).collect();
-    let matrix = matrix.map(|(r, c, m, o)| (r, c, m.iter().map(|v| *v as f32).collect(), o.iter().map(|v| *v as f32).collect()));
-    Core::Shaper { curves8, curves, matrix }
+    let curves8 = cs
+        .iter()
+        .map(|c| std::array::from_fn(|i| c.eval64(i as f64 / 255.0) as f32))
+        .collect();
+    let curves = cs
+        .iter()
+        .map(|c| {
+            (0..=TABLE_1D)
+                .map(|i| c.eval64(i as f64 / TABLE_1D as f64) as f32)
+                .collect()
+        })
+        .collect();
+    let matrix = matrix.map(|(r, c, m, o)| {
+        (
+            r,
+            c,
+            m.iter().map(|v| *v as f32).collect(),
+            o.iter().map(|v| *v as f32).collect(),
+        )
+    });
+    Core::Shaper {
+        curves8,
+        curves,
+        matrix,
+    }
 }
 
 #[inline]
@@ -493,7 +673,12 @@ fn table(t: &[f32], x: f32) -> f32 {
 }
 
 #[inline]
-fn apply_matrix(m: &Option<(usize, usize, Vec<f32>, Vec<f32>)>, v: &[f32; 16], out: &mut [f32; 16], n: usize) {
+fn apply_matrix(
+    m: &Option<(usize, usize, Vec<f32>, Vec<f32>)>,
+    v: &[f32; 16],
+    out: &mut [f32; 16],
+    n: usize,
+) {
     match m {
         None => out[..n].copy_from_slice(&v[..n]),
         Some((rows, cols, m, off)) => {
@@ -516,18 +701,32 @@ const PAR_MIN_PIXELS: usize = 16 * 1024;
 const PAR_CHUNK_PIXELS: usize = 8 * 1024;
 
 #[cfg(not(target_arch = "wasm32"))]
-fn par_rows<S: Sync, D: Send>(src: &[S], ss: usize, dst: &mut [D], ds: usize, f: impl Fn(&[S], &mut [D]) + Sync) {
+fn par_rows<S: Sync, D: Send>(
+    src: &[S],
+    ss: usize,
+    dst: &mut [D],
+    ds: usize,
+    f: impl Fn(&[S], &mut [D]) + Sync,
+) {
     use rayon::prelude::*;
     let n = (src.len() / ss).min(dst.len() / ds);
     let (src, dst) = (&src[..n * ss], &mut dst[..n * ds]);
     if n < PAR_MIN_PIXELS {
         return f(src, dst);
     }
-    src.par_chunks(PAR_CHUNK_PIXELS * ss).zip(dst.par_chunks_mut(PAR_CHUNK_PIXELS * ds)).for_each(|(s, d)| f(s, d));
+    src.par_chunks(PAR_CHUNK_PIXELS * ss)
+        .zip(dst.par_chunks_mut(PAR_CHUNK_PIXELS * ds))
+        .for_each(|(s, d)| f(s, d));
 }
 
 #[cfg(target_arch = "wasm32")]
-fn par_rows<S: Sync, D: Send>(src: &[S], ss: usize, dst: &mut [D], ds: usize, f: impl Fn(&[S], &mut [D]) + Sync) {
+fn par_rows<S: Sync, D: Send>(
+    src: &[S],
+    ss: usize,
+    dst: &mut [D],
+    ds: usize,
+    f: impl Fn(&[S], &mut [D]) + Sync,
+) {
     let n = (src.len() / ss).min(dst.len() / ds);
     f(&src[..n * ss], &mut dst[..n * ds]);
 }
@@ -549,12 +748,26 @@ fn par_inplace(buf: &mut [f32], _stride: usize, f: impl Fn(&mut [f32]) + Sync) {
 // ------------------------------------------------------------ linking
 
 /// Stages from `src` device values to `dst` device values.
-pub(crate) fn link_stages(src: &Profile, dst: &Profile, intent: Intent, bpc: bool) -> Result<Vec<Stage>, CmsError> {
+pub(crate) fn link_stages(
+    src: &Profile,
+    dst: &Profile,
+    intent: Intent,
+    bpc: bool,
+) -> Result<Vec<Stage>, CmsError> {
     for p in [src, dst] {
         // A Lab DeviceLink stands in for an abstract profile only when it also ends in Lab.
-        let lab_to_lab = p.color_space == ColorSpace::Lab && p.a2b.iter().flatten().all(|l| l.outputs == 3) && p.b2a.iter().flatten().all(|l| l.inputs == 3);
-        if matches!(p.class, ProfileClass::DeviceLink | ProfileClass::NamedColor | ProfileClass::Abstract) && !lab_to_lab {
-            return Err(CmsError::Unsupported(format!("{:?} profiles cannot be used as a source or destination", p.class)));
+        let lab_to_lab = p.color_space == ColorSpace::Lab
+            && p.a2b.iter().flatten().all(|l| l.outputs == 3)
+            && p.b2a.iter().flatten().all(|l| l.inputs == 3);
+        if matches!(
+            p.class,
+            ProfileClass::DeviceLink | ProfileClass::NamedColor | ProfileClass::Abstract
+        ) && !lab_to_lab
+        {
+            return Err(CmsError::Unsupported(format!(
+                "{:?} profiles cannot be used as a source or destination",
+                p.class
+            )));
         }
     }
     let (mut stages, s_pcs) = src.device_to_pcs(intent)?;
@@ -565,7 +778,12 @@ pub(crate) fn link_stages(src: &Profile, dst: &Profile, intent: Intent, bpc: boo
             if s_pcs == Pcs::Lab {
                 stages.push(Stage::LabToXyz);
             }
-            stages.push(Stage::Matrix { rows: 3, cols: 3, m: vec![scale[0], 0.0, 0.0, 0.0, scale[1], 0.0, 0.0, 0.0, scale[2]], offset: offset.to_vec() });
+            stages.push(Stage::Matrix {
+                rows: 3,
+                cols: 3,
+                m: vec![scale[0], 0.0, 0.0, 0.0, scale[1], 0.0, 0.0, 0.0, scale[2]],
+                offset: offset.to_vec(),
+            });
             if d_pcs == Pcs::Lab {
                 stages.push(Stage::XyzToLab);
             }
@@ -585,7 +803,12 @@ pub(crate) fn link_stages(src: &Profile, dst: &Profile, intent: Intent, bpc: boo
 /// Per-component XYZ `(scale, offset)`.
 type Affine3 = ([f64; 3], [f64; 3]);
 
-fn connection(src: &Profile, dst: &Profile, intent: Intent, bpc: bool) -> Result<Option<Affine3>, CmsError> {
+fn connection(
+    src: &Profile,
+    dst: &Profile,
+    intent: Intent,
+    bpc: bool,
+) -> Result<Option<Affine3>, CmsError> {
     if intent == Intent::AbsoluteColorimetric {
         let (ws, wd) = (src.media_white(), dst.media_white());
         // `wtpt` comes straight from the file. A zero, negative or non-finite component would
@@ -655,7 +878,11 @@ pub fn black_point(p: &Profile, intent: Intent, _input: bool) -> Result<f64, Cms
         return Ok(pcs_y(to_pcs, pcs, &zero));
     }
     // Subtractive LUT profile: darkest reachable colour.
-    let colorimetric = if intent == Intent::Saturation { Intent::Saturation } else { Intent::RelativeColorimetric };
+    let colorimetric = if intent == Intent::Saturation {
+        Intent::Saturation
+    } else {
+        Intent::RelativeColorimetric
+    };
     match p.pcs_to_device(colorimetric) {
         Ok((from_pcs, fpcs)) => {
             let mut st = Vec::new();
@@ -680,7 +907,11 @@ pub fn black_point(p: &Profile, intent: Intent, _input: bool) -> Result<f64, Cms
 type Key = (u64, u64, TransformOptions);
 
 /// Process-wide cache of transforms keyed by profile content and options.
-pub fn cached(src: &Profile, dst: &Profile, opts: TransformOptions) -> Result<Arc<Transform>, CmsError> {
+pub fn cached(
+    src: &Profile,
+    dst: &Profile,
+    opts: TransformOptions,
+) -> Result<Arc<Transform>, CmsError> {
     static CACHE: OnceLock<Mutex<HashMap<Key, Arc<Transform>>>> = OnceLock::new();
     let key = (src.content_hash(), dst.content_hash(), opts);
     let cache = CACHE.get_or_init(Default::default);

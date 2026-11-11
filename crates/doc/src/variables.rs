@@ -143,7 +143,10 @@ impl Variables {
 impl DataSet {
     /// The value for a variable in this data set, if present.
     pub fn get(&self, variable: &str) -> Option<&Value> {
-        self.values.iter().find(|v| v.variable == variable).map(|v| &v.value)
+        self.values
+            .iter()
+            .find(|v| v.variable == variable)
+            .map(|v| &v.value)
     }
 }
 
@@ -155,20 +158,41 @@ mod tests {
     fn round_trips_through_json() {
         let v = Variables {
             defs: vec![
-                VariableDef { name: "show".into(), layer: LayerId(1), kind: VarKind::Visibility },
-                VariableDef { name: "title".into(), layer: LayerId(2), kind: VarKind::TextReplacement },
+                VariableDef {
+                    name: "show".into(),
+                    layer: LayerId(1),
+                    kind: VarKind::Visibility,
+                },
+                VariableDef {
+                    name: "title".into(),
+                    layer: LayerId(2),
+                    kind: VarKind::TextReplacement,
+                },
                 VariableDef {
                     name: "photo".into(),
                     layer: LayerId(3),
-                    kind: VarKind::PixelReplacement { method: PixelMethod::Fill, align: PixelAlign::TopLeft, clip: true },
+                    kind: VarKind::PixelReplacement {
+                        method: PixelMethod::Fill,
+                        align: PixelAlign::TopLeft,
+                        clip: true,
+                    },
                 },
             ],
             data_sets: vec![DataSet {
                 name: "row1".into(),
                 values: vec![
-                    DataValue { variable: "show".into(), value: Value::Visibility(false) },
-                    DataValue { variable: "title".into(), value: Value::Text("Hello".into()) },
-                    DataValue { variable: "photo".into(), value: Value::Pixels("/tmp/a.png".into()) },
+                    DataValue {
+                        variable: "show".into(),
+                        value: Value::Visibility(false),
+                    },
+                    DataValue {
+                        variable: "title".into(),
+                        value: Value::Text("Hello".into()),
+                    },
+                    DataValue {
+                        variable: "photo".into(),
+                        value: Value::Pixels("/tmp/a.png".into()),
+                    },
                 ],
             }],
             active: Some(0),
@@ -180,8 +204,18 @@ mod tests {
     #[test]
     fn lookups() {
         let v = Variables {
-            defs: vec![VariableDef { name: "t".into(), layer: LayerId(9), kind: VarKind::TextReplacement }],
-            data_sets: vec![DataSet { name: "s".into(), values: vec![DataValue { variable: "t".into(), value: Value::Text("x".into()) }] }],
+            defs: vec![VariableDef {
+                name: "t".into(),
+                layer: LayerId(9),
+                kind: VarKind::TextReplacement,
+            }],
+            data_sets: vec![DataSet {
+                name: "s".into(),
+                values: vec![DataValue {
+                    variable: "t".into(),
+                    value: Value::Text("x".into()),
+                }],
+            }],
             active: None,
         };
         assert_eq!(v.def("t").unwrap().layer, LayerId(9));

@@ -125,7 +125,11 @@ impl SceneDirector {
     }
 
     /// Schedule multiple animations in parallel over `duration_frames` and advance the cursor.
-    pub fn play_parallel(&mut self, anims: Vec<ObjectAnimation>, duration_frames: u32) -> &mut Self {
+    pub fn play_parallel(
+        &mut self,
+        anims: Vec<ObjectAnimation>,
+        duration_frames: u32,
+    ) -> &mut Self {
         let d = duration_frames.max(1);
         for anim in anims {
             self.spans.push(ScheduledSpan {
@@ -195,7 +199,8 @@ impl CompiledSceneSchedule {
                 let raw_t = if frame >= span.end_frame {
                     1.0
                 } else {
-                    (frame - span.start_frame) as f32 / (span.end_frame - span.start_frame).max(1) as f32
+                    (frame - span.start_frame) as f32
+                        / (span.end_frame - span.start_frame).max(1) as f32
                 };
                 // Smoothstep easing for natural motion
                 let t = raw_t * raw_t * (3.0 - 2.0 * raw_t);
@@ -207,8 +212,7 @@ impl CompiledSceneSchedule {
                     ObjectAnimation::MoveTo {
                         target_x, target_y, ..
                     } => match &mut node {
-                        SceneNode::Rect { x, y, .. }
-                        | SceneNode::Text { x, y, .. } => {
+                        SceneNode::Rect { x, y, .. } | SceneNode::Text { x, y, .. } => {
                             *x = *x + (*target_x - *x) * t;
                             *y = *y + (*target_y - *y) * t;
                         }
@@ -236,10 +240,14 @@ impl CompiledSceneSchedule {
                     }
                     ObjectAnimation::ColorTo { target_color, .. } => {
                         let lerp_c = |c: &mut Color| {
-                            c.r = (c.r as f32 + (target_color.r as f32 - c.r as f32) * t).round() as u8;
-                            c.g = (c.g as f32 + (target_color.g as f32 - c.g as f32) * t).round() as u8;
-                            c.b = (c.b as f32 + (target_color.b as f32 - c.b as f32) * t).round() as u8;
-                            c.a = (c.a as f32 + (target_color.a as f32 - c.a as f32) * t).round() as u8;
+                            c.r = (c.r as f32 + (target_color.r as f32 - c.r as f32) * t).round()
+                                as u8;
+                            c.g = (c.g as f32 + (target_color.g as f32 - c.g as f32) * t).round()
+                                as u8;
+                            c.b = (c.b as f32 + (target_color.b as f32 - c.b as f32) * t).round()
+                                as u8;
+                            c.a = (c.a as f32 + (target_color.a as f32 - c.a as f32) * t).round()
+                                as u8;
                         };
                         match &mut node {
                             SceneNode::Rect { fill, .. } | SceneNode::Circle { fill, .. } => {
@@ -359,7 +367,8 @@ impl LinkedMediaStrip {
         if new_rate <= 0.05 || new_rate > 16.0 {
             return Err(format!("Unsupported playback rate: {new_rate}"));
         }
-        let source_span = (self.source_out_frame.saturating_sub(self.source_in_frame)).max(1) as f64;
+        let source_span =
+            (self.source_out_frame.saturating_sub(self.source_in_frame)).max(1) as f64;
         self.playback_rate = new_rate;
         self.duration_frames = (source_span / new_rate).round().max(1.0) as u32;
         Ok(())
@@ -442,7 +451,9 @@ impl LinkedMediaStrip {
         let gain = self.effective_audio_volume();
         for b in 0..num_bins {
             let s0 = (b * pcm_samples.len()) / num_bins;
-            let s1 = (((b + 1) * pcm_samples.len()) / num_bins).max(s0 + 1).min(pcm_samples.len());
+            let s1 = (((b + 1) * pcm_samples.len()) / num_bins)
+                .max(s0 + 1)
+                .min(pcm_samples.len());
             let max_abs = pcm_samples[s0..s1]
                 .iter()
                 .fold(0.0f32, |acc, &v| acc.max(v.abs()));

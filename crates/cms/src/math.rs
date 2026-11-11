@@ -27,11 +27,17 @@ pub fn mul(a: &Mat3, b: &Mat3) -> Mat3 {
 }
 
 pub fn apply(m: &Mat3, v: [f64; 3]) -> [f64; 3] {
-    [m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2], m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2], m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2]]
+    [
+        m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2],
+        m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2],
+        m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2],
+    ]
 }
 
 pub fn det(m: &Mat3) -> f64 {
-    m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+        - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
 }
 
 /// Inverse, or `None` when (nearly) singular.
@@ -42,9 +48,21 @@ pub fn invert(m: &Mat3) -> Option<Mat3> {
     }
     let inv = 1.0 / d;
     Some([
-        [(m[1][1] * m[2][2] - m[1][2] * m[2][1]) * inv, (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * inv, (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * inv],
-        [(m[1][2] * m[2][0] - m[1][0] * m[2][2]) * inv, (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * inv, (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * inv],
-        [(m[1][0] * m[2][1] - m[1][1] * m[2][0]) * inv, (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * inv, (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * inv],
+        [
+            (m[1][1] * m[2][2] - m[1][2] * m[2][1]) * inv,
+            (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * inv,
+            (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * inv,
+        ],
+        [
+            (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * inv,
+            (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * inv,
+            (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * inv,
+        ],
+        [
+            (m[1][0] * m[2][1] - m[1][1] * m[2][0]) * inv,
+            (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * inv,
+            (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * inv,
+        ],
     ])
 }
 
@@ -55,7 +73,11 @@ pub fn xy_to_xyz(xy: [f64; 2]) -> [f64; 3] {
 }
 
 /// Bradford cone response matrix (Lam 1985).
-const BRADFORD: Mat3 = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]];
+const BRADFORD: Mat3 = [
+    [0.8951, 0.2664, -0.1614],
+    [-0.7502, 1.7135, 0.0367],
+    [0.0389, -0.0685, 1.0296],
+];
 
 /// Bradford chromatic adaptation matrix from white `src` to white `dst` (both XYZ).
 pub fn bradford(src: [f64; 3], dst: [f64; 3]) -> Mat3 {
@@ -64,7 +86,11 @@ pub fn bradford(src: [f64; 3], dst: [f64; 3]) -> Mat3 {
     let inv = invert(&BRADFORD).expect("Bradford matrix is invertible");
     let s = apply(&BRADFORD, src);
     let d = apply(&BRADFORD, dst);
-    let scale = [[d[0] / s[0], 0.0, 0.0], [0.0, d[1] / s[1], 0.0], [0.0, 0.0, d[2] / s[2]]];
+    let scale = [
+        [d[0] / s[0], 0.0, 0.0],
+        [0.0, d[1] / s[1], 0.0],
+        [0.0, 0.0, d[2] / s[2]],
+    ];
     mul(&inv, &mul(&scale, &BRADFORD))
 }
 
@@ -72,9 +98,17 @@ pub fn bradford(src: [f64; 3], dst: [f64; 3]) -> Mat3 {
 /// `None` when the primaries are not independent.
 pub fn rgb_to_xyz_matrix(r: [f64; 2], g: [f64; 2], b: [f64; 2], white: [f64; 3]) -> Option<Mat3> {
     let (xr, xg, xb) = (xy_to_xyz(r), xy_to_xyz(g), xy_to_xyz(b));
-    let m = [[xr[0], xg[0], xb[0]], [xr[1], xg[1], xb[1]], [xr[2], xg[2], xb[2]]];
+    let m = [
+        [xr[0], xg[0], xb[0]],
+        [xr[1], xg[1], xb[1]],
+        [xr[2], xg[2], xb[2]],
+    ];
     let s = apply(&invert(&m)?, white);
-    Some([[m[0][0] * s[0], m[0][1] * s[1], m[0][2] * s[2]], [m[1][0] * s[0], m[1][1] * s[1], m[1][2] * s[2]], [m[2][0] * s[0], m[2][1] * s[1], m[2][2] * s[2]]])
+    Some([
+        [m[0][0] * s[0], m[0][1] * s[1], m[0][2] * s[2]],
+        [m[1][0] * s[0], m[1][1] * s[1], m[1][2] * s[2]],
+        [m[2][0] * s[0], m[2][1] * s[1], m[2][2] * s[2]],
+    ])
 }
 
 const EPS: f64 = 216.0 / 24389.0; // (6/29)^3
@@ -82,13 +116,21 @@ const KAPPA: f64 = 24389.0 / 27.0; // (29/3)^3
 
 #[inline]
 fn lab_f(t: f64) -> f64 {
-    if t > EPS { t.cbrt() } else { (KAPPA * t + 16.0) / 116.0 }
+    if t > EPS {
+        t.cbrt()
+    } else {
+        (KAPPA * t + 16.0) / 116.0
+    }
 }
 
 #[inline]
 fn lab_finv(f: f64) -> f64 {
     let f3 = f * f * f;
-    if f3 > EPS { f3 } else { (116.0 * f - 16.0) / KAPPA }
+    if f3 > EPS {
+        f3
+    } else {
+        (116.0 * f - 16.0) / KAPPA
+    }
 }
 
 /// CIE XYZ → L*a*b* relative to `white` (CIE 15).
@@ -104,7 +146,11 @@ pub fn lab_to_xyz(lab: [f64; 3], white: [f64; 3]) -> [f64; 3] {
     let fy = (lab[0] + 16.0) / 116.0;
     let fx = fy + lab[1] / 500.0;
     let fz = fy - lab[2] / 200.0;
-    [lab_finv(fx) * white[0], lab_finv(fy) * white[1], lab_finv(fz) * white[2]]
+    [
+        lab_finv(fx) * white[0],
+        lab_finv(fy) * white[1],
+        lab_finv(fz) * white[2],
+    ]
 }
 
 /// f32 versions for the hot paths (D50 PCS only).
@@ -113,7 +159,13 @@ pub fn xyz_to_lab_f32(xyz: [f32; 3]) -> [f32; 3] {
     const W: [f32; 3] = [0.9642, 1.0, 0.8249];
     const E: f32 = 216.0 / 24389.0;
     const K: f32 = 24389.0 / 27.0;
-    let f = |t: f32| if t > E { t.cbrt() } else { (K * t + 16.0) / 116.0 };
+    let f = |t: f32| {
+        if t > E {
+            t.cbrt()
+        } else {
+            (K * t + 16.0) / 116.0
+        }
+    };
     let fx = f(xyz[0] / W[0]);
     let fy = f(xyz[1] / W[1]);
     let fz = f(xyz[2] / W[2]);
@@ -130,7 +182,11 @@ pub fn lab_to_xyz_f32(lab: [f32; 3]) -> [f32; 3] {
     let fz = fy - lab[2] / 200.0;
     let finv = |f: f32| {
         let f3 = f * f * f;
-        if f3 > E { f3 } else { (116.0 * f - 16.0) / K }
+        if f3 > E {
+            f3
+        } else {
+            (116.0 * f - 16.0) / K
+        }
     };
     [finv(fx) * W[0], finv(fy) * W[1], finv(fz) * W[2]]
 }
@@ -147,7 +203,11 @@ pub fn s15f16_round(v: f64) -> f64 {
 
 /// The D50 illuminant exactly as an ICC header stores it (s15Fixed16).
 pub fn d50_quantized() -> [f64; 3] {
-    [s15f16_round(D50[0]), s15f16_round(D50[1]), s15f16_round(D50[2])]
+    [
+        s15f16_round(D50[0]),
+        s15f16_round(D50[1]),
+        s15f16_round(D50[2]),
+    ]
 }
 
 #[cfg(test)]
@@ -156,7 +216,11 @@ mod tests {
 
     #[test]
     fn lab_roundtrip() {
-        for xyz in [[0.2, 0.3, 0.1], [0.9642, 1.0, 0.8249], [0.001, 0.002, 0.0005]] {
+        for xyz in [
+            [0.2, 0.3, 0.1],
+            [0.9642, 1.0, 0.8249],
+            [0.001, 0.002, 0.0005],
+        ] {
             let back = lab_to_xyz(xyz_to_lab(xyz, D50), D50);
             for i in 0..3 {
                 assert!((back[i] - xyz[i]).abs() < 1e-12);

@@ -146,7 +146,9 @@ pub fn compute_mtb_shift(reference: &Pixmap, target: &Pixmap, max_shift: i32) ->
         let lumas: Vec<u8> = pm
             .pixels()
             .iter()
-            .map(|p| ((77 * p.red() as u32 + 150 * p.green() as u32 + 29 * p.blue() as u32) >> 8) as u8)
+            .map(|p| {
+                ((77 * p.red() as u32 + 150 * p.green() as u32 + 29 * p.blue() as u32) >> 8) as u8
+            })
             .collect();
         let mut sorted = lumas.clone();
         sorted.sort_unstable();
@@ -181,7 +183,8 @@ pub fn compute_mtb_shift(reference: &Pixmap, target: &Pixmap, max_shift: i32) ->
                     let tx = x + dx;
                     let ty = y + dy;
                     let t_idx = (ty * w + tx) as usize;
-                    if ref_valid[r_idx] && tgt_valid[t_idx] && (ref_bits[r_idx] != tgt_bits[t_idx]) {
+                    if ref_valid[r_idx] && tgt_valid[t_idx] && (ref_bits[r_idx] != tgt_bits[t_idx])
+                    {
                         err += 1;
                     }
                 }
@@ -244,10 +247,18 @@ pub fn merge_brackets(
     let hat_weight = |z: f32, ev: f32| -> f32 {
         if z > options.saturation_clip {
             // Clipped highlight: only trust if this is the shortest exposure (negative EV)
-            if ev < 0.0 { 0.05 } else { 0.001 }
+            if ev < 0.0 {
+                0.05
+            } else {
+                0.001
+            }
         } else if z < 0.02 {
             // Deep shadow: only trust if this is a long exposure (positive EV)
-            if ev > 0.0 { 0.05 } else { 0.005 }
+            if ev > 0.0 {
+                0.05
+            } else {
+                0.005
+            }
         } else {
             (1.0 - (2.0 * z - 1.0).abs()).max(0.02)
         }
@@ -277,11 +288,7 @@ pub fn merge_brackets(
             let mut weight_sum = 0.0f32;
 
             let ref_rgb = sample_shifted(ref_idx, x, y);
-            let ref_rad = [
-                ref_rgb[0] / ref_t,
-                ref_rgb[1] / ref_t,
-                ref_rgb[2] / ref_t,
-            ];
+            let ref_rad = [ref_rgb[0] / ref_t, ref_rgb[1] / ref_t, ref_rgb[2] / ref_t];
             let ref_luma_rad = 0.2126 * ref_rad[0] + 0.7152 * ref_rad[1] + 0.0722 * ref_rad[2];
 
             for (b_idx, b) in brackets.iter().enumerate() {
@@ -300,9 +307,12 @@ pub fn merge_brackets(
                         for py in (y - 1)..=(y + 1) {
                             for px_coord in (x - 1)..=(x + 1) {
                                 let s_rgb = sample_shifted(b_idx, px_coord, py);
-                                let s_luma = (0.2126 * s_rgb[0] + 0.7152 * s_rgb[1] + 0.0722 * s_rgb[2]) / t;
+                                let s_luma =
+                                    (0.2126 * s_rgb[0] + 0.7152 * s_rgb[1] + 0.0722 * s_rgb[2]) / t;
                                 let r_rgb = sample_shifted(ref_idx, px_coord, py);
-                                let r_luma = (0.2126 * r_rgb[0] + 0.7152 * r_rgb[1] + 0.0722 * r_rgb[2]) / ref_t;
+                                let r_luma =
+                                    (0.2126 * r_rgb[0] + 0.7152 * r_rgb[1] + 0.0722 * r_rgb[2])
+                                        / ref_t;
                                 patch_diff += (s_luma - r_luma).abs() / (r_luma + 0.08);
                             }
                         }

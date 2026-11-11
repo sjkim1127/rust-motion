@@ -1,10 +1,7 @@
-//! Directional polygon linear wipe transition presentation and component.
+//! Directional polygon linear wipe transition presentation and scene emitter.
 
 use crate::presentation::{PresentationVisual, TransitionContext, TransitionPresentation};
-use dioxus::prelude::*;
-use rust_motion_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};
 use rust_motion_composition::{CompositionError, SceneEmitter, SceneFrameContext};
-use rust_motion_core::hooks::use_current_frame;
 use rust_motion_rasterizer::{ClipRegion, Scene, SceneNode};
 use serde_json::Value;
 
@@ -83,28 +80,52 @@ impl LinearWipe {
                 )
             }
             WipeDirection::FromTopLeft => {
-                let d = 2.0 * p;
-                let x1 = width * d;
-                let y1 = height * d;
-                format!("M 0 0 L {x1:.2} 0 L 0 {y1:.2} Z")
+                // Diagonal polygon: corner expanding
+                let diag = (width + height) * p;
+                if diag <= width.min(height) {
+                    format!("M 0 0 L {diag:.2} 0 L 0 {diag:.2} Z")
+                } else {
+                    let x_top = diag.min(width);
+                    let y_left = diag.min(height);
+                    let x_bot = (diag - height).max(0.0);
+                    let y_right = (diag - width).max(0.0);
+                    format!(
+                        "M 0 0 L {x_top:.2} 0 L {width:.2} {y_right:.2} L {x_bot:.2} {height:.2} L 0 {y_left:.2} Z"
+                    )
+                }
             }
             WipeDirection::FromTopRight => {
-                let d = 2.0 * p;
-                let x0 = width * (1.0 - d);
-                let y1 = height * d;
-                format!("M {width:.2} 0 L {x0:.2} 0 L {width:.2} {y1:.2} Z")
+                let diag = (width + height) * p;
+                let x_right = width;
+                if diag <= width.min(height) {
+                    let x0 = (width - diag).max(0.0);
+                    format!("M {x_right:.2} 0 L {x_right:.2} {diag:.2} L {x0:.2} 0 Z")
+                } else {
+                    let x0 = (width - diag).max(0.0);
+                    let y_bot = (diag - width).max(0.0);
+                    format!(
+                        "M {x0:.2} 0 L {x_right:.2} 0 L {x_right:.2} {diag:.2} L {width:.2} {height:.2} L 0 {y_bot:.2} Z"
+                    )
+                }
             }
             WipeDirection::FromBottomLeft => {
-                let d = 2.0 * p;
-                let y0 = height * (1.0 - d);
-                let x1 = width * d;
-                format!("M 0 {height:.2} L 0 {y0:.2} L {x1:.2} {height:.2} Z")
+                let diag = (width + height) * p;
+                if diag <= width.min(height) {
+                    let y0 = height - diag;
+                    format!("M 0 {height:.2} L {diag:.2} {height:.2} L 0 {y0:.2} Z")
+                } else {
+                    format!("M 0 {height:.2} L {width:.2} {height:.2} L {width:.2} 0 L 0 0 Z")
+                }
             }
             WipeDirection::FromBottomRight => {
-                let d = 2.0 * p;
-                let x0 = width * (1.0 - d);
-                let y0 = height * (1.0 - d);
-                format!("M {width:.2} {height:.2} L {x0:.2} {height:.2} L {width:.2} {y0:.2} Z")
+                let diag = (width + height) * p;
+                if diag <= width.min(height) {
+                    let x0 = width - diag;
+                    let y0 = height - diag;
+                    format!("M {width:.2} {height:.2} L {x0:.2} {height:.2} L {width:.2} {y0:.2} Z")
+                } else {
+                    format!("M {width:.2} {height:.2} L 0 {height:.2} L 0 0 L {width:.2} 0 Z")
+                }
             }
         }
     }
@@ -187,50 +208,5 @@ impl<E: SceneEmitter> SceneEmitter for SceneLinearWipe<E> {
             });
         }
         Ok(())
-    }
-}
-
-/// Props for `<LinearWipe>` Dioxus component.
-#[derive(Props, Clone, PartialEq)]
-pub struct LinearWipeProps {
-    #[props(default = 20)]
-    pub enter_duration: u32,
-    #[props(default)]
-    pub direction: WipeDirection,
-    pub children: Element,
-}
-
-/// Linear polygon wipe component.
-#[component]
-pub fn LinearWipe(props: LinearWipeProps) -> Element {
-    let frame = use_current_frame() as f64;
-    let enter = props.enter_duration as f64;
-
-    let p = if enter > 0.0 {
-        interpolate(
-            frame,
-            &[0.0, enter],
-            &[0.0, 1.0],
-            InterpolateOptions {
-                extrapolate_left: ExtrapolateType::Clamp,
-                extrapolate_right: ExtrapolateType::Clamp,
-                ..Default::default()
-            },
-        )
-    } else {
-        1.0
-    } as f32;
-
-    let wipe = LinearWipe::new(props.direction);
-    let path = wipe.build_clip_path(100.0, 100.0, p);
-
-    rsx! {
-        div {
-            style: "
-                position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                clip-path: path('{path}');
-            ",
-            {props.children}
-        }
     }
 }

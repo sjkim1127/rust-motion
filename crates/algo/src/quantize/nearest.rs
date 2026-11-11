@@ -20,8 +20,19 @@ fn distance(a: [f32; 3], b: [f32; 3]) -> f32 {
 
 impl Nearest {
     pub(super) fn new(points: impl IntoIterator<Item = [f32; 3]>) -> Self {
-        let mut entries: Vec<Entry> = points.into_iter().enumerate().map(|(index, point)| Entry { point, index, axis: 0 }).collect();
-        let tree = entries.len() > 64 && entries.iter().all(|e| e.point.iter().all(|v| v.is_finite()));
+        let mut entries: Vec<Entry> = points
+            .into_iter()
+            .enumerate()
+            .map(|(index, point)| Entry {
+                point,
+                index,
+                axis: 0,
+            })
+            .collect();
+        let tree = entries.len() > 64
+            && entries
+                .iter()
+                .all(|e| e.point.iter().all(|v| v.is_finite()));
         if tree {
             partition(&mut entries);
         }
@@ -69,10 +80,16 @@ fn partition(entries: &mut [Entry]) {
             *hi = hi.max(p);
         }
     }
-    let axis = (0..3).max_by(|&a, &b| (hi[a] - lo[a]).total_cmp(&(hi[b] - lo[b]))).unwrap_or(0);
+    let axis = (0..3)
+        .max_by(|&a, &b| (hi[a] - lo[a]).total_cmp(&(hi[b] - lo[b])))
+        .unwrap_or(0);
     let mid = entries.len() / 2;
     // `mid` comes from this slice's length, never from image data.
-    let (left, pivot, right) = entries.select_nth_unstable_by(mid, |a, b| a.point[axis].total_cmp(&b.point[axis]).then(a.index.cmp(&b.index)));
+    let (left, pivot, right) = entries.select_nth_unstable_by(mid, |a, b| {
+        a.point[axis]
+            .total_cmp(&b.point[axis])
+            .then(a.index.cmp(&b.index))
+    });
     pivot.axis = axis;
     partition(left);
     partition(right);
@@ -86,10 +103,16 @@ fn search(entries: &[Entry], point: [f32; 3], best: &mut (f32, usize)) {
         return;
     }
     let (left, rest) = entries.split_at(entries.len() / 2);
-    let Some((pivot, right)) = rest.split_first() else { return };
+    let Some((pivot, right)) = rest.split_first() else {
+        return;
+    };
     consider(pivot, point, best);
     let delta = point[pivot.axis] - pivot.point[pivot.axis];
-    let (near, far) = if delta <= 0.0 { (left, right) } else { (right, left) };
+    let (near, far) = if delta <= 0.0 {
+        (left, right)
+    } else {
+        (right, left)
+    };
     if !near.is_empty() {
         search(near, point, best);
     }
@@ -124,7 +147,9 @@ mod tests {
         };
         for count in [0, 2, 8, 16, 17, 32, 64, 65, 128, 256] {
             for (offset, scale) in [(0.0, 255.0), (-128.0, 256.0)] {
-                let points: Vec<[f32; 3]> = (0..count).map(|_| std::array::from_fn(|_| random() * scale + offset)).collect();
+                let points: Vec<[f32; 3]> = (0..count)
+                    .map(|_| std::array::from_fn(|_| random() * scale + offset))
+                    .collect();
                 let lookup = Nearest::new(points.iter().copied());
                 for _ in 0..3000 {
                     let q = std::array::from_fn(|_| random() * scale + offset);
@@ -138,7 +163,11 @@ mod tests {
         let mut points = vec![[1.0; 3]; 256];
         points[250] = [-1.0; 3];
         let lookup = Nearest::new(points.iter().copied());
-        assert_eq!(lookup.find([0.0; 3]), 0, "equidistant entries preserve original order");
+        assert_eq!(
+            lookup.find([0.0; 3]),
+            0,
+            "equidistant entries preserve original order"
+        );
         points[0] = [f32::NAN; 3];
         let lookup = Nearest::new(points.iter().copied());
         assert_eq!(lookup.find([0.0; 3]), 1);

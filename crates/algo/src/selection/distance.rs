@@ -13,8 +13,15 @@ const BAND_ROWS: usize = 32;
 /// kernel. Working storage is one u32 per pixel in addition to the returned f32 buffer, plus
 /// a 32-row band and a row envelope per task.
 pub fn edt(inside: &[bool], w: usize, h: usize) -> Vec<f32> {
-    let Some(n) = w.checked_mul(h) else { return Vec::new() };
-    if n == 0 || n > isize::MAX as usize / std::mem::size_of::<u32>() || n != inside.len() || u32::try_from(w).is_err() || u32::try_from(h).is_err() {
+    let Some(n) = w.checked_mul(h) else {
+        return Vec::new();
+    };
+    if n == 0
+        || n > isize::MAX as usize / std::mem::size_of::<u32>()
+        || n != inside.len()
+        || u32::try_from(w).is_err()
+        || u32::try_from(h).is_err()
+    {
         return Vec::new();
     }
     if !inside.iter().any(|seed| *seed) {
@@ -23,7 +30,9 @@ pub fn edt(inside: &[bool], w: usize, h: usize) -> Vec<f32> {
     if inside.iter().all(|seed| *seed) {
         return vec![0.0; n];
     }
-    let Some(band_len) = w.checked_mul(BAND_ROWS) else { return Vec::new() };
+    let Some(band_len) = w.checked_mul(BAND_ROWS) else {
+        return Vec::new();
+    };
     // Column-major storage makes both distance sweeps contiguous. Only the boolean input
     // is read with a stride. Binary costs need two nearest-seed sweeps, not an envelope.
     let mut vertical = vec![NO_SEED; n];
@@ -72,7 +81,11 @@ pub fn edt(inside: &[bool], w: usize, h: usize) -> Vec<f32> {
     out
 }
 
-fn for_chunks<T: Send + Sync>(buf: &mut [T], stride: usize, f: impl Fn(usize, &mut [T]) + Sync + Send) {
+fn for_chunks<T: Send + Sync>(
+    buf: &mut [T],
+    stride: usize,
+    f: impl Fn(usize, &mut [T]) + Sync + Send,
+) {
     // Avoid starting Rayon tasks for the tiny masks used by tools and thumbnails.
     if buf.len() < 65_536 {
         for (i, chunk) in buf.chunks_mut(stride).enumerate() {
@@ -91,11 +104,14 @@ fn row_distance(costs: &[u32], out: &mut [f32], sites: &mut [usize], starts: &mu
         let fq = f64::from(distance).powi(2);
         let mut start = f64::NEG_INFINITY;
         while count > 0 {
-            let Some(&p) = sites.get(count - 1) else { return };
+            let Some(&p) = sites.get(count - 1) else {
+                return;
+            };
             let Some(&dp) = costs.get(p) else { return };
             // (q² - p²)/(2(q-p)) = (q+p)/2. This avoids subtracting large rounded
             // coordinate squares. f64 boundaries retain the half-pixel precision on PSBs.
-            start = (fq - f64::from(dp).powi(2)) / (2.0 * (q - p) as f64) + (q as f64 + p as f64) * 0.5;
+            start =
+                (fq - f64::from(dp).powi(2)) / (2.0 * (q - p) as f64) + (q as f64 + p as f64) * 0.5;
             if starts.get(count - 1).is_some_and(|s| start > *s) {
                 break;
             }

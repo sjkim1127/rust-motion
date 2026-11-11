@@ -1,37 +1,6 @@
-//! `<Polygon>` shape component (regular N-sided polygons).
+//! Polygon shape path generator (regular N-sided polygons).
 
-#[cfg(feature = "dioxus")]
-use crate::render_svg::RenderSvg;
-#[cfg(feature = "dioxus")]
-use dioxus::prelude::*;
 use std::f64::consts::PI;
-
-/// Props for the `<Polygon>` shape component.
-#[cfg(feature = "dioxus")]
-#[derive(Props, Clone, PartialEq)]
-pub struct PolygonProps {
-    /// Number of sides/vertices (e.g., 6 for hexagon, 8 for octagon).
-    #[props(default = 6)]
-    pub points: usize,
-    /// Outer radius of the polygon in pixels.
-    #[props(default = 100.0)]
-    pub radius: f64,
-    /// Fill color.
-    #[props(default = "#ffffff".to_string())]
-    pub fill: String,
-    /// Stroke color.
-    #[props(default = "none".to_string())]
-    pub stroke: String,
-    /// Stroke width.
-    #[props(default = 0.0)]
-    pub stroke_width: f64,
-    /// Opacity.
-    #[props(default = 1.0)]
-    pub opacity: f64,
-    /// Custom CSS styles.
-    #[props(default)]
-    pub style: String,
-}
 
 /// Generates SVG path string and dimensions for a regular N-sided polygon.
 pub fn make_polygon(points: usize, radius: f64) -> (String, f64, f64) {
@@ -58,26 +27,6 @@ pub fn make_polygon(points: usize, radius: f64) -> (String, f64, f64) {
     path_cmd.push_str(" Z");
 
     (path_cmd, size, size)
-}
-
-/// Renders a procedural SVG Polygon.
-#[cfg(feature = "dioxus")]
-#[component]
-pub fn Polygon(props: PolygonProps) -> Element {
-    let (path, width, height) = make_polygon(props.points, props.radius);
-
-    rsx! {
-        RenderSvg {
-            path,
-            width,
-            height,
-            fill: props.fill,
-            stroke: props.stroke,
-            stroke_width: props.stroke_width,
-            opacity: props.opacity,
-            style: props.style,
-        }
-    }
 }
 
 #[cfg(test)]

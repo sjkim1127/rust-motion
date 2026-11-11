@@ -82,7 +82,13 @@ pub struct WideAngle {
 
 impl Default for WideAngle {
     fn default() -> Self {
-        WideAngle { model: WideModel::Auto, focal_length: 0.0, crop_factor: 1.0, scale: 100.0, constraints: Vec::new() }
+        WideAngle {
+            model: WideModel::Auto,
+            focal_length: 0.0,
+            crop_factor: 1.0,
+            scale: 100.0,
+            constraints: Vec::new(),
+        }
     }
 }
 
@@ -121,7 +127,15 @@ impl Camera {
         } else {
             24.0
         };
-        Camera { model, f: f35 / 36.0 * w.max(h), c: [(frame.x0 + frame.x1) as f64 / 2.0, (frame.y0 + frame.y1) as f64 / 2.0], size: [w, h] }
+        Camera {
+            model,
+            f: f35 / 36.0 * w.max(h),
+            c: [
+                (frame.x0 + frame.x1) as f64 / 2.0,
+                (frame.y0 + frame.y1) as f64 / 2.0,
+            ],
+            size: [w, h],
+        }
     }
 
     /// Image px → unit ray (x right, y down, z forward).
@@ -136,7 +150,11 @@ impl Camera {
             WideModel::Fisheye => {
                 let r = dx.hypot(dy);
                 let th = r / self.f;
-                if r < 1e-12 { [0.0, 0.0, 1.0] } else { [th.sin() * dx / r, th.sin() * dy / r, th.cos()] }
+                if r < 1e-12 {
+                    [0.0, 0.0, 1.0]
+                } else {
+                    [th.sin() * dx / r, th.sin() * dy / r, th.cos()]
+                }
             }
             _ => [dx, dy, self.f],
         };
@@ -149,7 +167,10 @@ impl Camera {
             WideModel::FullSpherical => {
                 let lon = d[0].atan2(d[2]);
                 let lat = d[1].clamp(-1.0, 1.0).asin();
-                Some([self.c[0] + lon / std::f64::consts::TAU * self.size[0], self.c[1] + lat / std::f64::consts::PI * self.size[1]])
+                Some([
+                    self.c[0] + lon / std::f64::consts::TAU * self.size[0],
+                    self.c[1] + lat / std::f64::consts::PI * self.size[1],
+                ])
             }
             WideModel::Fisheye => {
                 let th = d[2].clamp(-1.0, 1.0).acos();
@@ -157,9 +178,17 @@ impl Camera {
                 if s < 1e-12 {
                     return Some(self.c);
                 }
-                Some([self.c[0] + self.f * th * d[0] / s, self.c[1] + self.f * th * d[1] / s])
+                Some([
+                    self.c[0] + self.f * th * d[0] / s,
+                    self.c[1] + self.f * th * d[1] / s,
+                ])
             }
-            _ => (d[2] > 1e-6).then(|| [self.c[0] + self.f * d[0] / d[2], self.c[1] + self.f * d[1] / d[2]]),
+            _ => (d[2] > 1e-6).then(|| {
+                [
+                    self.c[0] + self.f * d[0] / d[2],
+                    self.c[1] + self.f * d[1] / d[2],
+                ]
+            }),
         }
     }
 
@@ -173,8 +202,15 @@ impl Camera {
                 let d = if omega < 1e-9 {
                     da
                 } else {
-                    let (sa, sb) = (((1.0 - t) * omega).sin() / omega.sin(), (t * omega).sin() / omega.sin());
-                    norm([sa * da[0] + sb * db[0], sa * da[1] + sb * db[1], sa * da[2] + sb * db[2]])
+                    let (sa, sb) = (
+                        ((1.0 - t) * omega).sin() / omega.sin(),
+                        (t * omega).sin() / omega.sin(),
+                    );
+                    norm([
+                        sa * da[0] + sb * db[0],
+                        sa * da[1] + sb * db[1],
+                        sa * da[2] + sb * db[2],
+                    ])
                 };
                 self.pixel(d)
             })
@@ -219,7 +255,10 @@ impl WideMesh {
 
     /// Output position of source point `p` (bilinear in its grid cell).
     pub fn map(&self, frame: Rect, p: [f64; 2]) -> [f64; 2] {
-        let (cw, ch) = (frame.width() as f64 / self.nx as f64, frame.height() as f64 / self.ny as f64);
+        let (cw, ch) = (
+            frame.width() as f64 / self.nx as f64,
+            frame.height() as f64 / self.ny as f64,
+        );
         let gx = ((p[0] - frame.x0 as f64) / cw).clamp(0.0, self.nx as f64 - 1e-9);
         let gy = ((p[1] - frame.y0 as f64) / ch).clamp(0.0, self.ny as f64 - 1e-9);
         let (i, j) = (gx.floor() as usize, gy.floor() as usize);
@@ -245,8 +284,19 @@ pub fn solve(p: &WideAngle, frame: Rect) -> WideMesh {
     let (cw, ch) = (fw / nx as f64, fh / ny as f64);
     let w1 = nx + 1;
     let nv = w1 * (ny + 1);
-    let src: Vec<[f64; 2]> = (0..nv).map(|k| [frame.x0 as f64 + (k % w1) as f64 * cw, frame.y0 as f64 + (k / w1) as f64 * ch]).collect();
-    let curves: Vec<Vec<[f64; 2]>> = p.constraints.iter().map(|c| cam.arc(c.a, c.b, 24)).collect();
+    let src: Vec<[f64; 2]> = (0..nv)
+        .map(|k| {
+            [
+                frame.x0 as f64 + (k % w1) as f64 * cw,
+                frame.y0 as f64 + (k / w1) as f64 * ch,
+            ]
+        })
+        .collect();
+    let curves: Vec<Vec<[f64; 2]>> = p
+        .constraints
+        .iter()
+        .map(|c| cam.arc(c.a, c.b, 24))
+        .collect();
     let mut x: Vec<f64> = src.iter().flat_map(|s| [s[0], s[1]]).collect();
     // Bilinear weights of a source point in the grid.
     let weights = |q: [f64; 2]| -> [(usize, f64); 4] {
@@ -255,7 +305,12 @@ pub fn solve(p: &WideAngle, frame: Rect) -> WideMesh {
         let (i, j) = (gx.floor() as usize, gy.floor() as usize);
         let (tx, ty) = (gx - i as f64, gy - j as f64);
         let a = j * w1 + i;
-        [(a, (1.0 - tx) * (1.0 - ty)), (a + 1, tx * (1.0 - ty)), (a + w1, (1.0 - tx) * ty), (a + w1 + 1, tx * ty)]
+        [
+            (a, (1.0 - tx) * (1.0 - ty)),
+            (a + 1, tx * (1.0 - ty)),
+            (a + w1, (1.0 - tx) * ty),
+            (a + w1 + 1, tx * ty),
+        ]
     };
     let tris = {
         let mut t = Vec::new();
@@ -271,7 +326,9 @@ pub fn solve(p: &WideAngle, frame: Rect) -> WideMesh {
         }
         t
     };
-    let active: Vec<usize> = (0..curves.len()).filter(|&k| curves[k].len() >= 3).collect();
+    let active: Vec<usize> = (0..curves.len())
+        .filter(|&k| curves[k].len() >= 3)
+        .collect();
     if !active.is_empty() {
         let mut normals: Vec<[f64; 2]> = active.iter().map(|_| [0.0, 1.0]).collect();
         for round in 0..4 {
@@ -287,9 +344,29 @@ pub fn solve(p: &WideAngle, frame: Rect) -> WideMesh {
                     let u = (d[0] * e[0] + d[1] * e[1]) / l2;
                     let v = (d[0] * -e[1] + d[1] * e[0]) / l2;
                     // x: v0x − v1x − u (v2x − v1x) + v (v2y − v1y) = 0
-                    ls.add(vec![(2 * i0, 1.0), (2 * i1, -1.0 + u), (2 * i2, -u), (2 * i2 + 1, v), (2 * i1 + 1, -v)], 0.0, 1.0);
+                    ls.add(
+                        vec![
+                            (2 * i0, 1.0),
+                            (2 * i1, -1.0 + u),
+                            (2 * i2, -u),
+                            (2 * i2 + 1, v),
+                            (2 * i1 + 1, -v),
+                        ],
+                        0.0,
+                        1.0,
+                    );
                     // y: v0y − v1y − u (v2y − v1y) − v (v2x − v1x) = 0
-                    ls.add(vec![(2 * i0 + 1, 1.0), (2 * i1 + 1, -1.0 + u), (2 * i2 + 1, -u), (2 * i2, -v), (2 * i1, v)], 0.0, 1.0);
+                    ls.add(
+                        vec![
+                            (2 * i0 + 1, 1.0),
+                            (2 * i1 + 1, -1.0 + u),
+                            (2 * i2 + 1, -u),
+                            (2 * i2, -v),
+                            (2 * i1, v),
+                        ],
+                        0.0,
+                        1.0,
+                    );
                 }
             }
             // Weak anchoring to the source (fixes the global similarity).
@@ -322,7 +399,11 @@ pub fn solve(p: &WideAngle, frame: Rect) -> WideMesh {
             }
             x = ls.solve(&x, 400 + 200 * round);
             // Re-estimate free normals from the current end points.
-            let pos = |q: [f64; 2]| -> [f64; 2] { weights(q).iter().fold([0.0, 0.0], |acc, &(i, w)| [acc[0] + w * x[2 * i], acc[1] + w * x[2 * i + 1]]) };
+            let pos = |q: [f64; 2]| -> [f64; 2] {
+                weights(q).iter().fold([0.0, 0.0], |acc, &(i, w)| {
+                    [acc[0] + w * x[2 * i], acc[1] + w * x[2 * i + 1]]
+                })
+            };
             let mut changed = false;
             for (ci, &k) in active.iter().enumerate() {
                 let c = &curves[k];
@@ -335,7 +416,11 @@ pub fn solve(p: &WideAngle, frame: Rect) -> WideMesh {
                 }
                 normals[ci] = nn;
             }
-            if round == 0 && active.iter().all(|&k| p.constraints[k].orientation != Orientation::Free) {
+            if round == 0
+                && active
+                    .iter()
+                    .all(|&k| p.constraints[k].orientation != Orientation::Free)
+            {
                 break;
             }
             if round > 0 && !changed {
@@ -346,8 +431,24 @@ pub fn solve(p: &WideAngle, frame: Rect) -> WideMesh {
     // Scale about the centre.
     let s = (p.scale / 100.0).clamp(0.1, 10.0);
     let c = cam.c;
-    let verts: Vec<([f64; 2], [f64; 2])> = (0..nv).map(|k| ([c[0] + (x[2 * k] - c[0]) * s, c[1] + (x[2 * k + 1] - c[1]) * s], src[k])).collect();
-    let mut mesh = WideMesh { nx, ny, verts, curves, residual: 0.0 };
+    let verts: Vec<([f64; 2], [f64; 2])> = (0..nv)
+        .map(|k| {
+            (
+                [
+                    c[0] + (x[2 * k] - c[0]) * s,
+                    c[1] + (x[2 * k + 1] - c[1]) * s,
+                ],
+                src[k],
+            )
+        })
+        .collect();
+    let mut mesh = WideMesh {
+        nx,
+        ny,
+        verts,
+        curves,
+        residual: 0.0,
+    };
     // Straightness residual: distance of curve samples from the chord of their mapped ends.
     let mut worst = 0.0f64;
     for (k, cv) in mesh.curves.iter().enumerate() {
@@ -383,10 +484,20 @@ mod tests {
     fn camera_models_round_trip() {
         let frame = Rect::new(0, 0, 600, 400);
         for model in [WideModel::Fisheye, WideModel::Perspective] {
-            let cam = Camera::new(&WideAngle { model, focal_length: 15.0, ..Default::default() }, frame);
+            let cam = Camera::new(
+                &WideAngle {
+                    model,
+                    focal_length: 15.0,
+                    ..Default::default()
+                },
+                frame,
+            );
             for (x, y) in [(10.0, 20.0), (300.0, 200.0), (590.0, 350.0)] {
                 let p = cam.pixel(cam.ray(x, y)).unwrap();
-                assert!((p[0] - x).abs() < 1e-6 && (p[1] - y).abs() < 1e-6, "{model:?}");
+                assert!(
+                    (p[0] - x).abs() < 1e-6 && (p[1] - y).abs() < 1e-6,
+                    "{model:?}"
+                );
             }
         }
         let eq = Camera::new(&WideAngle::default(), Rect::new(0, 0, 800, 400));
@@ -394,13 +505,30 @@ mod tests {
         let p = eq.pixel(eq.ray(123.0, 77.0)).unwrap();
         assert!((p[0] - 123.0).abs() < 1e-6 && (p[1] - 77.0).abs() < 1e-6);
         // Perspective arcs are straight; fisheye arcs bend.
-        let cam = Camera::new(&WideAngle { model: WideModel::Perspective, ..Default::default() }, frame);
+        let cam = Camera::new(
+            &WideAngle {
+                model: WideModel::Perspective,
+                ..Default::default()
+            },
+            frame,
+        );
         let arc = cam.arc([50.0, 50.0], [550.0, 80.0], 10);
         let mid = arc[5];
         assert!((mid[1] - 65.0).abs() < 2.0, "{mid:?}");
-        let fish = Camera::new(&WideAngle { model: WideModel::Fisheye, focal_length: 8.0, ..Default::default() }, frame);
+        let fish = Camera::new(
+            &WideAngle {
+                model: WideModel::Fisheye,
+                focal_length: 8.0,
+                ..Default::default()
+            },
+            frame,
+        );
         let arc = fish.arc([50.0, 60.0], [550.0, 60.0], 10);
-        assert!(arc[5][1] < 50.0, "a line near the top bows away from the centre: {:?}", arc[5]);
+        assert!(
+            arc[5][1] < 50.0,
+            "a line near the top bows away from the centre: {:?}",
+            arc[5]
+        );
     }
 
     #[test]
@@ -410,8 +538,16 @@ mod tests {
             model: WideModel::Fisheye,
             focal_length: 8.0,
             constraints: vec![
-                Constraint { a: [60.0, 70.0], b: [420.0, 70.0], orientation: Orientation::Horizontal },
-                Constraint { a: [80.0, 60.0], b: [80.0, 260.0], orientation: Orientation::Free },
+                Constraint {
+                    a: [60.0, 70.0],
+                    b: [420.0, 70.0],
+                    orientation: Orientation::Horizontal,
+                },
+                Constraint {
+                    a: [80.0, 60.0],
+                    b: [80.0, 260.0],
+                    orientation: Orientation::Free,
+                },
             ],
             ..Default::default()
         };
@@ -426,11 +562,15 @@ mod tests {
         // The horizontal constraint is level.
         let pts: Vec<[f64; 2]> = mesh.curves[0].iter().map(|q| mesh.map(frame, *q)).collect();
         let ys: Vec<f64> = pts.iter().map(|q| q[1]).collect();
-        let spread = ys.iter().cloned().fold(f64::MIN, f64::max) - ys.iter().cloned().fold(f64::MAX, f64::min);
+        let spread = ys.iter().cloned().fold(f64::MIN, f64::max)
+            - ys.iter().cloned().fold(f64::MAX, f64::min);
         assert!(spread < 2.0, "{spread}");
         // Far from the constraints the image barely moves.
         let c = mesh.map(frame, [300.0, 250.0]);
-        assert!((c[0] - 300.0).abs() < 80.0 && (c[1] - 250.0).abs() < 40.0, "{c:?}");
+        assert!(
+            (c[0] - 300.0).abs() < 80.0 && (c[1] - 250.0).abs() < 40.0,
+            "{c:?}"
+        );
     }
 
     #[test]
@@ -440,8 +580,19 @@ mod tests {
         let mut s = Surface::new(PixelFormat::RGBA8);
         s.fill_rect(frame, &[0.2, 0.4, 0.6, 1.0]);
         let mesh = solve(&WideAngle::default(), frame);
-        assert!(mesh.verts.iter().all(|(o, s)| (o[0] - s[0]).abs() < 1e-9 && (o[1] - s[1]).abs() < 1e-9));
-        let out = apply(&s, frame, &WideAngle { scale: 80.0, ..Default::default() }, Interp::Bilinear);
+        assert!(mesh
+            .verts
+            .iter()
+            .all(|(o, s)| (o[0] - s[0]).abs() < 1e-9 && (o[1] - s[1]).abs() < 1e-9));
+        let out = apply(
+            &s,
+            frame,
+            &WideAngle {
+                scale: 80.0,
+                ..Default::default()
+            },
+            Interp::Bilinear,
+        );
         assert!(out.pixel(32, 24)[3] > 0.99 && out.pixel(1, 1)[3] < 0.01);
     }
 }
@@ -461,12 +612,19 @@ mod tile_tests {
             WideAngle {
                 model: WideModel::Fisheye,
                 focal_length: 12.0,
-                constraints: vec![Constraint { a: [20.0, 30.0], b: [700.0, 35.0], orientation: Orientation::Horizontal }],
+                constraints: vec![Constraint {
+                    a: [20.0, 30.0],
+                    b: [700.0, 35.0],
+                    orientation: Orientation::Horizontal,
+                }],
                 ..Default::default()
             },
         ] {
             let out = apply(&s, frame, &p, Interp::Bilinear);
-            let holes: Vec<(i32, i32)> = (80..440).flat_map(|y| (80..690).map(move |x| (x, y))).filter(|&(x, y)| out.rgba(x, y)[3] < 0.5).collect();
+            let holes: Vec<(i32, i32)> = (80..440)
+                .flat_map(|y| (80..690).map(move |x| (x, y)))
+                .filter(|&(x, y)| out.rgba(x, y)[3] < 0.5)
+                .collect();
             let m = solve(&p, frame);
             assert!(
                 holes.is_empty(),

@@ -31,7 +31,13 @@ impl MetadataItem {
         if data.len() % 2 == 1 {
             data.push(0);
         }
-        MetadataItem { signature: *b"8BIM", key, copy: false, reserved: [0; 3], data }
+        MetadataItem {
+            signature: *b"8BIM",
+            key,
+            copy: false,
+            reserved: [0; 3],
+            data,
+        }
     }
 }
 
@@ -48,7 +54,13 @@ pub fn parse_shmd(data: &[u8]) -> Result<Vec<MetadataItem>> {
         let reserved = r.array()?;
         let len = r.u32()?;
         let data = r.bytes_u64(u64::from(len))?.to_vec();
-        out.push(MetadataItem { signature, key, copy, reserved, data });
+        out.push(MetadataItem {
+            signature,
+            key,
+            copy,
+            reserved,
+            data,
+        });
     }
     if !r.is_empty() {
         return Err(PsdError::invalid("trailing bytes after metadata items"));
@@ -77,7 +89,13 @@ mod tests {
 
     #[test]
     fn roundtrip_exact() {
-        let items = vec![MetadataItem::new(*b"cmls", vec![1, 2, 3]), MetadataItem { copy: true, ..MetadataItem::new(*b"cust", vec![9; 4]) }];
+        let items = vec![
+            MetadataItem::new(*b"cmls", vec![1, 2, 3]),
+            MetadataItem {
+                copy: true,
+                ..MetadataItem::new(*b"cust", vec![9; 4])
+            },
+        ];
         assert_eq!(items[0].data.len(), 4);
         let bytes = write_shmd(&items);
         assert_eq!(parse_shmd(&bytes).unwrap(), items);

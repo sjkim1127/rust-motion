@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use crate::paint::{self, Paint, Stroke};
 use crate::stream::{ObjId, Stream, Tag};
-use crate::{Archive, Error, Limits, stream};
+use crate::{stream, Archive, Error, Limits};
 
 /// Affine map `x' = a·x + c·y + e`, `y' = b·x + d·y + f` (kurbo's coefficient order).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -23,12 +23,22 @@ impl Affine {
     pub fn then(self, outer: Self) -> Self {
         let [a, b, c, d, e, f] = self.0;
         let [oa, ob, oc, od, oe, of] = outer.0;
-        Self([oa * a + oc * b, ob * a + od * b, oa * c + oc * d, ob * c + od * d, oa * e + oc * f + oe, ob * e + od * f + of])
+        Self([
+            oa * a + oc * b,
+            ob * a + od * b,
+            oa * c + oc * d,
+            ob * c + od * d,
+            oa * e + oc * f + oe,
+            ob * e + od * f + of,
+        ])
     }
 
     pub fn apply(&self, p: Point) -> Point {
         let [a, b, c, d, e, f] = self.0;
-        Point { x: a * p.x + c * p.y + e, y: b * p.x + d * p.y + f }
+        Point {
+            x: a * p.x + c * p.y + e,
+            y: b * p.x + d * p.y + f,
+        }
     }
 
     /// Geometric mean of the axis scales: how much a stroke width or font size grows.
@@ -77,7 +87,15 @@ impl Path {
             subpaths: self
                 .subpaths
                 .iter()
-                .map(|s| SubPath { start: m.apply(s.start), segments: s.segments.iter().map(|seg| seg.map(|p| m.apply(p))).collect(), closed: s.closed })
+                .map(|s| SubPath {
+                    start: m.apply(s.start),
+                    segments: s
+                        .segments
+                        .iter()
+                        .map(|seg| seg.map(|p| m.apply(p)))
+                        .collect(),
+                    closed: s.closed,
+                })
                 .collect(),
         }
     }
@@ -305,7 +323,15 @@ pub(crate) struct Reader<'s, 'a, 'b> {
 
 impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
     fn new(s: &'s Stream, archive: &'b mut Archive<'a>, limits: Limits) -> Self {
-        Self { s, archive, dpi: 72.0, warnings: BTreeMap::new(), nodes: 0, active: HashSet::new(), pixels_left: limits.max_pixel_bytes }
+        Self {
+            s,
+            archive,
+            dpi: 72.0,
+            warnings: BTreeMap::new(),
+            nodes: 0,
+            active: HashSet::new(),
+            pixels_left: limits.max_pixel_bytes,
+        }
     }
 
     /// Admit a layer's decoded pixels before they are allocated (#4960). `rgba` is the layer's
@@ -328,7 +354,11 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
     fn document(mut self) -> Result<Document, Error> {
         let s = self.s;
         let root = s.root;
-        self.dpi = s.obj(root, b"UVCn").and_then(|u| s.f64(u, b"UPPI")).filter(|d| *d > 0.0 && *d < 100_000.0).unwrap_or(72.0);
+        self.dpi = s
+            .obj(root, b"UVCn")
+            .and_then(|u| s.f64(u, b"UPPI"))
+            .filter(|d| *d > 0.0 && *d < 100_000.0)
+            .unwrap_or(72.0);
         let saved_by = s.obj(root, b"NVer").map(|v| {
             let product = s.str(v, b"Prod").unwrap_or("Affinity");
             match (s.int(v, b"Majr"), s.int(v, b"Minr"), s.int(v, b"Bild")) {
@@ -336,7 +366,9 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
                 _ => product.to_string(),
             }
         });
-        let doc = s.obj(root, b"DocR").ok_or(Error::Malformed("document has no root node"))?;
+        let doc = s
+            .obj(root, b"DocR")
+            .ok_or(Error::Malformed("document has no root node"))?;
         let mut spreads = Vec::new();
         for spread in s.objs(doc, b"Chld") {
             if !s.is(spread, b"Sprd") {
@@ -344,19 +376,37 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
                 continue;
             }
             let pages = pages(s, spread);
-            let default_size = s.floats::<2>(doc, b"DfSz").filter(|[w, h]| *w > 0.0 && *h > 0.0).map(|[w, h]| Rect { x0: 0.0, y0: 0.0, x1: w, y1: h });
-            let bounds = s.floats::<4>(spread, b"SprB").map(rect).or_else(|| pages.iter().copied().reduce(union)).or(default_size).unwrap_or(Rect {
-                x0: 0.0,
-                y0: 0.0,
-                x1: 0.0,
-                y1: 0.0,
-            });
+            let default_size = s
+                .floats::<2>(doc, b"DfSz")
+                .filter(|[w, h]| *w > 0.0 && *h > 0.0)
+                .map(|[w, h]| Rect {
+                    x0: 0.0,
+                    y0: 0.0,
+                    x1: w,
+                    y1: h,
+                });
+            let bounds = s
+                .floats::<4>(spread, b"SprB")
+                .map(rect)
+                .or_else(|| pages.iter().copied().reduce(union))
+                .or(default_size)
+                .unwrap_or(Rect {
+                    x0: 0.0,
+                    y0: 0.0,
+                    x1: 0.0,
+                    y1: 0.0,
+                });
             let transparent = s.bool(spread, b"SprT").unwrap_or(false);
             let (nodes, mask) = self.children(spread, Affine::IDENTITY, 0)?;
             if mask.is_some() {
                 self.warn("mask layers directly on a page (imported without them)");
             }
-            spreads.push(Spread { bounds, pages, transparent, nodes });
+            spreads.push(Spread {
+                bounds,
+                pages,
+                transparent,
+                nodes,
+            });
         }
         if spreads.is_empty() {
             return Err(Error::Malformed("document has no pages"));
@@ -364,12 +414,26 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
         if !s.objs(doc, b"MpCh").is_empty() {
             self.warn("master pages (their content is not placed on the pages that use them)");
         }
-        let warnings = self.warnings.into_iter().map(|(w, n)| if n > 1 { format!("{w} ({n}×)") } else { w }).collect();
-        Ok(Document { dpi: self.dpi, spreads, saved_by, warnings })
+        let warnings = self
+            .warnings
+            .into_iter()
+            .map(|(w, n)| if n > 1 { format!("{w} ({n}×)") } else { w })
+            .collect();
+        Ok(Document {
+            dpi: self.dpi,
+            spreads,
+            saved_by,
+            warnings,
+        })
     }
 
     /// The children of `parent`, and the pixel mask a mask layer among them puts on the parent.
-    fn children(&mut self, parent: ObjId, world: Affine, depth: usize) -> Result<(Vec<Node>, Option<Image>), Error> {
+    fn children(
+        &mut self,
+        parent: ObjId,
+        world: Affine,
+        depth: usize,
+    ) -> Result<(Vec<Node>, Option<Image>), Error> {
         let s = self.s;
         let mut out = Vec::new();
         let mut mask = None;
@@ -379,10 +443,15 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
                 if s.bool(c, b"Visi") == Some(false) {
                     continue;
                 }
-                let local = s.floats::<6>(c, b"Xfrm").map(Affine::from_xfrm).unwrap_or(Affine::IDENTITY);
+                let local = s
+                    .floats::<6>(c, b"Xfrm")
+                    .map(Affine::from_xfrm)
+                    .unwrap_or(Affine::IDENTITY);
                 match crate::raster::mask(self, c, local.then(world))? {
                     Some(m) if mask.is_none() => mask = Some(m),
-                    Some(_) => self.warn("several pixel masks on one layer (only the first is used)"),
+                    Some(_) => {
+                        self.warn("several pixel masks on one layer (only the first is used)")
+                    }
                     None => {}
                 }
                 continue;
@@ -409,7 +478,10 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
             self.warn("a layer that contains itself");
             return Ok(None);
         }
-        let local = s.floats::<6>(id, b"Xfrm").map(Affine::from_xfrm).unwrap_or(Affine::IDENTITY);
+        let local = s
+            .floats::<6>(id, b"Xfrm")
+            .map(Affine::from_xfrm)
+            .unwrap_or(Affine::IDENTITY);
         let world = local.then(parent);
         let class = s.class(id).unwrap_or(Tag(0));
         let name = s.str(id, b"Desc").unwrap_or_default().to_string();
@@ -431,17 +503,41 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
             self.kind(id, class, world, parent)?
         };
         // A compound's children are its operands, already merged into its outline.
-        let (children, child_mask) = if class == Tag::of(b"Comp") { (Vec::new(), None) } else { self.children(id, world, depth)? };
+        let (children, child_mask) = if class == Tag::of(b"Comp") {
+            (Vec::new(), None)
+        } else {
+            self.children(id, world, depth)?
+        };
         let (mask, attached_mask) = self.attached_masks(id, world)?;
         let pixel_mask = attached_mask.or(child_mask);
         self.active.remove(&id);
-        if s.objs(id, b"FiEf").iter().any(|e| s.bool(*e, b"Enab") != Some(false)) {
+        if s.objs(id, b"FiEf")
+            .iter()
+            .any(|e| s.bool(*e, b"Enab") != Some(false))
+        {
             self.warn("layer effects (shadows, glows, outlines, bevels…)");
         }
-        Ok(Some(Node { class, name, visible, locked, opacity, blend, kind, mask, pixel_mask, children }))
+        Ok(Some(Node {
+            class,
+            name,
+            visible,
+            locked,
+            opacity,
+            blend,
+            kind,
+            mask,
+            pixel_mask,
+            children,
+        }))
     }
 
-    fn kind(&mut self, id: ObjId, class: Tag, world: Affine, parent: Affine) -> Result<Kind, Error> {
+    fn kind(
+        &mut self,
+        id: ObjId,
+        class: Tag,
+        world: Affine,
+        parent: Affine,
+    ) -> Result<Kind, Error> {
         let s = self.s;
         Ok(match &class.0.to_be_bytes() {
             b"Scop" => Kind::Layer,
@@ -450,18 +546,26 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
                 // Current .af boards carry artboard properties (aprp) in phrp; older
                 // documents use ABEn. Converted curve boards keep those properties too.
                 // Other property classes also use phrp, so the field alone is not a marker.
-                if s.bool(id, b"ABEn") == Some(true) || s.obj(id, b"phrp").is_some_and(|p| s.is(p, b"aprp")) {
+                if s.bool(id, b"ABEn") == Some(true)
+                    || s.obj(id, b"phrp").is_some_and(|p| s.is(p, b"aprp"))
+                {
                     if class != Tag::of(b"ShpN") {
                         self.warn("a converted artboard outline (imported at its bounding box)");
                     }
                     return Ok(self.artboard(id, world));
                 }
-                let Some((local, even_odd)) = crate::geometry::outline(self, id, class, world) else {
+                let Some((local, even_odd)) = crate::geometry::outline(self, id, class, world)
+                else {
                     self.warn(format!("a {} that could not be read", describe(class)));
                     return Ok(Kind::Unsupported);
                 };
                 let (fills, strokes) = paint::node_paint(self, id, world);
-                Kind::Shape { path: local.transformed(world), fills, strokes, even_odd }
+                Kind::Shape {
+                    path: local.transformed(world),
+                    fills,
+                    strokes,
+                    even_odd,
+                }
             }
             b"TxtA" | b"TxtF" | b"TxtC" => match crate::text::read(self, id, world) {
                 Some(t) => Kind::Text(t),
@@ -487,12 +591,23 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
             b"FRst" => {
                 // A fill layer paints its whole bitmap area; its gradient lives in page space.
                 let b = s.obj(id, b"Bitm");
-                let size = |t: &[u8; 4]| b.and_then(|b| s.int(b, t)).map(|v| v as f64).filter(|v| *v > 0.0);
+                let size = |t: &[u8; 4]| {
+                    b.and_then(|b| s.int(b, t))
+                        .map(|v| v as f64)
+                        .filter(|v| *v > 0.0)
+                };
                 match (size(b"BmpW"), size(b"BmpH")) {
                     (Some(w), Some(h)) => {
-                        let local = Path { subpaths: vec![crate::shapes::rectangle(0.0, 0.0, w, h)] };
+                        let local = Path {
+                            subpaths: vec![crate::shapes::rectangle(0.0, 0.0, w, h)],
+                        };
                         let fills = paint::fills(self, id, parent, b"BFFl");
-                        Kind::Shape { path: local.transformed(world), fills, strokes: Vec::new(), even_odd: false }
+                        Kind::Shape {
+                            path: local.transformed(world),
+                            fills,
+                            strokes: Vec::new(),
+                            even_odd: false,
+                        }
                     }
                     _ => {
                         self.warn("fill layers without an area");
@@ -509,7 +624,11 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
 
     /// Vector shapes attached to a node (`AdCh`) mask it: it shows only inside their outlines;
     /// an attached mask layer is a pixel mask. Adjustments attached the same way are reported.
-    fn attached_masks(&mut self, id: ObjId, world: Affine) -> Result<(Option<Path>, Option<Image>), Error> {
+    fn attached_masks(
+        &mut self,
+        id: ObjId,
+        world: Affine,
+    ) -> Result<(Option<Path>, Option<Image>), Error> {
         let s = self.s;
         let attached = s.objs(id, b"AdCh");
         let mut mask: Option<Path> = None;
@@ -520,19 +639,34 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
                 continue;
             }
             if class == Tag::of(b"PCrv") || class == Tag::of(b"ShpN") || class == Tag::of(b"Comp") {
-                let local = s.floats::<6>(a, b"Xfrm").map(Affine::from_xfrm).unwrap_or(Affine::IDENTITY).then(world);
+                let local = s
+                    .floats::<6>(a, b"Xfrm")
+                    .map(Affine::from_xfrm)
+                    .unwrap_or(Affine::IDENTITY)
+                    .then(world);
                 if let Some((p, _)) = crate::geometry::outline(self, a, class, local) {
-                    mask.get_or_insert_with(Path::default).subpaths.extend(p.transformed(local).subpaths);
+                    mask.get_or_insert_with(Path::default)
+                        .subpaths
+                        .extend(p.transformed(local).subpaths);
                 }
             } else if class == Tag::of(b"MRst") {
-                let local = s.floats::<6>(a, b"Xfrm").map(Affine::from_xfrm).unwrap_or(Affine::IDENTITY).then(world);
+                let local = s
+                    .floats::<6>(a, b"Xfrm")
+                    .map(Affine::from_xfrm)
+                    .unwrap_or(Affine::IDENTITY)
+                    .then(world);
                 match crate::raster::mask(self, a, local)? {
                     Some(m) if pixels.is_none() => pixels = Some(m),
-                    Some(_) => self.warn("several pixel masks on one layer (only the first is used)"),
+                    Some(_) => {
+                        self.warn("several pixel masks on one layer (only the first is used)")
+                    }
                     None => {}
                 }
             } else {
-                self.warn(format!("{} layers attached to other layers (imported without them)", describe(class)));
+                self.warn(format!(
+                    "{} layers attached to other layers (imported without them)",
+                    describe(class)
+                ));
             }
         }
         Ok((mask, pixels))
@@ -540,8 +674,19 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
 
     fn artboard(&mut self, id: ObjId, world: Affine) -> Kind {
         let s = self.s;
-        let b = s.floats::<4>(id, b"ShpB").map(rect).unwrap_or(Rect { x0: 0.0, y0: 0.0, x1: 0.0, y1: 0.0 });
-        let corners = [Point { x: b.x0, y: b.y0 }, Point { x: b.x1, y: b.y0 }, Point { x: b.x1, y: b.y1 }, Point { x: b.x0, y: b.y1 }].map(|p| world.apply(p));
+        let b = s.floats::<4>(id, b"ShpB").map(rect).unwrap_or(Rect {
+            x0: 0.0,
+            y0: 0.0,
+            x1: 0.0,
+            y1: 0.0,
+        });
+        let corners = [
+            Point { x: b.x0, y: b.y0 },
+            Point { x: b.x1, y: b.y0 },
+            Point { x: b.x1, y: b.y1 },
+            Point { x: b.x0, y: b.y1 },
+        ]
+        .map(|p| world.apply(p));
         let [a, b2, c, d, ..] = world.0;
         if b2.abs() > 1e-9 || c.abs() > 1e-9 || a <= 0.0 || d <= 0.0 {
             self.warn("a rotated or flipped artboard (imported at its bounding box)");
@@ -563,22 +708,41 @@ impl<'s, 'a, 'b> Reader<'s, 'a, 'b> {
 /// equal pages (Publisher 1 facing spreads).
 fn pages(s: &Stream, spread: ObjId) -> Vec<Rect> {
     if let Some(md) = s.obj(spread, b"SpMd") {
-        let v: Vec<Rect> = s.objs(md, b"PagR").into_iter().filter_map(|p| s.floats::<4>(p, b"rctp").map(rect)).filter(|r| r.x1 > r.x0 && r.y1 > r.y0).collect();
+        let v: Vec<Rect> = s
+            .objs(md, b"PagR")
+            .into_iter()
+            .filter_map(|p| s.floats::<4>(p, b"rctp").map(rect))
+            .filter(|r| r.x1 > r.x0 && r.y1 > r.y0)
+            .collect();
         if !v.is_empty() {
             return v;
         }
     }
-    match (s.floats::<4>(spread, b"SprB").map(rect), s.int(spread, b"PagC")) {
+    match (
+        s.floats::<4>(spread, b"SprB").map(rect),
+        s.int(spread, b"PagC"),
+    ) {
         (Some(b), Some(n @ 2..=16)) => {
             let w = (b.x1 - b.x0) / n as f64;
-            (0..n).map(|i| Rect { x0: b.x0 + w * i as f64, x1: b.x0 + w * (i + 1) as f64, ..b }).collect()
+            (0..n)
+                .map(|i| Rect {
+                    x0: b.x0 + w * i as f64,
+                    x1: b.x0 + w * (i + 1) as f64,
+                    ..b
+                })
+                .collect()
         }
         _ => Vec::new(),
     }
 }
 
 pub(crate) fn union(a: Rect, b: Rect) -> Rect {
-    Rect { x0: a.x0.min(b.x0), y0: a.y0.min(b.y0), x1: a.x1.max(b.x1), y1: a.y1.max(b.y1) }
+    Rect {
+        x0: a.x0.min(b.x0),
+        y0: a.y0.min(b.y0),
+        x1: a.x1.max(b.x1),
+        y1: a.y1.max(b.y1),
+    }
 }
 
 fn is_container(class: Tag) -> bool {
@@ -586,7 +750,12 @@ fn is_container(class: Tag) -> bool {
 }
 
 pub(crate) fn rect(v: [f64; 4]) -> Rect {
-    Rect { x0: v[0], y0: v[1], x1: v[2], y1: v[3] }
+    Rect {
+        x0: v[0],
+        y0: v[1],
+        x1: v[2],
+        y1: v[3],
+    }
 }
 
 /// A readable name for a layer class in warnings.

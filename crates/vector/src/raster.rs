@@ -65,7 +65,11 @@ impl Rasterizer {
     /// Empty rasterizer (renders nothing, or everything when `inverted`: the final result is
     /// inverted).
     pub fn new(inverted: bool) -> Self {
-        Rasterizer { inverted, union_only: true, ..Default::default() }
+        Rasterizer {
+            inverted,
+            union_only: true,
+            ..Default::default()
+        }
     }
 
     /// Adds a component made of closed polygons (open input is closed implicitly).
@@ -99,11 +103,21 @@ impl Rasterizer {
                     continue;
                 }
                 // Far beyond any pixel rectangle; keeps edge arithmetic from overflowing.
-                let clamp = |p: (f64, f64)| (p.0.clamp(-COORD_LIMIT, COORD_LIMIT), p.1.clamp(-COORD_LIMIT, COORD_LIMIT));
+                let clamp = |p: (f64, f64)| {
+                    (
+                        p.0.clamp(-COORD_LIMIT, COORD_LIMIT),
+                        p.1.clamp(-COORD_LIMIT, COORD_LIMIT),
+                    )
+                };
                 let (a, b) = (clamp(a), clamp(b));
                 self.bounds = Some(match self.bounds {
                     None => (a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1)),
-                    Some(bb) => (bb.0.min(a.0.min(b.0)), bb.1.min(a.1.min(b.1)), bb.2.max(a.0.max(b.0)), bb.3.max(a.1.max(b.1))),
+                    Some(bb) => (
+                        bb.0.min(a.0.min(b.0)),
+                        bb.1.min(a.1.min(b.1)),
+                        bb.2.max(a.0.max(b.0)),
+                        bb.3.max(a.1.max(b.1)),
+                    ),
                 });
                 if a.1 == b.1 {
                     continue;
@@ -115,7 +129,14 @@ impl Rasterizer {
                 if !dxdy.is_finite() {
                     continue;
                 }
-                self.edges.push(Edge { x0: p.0, y0: p.1, y1: q.1, dir, comp, dxdy });
+                self.edges.push(Edge {
+                    x0: p.0,
+                    y0: p.1,
+                    y1: q.1,
+                    dir,
+                    comp,
+                    dxdy,
+                });
             }
         }
     }
@@ -128,7 +149,12 @@ impl Rasterizer {
             return None;
         }
         let (x0, y0, x1, y1) = self.bounds?;
-        let r = Rect::new(x0.floor() as i32, y0.floor() as i32, (x1.ceil() as i32).saturating_add(1), (y1.ceil() as i32).saturating_add(1));
+        let r = Rect::new(
+            x0.floor() as i32,
+            y0.floor() as i32,
+            (x1.ceil() as i32).saturating_add(1),
+            (y1.ceil() as i32).saturating_add(1),
+        );
         (!r.is_empty()).then_some(r)
     }
 
@@ -182,11 +208,13 @@ impl Rasterizer {
         #[cfg(not(target_arch = "wasm32"))]
         if h > STRIP && w * h > 64 * 1024 {
             use rayon::prelude::*;
-            out.par_chunks_mut(w * STRIP).enumerate().for_each(|(i, chunk)| {
-                let y0 = rect.y0 + (i * STRIP) as i32;
-                let rows = chunk.len() / w;
-                self.render_into(Rect::new(rect.x0, y0, rect.x1, y0 + rows as i32), chunk);
-            });
+            out.par_chunks_mut(w * STRIP)
+                .enumerate()
+                .for_each(|(i, chunk)| {
+                    let y0 = rect.y0 + (i * STRIP) as i32;
+                    let rows = chunk.len() / w;
+                    self.render_into(Rect::new(rect.x0, y0, rect.x1, y0 + rows as i32), chunk);
+                });
             return out;
         }
         self.render_into(rect, &mut out);
@@ -200,7 +228,8 @@ impl Rasterizer {
         // Edges are sorted by y0; `next` is the first edge not yet activated.
         let top = f64::from(rect.y0);
         let mut next = self.edges.partition_point(|e| e.y0 < top);
-        st.active.extend((0..next).filter(|&i| self.edges[i].y1 > top));
+        st.active
+            .extend((0..next).filter(|&i| self.edges[i].y1 > top));
         for (row, y) in (rect.y0..rect.y1).enumerate() {
             let (ya, yb) = (f64::from(y), f64::from(y) + 1.0);
             st.active.retain(|&i| self.edges[i].y1 > ya);
@@ -214,9 +243,13 @@ impl Rasterizer {
             acc.iter_mut().for_each(|v| *v = 0.0);
             if st.active.is_empty() {
                 if self.inverted {
-                    out[row * w..(row + 1) * w].iter_mut().for_each(|v| *v = 1.0);
+                    out[row * w..(row + 1) * w]
+                        .iter_mut()
+                        .for_each(|v| *v = 1.0);
                 } else {
-                    out[row * w..(row + 1) * w].iter_mut().for_each(|v| *v = 0.0);
+                    out[row * w..(row + 1) * w]
+                        .iter_mut()
+                        .for_each(|v| *v = 0.0);
                 }
                 continue;
             }
@@ -263,7 +296,12 @@ impl Rasterizer {
             let e = &self.edges[i];
             if e.y0 <= mid && e.y1 >= mid {
                 let (xa, xb) = (e.x_at(a), e.x_at(b));
-                st.band.push(BandEdge { xa, xb, xm: 0.5 * (xa + xb), idx: i as u32 });
+                st.band.push(BandEdge {
+                    xa,
+                    xb,
+                    xm: 0.5 * (xa + xb),
+                    idx: i as u32,
+                });
             }
         }
         if st.band.is_empty() {
@@ -282,9 +320,17 @@ impl Rasterizer {
                 let bot = p.xb - q.xb;
                 if top > 1e-9 || bot > 1e-9 {
                     // Crossing where (p - q)(y) = 0, linear in y over the band.
-                    let t = if (top - bot).abs() > 1e-15 { top / (top - bot) } else { 0.5 };
+                    let t = if (top - bot).abs() > 1e-15 {
+                        top / (top - bot)
+                    } else {
+                        0.5
+                    };
                     let y = a + (b - a) * t.clamp(0.0, 1.0);
-                    let y = if y <= a + 1e-9 || y >= b - 1e-9 { mid } else { y };
+                    let y = if y <= a + 1e-9 || y >= b - 1e-9 {
+                        mid
+                    } else {
+                        y
+                    };
                     self.band(a, y, x0, st, depth + 1);
                     self.band(y, b, x0, st, depth + 1);
                     return;
@@ -339,7 +385,13 @@ struct RowState {
 
 impl RowState {
     fn new(comps: usize, width: usize) -> Self {
-        RowState { active: Vec::new(), cuts: Vec::new(), band: Vec::new(), wind: vec![0; comps.max(1)], acc: vec![0.0; width + 1] }
+        RowState {
+            active: Vec::new(),
+            cuts: Vec::new(),
+            band: Vec::new(),
+            wind: vec![0; comps.max(1)],
+            acc: vec![0.0; width + 1],
+        }
     }
 }
 
@@ -420,7 +472,11 @@ mod tests {
     #[test]
     fn axis_aligned_square_exact() {
         let mut r = Rasterizer::new(false);
-        r.add_component(&[square(2.25, 3.5, 4.0)], PathOp::Combine, FillRule::NonZero);
+        r.add_component(
+            &[square(2.25, 3.5, 4.0)],
+            PathOp::Combine,
+            FillRule::NonZero,
+        );
         let c = r.render(Rect::new(0, 0, 10, 10));
         assert!((sum(&c) - 16.0).abs() < 1e-4);
         assert!((c[3 * 10 + 2] - 0.75 * 0.5).abs() < 1e-5);
@@ -431,7 +487,11 @@ mod tests {
     #[test]
     fn clipped_rect_matches_full_render() {
         let mut r = Rasterizer::new(false);
-        r.add_component(&[vec![(1.3, 0.7), (17.9, 5.2), (8.1, 19.6)]], PathOp::Combine, FillRule::NonZero);
+        r.add_component(
+            &[vec![(1.3, 0.7), (17.9, 5.2), (8.1, 19.6)]],
+            PathOp::Combine,
+            FillRule::NonZero,
+        );
         let full = r.render(Rect::new(0, 0, 20, 20));
         let part = r.render(Rect::new(7, 4, 13, 15));
         for y in 4..15 {
@@ -459,12 +519,19 @@ mod tests {
         // overflow to infinity, and the NaN it gave at the edge's top dropped that boundary,
         // filling row 3 (#5195).
         let mut r = Rasterizer::new(false);
-        r.add_component(&[vec![(-1e308, 3.0), (1e308, 5.0), (-1e308, 5.0)]], PathOp::Combine, FillRule::NonZero);
+        r.add_component(
+            &[vec![(-1e308, 3.0), (1e308, 5.0), (-1e308, 5.0)]],
+            PathOp::Combine,
+            FillRule::NonZero,
+        );
         let c = r.render(Rect::new(0, 0, 10, 8));
         assert!(c.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)));
         for (y, row) in c.chunks(10).enumerate() {
             let expect = if y == 4 { 1.0 } else { 0.0 };
-            assert!(row.iter().all(|v| (v - expect).abs() < 1e-3), "row {y}: {row:?}");
+            assert!(
+                row.iter().all(|v| (v - expect).abs() < 1e-3),
+                "row {y}: {row:?}"
+            );
         }
     }
 
@@ -473,9 +540,24 @@ mod tests {
         // Components sharing top rows (tied `y0`s) and a subtraction: one stable sort at the end
         // gives the exact edge order (and so the exact bits) of a sort after every component.
         let comps = [
-            (vec![square(1.0, 1.0, 6.0), vec![(2.5, 1.0), (9.0, 4.0), (3.0, 8.5)]], PathOp::Combine, FillRule::NonZero),
-            (vec![square(3.0, 1.0, 2.5)], PathOp::Subtract, FillRule::EvenOdd),
-            (vec![vec![(0.5, 1.0), (8.0, 1.0), (4.2, 7.7)]], PathOp::Exclude, FillRule::NonZero),
+            (
+                vec![
+                    square(1.0, 1.0, 6.0),
+                    vec![(2.5, 1.0), (9.0, 4.0), (3.0, 8.5)],
+                ],
+                PathOp::Combine,
+                FillRule::NonZero,
+            ),
+            (
+                vec![square(3.0, 1.0, 2.5)],
+                PathOp::Subtract,
+                FillRule::EvenOdd,
+            ),
+            (
+                vec![vec![(0.5, 1.0), (8.0, 1.0), (4.2, 7.7)]],
+                PathOp::Exclude,
+                FillRule::NonZero,
+            ),
         ];
         let (mut each, mut once) = (Rasterizer::new(false), Rasterizer::new(false));
         for (polys, op, rule) in &comps {
@@ -493,9 +575,16 @@ mod tests {
     fn pixel_bounds_clip_upper_edge_at_i32_max() {
         let mut r = Rasterizer::new(false);
         let max = f64::from(i32::MAX);
-        r.add_component(&[square(max - 2.0, max - 2.0, 4.0)], PathOp::Combine, FillRule::NonZero);
+        r.add_component(
+            &[square(max - 2.0, max - 2.0, 4.0)],
+            PathOp::Combine,
+            FillRule::NonZero,
+        );
 
-        assert_eq!(r.pixel_bounds(), Some(Rect::new(i32::MAX - 2, i32::MAX - 2, i32::MAX, i32::MAX)));
+        assert_eq!(
+            r.pixel_bounds(),
+            Some(Rect::new(i32::MAX - 2, i32::MAX - 2, i32::MAX, i32::MAX))
+        );
 
         // Raster work clipped to a normal document area stays empty and does not use the
         // extreme bounds as an allocation size.
@@ -507,7 +596,11 @@ mod tests {
     fn pixel_bounds_beyond_i32_max_are_empty() {
         let mut r = Rasterizer::new(false);
         let max = f64::from(i32::MAX);
-        r.add_component(&[square(max + 10.0, max + 10.0, 4.0)], PathOp::Combine, FillRule::NonZero);
+        r.add_component(
+            &[square(max + 10.0, max + 10.0, 4.0)],
+            PathOp::Combine,
+            FillRule::NonZero,
+        );
 
         assert_eq!(r.pixel_bounds(), None);
     }

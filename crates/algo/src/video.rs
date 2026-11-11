@@ -3,14 +3,20 @@
 use rust_motion_color::ColorMode;
 use rust_motion_geom::Rect;
 
-use crate::Ctx;
-use crate::fxutil::{MAXC, rgba, set_rgba, xy};
+use crate::fxutil::{rgba, set_rgba, xy, MAXC};
 use crate::image::Image;
+use crate::Ctx;
 
 /// De-Interlace: removes one field (odd = lines 1, 3, 5… counted from the
 /// bounds' top, i.e. even offsets) and rebuilds it from the neighbouring
 /// kept lines by duplication or (premultiplied) interpolation.
-pub(crate) fn deinterlace(src: &Image, out: Rect, ctx: &Ctx, eliminate_even: bool, interpolate: bool) -> Vec<f32> {
+pub(crate) fn deinterlace(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    eliminate_even: bool,
+    interpolate: bool,
+) -> Vec<f32> {
     let n = src.ch;
     let b = ctx.bounds;
     let mut res = src.crop(out);
@@ -36,7 +42,11 @@ pub(crate) fn deinterlace(src: &Image, out: Rect, ctx: &Ctx, eliminate_even: boo
         acc[..n].fill(0.0);
         let k = 1.0 / cnt as f32;
         for &yy in &rows[..cnt] {
-            let a = if ctx.alpha { src.get(x, yy, n - 1) } else { 1.0 };
+            let a = if ctx.alpha {
+                src.get(x, yy, n - 1)
+            } else {
+                1.0
+            };
             for (c, v) in acc.iter_mut().enumerate().take(n) {
                 let s = src.get(x, yy, c);
                 *v += if ctx.alpha && c < n - 1 { s * a } else { s } * k;
@@ -60,7 +70,11 @@ pub(crate) fn ntsc(src: &Image, out: Rect, ctx: &Ctx) -> Vec<f32> {
     let native = ctx.mode == ColorMode::Rgb;
     let mut res = src.crop(out);
     for px in res.chunks_exact_mut(n) {
-        let c = if native { [px[0], px[1], px[2], 1.0] } else { rgba(ctx, px) };
+        let c = if native {
+            [px[0], px[1], px[2], 1.0]
+        } else {
+            rgba(ctx, px)
+        };
         let yy = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
         let ii = 0.595_716 * c[0] - 0.274_453 * c[1] - 0.321_263 * c[2];
         let qq = 0.211_456 * c[0] - 0.522_591 * c[1] + 0.311_135 * c[2];
@@ -79,7 +93,11 @@ pub(crate) fn ntsc(src: &Image, out: Rect, ctx: &Ctx) -> Vec<f32> {
             continue;
         }
         let (i2, q2) = (ii * k, qq * k);
-        let rgb = [yy + 0.956_3 * i2 + 0.621_0 * q2, yy - 0.272_1 * i2 - 0.647_4 * q2, yy - 1.107_0 * i2 + 1.704_6 * q2];
+        let rgb = [
+            yy + 0.956_3 * i2 + 0.621_0 * q2,
+            yy - 0.272_1 * i2 - 0.647_4 * q2,
+            yy - 1.107_0 * i2 + 1.704_6 * q2,
+        ];
         if native {
             px[..3].copy_from_slice(&rgb);
         } else {

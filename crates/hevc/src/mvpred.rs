@@ -2,10 +2,23 @@
 //! and temporal motion vector prediction (8.5.3.2.8, 8.5.3.2.9).
 
 use crate::picture::RefPic;
-use crate::slicedec::{F_INTRA, MvField, PartMode, SliceDecoder};
+use crate::slicedec::{MvField, PartMode, SliceDecoder, F_INTRA};
 
 /// l0CandIdx / l1CandIdx of Table 8-7.
-const COMB: [(usize, usize); 12] = [(0, 1), (1, 0), (0, 2), (2, 0), (1, 2), (2, 1), (0, 3), (3, 0), (1, 3), (3, 1), (2, 3), (3, 2)];
+const COMB: [(usize, usize); 12] = [
+    (0, 1),
+    (1, 0),
+    (0, 2),
+    (2, 0),
+    (1, 2),
+    (2, 1),
+    (0, 3),
+    (3, 0),
+    (1, 3),
+    (3, 1),
+    (2, 3),
+    (3, 2),
+];
 
 /// Motion vector scaling (8-179 .. 8-183).
 pub fn scale_mv(mv: [i16; 2], td: i32, tb: i32) -> [i16; 2] {
@@ -38,7 +51,19 @@ fn same_motion(a: &MvField, b: &MvField) -> bool {
 
 impl<'a, S: crate::picture::Sample> SliceDecoder<'a, S> {
     /// Prediction block availability (6.4.2).
-    fn pb_avail(&self, xc: i32, yc: i32, ncb: i32, xp: i32, yp: i32, w: i32, h: i32, part_idx: usize, xn: i32, yn: i32) -> bool {
+    fn pb_avail(
+        &self,
+        xc: i32,
+        yc: i32,
+        ncb: i32,
+        xp: i32,
+        yp: i32,
+        w: i32,
+        h: i32,
+        part_idx: usize,
+        xn: i32,
+        yn: i32,
+    ) -> bool {
         let same_cb = xc <= xn && yc <= yn && xc + ncb > xn && yc + ncb > yn;
         let avail = if !same_cb {
             self.pic.zavail(xp, yp, xn, yn, self.slice_addr)
@@ -73,23 +98,41 @@ impl<'a, S: crate::picture::Sample> SliceDecoder<'a, S> {
         merge_idx: usize,
     ) -> MvField {
         let pml = self.pps.log2_parallel_merge_level;
-        let (xp, yp, w, h, part_idx) = if pml > 2 && ncb == 8 { (xc, yc, ncb, ncb, 0) } else { (xp0, yp0, w0, h0, part_idx0) };
+        let (xp, yp, w, h, part_idx) = if pml > 2 && ncb == 8 {
+            (xc, yc, ncb, ncb, 0)
+        } else {
+            (xp0, yp0, w0, h0, part_idx0)
+        };
         let same_mer = |xn: i32, yn: i32| (xp >> pml) == (xn >> pml) && (yp >> pml) == (yn >> pml);
-        let avail = |xn: i32, yn: i32| self.pb_avail(xc, yc, ncb, xp, yp, w, h, part_idx, xn, yn) && !same_mer(xn, yn);
+        let avail = |xn: i32, yn: i32| {
+            self.pb_avail(xc, yc, ncb, xp, yp, w, h, part_idx, xn, yn) && !same_mer(xn, yn)
+        };
         let mut list: [MvField; 5] = [MvField::default(); 5];
         let mut n = 0;
         let max = self.sh.max_num_merge_cand as usize;
         // spatial candidates (8.5.3.2.3)
         let pa1 = (xp - 1, yp + h - 1);
-        let av_a1 = avail(pa1.0, pa1.1) && !(matches!(part, PartMode::PNx2N | PartMode::PnLx2N | PartMode::PnRx2N) && part_idx == 1);
-        let m_a1 = if av_a1 { self.mv_at(pa1.0, pa1.1) } else { MvField::default() };
+        let av_a1 = avail(pa1.0, pa1.1)
+            && !(matches!(part, PartMode::PNx2N | PartMode::PnLx2N | PartMode::PnRx2N)
+                && part_idx == 1);
+        let m_a1 = if av_a1 {
+            self.mv_at(pa1.0, pa1.1)
+        } else {
+            MvField::default()
+        };
         if av_a1 {
             list[n] = m_a1;
             n += 1;
         }
         let pb1 = (xp + w - 1, yp - 1);
-        let av_b1 = avail(pb1.0, pb1.1) && !(matches!(part, PartMode::P2NxN | PartMode::P2NxnU | PartMode::P2NxnD) && part_idx == 1);
-        let m_b1 = if av_b1 { self.mv_at(pb1.0, pb1.1) } else { MvField::default() };
+        let av_b1 = avail(pb1.0, pb1.1)
+            && !(matches!(part, PartMode::P2NxN | PartMode::P2NxnU | PartMode::P2NxnD)
+                && part_idx == 1);
+        let m_b1 = if av_b1 {
+            self.mv_at(pb1.0, pb1.1)
+        } else {
+            MvField::default()
+        };
         let fl_b1 = av_b1 && !(av_a1 && same_motion(&m_a1, &m_b1));
         if fl_b1 {
             list[n] = m_b1;
@@ -119,7 +162,8 @@ impl<'a, S: crate::picture::Sample> SliceDecoder<'a, S> {
         let av_b2 = avail(pb2.0, pb2.1);
         let fl_b2 = av_b2 && {
             let m = self.mv_at(pb2.0, pb2.1);
-            !((av_a1 && same_motion(&m_a1, &m)) || (av_b1 && same_motion(&m_b1, &m))) && (fl_a0 as u32 + av_a1 as u32 + fl_b0 as u32 + fl_b1 as u32) != 4
+            !((av_a1 && same_motion(&m_a1, &m)) || (av_b1 && same_motion(&m_b1, &m)))
+                && (fl_a0 as u32 + av_a1 as u32 + fl_b0 as u32 + fl_b1 as u32) != 4
         };
         if fl_b2 {
             list[n] = self.mv_at(pb2.0, pb2.1);
@@ -157,8 +201,15 @@ impl<'a, S: crate::picture::Sample> SliceDecoder<'a, S> {
             while comb < num_orig * (num_orig - 1) && cands.len() < max {
                 let (i0, i1) = COMB[comb];
                 let (c0, c1) = (cands[i0], cands[i1]);
-                if c0.pred(0) && c1.pred(1) && (self.ref_pic(0, c0.ref_idx[0]).poc != self.ref_pic(1, c1.ref_idx[1]).poc || c0.mv[0] != c1.mv[1]) {
-                    cands.push(MvField { mv: [c0.mv[0], c1.mv[1]], ref_idx: [c0.ref_idx[0], c1.ref_idx[1]] });
+                if c0.pred(0)
+                    && c1.pred(1)
+                    && (self.ref_pic(0, c0.ref_idx[0]).poc != self.ref_pic(1, c1.ref_idx[1]).poc
+                        || c0.mv[0] != c1.mv[1])
+                {
+                    cands.push(MvField {
+                        mv: [c0.mv[0], c1.mv[1]],
+                        ref_idx: [c0.ref_idx[0], c1.ref_idx[1]],
+                    });
                 }
                 comb += 1;
             }
@@ -167,11 +218,22 @@ impl<'a, S: crate::picture::Sample> SliceDecoder<'a, S> {
             return self.finish_merge(cands[merge_idx], w0, h0);
         }
         // zero candidates (8.5.3.2.5)
-        let num_ref = if self.sh.is_b() { self.sh.num_ref_idx[0].min(self.sh.num_ref_idx[1]) } else { self.sh.num_ref_idx[0] } as usize;
+        let num_ref = if self.sh.is_b() {
+            self.sh.num_ref_idx[0].min(self.sh.num_ref_idx[1])
+        } else {
+            self.sh.num_ref_idx[0]
+        } as usize;
         let mut zero_idx = 0;
         while cands.len() <= merge_idx {
-            let r = if zero_idx < num_ref { zero_idx as i8 } else { 0 };
-            cands.push(MvField { mv: [[0; 2]; 2], ref_idx: [r, if self.sh.is_b() { r } else { -1 }] });
+            let r = if zero_idx < num_ref {
+                zero_idx as i8
+            } else {
+                0
+            };
+            cands.push(MvField {
+                mv: [[0; 2]; 2],
+                ref_idx: [r, if self.sh.is_b() { r } else { -1 }],
+            });
             zero_idx += 1;
         }
         self.finish_merge(cands[merge_idx], w0, h0)
@@ -191,7 +253,15 @@ impl<'a, S: crate::picture::Sample> SliceDecoder<'a, S> {
     }
 
     /// Temporal luma motion vector prediction (8.5.3.2.8).
-    pub fn temporal(&self, xp: i32, yp: i32, w: i32, h: i32, l: usize, ref_idx: usize) -> Option<[i16; 2]> {
+    pub fn temporal(
+        &self,
+        xp: i32,
+        yp: i32,
+        w: i32,
+        h: i32,
+        l: usize,
+        ref_idx: usize,
+    ) -> Option<[i16; 2]> {
         let col = self.col.as_ref()?;
         let s = self.sps.log2_ctb;
         let (xbr, ybr) = (xp + w, yp + h);
@@ -232,7 +302,11 @@ impl<'a, S: crate::picture::Sample> SliceDecoder<'a, S> {
         }
         let col_diff = col.poc - cm.ref_poc[list_col];
         let cur_diff = self.pic.poc - cur.poc;
-        if cur.long_term || col_diff == cur_diff { Some(mv) } else { Some(scale_mv(mv, col_diff, cur_diff)) }
+        if cur.long_term || col_diff == cur_diff {
+            Some(mv)
+        } else {
+            Some(scale_mv(mv, col_diff, cur_diff))
+        }
     }
 
     /// AMVP predictor (8.5.3.2.6, 8.5.3.2.7).
@@ -273,10 +347,19 @@ impl<'a, S: crate::picture::Sample> SliceDecoder<'a, S> {
             } else {
                 None
             };
-            pick.map(|(mv, r)| if r.poc != tpoc && !r.long_term && !tlt { scale_mv(mv, cur_poc - r.poc, cur_poc - tpoc) } else { mv })
+            pick.map(|(mv, r)| {
+                if r.poc != tpoc && !r.long_term && !tlt {
+                    scale_mv(mv, cur_poc - r.poc, cur_poc - tpoc)
+                } else {
+                    mv
+                }
+            })
         };
         let pa = [(xp - 1, yp + h), (xp - 1, yp + h - 1)];
-        let av_a = [self.pb_avail(xc, yc, ncb, xp, yp, w, h, part_idx, pa[0].0, pa[0].1), self.pb_avail(xc, yc, ncb, xp, yp, w, h, part_idx, pa[1].0, pa[1].1)];
+        let av_a = [
+            self.pb_avail(xc, yc, ncb, xp, yp, w, h, part_idx, pa[0].0, pa[0].1),
+            self.pb_avail(xc, yc, ncb, xp, yp, w, h, part_idx, pa[1].0, pa[1].1),
+        ];
         let is_scaled = av_a[0] || av_a[1];
         let mut a = None;
         for k in 0..2 {
@@ -292,7 +375,8 @@ impl<'a, S: crate::picture::Sample> SliceDecoder<'a, S> {
             }
         }
         let pb = [(xp + w, yp - 1), (xp + w - 1, yp - 1), (xp - 1, yp - 1)];
-        let av_b = [0, 1, 2].map(|k| self.pb_avail(xc, yc, ncb, xp, yp, w, h, part_idx, pb[k].0, pb[k].1));
+        let av_b =
+            [0, 1, 2].map(|k| self.pb_avail(xc, yc, ncb, xp, yp, w, h, part_idx, pb[k].0, pb[k].1));
         let mut b = None;
         for k in 0..3 {
             if av_b[k] && b.is_none() {

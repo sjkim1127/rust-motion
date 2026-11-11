@@ -8,7 +8,14 @@ fn sigma_of(blur: f32) -> f32 {
 const LEVELS: usize = 6;
 
 /// Blurs `src` over `out` with a per-pixel σ (`sigma(x, y)`, ≤ `smax`).
-fn variable_blur(src: &Image, out: Rect, ctx: &Ctx, smax: f32, trim_levels: bool, sigma: impl Fn(f32, f32) -> f32) -> Vec<f32> {
+fn variable_blur(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    smax: f32,
+    trim_levels: bool,
+    sigma: impl Fn(f32, f32) -> f32,
+) -> Vec<f32> {
     let n = src.ch;
     if n == 0 || out.is_empty() {
         return Vec::new();
@@ -19,15 +26,25 @@ fn variable_blur(src: &Image, out: Rect, ctx: &Ctx, smax: f32, trim_levels: bool
     let win = src.rect;
     let (ww, wh) = (win.width() as usize, win.height() as usize);
     let (ow, oh) = (out.width() as usize, out.height() as usize);
-    let Some(row_len) = ww.checked_mul(n).filter(|&len| len > 0) else { return Vec::new() };
-    let Some(source_len) = row_len.checked_mul(wh) else { return Vec::new() };
-    let Some(pixels) = ow.checked_mul(oh) else { return Vec::new() };
-    let Some(samples) = pixels.checked_mul(n) else { return Vec::new() };
+    let Some(row_len) = ww.checked_mul(n).filter(|&len| len > 0) else {
+        return Vec::new();
+    };
+    let Some(source_len) = row_len.checked_mul(wh) else {
+        return Vec::new();
+    };
+    let Some(pixels) = ow.checked_mul(oh) else {
+        return Vec::new();
+    };
+    let Some(samples) = pixels.checked_mul(n) else {
+        return Vec::new();
+    };
     if trim_levels && src.data.len() != source_len {
         return Vec::new();
     }
     // Level σs: 0, then smax / 2^(LEVELS-1) … smax.
-    let lv: Vec<f32> = std::iter::once(0.0).chain((0..LEVELS).map(|k| smax / 2f32.powi((LEVELS - 1 - k) as i32))).collect();
+    let lv: Vec<f32> = std::iter::once(0.0)
+        .chain((0..LEVELS).map(|k| smax / 2f32.powi((LEVELS - 1 - k) as i32)))
+        .collect();
     let sig: Vec<f32> = (0..pixels)
         .map(|i| {
             let (x, y) = xy(out, i);
@@ -69,10 +86,22 @@ fn variable_blur(src: &Image, out: Rect, ctx: &Ctx, smax: f32, trim_levels: bool
             // not the maximum blur's trailing halo. Keep the original top/left:
             // moving the running sums' start changes floating-point cancellation.
             let trim = trim_levels && win.intersect(&out) == out;
-            let reach = if !trim || lvk < 0.3 { 0 } else { gauss_box_radii(lvk).iter().sum::<usize>() };
+            let reach = if !trim || lvk < 0.3 {
+                0
+            } else {
+                gauss_box_radii(lvk).iter().sum::<usize>()
+            };
             let reach = i32::try_from(reach).unwrap_or(i32::MAX);
-            let lw = if trim { (i64::from(out.x1.saturating_add(reach).min(win.x1)) - i64::from(win.x0)) as usize } else { ww };
-            let lh = if trim { (i64::from(out.y1.saturating_add(reach).min(win.y1)) - i64::from(win.y0)) as usize } else { wh };
+            let lw = if trim {
+                (i64::from(out.x1.saturating_add(reach).min(win.x1)) - i64::from(win.x0)) as usize
+            } else {
+                ww
+            };
+            let lh = if trim {
+                (i64::from(out.y1.saturating_add(reach).min(win.y1)) - i64::from(win.y0)) as usize
+            } else {
+                wh
+            };
             buf.clear();
             if buf.capacity() == 0 {
                 // Match the old single full-window allocation. Row appends must
@@ -118,10 +147,22 @@ fn short_side(b: Rect) -> f32 {
 /// Tilt-Shift: a sharp band through the centre at `angle`, blurring with
 /// distance beyond `focus` over `transition` (both fractions of the shorter side).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn tilt_shift(src: &Image, out: Rect, ctx: &Ctx, blur: f32, centre: (f32, f32), angle: f32, focus: f32, transition: f32) -> Vec<f32> {
+pub(crate) fn tilt_shift(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    blur: f32,
+    centre: (f32, f32),
+    angle: f32,
+    focus: f32,
+    transition: f32,
+) -> Vec<f32> {
     let b = ctx.bounds;
     let ss = short_side(b);
-    let (cx, cy) = (b.x0 as f32 + centre.0 * b.width() as f32, b.y0 as f32 + centre.1 * b.height() as f32);
+    let (cx, cy) = (
+        b.x0 as f32 + centre.0 * b.width() as f32,
+        b.y0 as f32 + centre.1 * b.height() as f32,
+    );
     // Band normal (the band runs along `angle`).
     let (s, c) = angle.to_radians().sin_cos();
     let (nx, ny) = (s, c);

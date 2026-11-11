@@ -31,9 +31,9 @@ use crate::file::{GlobalLayerMask, LayerInfoPlacement, PsdFile};
 use crate::header::{Header, Version};
 use crate::image_data::ImageData;
 use crate::io::{Reader, WriteExt};
-use crate::layer::{LayerInfo, LayerMask, mask_parameter_bytes};
+use crate::layer::{mask_parameter_bytes, LayerInfo, LayerMask};
 use crate::resources::ImageResource;
-use crate::tagged::{TaggedBlock, read_blocks, uses_long_length};
+use crate::tagged::{read_blocks, uses_long_length, TaggedBlock};
 
 /// The byte order of a TIFF container (and so of the Photoshop data inside it).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -104,9 +104,10 @@ fn block_order(rest: &[u8]) -> Result<ByteOrder> {
     match rest.get(..4) {
         None | Some(b"8BIM") | Some(b"8B64") => Ok(ByteOrder::Big),
         Some(b"MIB8") | Some(b"46B8") => Ok(ByteOrder::Little),
-        Some(other) => {
-            Err(PsdError::InvalidSignature { expected: "8BIM or MIB8 (Photoshop image source data block)", found: [other[0], other[1], other[2], other[3]] })
-        }
+        Some(other) => Err(PsdError::InvalidSignature {
+            expected: "8BIM or MIB8 (Photoshop image source data block)",
+            found: [other[0], other[1], other[2], other[3]],
+        }),
     }
 }
 
@@ -117,13 +118,16 @@ impl ImageSourceData {
         let (version, rest) = match data.get(..36) {
             Some(s) if s == SIGNATURE => (Version::Psd, &data[36..]),
             Some(s) if s == SIGNATURE_PSB => (Version::Psb, &data[36..]),
-            _ => return Err(PsdError::invalid("not Photoshop image source data (missing \"Adobe Photoshop Document Data Block\")")),
+            _ => return Err(PsdError::invalid(
+                "not Photoshop image source data (missing \"Adobe Photoshop Document Data Block\")",
+            )),
         };
         let byte_order = block_order(rest)?;
         let mut warnings = Vec::new();
         let big;
         let rest = if byte_order.is_little() {
-            let (b, w) = transcode::transcode_blocks(rest, version, ByteOrder::Little, ByteOrder::Big)?;
+            let (b, w) =
+                transcode::transcode_blocks(rest, version, ByteOrder::Little, ByteOrder::Big)?;
             warnings = w;
             big = b;
             &big[..]
@@ -134,19 +138,42 @@ impl ImageSourceData {
         // Blocks in a TIFF are padded to 4 (`to_bytes` re-pads them), so zero padding is the
         // canonical default here, as even-length padding is in a PSD.
         for b in &mut blocks {
-            if b.padding.as_ref().is_some_and(|p| p.len() <= 3 && p.iter().all(|&x| x == 0)) {
+            if b.padding
+                .as_ref()
+                .is_some_and(|p| p.len() <= 3 && p.iter().all(|&x| x == 0))
+            {
                 b.padding = None;
             }
         }
         let mut layer_info = None;
         let mut layer_info_key = *b"Layr";
-        if let Some(i) = blocks.iter().position(|b| matches!(&b.key, b"Layr" | b"Lr16" | b"Lr32")) {
+        if let Some(i) = blocks
+            .iter()
+            .position(|b| matches!(&b.key, b"Layr" | b"Lr16" | b"Lr32"))
+        {
             let b = blocks.remove(i);
             layer_info = Some(LayerInfo::read_body(&b.data, version)?);
             layer_info_key = b.key;
         }
-        let global_layer_mask = blocks.iter().position(|b| &b.key == b"LMsk").map(|i| GlobalLayerMask { data: blocks.remove(i).data });
-        Ok((ImageSourceData { version, byte_order, layer_info, layer_info_key, global_layer_mask, global_blocks: blocks, trailing }, warnings))
+        let global_layer_mask =
+            blocks
+                .iter()
+                .position(|b| &b.key == b"LMsk")
+                .map(|i| GlobalLayerMask {
+                    data: blocks.remove(i).data,
+                });
+        Ok((
+            ImageSourceData {
+                version,
+                byte_order,
+                layer_info,
+                layer_info_key,
+                global_layer_mask,
+                global_blocks: blocks,
+                trailing,
+            },
+            warnings,
+        ))
     }
 
     /// Serializes the data in `order`. Returns the bytes and warnings about blocks that were
@@ -158,7 +185,8 @@ impl ImageSourceData {
             // Pad to 4 without cloning the layers (and all their pixel data) just to set `padding`.
             let pad = info.pad_len(version, 4)?;
             let mut data = Vec::new();
-            data.try_reserve(info.channel_data_len().saturating_add(pad)).map_err(|_| PsdError::LimitExceeded("not enough memory for the layer data"))?;
+            data.try_reserve(info.channel_data_len().saturating_add(pad))
+                .map_err(|_| PsdError::LimitExceeded("not enough memory for the layer data"))?;
             info.write_unpadded(&mut data, version)?;
             data.resize(data.len() + pad, 0);
             padded_block(self.layer_info_key, data).write(&mut body, version, 4)?;
@@ -173,10 +201,17 @@ impl ImageSourceData {
             b.write(&mut body, version, 4)?;
         }
         body.put(&self.trailing);
-        let (body, warnings) =
-            if order.is_little() { transcode::transcode_blocks(&body, version, ByteOrder::Big, ByteOrder::Little)? } else { (body, Vec::new()) };
+        let (body, warnings) = if order.is_little() {
+            transcode::transcode_blocks(&body, version, ByteOrder::Big, ByteOrder::Little)?
+        } else {
+            (body, Vec::new())
+        };
         let mut out = Vec::with_capacity(36 + body.len());
-        out.put(if version.is_psb() { SIGNATURE_PSB } else { SIGNATURE });
+        out.put(if version.is_psb() {
+            SIGNATURE_PSB
+        } else {
+            SIGNATURE
+        });
         out.put(&body);
         Ok((out, warnings))
     }
@@ -201,12 +236,23 @@ impl ImageSourceData {
     /// Assembles a PSD model from this data plus the parts a TIFF stores natively: the header
     /// (dimensions, depth, colour mode, channel count), the image resources (tag 34377) and the
     /// merged image (the TIFF's pixels).
-    pub fn into_psd(self, header: Header, resources: Vec<ImageResource>, image_data: ImageData) -> PsdFile {
-        let placement = if matches!(&self.layer_info_key, b"Lr16" | b"Lr32") && self.layer_info.is_some() {
-            LayerInfoPlacement::GlobalBlock { index: 0, signature: *b"8BIM", key: self.layer_info_key, padding: None }
-        } else {
-            LayerInfoPlacement::Section
-        };
+    pub fn into_psd(
+        self,
+        header: Header,
+        resources: Vec<ImageResource>,
+        image_data: ImageData,
+    ) -> PsdFile {
+        let placement =
+            if matches!(&self.layer_info_key, b"Lr16" | b"Lr32") && self.layer_info.is_some() {
+                LayerInfoPlacement::GlobalBlock {
+                    index: 0,
+                    signature: *b"8BIM",
+                    key: self.layer_info_key,
+                    padding: None,
+                }
+            } else {
+                LayerInfoPlacement::Section
+            };
         PsdFile {
             header,
             color_mode_data: Vec::new(),
@@ -224,7 +270,12 @@ impl ImageSourceData {
 /// A block padded to a multiple of 4, as Photoshop writes them in TIFFs.
 fn padded_block(key: [u8; 4], data: Vec<u8>) -> TaggedBlock {
     let pad = (4 - data.len() % 4) % 4;
-    TaggedBlock { signature: *b"8BIM", key, data, padding: Some(vec![0; pad]) }
+    TaggedBlock {
+        signature: *b"8BIM",
+        key,
+        data,
+        padding: Some(vec![0; pad]),
+    }
 }
 
 /// Parses a 34377 tag (image resources). Little-endian resource blocks (`MIB8`) are converted;
@@ -272,21 +323,35 @@ pub mod transcode {
     use super::*;
 
     /// Converts the tagged blocks after the 37724 header string from `from` to `to`.
-    pub fn transcode_blocks(data: &[u8], version: Version, from: ByteOrder, to: ByteOrder) -> Result<(Vec<u8>, Vec<String>)> {
+    pub fn transcode_blocks(
+        data: &[u8],
+        version: Version,
+        from: ByteOrder,
+        to: ByteOrder,
+    ) -> Result<(Vec<u8>, Vec<String>)> {
         let mut t = Tx::new(data, version, from, to);
         t.blocks()?;
         Ok(t.finish())
     }
 
     /// Converts a layer-info body (the data of a `Layr` / `Lr16` / `Lr32` block) between orders.
-    pub fn transcode_layer_info(data: &[u8], version: Version, from: ByteOrder, to: ByteOrder) -> Result<(Vec<u8>, Vec<String>)> {
+    pub fn transcode_layer_info(
+        data: &[u8],
+        version: Version,
+        from: ByteOrder,
+        to: ByteOrder,
+    ) -> Result<(Vec<u8>, Vec<String>)> {
         let mut t = Tx::new(data, version, from, to);
         t.layer_info()?;
         Ok(t.finish())
     }
 
     /// Converts image-resource blocks (a 34377 tag) between orders.
-    pub fn transcode_resources(data: &[u8], from: ByteOrder, to: ByteOrder) -> Result<(Vec<u8>, Vec<String>)> {
+    pub fn transcode_resources(
+        data: &[u8],
+        from: ByteOrder,
+        to: ByteOrder,
+    ) -> Result<(Vec<u8>, Vec<String>)> {
         let mut t = Tx::new(data, Version::Psd, from, to);
         t.resources()?;
         Ok(t.finish())
@@ -298,7 +363,9 @@ pub mod transcode {
         if little {
             b.starts_with(b"MIB8") || b.starts_with(b"46B8")
         } else {
-            b.starts_with(b"8BIM") || b.starts_with(b"8B64") || TaggedBlock::is_foreign_order_signature(b)
+            b.starts_with(b"8BIM")
+                || b.starts_with(b"8B64")
+                || TaggedBlock::is_foreign_order_signature(b)
         }
     }
 
@@ -324,7 +391,11 @@ pub mod transcode {
         ($name:ident, $ty:ty) => {
             fn $name(&mut self) -> Result<$ty> {
                 let v = self.r.$name()?;
-                self.out.extend_from_slice(&if self.to.is_little() { v.to_le_bytes() } else { v.to_be_bytes() });
+                self.out.extend_from_slice(&if self.to.is_little() {
+                    v.to_le_bytes()
+                } else {
+                    v.to_be_bytes()
+                });
                 Ok(v)
             }
         };
@@ -332,8 +403,20 @@ pub mod transcode {
 
     impl<'a> Tx<'a> {
         fn new(data: &'a [u8], version: Version, from: ByteOrder, to: ByteOrder) -> Self {
-            let r = if from.is_little() { Reader::new_little(data) } else { Reader::new(data) };
-            Tx { r, out: Vec::with_capacity(data.len()), from, to, version, warnings: Vec::new(), depth: 0 }
+            let r = if from.is_little() {
+                Reader::new_little(data)
+            } else {
+                Reader::new(data)
+            };
+            Tx {
+                r,
+                out: Vec::with_capacity(data.len()),
+                from,
+                to,
+                version,
+                warnings: Vec::new(),
+                depth: 0,
+            }
         }
 
         fn finish(self) -> (Vec<u8>, Vec<String>) {
@@ -344,8 +427,20 @@ pub mod transcode {
         /// takes the buffer, so a nested structure is written once, not copied up per level. Hand
         /// the buffer back with [`Self::adopt`] before returning, error or not.
         fn nested<'b>(&mut self, data: &'b [u8], depth: usize) -> Tx<'b> {
-            let r = if self.from.is_little() { Reader::new_little(data) } else { Reader::new(data) };
-            Tx { r, out: std::mem::take(&mut self.out), from: self.from, to: self.to, version: self.version, warnings: Vec::new(), depth }
+            let r = if self.from.is_little() {
+                Reader::new_little(data)
+            } else {
+                Reader::new(data)
+            };
+            Tx {
+                r,
+                out: std::mem::take(&mut self.out),
+                from: self.from,
+                to: self.to,
+                version: self.version,
+                warnings: Vec::new(),
+                depth,
+            }
         }
 
         /// Takes the output buffer back from a [`Self::nested`] walker.
@@ -377,8 +472,16 @@ pub mod transcode {
 
         fn f32(&mut self) -> Result<()> {
             let b = self.r.array::<4>()?;
-            let v = if self.from.is_little() { f32::from_le_bytes(b) } else { f32::from_be_bytes(b) };
-            self.out.extend_from_slice(&if self.to.is_little() { v.to_le_bytes() } else { v.to_be_bytes() });
+            let v = if self.from.is_little() {
+                f32::from_le_bytes(b)
+            } else {
+                f32::from_be_bytes(b)
+            };
+            self.out.extend_from_slice(&if self.to.is_little() {
+                v.to_le_bytes()
+            } else {
+                v.to_be_bytes()
+            });
             Ok(())
         }
 
@@ -410,7 +513,11 @@ pub mod transcode {
         }
 
         fn len(&mut self, long: bool) -> Result<u64> {
-            if long { self.u64() } else { Ok(u64::from(self.u32()?)) }
+            if long {
+                self.u64()
+            } else {
+                Ok(u64::from(self.u32()?))
+            }
         }
 
         fn u16s(&mut self, n: usize) -> Result<()> {
@@ -484,7 +591,9 @@ pub mod transcode {
             self.adopt(&mut child);
             res?;
             if self.out.len() - start != data.len() {
-                return Err(PsdError::invalid("byte-order conversion changed a structure's length"));
+                return Err(PsdError::invalid(
+                    "byte-order conversion changed a structure's length",
+                ));
             }
             self.warnings.append(&mut child.warnings);
             Ok(())
@@ -492,21 +601,36 @@ pub mod transcode {
 
         /// Reads a length field (4 bytes, or 8 when `long`), transcodes that many bytes with `f`
         /// and writes the length of the result: blocks dropped inside shrink the field.
-        fn sized_region(&mut self, long: bool, f: impl FnOnce(&mut Tx<'_>) -> Result<()>) -> Result<()> {
+        fn sized_region(
+            &mut self,
+            long: bool,
+            f: impl FnOnce(&mut Tx<'_>) -> Result<()>,
+        ) -> Result<()> {
             self.sized_region_counting(long, false, f)
         }
 
         /// [`Self::sized_region`] for a u32 length that counts its own 4 bytes.
-        fn sized_region_inclusive(&mut self, f: impl FnOnce(&mut Tx<'_>) -> Result<()>) -> Result<()> {
+        fn sized_region_inclusive(
+            &mut self,
+            f: impl FnOnce(&mut Tx<'_>) -> Result<()>,
+        ) -> Result<()> {
             self.sized_region_counting(false, true, f)
         }
 
-        fn sized_region_counting(&mut self, long: bool, inclusive: bool, f: impl FnOnce(&mut Tx<'_>) -> Result<()>) -> Result<()> {
+        fn sized_region_counting(
+            &mut self,
+            long: bool,
+            inclusive: bool,
+            f: impl FnOnce(&mut Tx<'_>) -> Result<()>,
+        ) -> Result<()> {
             let mut len = self.r.len_field(long)?;
             let at = self.out.len();
-            self.out.extend_from_slice(if long { &[0u8; 8] } else { &[0u8; 4] });
+            self.out
+                .extend_from_slice(if long { &[0u8; 8] } else { &[0u8; 4] });
             if inclusive {
-                len = len.checked_sub(4).ok_or_else(|| PsdError::invalid("length shorter than its own field"))?;
+                len = len
+                    .checked_sub(4)
+                    .ok_or_else(|| PsdError::invalid("length shorter than its own field"))?;
             }
             let data = self.r.bytes_u64(len)?;
             let start = self.out.len();
@@ -515,7 +639,11 @@ pub mod transcode {
             self.adopt(&mut child);
             res?;
             self.warnings.append(&mut child.warnings);
-            self.patch_len(at, long, (self.out.len() - start) as u64 + if inclusive { 4 } else { 0 })?;
+            self.patch_len(
+                at,
+                long,
+                (self.out.len() - start) as u64 + if inclusive { 4 } else { 0 },
+            )?;
             Ok(())
         }
 
@@ -523,7 +651,9 @@ pub mod transcode {
         /// trailing zero bytes are left. On a miss nothing is consumed or written.
         fn attempt(&mut self, f: impl FnOnce(&mut Tx<'_>) -> Result<()>) -> bool {
             let (reader, written) = (self.r.clone(), self.out.len());
-            let ok = f(self).is_ok() && self.remaining() <= 3 && self.r.peek_rest().iter().all(|&b| b == 0);
+            let ok = f(self).is_ok()
+                && self.remaining() <= 3
+                && self.r.peek_rest().iter().all(|&b| b == 0);
             if !ok {
                 self.r = reader;
                 self.out.truncate(written);
@@ -545,13 +675,23 @@ pub mod transcode {
         /// Writes `n` into the length placeholder at `at`.
         fn patch_len(&mut self, at: usize, long: bool, n: u64) -> Result<()> {
             if long {
-                let b = if self.to.is_little() { n.to_le_bytes() } else { n.to_be_bytes() };
+                let b = if self.to.is_little() {
+                    n.to_le_bytes()
+                } else {
+                    n.to_be_bytes()
+                };
                 if let Some(slot) = self.out.get_mut(at..at + 8) {
                     slot.copy_from_slice(&b);
                 }
             } else {
-                let n = u32::try_from(n).map_err(|_| PsdError::LimitExceeded("structure too large for a 32-bit length"))?;
-                let b = if self.to.is_little() { n.to_le_bytes() } else { n.to_be_bytes() };
+                let n = u32::try_from(n).map_err(|_| {
+                    PsdError::LimitExceeded("structure too large for a 32-bit length")
+                })?;
+                let b = if self.to.is_little() {
+                    n.to_le_bytes()
+                } else {
+                    n.to_be_bytes()
+                };
                 if let Some(slot) = self.out.get_mut(at..at + 4) {
                     slot.copy_from_slice(&b);
                 }
@@ -585,7 +725,11 @@ pub mod transcode {
                 self.version = Version::Psb;
             }
             let compression = self.u16()?;
-            let res = if compression == 1 { self.rle_counts(rows) } else { Ok(()) };
+            let res = if compression == 1 {
+                self.rle_counts(rows)
+            } else {
+                Ok(())
+            };
             self.version = saved;
             res?;
             self.rest()
@@ -678,7 +822,8 @@ pub mod transcode {
             // A `MIB8` / `46B8` marker in big-endian data: a block kept verbatim from a
             // little-endian file. Written back as it was into little-endian output (its `8BIM`
             // signature reversed, as every signature there), copied as is otherwise.
-            if !self.from.is_little() && TaggedBlock::is_foreign_order_signature(self.r.peek_rest()) {
+            if !self.from.is_little() && TaggedBlock::is_foreign_order_signature(self.r.peek_rest())
+            {
                 let sig = self.r.array::<4>()?;
                 let mut key = self.r.array::<4>()?;
                 let long = uses_long_length(self.version, &{
@@ -696,11 +841,17 @@ pub mod transcode {
                 self.out.extend_from_slice(&sig);
                 self.out.extend_from_slice(&key);
                 let n = self.out.len();
-                self.out.extend_from_slice(if long { &[0u8; 8] } else { &[0u8; 4] });
+                self.out
+                    .extend_from_slice(if long { &[0u8; 8] } else { &[0u8; 4] });
                 self.patch_len(n, long, len)?;
                 self.out.extend_from_slice(data);
                 let rest = self.r.peek_rest();
-                let pad = (0..=3usize).find(|&k| k == rest.len() || (k < rest.len() && is_sig(&rest[k..], self.from.is_little()))).unwrap_or(0);
+                let pad = (0..=3usize)
+                    .find(|&k| {
+                        k == rest.len()
+                            || (k < rest.len() && is_sig(&rest[k..], self.from.is_little()))
+                    })
+                    .unwrap_or(0);
                 let pad_bytes = self.r.bytes(pad)?;
                 self.out.extend_from_slice(pad_bytes);
                 return Ok(());
@@ -711,7 +862,8 @@ pub mod transcode {
             let long = uses_long_length(self.version, &key);
             let len = self.r.len_field(long)?;
             let len_at = self.out.len();
-            self.out.extend_from_slice(if long { &[0u8; 8] } else { &[0u8; 4] });
+            self.out
+                .extend_from_slice(if long { &[0u8; 8] } else { &[0u8; 4] });
             let data = self.r.bytes_u64(len)?;
             // The body is transcoded straight into this output, after the length placeholder.
             let data_at = self.out.len();
@@ -723,7 +875,11 @@ pub mod transcode {
             } else {
                 child.block_body(&key)
             };
-            let rest = if matches!(handled, Ok(true)) { child.rest() } else { Ok(()) };
+            let rest = if matches!(handled, Ok(true)) {
+                child.rest()
+            } else {
+                Ok(())
+            };
             self.adopt(&mut child);
             rest?;
             if !matches!(handled, Ok(true)) {
@@ -732,7 +888,11 @@ pub mod transcode {
             }
             // Padding: the smallest k in 0..=3 after which the next block (or the end) starts.
             let rest = self.r.peek_rest();
-            let pad = (0..=3usize).find(|&k| k == rest.len() || (k < rest.len() && is_sig(&rest[k..], self.from.is_little()))).unwrap_or(0);
+            let pad = (0..=3usize)
+                .find(|&k| {
+                    k == rest.len() || (k < rest.len() && is_sig(&rest[k..], self.from.is_little()))
+                })
+                .unwrap_or(0);
             let pad_bytes = self.r.bytes(pad)?;
             match handled {
                 Ok(true) => {
@@ -761,18 +921,31 @@ pub mod transcode {
                         data.len()
                     ));
                 }
-                Err(e) if self.same_order() => return Err(PsdError::invalid(format!("{} block: {e}", String::from_utf8_lossy(&key)))),
+                Err(e) if self.same_order() => {
+                    return Err(PsdError::invalid(format!(
+                        "{} block: {e}",
+                        String::from_utf8_lossy(&key)
+                    )))
+                }
                 Err(e) if self.from.is_little() => {
                     let marker: &[u8; 4] = if &sig == b"8B64" { b"46B8" } else { b"MIB8" };
                     self.out[sig_at..sig_at + 4].copy_from_slice(marker);
                     self.patch_len(len_at, long, data.len() as u64)?;
                     self.out.extend_from_slice(data);
                     self.out.extend_from_slice(pad_bytes);
-                    self.warnings.push(format!("{} block ({} bytes) kept as stored, in little-endian layout: {e}", String::from_utf8_lossy(&key), data.len()));
+                    self.warnings.push(format!(
+                        "{} block ({} bytes) kept as stored, in little-endian layout: {e}",
+                        String::from_utf8_lossy(&key),
+                        data.len()
+                    ));
                 }
                 Err(e) => {
                     self.out.truncate(before);
-                    self.warnings.push(format!("{} block ({} bytes) dropped: {e}", String::from_utf8_lossy(&key), data.len()));
+                    self.warnings.push(format!(
+                        "{} block ({} bytes) dropped: {e}",
+                        String::from_utf8_lossy(&key),
+                        data.len()
+                    ));
                 }
             }
             Ok(())
@@ -822,8 +995,8 @@ pub mod transcode {
                     self.u32()?;
                     self.versioned_descriptor()?;
                 }
-                b"SoCo" | b"GdFl" | b"PtFl" | b"vstk" | b"blwh" | b"vibA" | b"CgEd" | b"artb" | b"artd" | b"cinf" | b"cust" | b"PxSD" | b"GenI" | b"OCIO"
-                | b"extn" | b"pths" => {
+                b"SoCo" | b"GdFl" | b"PtFl" | b"vstk" | b"blwh" | b"vibA" | b"CgEd" | b"artb"
+                | b"artd" | b"cinf" | b"cust" | b"PxSD" | b"GenI" | b"OCIO" | b"extn" | b"pths" => {
                     self.versioned_descriptor()?;
                 }
                 // Color Lookup: u16 version, then the descriptor.
@@ -975,7 +1148,8 @@ pub mod transcode {
                     if &kind == b"liFA" {
                         t.raw(8)?;
                     }
-                    let data_len = usize::try_from(data_len).map_err(|_| PsdError::LimitExceeded("linked file length"))?;
+                    let data_len = usize::try_from(data_len)
+                        .map_err(|_| PsdError::LimitExceeded("linked file length"))?;
                     if &kind == b"liFD" {
                         t.raw(data_len)?;
                     }
@@ -1058,7 +1232,10 @@ pub mod transcode {
                 }
                 let sig = self.key()?;
                 if &sig != b"8BIM" {
-                    return Err(PsdError::InvalidSignature { expected: "8BIM (layer blend mode)", found: sig });
+                    return Err(PsdError::InvalidSignature {
+                        expected: "8BIM (layer blend mode)",
+                        found: sig,
+                    });
                 }
                 self.key()?;
                 for _ in 0..4 {
@@ -1143,7 +1320,10 @@ pub mod transcode {
                 let pf = self.u8()?;
                 let need = mask_parameter_bytes(pf);
                 if need > self.remaining() {
-                    return Err(PsdError::UnexpectedEof { offset: self.r.pos(), needed: need - self.remaining() });
+                    return Err(PsdError::UnexpectedEof {
+                        offset: self.r.pos(),
+                        needed: need - self.remaining(),
+                    });
                 }
                 if pf & 1 != 0 {
                     self.u8()?;
@@ -1256,13 +1436,21 @@ pub mod transcode {
                 b"type" | b"GlbC" => self.class()?,
                 b"alis" | b"Pth " | b"tdta" => {
                     let n = self.u32()?;
-                    self.raw(usize::try_from(n).map_err(|_| PsdError::LimitExceeded("descriptor data length"))?)?;
+                    self.raw(
+                        usize::try_from(n)
+                            .map_err(|_| PsdError::LimitExceeded("descriptor data length"))?,
+                    )?;
                 }
                 b"ObAr" => {
                     self.u32()?;
                     self.descriptor()?;
                 }
-                other => return Err(PsdError::Unsupported(format!("descriptor OSType {:?}", String::from_utf8_lossy(other)))),
+                other => {
+                    return Err(PsdError::Unsupported(format!(
+                        "descriptor OSType {:?}",
+                        String::from_utf8_lossy(other)
+                    )))
+                }
             }
             Ok(())
         }
@@ -1291,7 +1479,12 @@ pub mod transcode {
                     self.class()?;
                     self.unicode()?;
                 }
-                other => return Err(PsdError::Unsupported(format!("reference item type {:?}", String::from_utf8_lossy(other)))),
+                other => {
+                    return Err(PsdError::Unsupported(format!(
+                        "reference item type {:?}",
+                        String::from_utf8_lossy(other)
+                    )))
+                }
             }
             Ok(())
         }
@@ -1315,19 +1508,27 @@ pub mod transcode {
                 self.raw(3)?;
                 let same = self.same_order();
                 let res = self.sized_region(false, |t| match &key {
-                    b"cmls" | b"mlst" | b"cust" | b"tmln" | b"sgrp" | b"cinf" => t.versioned_descriptor(),
+                    b"cmls" | b"mlst" | b"cust" | b"tmln" | b"sgrp" | b"cinf" => {
+                        t.versioned_descriptor()
+                    }
                     // mdyn (dynamic metadata) is one u32.
                     b"mdyn" => t.u32s_to_end(),
                     _ if same => Ok(()),
                     _ if t.descriptor_shaped() => Ok(()),
-                    _ => Err(PsdError::Unsupported(format!("metadata item {:?}", String::from_utf8_lossy(&key)))),
+                    _ => Err(PsdError::Unsupported(format!(
+                        "metadata item {:?}",
+                        String::from_utf8_lossy(&key)
+                    ))),
                 });
                 match res {
                     Ok(()) => kept += 1,
                     Err(e) if same => return Err(e),
                     Err(e) => {
                         self.out.truncate(before);
-                        self.warnings.push(format!("shmd item {} dropped: {e}", String::from_utf8_lossy(&key)));
+                        self.warnings.push(format!(
+                            "shmd item {} dropped: {e}",
+                            String::from_utf8_lossy(&key)
+                        ));
                     }
                 }
             }
@@ -1427,7 +1628,9 @@ pub mod transcode {
                         it.u32()?;
                         let max = it.u32()?;
                         if max > crate::filter_effects::MAX_SLOTS {
-                            return Err(PsdError::LimitExceeded("filter effects: too many channels"));
+                            return Err(PsdError::LimitExceeded(
+                                "filter effects: too many channels",
+                            ));
                         }
                         for _ in 0..max + 2 {
                             if it.u32()? != 0 {
@@ -1654,7 +1857,12 @@ mod tests {
         let (big, w) = d.to_bytes(ByteOrder::Big).unwrap();
         assert!(w.is_empty(), "{w:?}");
         let (little, w) = d.to_bytes(ByteOrder::Little).unwrap();
-        assert!(w.iter().all(|w| UNKNOWN.iter().any(|k| w.starts_with(std::str::from_utf8(*k).unwrap()))), "{w:?}");
+        assert!(
+            w.iter().all(|w| UNKNOWN
+                .iter()
+                .any(|k| w.starts_with(std::str::from_utf8(*k).unwrap()))),
+            "{w:?}"
+        );
         if w.is_empty() {
             assert_eq!(big.len(), little.len());
         }
@@ -1673,7 +1881,12 @@ mod tests {
         // The little-endian bytes are a fixed point (from the second generation on when blocks
         // were dropped, since the layer-info padding then follows the shorter body).
         let (little2, _) = back_little.to_bytes(ByteOrder::Little).unwrap();
-        let little3 = ImageSourceData::from_bytes(&little2).unwrap().0.to_bytes(ByteOrder::Little).unwrap().0;
+        let little3 = ImageSourceData::from_bytes(&little2)
+            .unwrap()
+            .0
+            .to_bytes(ByteOrder::Little)
+            .unwrap()
+            .0;
         assert_eq!(little3, little2);
         back_big
     }
@@ -1697,7 +1910,8 @@ mod tests {
         for case in testgen::all_cases() {
             let d = ImageSourceData::from_psd(&case.file);
             let (big, _) = d.to_bytes(ByteOrder::Big).unwrap();
-            let (same, w) = transcode_blocks(&big[36..], d.version, ByteOrder::Big, ByteOrder::Big).unwrap();
+            let (same, w) =
+                transcode_blocks(&big[36..], d.version, ByteOrder::Big, ByteOrder::Big).unwrap();
             assert!(w.is_empty());
             assert_eq!(same, big[36..].to_vec(), "{}", case.name);
         }
@@ -1716,7 +1930,10 @@ mod tests {
         d.version = Version::Psb;
         let (b, _) = d.to_bytes(ByteOrder::Big).unwrap();
         assert!(b.starts_with(SIGNATURE_PSB));
-        assert_eq!(ImageSourceData::from_bytes(&b).unwrap().0.version, Version::Psb);
+        assert_eq!(
+            ImageSourceData::from_bytes(&b).unwrap().0.version,
+            Version::Psb
+        );
         roundtrip(&d);
     }
 
@@ -1725,20 +1942,38 @@ mod tests {
         assert_eq!(layer_info_key(8), *b"Layr");
         assert_eq!(layer_info_key(16), *b"Lr16");
         assert_eq!(layer_info_key(32), *b"Lr32");
-        for (depth, comp) in [(16, Compression::ZipPrediction), (32, Compression::ZipPrediction), (16, Compression::Rle)] {
+        for (depth, comp) in [
+            (16, Compression::ZipPrediction),
+            (32, Compression::ZipPrediction),
+            (16, Compression::Rle),
+        ] {
             let file = testgen::layered(Version::Psd, ColorMode::Rgb, depth, comp);
             let d = ImageSourceData::from_psd(&file);
             assert_eq!(d.layer_info_key, layer_info_key(depth));
             let back = roundtrip(&d);
             assert_eq!(back.layer_info_key, d.layer_info_key);
             // The 16/32-bit model goes back into a PSD as a global block, like Photoshop's.
-            let psd = back.into_psd(file.header.clone(), file.resources.clone(), file.image_data.clone());
-            assert!(matches!(psd.layer_info_placement, LayerInfoPlacement::GlobalBlock { .. }));
+            let psd = back.into_psd(
+                file.header.clone(),
+                file.resources.clone(),
+                file.image_data.clone(),
+            );
+            assert!(matches!(
+                psd.layer_info_placement,
+                LayerInfoPlacement::GlobalBlock { .. }
+            ));
             let again = PsdFile::from_bytes(&psd.to_bytes().unwrap()).unwrap();
-            assert_eq!(known(&ImageSourceData::from_psd(&again)).layer_info, known(&d).layer_info);
+            assert_eq!(
+                known(&ImageSourceData::from_psd(&again)).layer_info,
+                known(&d).layer_info
+            );
             let (little, _) = d.to_bytes(ByteOrder::Little).unwrap();
             let (back, _) = ImageSourceData::from_bytes(&little).unwrap();
-            assert_eq!(known(&back).layer_info, known(&d).layer_info, "depth {depth}");
+            assert_eq!(
+                known(&back).layer_info,
+                known(&d).layer_info,
+                "depth {depth}"
+            );
         }
     }
 
@@ -1757,7 +1992,10 @@ mod tests {
     }
 
     fn block_rt(key: [u8; 4], data: Vec<u8>) -> (Vec<u8>, Vec<u8>) {
-        let d = ImageSourceData { global_blocks: vec![TaggedBlock::new(key, data.clone())], ..Default::default() };
+        let d = ImageSourceData {
+            global_blocks: vec![TaggedBlock::new(key, data.clone())],
+            ..Default::default()
+        };
         let (big, _) = d.to_bytes(ByteOrder::Big).unwrap();
         let (little, w) = d.to_bytes(ByteOrder::Little).unwrap();
         assert!(w.is_empty(), "{w:?}");
@@ -1771,12 +2009,37 @@ mod tests {
     #[test]
     fn descriptor_blocks_swap_keys_and_numbers() {
         let mut desc = Descriptor::new("null");
-        desc.items.push((Id::new("Opct"), Value::UnitFloat { unit: *b"#Prc", value: 75.5 }));
-        desc.items.push((Id::new("Nm  "), Value::Text(UnicodeString::new_nul("Drop Shadow"))));
+        desc.items.push((
+            Id::new("Opct"),
+            Value::UnitFloat {
+                unit: *b"#Prc",
+                value: 75.5,
+            },
+        ));
+        desc.items.push((
+            Id::new("Nm  "),
+            Value::Text(UnicodeString::new_nul("Drop Shadow")),
+        ));
         desc.items.push((Id::new("enab"), Value::Boolean(true)));
-        desc.items.push((Id::new("Md  "), Value::Enumerated { type_id: Id::new("BlnM"), value: Id::new("Mltp") }));
-        desc.items.push((Id::new("list"), Value::List(vec![Value::Integer(-3), Value::Double(1.5), Value::LargeInteger(7)])));
-        desc.items.push((Id::new("longKeyName"), Value::Descriptor(Descriptor::new("innr"))));
+        desc.items.push((
+            Id::new("Md  "),
+            Value::Enumerated {
+                type_id: Id::new("BlnM"),
+                value: Id::new("Mltp"),
+            },
+        ));
+        desc.items.push((
+            Id::new("list"),
+            Value::List(vec![
+                Value::Integer(-3),
+                Value::Double(1.5),
+                Value::LargeInteger(7),
+            ]),
+        ));
+        desc.items.push((
+            Id::new("longKeyName"),
+            Value::Descriptor(Descriptor::new("innr")),
+        ));
         let mut data = 0u32.to_be_bytes().to_vec();
         data.extend(VersionedDescriptor::new(desc).to_bytes());
         let (big, little) = block_rt(*b"lfx2", data);
@@ -1787,7 +2050,10 @@ mod tests {
         assert_eq!(&little[body_at + 4..body_at + 8], &[16, 0, 0, 0]);
         assert_eq!(&big[body_at + 4..body_at + 8], &[0, 0, 0, 16]);
         assert!(little.windows(4).any(|w| w == b"crP#"), "unit key reversed");
-        assert!(little.windows(11).any(|w| w == b"longKeyName"), "string ids are not reversed");
+        assert!(
+            little.windows(11).any(|w| w == b"longKeyName"),
+            "string ids are not reversed"
+        );
     }
 
     #[test]
@@ -1859,8 +2125,14 @@ mod tests {
         fx.put_u32(so.len() as u32);
         fx.put(&so);
         let (_, little) = block_rt(*b"lrFX", fx);
-        assert!(little.windows(8).any(|w| w == b"MIB8wdsd"), "effect keys reversed");
-        assert!(little.windows(2).any(|w| w == [0x34, 0x12]), "colour component swapped");
+        assert!(
+            little.windows(8).any(|w| w == b"MIB8wdsd"),
+            "effect keys reversed"
+        );
+        assert!(
+            little.windows(2).any(|w| w == [0x34, 0x12]),
+            "colour component swapped"
+        );
 
         // levl: version + 29 records + the Lvls extension.
         let mut lv = Vec::new();
@@ -1899,22 +2171,46 @@ mod tests {
         block_rt(*b"curv", cv);
 
         for (key, data) in [
-            (*b"hue2", vec![0, 2, 0, 0, 0, 10, 0, 20, 0, 30, 0, 40, 0, 50, 0, 60]),
+            (
+                *b"hue2",
+                vec![0, 2, 0, 0, 0, 10, 0, 20, 0, 30, 0, 40, 0, 50, 0, 60],
+            ),
             (*b"brit", vec![0, 10, 0, 20, 0, 30, 1, 0]),
             (*b"thrs", vec![0, 128, 0, 0]),
             (*b"post", vec![0, 4, 0, 0]),
             (*b"nvrt", vec![]),
-            (*b"expA", [1u16.to_be_bytes().to_vec(), 0.5f32.to_be_bytes().to_vec(), 0.0f32.to_be_bytes().to_vec(), 1.0f32.to_be_bytes().to_vec()].concat()),
+            (
+                *b"expA",
+                [
+                    1u16.to_be_bytes().to_vec(),
+                    0.5f32.to_be_bytes().to_vec(),
+                    0.0f32.to_be_bytes().to_vec(),
+                    1.0f32.to_be_bytes().to_vec(),
+                ]
+                .concat(),
+            ),
             (*b"blnc", vec![0; 20]),
             (*b"mixr", vec![0, 1, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 0, 0]),
             (*b"selc", vec![0, 1, 0, 0, 0, 5, 0, 6, 0, 7, 0, 8]),
-            (*b"phfl", vec![0, 3, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 25, 1, 0]),
-            (*b"phfl", vec![0, 2, 0, 0, 1, 0, 2, 0, 3, 0, 4, 0, 0, 0, 25, 1, 0]),
+            (
+                *b"phfl",
+                vec![0, 3, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 25, 1, 0],
+            ),
+            (
+                *b"phfl",
+                vec![0, 2, 0, 0, 1, 0, 2, 0, 3, 0, 4, 0, 0, 0, 25, 1, 0],
+            ),
             (*b"lclr", vec![0, 1, 0, 0, 0, 0, 0, 0]),
-            (*b"fxrp", [1.5f64.to_be_bytes().to_vec(), 2.5f64.to_be_bytes().to_vec()].concat()),
+            (
+                *b"fxrp",
+                [1.5f64.to_be_bytes().to_vec(), 2.5f64.to_be_bytes().to_vec()].concat(),
+            ),
             (*b"brst", vec![0, 0, 0, 1, 0, 0, 0, 2]),
             (*b"FMsk", vec![0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0, 50]),
-            (*b"lsct", [3u32.to_be_bytes().to_vec(), b"8BIMpass".to_vec()].concat()),
+            (
+                *b"lsct",
+                [3u32.to_be_bytes().to_vec(), b"8BIMpass".to_vec()].concat(),
+            ),
             (*b"lspf", vec![0, 0, 0, 5]),
             (*b"lnsr", b"layr".to_vec()),
             (*b"knko", vec![1, 0, 0, 0]),
@@ -1935,7 +2231,12 @@ mod tests {
 
     #[test]
     fn global_layer_mask_block() {
-        let d = ImageSourceData { global_layer_mask: Some(GlobalLayerMask { data: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 128, 0] }), ..Default::default() };
+        let d = ImageSourceData {
+            global_layer_mask: Some(GlobalLayerMask {
+                data: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 128, 0],
+            }),
+            ..Default::default()
+        };
         let (little, w) = d.to_bytes(ByteOrder::Little).unwrap();
         assert!(w.is_empty());
         assert!(little[36..].starts_with(b"MIB8ksML"));
@@ -2001,7 +2302,10 @@ mod tests {
             }
         }
         let (_, little) = block_rt(*b"vmsk", v);
-        assert!(little.windows(4).any(|w| w == [0, 0, 0x10, 0]), "fixed-point coordinate swapped");
+        assert!(
+            little.windows(4).any(|w| w == [0, 0, 0x10, 0]),
+            "fixed-point coordinate swapped"
+        );
     }
 
     #[test]
@@ -2021,10 +2325,16 @@ mod tests {
         let data = crate::patterns::write_pattern_block(std::slice::from_ref(&p)).unwrap();
         block_rt(*b"Patt", data.clone());
         // Little-endian pattern data parses back into the same pattern.
-        let d = ImageSourceData { global_blocks: vec![TaggedBlock::new(*b"Patt", data)], ..Default::default() };
+        let d = ImageSourceData {
+            global_blocks: vec![TaggedBlock::new(*b"Patt", data)],
+            ..Default::default()
+        };
         let (little, _) = d.to_bytes(ByteOrder::Little).unwrap();
         let (back, _) = ImageSourceData::from_bytes(&little).unwrap();
-        assert_eq!(crate::patterns::parse_pattern_block(&back.global_blocks[0].data).unwrap(), vec![p]);
+        assert_eq!(
+            crate::patterns::parse_pattern_block(&back.global_blocks[0].data).unwrap(),
+            vec![p]
+        );
     }
 
     #[test]
@@ -2032,7 +2342,12 @@ mod tests {
         use crate::filter_effects::{EffectsPlane, FilterEffects, FilterEffectsItem};
         let plane = EffectsPlane::encode(Compression::Rle, &[1, 2, 3, 4, 5, 6], 3, 2, 8).unwrap();
         let mask = EffectsPlane::encode(Compression::Raw, &[9; 6], 3, 2, 8).unwrap();
-        let rect = crate::layer::Rect { top: 0, left: 0, bottom: 2, right: 3 };
+        let rect = crate::layer::Rect {
+            top: 0,
+            left: 0,
+            bottom: 2,
+            right: 3,
+        };
         let fx = FilterEffects {
             version: 1,
             items: vec![FilterEffectsItem {
@@ -2047,10 +2362,16 @@ mod tests {
         };
         let data = fx.to_bytes();
         block_rt(*b"FEid", data.clone());
-        let d = ImageSourceData { global_blocks: vec![TaggedBlock::new(*b"FEid", data)], ..Default::default() };
+        let d = ImageSourceData {
+            global_blocks: vec![TaggedBlock::new(*b"FEid", data)],
+            ..Default::default()
+        };
         let (little, _) = d.to_bytes(ByteOrder::Little).unwrap();
         let (back, _) = ImageSourceData::from_bytes(&little).unwrap();
-        assert_eq!(FilterEffects::parse(&back.global_blocks[0].data).unwrap(), fx);
+        assert_eq!(
+            FilterEffects::parse(&back.global_blocks[0].data).unwrap(),
+            fx
+        );
     }
 
     #[test]
@@ -2062,9 +2383,18 @@ mod tests {
         let items = vec![
             crate::metadata::MetadataItem::new(*b"zzzz", vec![1, 2, 3, 4, 5, 6, 7, 8]),
             crate::metadata::MetadataItem::new(*b"mdyn", vec![0, 0, 0, 1]),
-            crate::metadata::MetadataItem::new(*b"cmls", VersionedDescriptor::new(Descriptor::new("null")).to_bytes()),
+            crate::metadata::MetadataItem::new(
+                *b"cmls",
+                VersionedDescriptor::new(Descriptor::new("null")).to_bytes(),
+            ),
         ];
-        let d = ImageSourceData { global_blocks: vec![TaggedBlock::new(*b"shmd", crate::metadata::write_shmd(&items))], ..Default::default() };
+        let d = ImageSourceData {
+            global_blocks: vec![TaggedBlock::new(
+                *b"shmd",
+                crate::metadata::write_shmd(&items),
+            )],
+            ..Default::default()
+        };
         let (little, w) = d.to_bytes(ByteOrder::Little).unwrap();
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].starts_with("shmd item zzzz dropped"), "{}", w[0]);
@@ -2079,7 +2409,8 @@ mod tests {
         // A key the transcoder has never heard of, holding a versioned descriptor (as every
         // block Photoshop added since CS6 does): converted, not dropped.
         let mut desc = Descriptor::new("null");
-        desc.items.push((Id::new("Nm  "), Value::Text(UnicodeString::new_nul("x"))));
+        desc.items
+            .push((Id::new("Nm  "), Value::Text(UnicodeString::new_nul("x"))));
         let data = VersionedDescriptor::new(desc.clone()).to_bytes();
         block_rt(*b"Qqqq", data);
         let mut with_version = 3u32.to_be_bytes().to_vec();
@@ -2117,8 +2448,14 @@ mod tests {
             data.push(0);
         }
         let (_, little) = block_rt(*b"lnk2", data);
-        assert!(little.windows(4).any(|w| w == b"DFil"), "item type key reversed");
-        assert!(little.windows(7).any(|w| w == bytes), "file bytes untouched");
+        assert!(
+            little.windows(4).any(|w| w == b"DFil"),
+            "item type key reversed"
+        );
+        assert!(
+            little.windows(7).any(|w| w == bytes),
+            "file bytes untouched"
+        );
     }
 
     #[test]
@@ -2163,7 +2500,8 @@ mod tests {
     #[test]
     fn unknown_blocks_kept_in_big_dropped_in_little() {
         let mut d = sample_layers();
-        d.global_blocks.push(TaggedBlock::new(*b"Zzzz", vec![1, 2, 3, 4, 5]));
+        d.global_blocks
+            .push(TaggedBlock::new(*b"Zzzz", vec![1, 2, 3, 4, 5]));
         let (big, w) = d.to_bytes(ByteOrder::Big).unwrap();
         assert!(w.is_empty());
         let (back, w) = ImageSourceData::from_bytes(&big).unwrap();
@@ -2171,10 +2509,19 @@ mod tests {
         assert_eq!(back.global_blocks, d.global_blocks);
         // Big-endian data of unknown layout cannot go into a little-endian file.
         let (little, w) = d.to_bytes(ByteOrder::Little).unwrap();
-        assert_eq!(w.iter().filter(|w| w.starts_with("Zzzz block (5 bytes) dropped")).count(), 1, "{w:?}");
+        assert_eq!(
+            w.iter()
+                .filter(|w| w.starts_with("Zzzz block (5 bytes) dropped"))
+                .count(),
+            1,
+            "{w:?}"
+        );
         let (back, w) = ImageSourceData::from_bytes(&little).unwrap();
         assert!(w.is_empty());
-        assert_eq!(back.global_blocks.iter().map(|b| b.key).collect::<Vec<_>>(), vec![*b"Patt", *b"FMsk"]);
+        assert_eq!(
+            back.global_blocks.iter().map(|b| b.key).collect::<Vec<_>>(),
+            vec![*b"Patt", *b"FMsk"]
+        );
         assert_eq!(known(&back).layer_info, known(&d).layer_info);
     }
 
@@ -2193,22 +2540,42 @@ mod tests {
         let (back, w) = ImageSourceData::from_bytes(&raw).unwrap();
         assert!(w.is_empty(), "{w:?}");
         assert_eq!(known(&back).layer_info, known(&d).layer_info);
-        let kept = back.global_blocks.iter().find(|b| &b.key == b"Zzzz").expect("kept");
+        let kept = back
+            .global_blocks
+            .iter()
+            .find(|b| &b.key == b"Zzzz")
+            .expect("kept");
         assert!(kept.is_foreign_order());
         assert_eq!(kept.signature, *b"MIB8");
         assert_eq!(kept.data, [9, 8, 7, 6, 5, 4]);
         // The known block after it was still converted.
-        assert_eq!(back.global_blocks.iter().find(|b| &b.key == b"lyid").unwrap().data, 7u32.to_be_bytes());
+        assert_eq!(
+            back.global_blocks
+                .iter()
+                .find(|b| &b.key == b"lyid")
+                .unwrap()
+                .data,
+            7u32.to_be_bytes()
+        );
         // Written back to a little-endian TIFF, the bytes are exactly what was read.
         let (again, w) = back.to_bytes(ByteOrder::Little).unwrap();
         assert!(w.is_empty(), "{w:?}");
         let tail = &raw[raw.len() - 18 - 16..];
-        assert!(again.windows(tail.len()).any(|x| x == tail), "foreign-order block restored verbatim");
-        assert_eq!(ImageSourceData::from_bytes(&again).unwrap().0.global_blocks, back.global_blocks);
+        assert!(
+            again.windows(tail.len()).any(|x| x == tail),
+            "foreign-order block restored verbatim"
+        );
+        assert_eq!(
+            ImageSourceData::from_bytes(&again).unwrap().0.global_blocks,
+            back.global_blocks
+        );
         // The big-endian (PSD) model keeps the marker, so a PSD writer can tell it apart.
         let (big, _) = back.to_bytes(ByteOrder::Big).unwrap();
         assert!(big.windows(8).any(|x| x == b"MIB8Zzzz"));
-        assert_eq!(ImageSourceData::from_bytes(&big).unwrap().0.global_blocks, back.global_blocks);
+        assert_eq!(
+            ImageSourceData::from_bytes(&big).unwrap().0.global_blocks,
+            back.global_blocks
+        );
     }
 
     #[test]
@@ -2219,12 +2586,18 @@ mod tests {
         let (little, _) = d.to_bytes(ByteOrder::Little).unwrap();
         let (back, _) = ImageSourceData::from_bytes(&little).unwrap();
         let d = known(&d);
-        let (a, b) = (d.layer_info.as_ref().unwrap(), back.layer_info.as_ref().unwrap());
+        let (a, b) = (
+            d.layer_info.as_ref().unwrap(),
+            back.layer_info.as_ref().unwrap(),
+        );
         for (la, lb) in a.layers.iter().zip(&b.layers) {
             for (ca, cb) in la.channels.iter().zip(&lb.channels) {
                 assert_eq!(ca, cb);
                 let (w, h) = la.channel_rect(ca.id).size().unwrap();
-                assert_eq!(ca.decode(w, h, 16, Version::Psd).unwrap(), cb.decode(w, h, 16, Version::Psd).unwrap());
+                assert_eq!(
+                    ca.decode(w, h, 16, Version::Psd).unwrap(),
+                    cb.decode(w, h, 16, Version::Psd).unwrap()
+                );
             }
         }
         // The encoded samples (after the count table) are identical bytes in both files, while
@@ -2232,7 +2605,12 @@ mod tests {
         let (rec, ch) = a
             .layers
             .iter()
-            .flat_map(|l| l.channels.iter().filter(|c| c.id >= -1 && c.compression == Some(Compression::Rle)).map(move |c| (l, c)))
+            .flat_map(|l| {
+                l.channels
+                    .iter()
+                    .filter(|c| c.id >= -1 && c.compression == Some(Compression::Rle))
+                    .map(move |c| (l, c))
+            })
             .find(|(l, c)| l.rect.height() > 1 && c.data.len() > l.rect.height() as usize * 2 + 8)
             .unwrap();
         let table = rec.rect.height() as usize * 2;
@@ -2241,7 +2619,9 @@ mod tests {
         assert!(little.windows(samples.len()).any(|w| w == samples));
         let counts = &ch.data[..table];
         let swapped: Vec<u8> = counts.chunks(2).flat_map(|c| [c[1], c[0]]).collect();
-        assert!(little.windows(table + samples.len()).any(|w| w[..table] == swapped[..] && w[table..] == *samples));
+        assert!(little
+            .windows(table + samples.len())
+            .any(|w| w[..table] == swapped[..] && w[table..] == *samples));
     }
 
     #[test]
@@ -2249,15 +2629,33 @@ mod tests {
         let mut file = testgen::layered(Version::Psd, ColorMode::Rgb, 8, Compression::Rle);
         let ranges: Vec<u8> = [0u8, 0, 255, 255].repeat(10);
         let marked: Vec<u8> = (1u8..=40).collect();
-        for (i, l) in file.layer_info.as_mut().unwrap().layers.iter_mut().enumerate() {
-            l.blending_ranges.data = if i == 0 { marked.clone() } else { ranges.clone() };
+        for (i, l) in file
+            .layer_info
+            .as_mut()
+            .unwrap()
+            .layers
+            .iter_mut()
+            .enumerate()
+        {
+            l.blending_ranges.data = if i == 0 {
+                marked.clone()
+            } else {
+                ranges.clone()
+            };
         }
         let d = ImageSourceData::from_psd(&file);
         let (little, _) = d.to_bytes(ByteOrder::Little).unwrap();
         // Written verbatim (what Photoshop writes in an `II` TIFF), not swapped per u32.
         assert!(little.windows(marked.len()).any(|w| w == marked));
         let (back, _) = ImageSourceData::from_bytes(&little).unwrap();
-        for (a, b) in d.layer_info.as_ref().unwrap().layers.iter().zip(&back.layer_info.as_ref().unwrap().layers) {
+        for (a, b) in d
+            .layer_info
+            .as_ref()
+            .unwrap()
+            .layers
+            .iter()
+            .zip(&back.layer_info.as_ref().unwrap().layers)
+        {
             assert_eq!(a.blending_ranges, b.blending_ranges);
         }
     }
@@ -2281,7 +2679,12 @@ mod tests {
             ImageResource::new(1005, vec![0, 72, 0, 0, 0, 1, 0, 1, 0, 72, 0, 0, 0, 1, 0, 1]),
             ImageResource::new(1037, vec![0, 0, 0, 120]),
             ImageResource::new(1039, vec![1, 2, 3]),
-            ImageResource { signature: *b"8BIM", id: 1026, name: b"grp".to_vec(), data: vec![0, 1, 0, 1, 0, 0] },
+            ImageResource {
+                signature: *b"8BIM",
+                id: 1026,
+                name: b"grp".to_vec(),
+                data: vec![0, 1, 0, 1, 0, 0],
+            },
         ];
         let big = resources_to_bytes(&res).unwrap();
         let (back, w) = resources_from_bytes(&big).unwrap();
@@ -2313,7 +2716,10 @@ mod tests {
         let d = sample_layers();
         for order in [ByteOrder::Big, ByteOrder::Little] {
             let (bytes, _) = d.to_bytes(order).unwrap();
-            for cut in (0..bytes.len()).step_by(7).chain(bytes.len().saturating_sub(8)..bytes.len()) {
+            for cut in (0..bytes.len())
+                .step_by(7)
+                .chain(bytes.len().saturating_sub(8)..bytes.len())
+            {
                 let _ = ImageSourceData::from_bytes(&bytes[..cut]);
             }
             // Bit flips in the structure (not the signature).
@@ -2337,11 +2743,18 @@ mod tests {
         let d = ImageSourceData::from_psd(&file);
         let (little, _) = d.to_bytes(ByteOrder::Little).unwrap();
         let (back, _) = ImageSourceData::from_bytes(&little).unwrap();
-        let psd = back.into_psd(file.header.clone(), file.resources.clone(), file.image_data.clone());
+        let psd = back.into_psd(
+            file.header.clone(),
+            file.resources.clone(),
+            file.image_data.clone(),
+        );
         let bytes = psd.to_bytes().unwrap();
         let again = PsdFile::from_bytes(&bytes).unwrap();
         let expected = known(&ImageSourceData::from_psd(&file));
-        assert_eq!(known(&ImageSourceData::from_psd(&again)).layer_info, expected.layer_info);
+        assert_eq!(
+            known(&ImageSourceData::from_psd(&again)).layer_info,
+            expected.layer_info
+        );
         assert_eq!(again.global_blocks, expected.global_blocks);
         assert_eq!(again.layer_tree().len(), file.layer_tree().len());
     }
@@ -2351,9 +2764,16 @@ mod tests {
     #[test]
     fn global_blocks_written_without_copies_keep_their_bytes() {
         for version in [Version::Psd, Version::Psb] {
-            let mut d = ImageSourceData { version, global_layer_mask: Some(GlobalLayerMask { data: vec![0, 1, 0, 2, 0, 3, 0, 4, 9] }), ..Default::default() };
+            let mut d = ImageSourceData {
+                version,
+                global_layer_mask: Some(GlobalLayerMask {
+                    data: vec![0, 1, 0, 2, 0, 3, 0, 4, 9],
+                }),
+                ..Default::default()
+            };
             for n in 0..8u8 {
-                d.global_blocks.push(TaggedBlock::new(*b"FMsk", (0..n).collect()));
+                d.global_blocks
+                    .push(TaggedBlock::new(*b"FMsk", (0..n).collect()));
             }
             let mut explicit = TaggedBlock::new(*b"FMsk", vec![1, 2, 3]);
             explicit.padding = Some(vec![]);
@@ -2361,7 +2781,10 @@ mod tests {
             let mut odd = TaggedBlock::new(*b"FMsk", vec![1, 2]);
             odd.padding = Some(vec![0, 0, 0, 0, 0]);
             d.global_blocks.push(odd);
-            let mut copies = vec![padded_block(*b"LMsk", d.global_layer_mask.as_ref().unwrap().data.clone())];
+            let mut copies = vec![padded_block(
+                *b"LMsk",
+                d.global_layer_mask.as_ref().unwrap().data.clone(),
+            )];
             for b in &d.global_blocks {
                 let mut b = b.clone();
                 if b.padding.is_none() {
@@ -2371,10 +2794,21 @@ mod tests {
             }
             let mut body = Vec::new();
             crate::tagged::write_blocks(&mut body, &copies, version, 2).unwrap();
-            let signature = if version.is_psb() { SIGNATURE_PSB } else { SIGNATURE };
-            assert_eq!(d.to_bytes(ByteOrder::Big).unwrap().0, [signature, &body[..]].concat());
-            let (little, _) = transcode_blocks(&body, version, ByteOrder::Big, ByteOrder::Little).unwrap();
-            assert_eq!(d.to_bytes(ByteOrder::Little).unwrap().0, [signature, &little[..]].concat());
+            let signature = if version.is_psb() {
+                SIGNATURE_PSB
+            } else {
+                SIGNATURE
+            };
+            assert_eq!(
+                d.to_bytes(ByteOrder::Big).unwrap().0,
+                [signature, &body[..]].concat()
+            );
+            let (little, _) =
+                transcode_blocks(&body, version, ByteOrder::Big, ByteOrder::Little).unwrap();
+            assert_eq!(
+                d.to_bytes(ByteOrder::Little).unwrap().0,
+                [signature, &little[..]].concat()
+            );
         }
     }
 
@@ -2386,18 +2820,27 @@ mod tests {
         let clean = sample_layers();
         let mut fx = Vec::new();
         fx.put_u32(0);
-        fx.extend_from_slice(&VersionedDescriptor::new(Descriptor::new("null").with("Opct", Value::Double(1.0))).to_bytes());
+        fx.extend_from_slice(
+            &VersionedDescriptor::new(Descriptor::new("null").with("Opct", Value::Double(1.0)))
+                .to_bytes(),
+        );
         // A whole number of 4-byte units, so dropping it cannot change any padding.
         fx.resize(fx.len().next_multiple_of(4), 0);
         let mut d = clean.clone();
-        d.layer_info.as_mut().unwrap().layers[0].blocks.insert(0, TaggedBlock::new(*b"lfx2", fx.clone()));
+        d.layer_info.as_mut().unwrap().layers[0]
+            .blocks
+            .insert(0, TaggedBlock::new(*b"lfx2", fx.clone()));
         let (mut little, w) = d.to_bytes(ByteOrder::Little).unwrap();
         assert!(!w.iter().any(|w| w.starts_with("lfx2")), "{w:?}");
         // An unknown value type after the descriptor's header: parsing fails part-way.
         let at = little.windows(4).position(|w| w == b"buod").unwrap();
         little[at..at + 4].copy_from_slice(b"????");
         let (back, w) = ImageSourceData::from_bytes(&little).unwrap();
-        assert_eq!(w.iter().filter(|w| w.starts_with("lfx2 block")).count(), 1, "{w:?}");
+        assert_eq!(
+            w.iter().filter(|w| w.starts_with("lfx2 block")).count(),
+            1,
+            "{w:?}"
+        );
         let kept = &back.layer_info.as_ref().unwrap().layers[0].blocks[0];
         assert!(kept.is_foreign_order());
         let stored = little.windows(4).position(|w| w == b"2xfl").unwrap() + 8;
@@ -2409,7 +2852,11 @@ mod tests {
         broken[at..at + 4].copy_from_slice(b"????");
         big_bad.layer_info.as_mut().unwrap().layers[0].blocks[0].data = broken;
         let (little, w) = big_bad.to_bytes(ByteOrder::Little).unwrap();
-        assert_eq!(w.iter().filter(|w| w.starts_with("lfx2 block")).count(), 1, "{w:?}");
+        assert_eq!(
+            w.iter().filter(|w| w.starts_with("lfx2 block")).count(),
+            1,
+            "{w:?}"
+        );
         assert_eq!(little, clean.to_bytes(ByteOrder::Little).unwrap().0);
     }
 }

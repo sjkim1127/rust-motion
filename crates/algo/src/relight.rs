@@ -3,9 +3,9 @@
 
 use rust_motion_geom::Rect;
 
-use crate::Ctx;
-use crate::fxutil::{MAXC, rgba, set_rgba, xy};
+use crate::fxutil::{rgba, set_rgba, xy, MAXC};
 use crate::image::Image;
+use crate::Ctx;
 
 /// Softness maps onto this σ range; the halo is derived from the σ actually used.
 pub(crate) const SIGMA_MIN: f32 = 2.0;
@@ -66,7 +66,11 @@ fn light_dir(angle: f32, elevation: f32) -> [f32; 3] {
 
 fn norm3(v: [f32; 3]) -> [f32; 3] {
     let m = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
-    if !m.is_finite() || m < 1e-9 { [0.0, 0.0, 1.0] } else { [v[0] / m, v[1] / m, v[2] / m] }
+    if !m.is_finite() || m < 1e-9 {
+        [0.0, 0.0, 1.0]
+    } else {
+        [v[0] / m, v[1] / m, v[2] / m]
+    }
 }
 
 fn light_color(warmth: f32) -> [f32; 3] {
@@ -98,7 +102,10 @@ fn sample_y(buf: &[f32], w: usize, h: usize, rect: Rect, x: i32, y: i32) -> f32 
     if ox >= w || oy >= h {
         return 0.04;
     }
-    buf.get(oy.saturating_mul(w).saturating_add(ox)).copied().filter(|v| v.is_finite()).unwrap_or(0.04)
+    buf.get(oy.saturating_mul(w).saturating_add(ox))
+        .copied()
+        .filter(|v| v.is_finite())
+        .unwrap_or(0.04)
 }
 
 /// Approximate Gaussian of a single-channel field (three box passes; cost independent of σ).
@@ -129,9 +136,15 @@ fn blur_channel(src: &[f32], w: usize, h: usize, sigma: f32) -> Vec<f32> {
     for i in 0..n {
         let o = i.saturating_mul(2);
         let Some(&acc) = packed.get(o) else { continue };
-        let Some(&wgt) = packed.get(o.saturating_add(1)) else { continue };
+        let Some(&wgt) = packed.get(o.saturating_add(1)) else {
+            continue;
+        };
         if let Some(slot) = out.get_mut(i) {
-            *slot = if wgt > 1e-6 && acc.is_finite() && wgt.is_finite() { acc / wgt } else { 0.5 };
+            *slot = if wgt > 1e-6 && acc.is_finite() && wgt.is_finite() {
+                acc / wgt
+            } else {
+                0.5
+            };
         }
     }
     out
@@ -184,10 +197,22 @@ fn luma_band_rows(out: Rect, reach: i32) -> Option<i32> {
     }
     let max_yh = (MAX_LUMA_PIXELS / yw).max(1);
     let inner = max_yh.saturating_sub(margin).max(1).min(i32::MAX as usize) as i32;
-    if inner >= out.height() as i32 { None } else { Some(inner.max(1)) }
+    if inner >= out.height() as i32 {
+        None
+    } else {
+        Some(inner.max(1))
+    }
 }
 
-fn relight_bands(src: &Image, out: Rect, ctx: &Ctx, p: Params, sig: f32, step: i32, band_h: i32) -> Vec<f32> {
+fn relight_bands(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    p: Params,
+    sig: f32,
+    step: i32,
+    band_h: i32,
+) -> Vec<f32> {
     let n = src.ch;
     let mut res = src.crop(out);
     let mut y = out.y0;
@@ -218,8 +243,12 @@ fn copy_band(dst: &mut [f32], dst_rect: Rect, src: &[f32], src_rect: Rect, n: us
         let so = sy.saturating_mul(sw).saturating_mul(n);
         let d_off = dy.saturating_mul(dw).saturating_mul(n);
         let len = sw.saturating_mul(n);
-        let Some(d) = dst.get_mut(d_off..d_off.saturating_add(len)) else { continue };
-        let Some(s) = src.get(so..so.saturating_add(len)) else { continue };
+        let Some(d) = dst.get_mut(d_off..d_off.saturating_add(len)) else {
+            continue;
+        };
+        let Some(s) = src.get(so..so.saturating_add(len)) else {
+            continue;
+        };
         if d.len() == s.len() {
             d.copy_from_slice(s);
         }
@@ -255,13 +284,23 @@ fn relight_rect(src: &Image, out: Rect, ctx: &Ctx, p: Params, sig: f32, step: i3
                 continue;
             }
             let a = if ctx.alpha { c[3] } else { 1.0 };
-            *slot = if a > 0.0 && a.is_finite() { rec709_y(c) } else { f32::NAN };
+            *slot = if a > 0.0 && a.is_finite() {
+                rec709_y(c)
+            } else {
+                f32::NAN
+            };
         }
     }
     let sbuf = blur_channel(&ybuf, yw, yh, sig);
     let ldir = light_dir(p.angle, p.elevation);
     let lcol = light_color(p.warmth);
-    let amb = (if p.ambient.is_finite() { p.ambient } else { 0.0 }).clamp(0.0, 100.0) / 100.0;
+    let amb = (if p.ambient.is_finite() {
+        p.ambient
+    } else {
+        0.0
+    })
+    .clamp(0.0, 100.0)
+        / 100.0;
     let inten = p.intensity.clamp(0.0, 100.0) / 100.0;
     for (i, px) in res.chunks_exact_mut(n).enumerate() {
         let (x, y) = xy(out, i);
@@ -277,15 +316,23 @@ fn relight_rect(src: &Image, out: Rect, ctx: &Ctx, p: Params, sig: f32, step: i3
             continue;
         }
         let s0 = sample_y(&sbuf, yw, yh, y_rect, x, y).max(0.04);
-        let nx = (sample_y(&sbuf, yw, yh, y_rect, x - step, y) - sample_y(&sbuf, yw, yh, y_rect, x + step, y)) * SCALE;
-        let ny = (sample_y(&sbuf, yw, yh, y_rect, x, y - step) - sample_y(&sbuf, yw, yh, y_rect, x, y + step)) * SCALE;
+        let nx = (sample_y(&sbuf, yw, yh, y_rect, x - step, y)
+            - sample_y(&sbuf, yw, yh, y_rect, x + step, y))
+            * SCALE;
+        let ny = (sample_y(&sbuf, yw, yh, y_rect, x, y - step)
+            - sample_y(&sbuf, yw, yh, y_rect, x, y + step))
+            * SCALE;
         let nrm = norm3([nx, ny, 1.0]);
         let ndl = (nrm[0] * ldir[0] + nrm[1] * ldir[1] + nrm[2] * ldir[2]).max(0.0);
         let shade = amb + inten * ndl;
         let mut out_c = c;
         for (k, lc) in lcol.iter().enumerate() {
-            let Some(ch) = c.get(k).copied() else { continue };
-            let Some(slot) = out_c.get_mut(k) else { continue };
+            let Some(ch) = c.get(k).copied() else {
+                continue;
+            };
+            let Some(slot) = out_c.get_mut(k) else {
+                continue;
+            };
             *slot = (ch / s0) * shade * *lc;
         }
         if !finite_all(&out_c) {
@@ -304,7 +351,7 @@ fn relight_rect(src: &Image, out: Rect, ctx: &Ctx, p: Params, sig: f32, step: i3
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{FilterParams, Halo, apply, apply_tiled, output_area};
+    use crate::{apply, apply_tiled, output_area, FilterParams, Halo};
     use rust_motion_color::{ColorMode, PixelFormat, SampleType};
     use rust_motion_raster::Surface;
 
@@ -317,11 +364,32 @@ mod tests {
     }
 
     fn params(intensity: f32, angle: f32, warmth: f32, softness: f32) -> FilterParams {
-        FilterParams::Relight { angle, elevation: 40.0, intensity, ambient: 55.0, warmth, softness }
+        FilterParams::Relight {
+            angle,
+            elevation: 40.0,
+            intensity,
+            ambient: 55.0,
+            warmth,
+            softness,
+        }
     }
 
-    fn relight_p(angle: f32, elevation: f32, intensity: f32, ambient: f32, warmth: f32, softness: f32) -> FilterParams {
-        FilterParams::Relight { angle, elevation, intensity, ambient, warmth, softness }
+    fn relight_p(
+        angle: f32,
+        elevation: f32,
+        intensity: f32,
+        ambient: f32,
+        warmth: f32,
+        softness: f32,
+    ) -> FilterParams {
+        FilterParams::Relight {
+            angle,
+            elevation,
+            intensity,
+            ambient,
+            warmth,
+            softness,
+        }
     }
 
     fn run(s: &Surface, p: &FilterParams, bounds: Rect) -> Surface {
@@ -330,7 +398,10 @@ mod tests {
     }
 
     fn max_diff(a: &[f32], b: &[f32]) -> f32 {
-        a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max)
+        a.iter()
+            .zip(b)
+            .map(|(x, y)| (x - y).abs())
+            .fold(0.0, f32::max)
     }
 
     fn luma(px: &[f32]) -> f32 {
@@ -391,7 +462,12 @@ mod tests {
         let mut v = Vec::new();
         for y in r.y0..r.y1 {
             for x in r.x0..r.x1 {
-                v.extend_from_slice(&[((x * 7 + y * 3) % 64) as f32 / 63.0, ((x * x + y) % 50) as f32 / 49.0, (y % 9) as f32 / 8.0, 1.0]);
+                v.extend_from_slice(&[
+                    ((x * 7 + y * 3) % 64) as f32 / 63.0,
+                    ((x * x + y) % 50) as f32 / 49.0,
+                    (y % 9) as f32 / 8.0,
+                    1.0,
+                ]);
             }
         }
         surf.write_region(r, &v);
@@ -407,7 +483,10 @@ mod tests {
     #[test]
     fn halo_is_zero_at_identity_and_covers_sigma_otherwise() {
         assert_eq!(params(0.0, 45.0, 0.0, 25.0).halo(), Halo::Radius(0));
-        assert_eq!(params(40.0, 45.0, 0.0, 25.0).halo(), Halo::Radius(halo_radius_max()));
+        assert_eq!(
+            params(40.0, 45.0, 0.0, 25.0).halo(),
+            Halo::Radius(halo_radius_max())
+        );
         assert_eq!(halo_radius_max(), read_radius(SIGMA_MAX));
         // Short side 1600 px, default softness 25: σ = 32, read 3σ+1+step = 129, which
         // the old constant halo of 97 did not cover.
@@ -418,7 +497,10 @@ mod tests {
         assert_eq!(reach, 96 + 1 + 32);
         assert!(reach > 97);
         assert_eq!(halo_radius(25.0, wide), reach);
-        assert_eq!(params(40.0, 45.0, 0.0, 25.0).halo_for(wide), Halo::Radius(reach));
+        assert_eq!(
+            params(40.0, 45.0, 0.0, 25.0).halo_for(wide),
+            Halo::Radius(reach)
+        );
     }
 
     #[test]
@@ -453,8 +535,14 @@ mod tests {
         let l_right = sphere_half_mean(&left_lit, size, false);
         let r_left = sphere_half_mean(&right_lit, size, true);
         let r_right = sphere_half_mean(&right_lit, size, false);
-        assert!(l_left - l_right >= 0.05, "light from the left ({size}px): {l_left} vs {l_right}");
-        assert!(r_right - r_left >= 0.05, "light from the right ({size}px): {r_left} vs {r_right}");
+        assert!(
+            l_left - l_right >= 0.05,
+            "light from the left ({size}px): {l_left} vs {l_right}"
+        );
+        assert!(
+            r_right - r_left >= 0.05,
+            "light from the right ({size}px): {r_left} vs {r_right}"
+        );
     }
 
     #[test]
@@ -570,7 +658,15 @@ mod tests {
             if w > 0 && h > 0 {
                 s.fill_rect(r, &[0.4, 0.5, 0.6, 1.0]);
             }
-            let _ = run(&s, &p, if r.is_empty() { Rect::new(0, 0, 1, 1) } else { r });
+            let _ = run(
+                &s,
+                &p,
+                if r.is_empty() {
+                    Rect::new(0, 0, 1, 1)
+                } else {
+                    r
+                },
+            );
             let _ = apply(&s, &p, Rect::EMPTY, Rect::new(0, 0, 4, 4), None);
         }
     }

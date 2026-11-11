@@ -3,7 +3,7 @@
 use std::io::Cursor;
 
 use super::*;
-use crate::{Codec, OperationalPattern, PartitionKind, TrackKind, Wrapping, open};
+use crate::{open, Codec, OperationalPattern, PartitionKind, TrackKind, Wrapping};
 
 fn prores_like(i: usize) -> Vec<u8> {
     let mut v = vec![0, 0, 0, 40];
@@ -40,10 +40,29 @@ fn pcm24(start: usize, n: usize) -> Vec<u8> {
 }
 
 fn op1a_config(rate: Rational, coding: PictureCoding) -> WriterConfig {
-    let mut cfg = WriterConfig::new(Pattern::Op1a, rate, PackageIds::from_seed("test", "Test Clip"));
+    let mut cfg = WriterConfig::new(
+        Pattern::Op1a,
+        rate,
+        PackageIds::from_seed("test", "Test Clip"),
+    );
     cfg.picture = Some(PictureDesc::new(coding, 64, 36));
-    cfg.sound = vec![SoundDesc { sample_rate: 48_000, channels: 2, bits: 16 }, SoundDesc { sample_rate: 48_000, channels: 1, bits: 24 }];
-    cfg.timecode = Some(StartTimecode { frames: 90_000, rate, drop_frame: false });
+    cfg.sound = vec![
+        SoundDesc {
+            sample_rate: 48_000,
+            channels: 2,
+            bits: 16,
+        },
+        SoundDesc {
+            sample_rate: 48_000,
+            channels: 1,
+            bits: 24,
+        },
+    ];
+    cfg.timecode = Some(StartTimecode {
+        frames: 90_000,
+        rate,
+        drop_frame: false,
+    });
     cfg
 }
 
@@ -73,15 +92,31 @@ fn op1a_reads_back() {
     let f = build_op1a();
     let m = open(&f).unwrap();
     assert!(m.warnings.is_empty(), "{:?}", m.warnings);
-    assert_eq!(m.operational_pattern, OperationalPattern::Generalized { item: 1, package: 1 });
+    assert_eq!(
+        m.operational_pattern,
+        OperationalPattern::Generalized {
+            item: 1,
+            package: 1
+        }
+    );
     assert_eq!(m.material_package_name.as_deref(), Some("Test Clip"));
     assert_eq!(m.product_name.as_deref(), Some("FilmCraft"));
     let tc = m.timecode.unwrap();
     assert_eq!(tc.format(), "01:00:00:00");
     // header rewritten closed and complete; body and footer partitions; footer metadata used
     let kinds: Vec<(PartitionKind, u8)> = m.partitions.iter().map(|p| (p.kind, p.status)).collect();
-    assert_eq!(kinds, vec![(PartitionKind::Header, 4), (PartitionKind::Body, 4), (PartitionKind::Footer, 4)]);
-    assert!(m.partitions.iter().all(|p| p.footer_partition == m.partitions[2].offset));
+    assert_eq!(
+        kinds,
+        vec![
+            (PartitionKind::Header, 4),
+            (PartitionKind::Body, 4),
+            (PartitionKind::Footer, 4)
+        ]
+    );
+    assert!(m
+        .partitions
+        .iter()
+        .all(|p| p.footer_partition == m.partitions[2].offset));
     assert_eq!(m.tracks.len(), 3);
     let v = m.track_of_kind(TrackKind::Picture).unwrap();
     let t = &m.tracks[v];
@@ -91,12 +126,17 @@ fn op1a_reads_back() {
     assert_eq!(t.wrapping, Wrapping::Frame);
     assert!(t.indexed || t.codec.intra_only());
     let p = t.picture.as_ref().unwrap();
-    assert_eq!((p.frame_width(), p.frame_height(), p.component_depth), (64, 36, 10));
+    assert_eq!(
+        (p.frame_width(), p.frame_height(), p.component_depth),
+        (64, 36, 10)
+    );
     assert_eq!(p.aspect_ratio, Rational::new(16, 9));
     for i in 0..10 {
         assert_eq!(m.read_sample(&f, v, i).unwrap(), prores_like(i));
     }
-    let sounds: Vec<usize> = (0..m.tracks.len()).filter(|&i| m.tracks[i].kind == TrackKind::Sound).collect();
+    let sounds: Vec<usize> = (0..m.tracks.len())
+        .filter(|&i| m.tracks[i].kind == TrackKind::Sound)
+        .collect();
     assert_eq!(sounds.len(), 2);
     let s0 = &m.tracks[sounds[0]];
     assert_eq!(s0.codec, Codec::Pcm);
@@ -126,7 +166,11 @@ fn ntsc_sound_follows_the_edit_unit_pattern() {
     let rate = Rational::new(30000, 1001);
     let mut cfg = op1a_config(rate, PictureCoding::Vc3 { cid: 1274 });
     cfg.sound.truncate(1);
-    cfg.timecode = Some(StartTimecode { frames: 107_892, rate, drop_frame: true });
+    cfg.timecode = Some(StartTimecode {
+        frames: 107_892,
+        rate,
+        drop_frame: true,
+    });
     let mut w = MxfWriter::new(Cursor::new(Vec::new()), cfg).unwrap();
     let n = 12;
     let total = (n as u64 * 48_000 * 1001 / 30_000) as usize;
@@ -150,15 +194,39 @@ fn ntsc_sound_follows_the_edit_unit_pattern() {
 #[test]
 fn long_gop_index_gives_presentation_order_and_key_frames() {
     let rate = Rational::new(25, 1);
-    let mut cfg = op1a_config(rate, PictureCoding::Avc { profile_idc: 100, intra: false });
+    let mut cfg = op1a_config(
+        rate,
+        PictureCoding::Avc {
+            profile_idc: 100,
+            intra: false,
+        },
+    );
     cfg.sound.clear();
     let mut w = MxfWriter::new(Cursor::new(Vec::new()), cfg).unwrap();
     // stored I0 P3 B1 B2 P6 B4 B5 I7(IDR)
-    let order = [(0, CodedKind::Intra, true), (3, CodedKind::Predicted, false), (1, CodedKind::Bidirectional, false), (2, CodedKind::Bidirectional, false)];
-    let more = [(6, CodedKind::Predicted, false), (4, CodedKind::Bidirectional, false), (5, CodedKind::Bidirectional, false), (7, CodedKind::Intra, true)];
+    let order = [
+        (0, CodedKind::Intra, true),
+        (3, CodedKind::Predicted, false),
+        (1, CodedKind::Bidirectional, false),
+        (2, CodedKind::Bidirectional, false),
+    ];
+    let more = [
+        (6, CodedKind::Predicted, false),
+        (4, CodedKind::Bidirectional, false),
+        (5, CodedKind::Bidirectional, false),
+        (7, CodedKind::Intra, true),
+    ];
     for (i, (d, kind, key)) in order.iter().chain(more.iter()).enumerate() {
         let au = vec![0, 0, 0, 1, if *key { 0x65 } else { 0x41 }, i as u8];
-        w.push_picture(&au, FrameInfo { key: *key, kind: *kind, display: Some(*d) }).unwrap();
+        w.push_picture(
+            &au,
+            FrameInfo {
+                key: *key,
+                kind: *kind,
+                display: Some(*d),
+            },
+        )
+        .unwrap();
     }
     let f = w.finish().unwrap().into_inner();
     let m = open(&f).unwrap();
@@ -168,7 +236,10 @@ fn long_gop_index_gives_presentation_order_and_key_frames() {
     let pts: Vec<i64> = t.samples.iter().map(|s| s.pts).collect();
     assert_eq!(pts, vec![0, 3, 1, 2, 6, 4, 5, 7]);
     let keys: Vec<bool> = t.samples.iter().map(|s| s.key).collect();
-    assert_eq!(keys, vec![true, false, false, false, false, false, false, true]);
+    assert_eq!(
+        keys,
+        vec![true, false, false, false, false, false, false, true]
+    );
     let b: Vec<bool> = t.samples.iter().map(|s| s.b_picture).collect();
     assert_eq!(b, vec![false, false, true, true, false, true, true, false]);
     assert_eq!(t.sample_at(4), Some(5));
@@ -176,9 +247,17 @@ fn long_gop_index_gives_presentation_order_and_key_frames() {
 
 #[test]
 fn op_atom_picture_is_clip_wrapped() {
-    let mut cfg = WriterConfig::new(Pattern::OpAtom, Rational::new(24, 1), PackageIds::from_seed("atom-v", "Atom V"));
+    let mut cfg = WriterConfig::new(
+        Pattern::OpAtom,
+        Rational::new(24, 1),
+        PackageIds::from_seed("atom-v", "Atom V"),
+    );
     cfg.picture = Some(PictureDesc::new(PictureCoding::Vc3 { cid: 1272 }, 64, 36));
-    cfg.timecode = Some(StartTimecode { frames: 86_400, rate: Rational::new(24, 1), drop_frame: false });
+    cfg.timecode = Some(StartTimecode {
+        frames: 86_400,
+        rate: Rational::new(24, 1),
+        drop_frame: false,
+    });
     let mut w = MxfWriter::new(Cursor::new(Vec::new()), cfg).unwrap();
     for i in 0..9 {
         w.push_picture(&vc3_like(i), FrameInfo::intra()).unwrap();
@@ -203,7 +282,14 @@ fn op_atom_pcm_helper() {
     let ids = PackageIds::from_seed("atom-a", "Atom A1");
     let samples: Vec<i32> = (0..4801).map(|k| (k * 7 % 65536) - 32768).collect();
     for rate in [None, Some(Rational::new(25, 1))] {
-        let opts = OpAtomPcm { sample_rate: 48_000, bits: 16, channels: 1, edit_rate: rate, ids: ids.clone(), timecode: None };
+        let opts = OpAtomPcm {
+            sample_rate: 48_000,
+            bits: 16,
+            channels: 1,
+            edit_rate: rate,
+            ids: ids.clone(),
+            timecode: None,
+        };
         let f = write_opatom_pcm(&opts, &samples).unwrap();
         let m = open(&f).unwrap();
         assert_eq!(m.operational_pattern, OperationalPattern::Atom);
@@ -212,10 +298,20 @@ fn op_atom_pcm_helper() {
         assert_eq!(t.stored_sample_frames(), 4801);
         assert_eq!(t.duration, Some(if rate.is_some() { 3 } else { 4801 }));
         let pcm = m.read_pcm(&f, 0, 0, 4801).unwrap();
-        assert!(samples.iter().zip(&pcm[0]).all(|(s, p)| *s as f32 / 32768.0 == *p));
+        assert!(samples
+            .iter()
+            .zip(&pcm[0])
+            .all(|(s, p)| *s as f32 / 32768.0 == *p));
     }
     // 24-bit stereo
-    let opts = OpAtomPcm { sample_rate: 48_000, bits: 24, channels: 2, edit_rate: None, ids, timecode: None };
+    let opts = OpAtomPcm {
+        sample_rate: 48_000,
+        bits: 24,
+        channels: 2,
+        edit_rate: None,
+        ids,
+        timecode: None,
+    };
     let f = write_opatom_pcm(&opts, &[8_388_607, -8_388_608, 1, -1]).unwrap();
     let m = open(&f).unwrap();
     let pcm = m.read_pcm(&f, 0, 0, 2).unwrap();
@@ -240,14 +336,27 @@ fn long_files_split_the_index_into_segments() {
     cfg.sound.clear();
     let mut w = MxfWriter::new(Cursor::new(Vec::new()), cfg).unwrap();
     for i in 0..12_000 {
-        w.push_picture(&[0, 0, 0, 9, b'i', b'c', b'p', b'f', i as u8], FrameInfo::intra()).unwrap();
+        w.push_picture(
+            &[0, 0, 0, 9, b'i', b'c', b'p', b'f', i as u8],
+            FrameInfo::intra(),
+        )
+        .unwrap();
     }
     let f = w.finish().unwrap().into_inner();
     let m = open(&f).unwrap();
     assert!(m.index_segments.len() >= 2);
-    assert_eq!(m.index_segments.iter().map(|s| s.entries.len()).sum::<usize>(), 12_000);
+    assert_eq!(
+        m.index_segments
+            .iter()
+            .map(|s| s.entries.len())
+            .sum::<usize>(),
+        12_000
+    );
     assert_eq!(m.tracks[0].samples.len(), 12_000);
-    assert_eq!(m.read_sample(&f, 0, 11_999).unwrap()[8], (11_999 % 256) as u8);
+    assert_eq!(
+        m.read_sample(&f, 0, 11_999).unwrap()[8],
+        (11_999 % 256) as u8
+    );
 }
 
 #[test]
@@ -256,15 +365,33 @@ fn rejects_bad_configs() {
     let cfg = WriterConfig::new(Pattern::Op1a, Rational::new(25, 1), ids.clone());
     assert!(MxfWriter::new(Cursor::new(Vec::new()), cfg).is_err());
     let mut cfg = WriterConfig::new(Pattern::OpAtom, Rational::new(25, 1), ids);
-    cfg.sound = vec![SoundDesc { sample_rate: 48_000, channels: 1, bits: 16 }; 2];
+    cfg.sound = vec![
+        SoundDesc {
+            sample_rate: 48_000,
+            channels: 1,
+            bits: 16
+        };
+        2
+    ];
     assert!(MxfWriter::new(Cursor::new(Vec::new()), cfg).is_err());
 }
 
 #[test]
 fn timestamps() {
-    assert_eq!(Timestamp::from_unix(0), Timestamp { year: 1970, month: 1, day: 1, ..Default::default() });
+    assert_eq!(
+        Timestamp::from_unix(0),
+        Timestamp {
+            year: 1970,
+            month: 1,
+            day: 1,
+            ..Default::default()
+        }
+    );
     let t = Timestamp::from_unix(1_700_000_000);
-    assert_eq!((t.year, t.month, t.day, t.hour, t.minute, t.second), (2023, 11, 14, 22, 13, 20));
+    assert_eq!(
+        (t.year, t.month, t.day, t.hour, t.minute, t.second),
+        (2023, 11, 14, 22, 13, 20)
+    );
     let t = Timestamp::from_unix(951_782_400); // 2000-02-29
     assert_eq!((t.year, t.month, t.day), (2000, 2, 29));
 }
@@ -285,16 +412,27 @@ fn truncated_and_mutated_files_never_panic() {
             }
         }
     }
-    assert!(opened > 20, "a truncated file with a complete header still opens ({opened})");
+    assert!(
+        opened > 20,
+        "a truncated file with a complete header still opens ({opened})"
+    );
     let atom = write_opatom_pcm(
-        &OpAtomPcm { sample_rate: 48_000, bits: 24, channels: 1, edit_rate: None, ids: PackageIds::from_seed("m", "m"), timecode: None },
+        &OpAtomPcm {
+            sample_rate: 48_000,
+            bits: 24,
+            channels: 1,
+            edit_rate: None,
+            ids: PackageIds::from_seed("m", "m"),
+            timecode: None,
+        },
         &(0..3000).collect::<Vec<i32>>(),
     )
     .unwrap();
     let mut seed = 0x9E37_79B9u64;
     for src in [&f, &atom] {
         for cut in (0..src.len()).step_by(53) {
-            let _ = open(&src[..cut].to_vec()).map(|m| m.read_pcm(&src[..cut].to_vec(), 0, 0, 100).ok());
+            let _ = open(&src[..cut].to_vec())
+                .map(|m| m.read_pcm(&src[..cut].to_vec(), 0, 0, 100).ok());
         }
         for _ in 0..400 {
             let mut g = src.clone();
@@ -323,8 +461,17 @@ fn truncated_and_mutated_files_never_panic() {
 #[test]
 fn long_pcm_reads_backed_by_the_file_are_not_capped() {
     let frames = 200 * 48_000;
-    let samples: Vec<i32> = (0..frames * 2).map(|k| (k % 60_000) as i32 - 30_000).collect();
-    let opts = OpAtomPcm { sample_rate: 48_000, bits: 16, channels: 2, edit_rate: None, ids: PackageIds::from_seed("long", "Long"), timecode: None };
+    let samples: Vec<i32> = (0..frames * 2)
+        .map(|k| (k % 60_000) as i32 - 30_000)
+        .collect();
+    let opts = OpAtomPcm {
+        sample_rate: 48_000,
+        bits: 16,
+        channels: 2,
+        edit_rate: None,
+        ids: PackageIds::from_seed("long", "Long"),
+        timecode: None,
+    };
     let f = write_opatom_pcm(&opts, &samples).unwrap();
     let m = open(&f).unwrap();
     assert_eq!(m.tracks[0].stored_sample_frames(), frames as u64);

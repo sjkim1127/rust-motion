@@ -53,7 +53,10 @@ impl Umid {
     /// time, track). The same seed always gives the same UMID.
     pub fn from_seed(seed: &[u8]) -> Umid {
         let mut u = [0u8; 32];
-        u[..16].copy_from_slice(&[0x06, 0x0A, 0x2B, 0x34, 0x01, 0x01, 0x01, 0x05, 0x01, 0x01, 0x0D, 0x20, 0x13, 0x00, 0x00, 0x00]);
+        u[..16].copy_from_slice(&[
+            0x06, 0x0A, 0x2B, 0x34, 0x01, 0x01, 0x01, 0x05, 0x01, 0x01, 0x0D, 0x20, 0x13, 0x00,
+            0x00, 0x00,
+        ]);
         u[16..].copy_from_slice(&hash128(seed));
         Umid(u)
     }
@@ -71,7 +74,9 @@ fn hash128(seed: &[u8]) -> [u8; 16] {
     let mut b = 0x84222325_cbf29ce4u64 ^ seed.len() as u64;
     for &x in seed {
         a = (a ^ x as u64).wrapping_mul(0x0000_0100_0000_01B3);
-        b = (b ^ x as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(23);
+        b = (b ^ x as u64)
+            .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            .rotate_left(23);
     }
     let mix = |mut z: u64| {
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -117,12 +122,34 @@ impl PictureCoding {
     fn coding_label(&self) -> [u8; 16] {
         match *self {
             PictureCoding::Vc3 { cid } => {
-                let code = if (1235..=1234 + 0x7F).contains(&cid) { (cid - 1234) as u8 } else { 0 };
-                [0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x0A, 0x04, 0x01, 0x02, 0x02, 0x71, code, 0x00, 0x00]
+                let code = if (1235..=1234 + 0x7F).contains(&cid) {
+                    (cid - 1234) as u8
+                } else {
+                    0
+                };
+                [
+                    0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x0A, 0x04, 0x01, 0x02, 0x02, 0x71,
+                    code, 0x00, 0x00,
+                ]
             }
-            PictureCoding::ProRes { profile } => {
-                [0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x0D, 0x04, 0x01, 0x02, 0x02, 0x03, 0x06, profile.clamp(1, 6), 0x00]
-            }
+            PictureCoding::ProRes { profile } => [
+                0x06,
+                0x0E,
+                0x2B,
+                0x34,
+                0x04,
+                0x01,
+                0x01,
+                0x0D,
+                0x04,
+                0x01,
+                0x02,
+                0x02,
+                0x03,
+                0x06,
+                profile.clamp(1, 6),
+                0x00,
+            ],
             PictureCoding::Avc { profile_idc, intra } => {
                 let (b13, b14) = if intra {
                     (0x32, 0x20)
@@ -140,7 +167,10 @@ impl PictureCoding {
                         },
                     )
                 };
-                [0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x0A, 0x04, 0x01, 0x02, 0x02, 0x01, b13, b14, 0x01]
+                [
+                    0x06, 0x0E, 0x2B, 0x34, 0x04, 0x01, 0x01, 0x0A, 0x04, 0x01, 0x02, 0x02, 0x01,
+                    b13, b14, 0x01,
+                ]
             }
         }
     }
@@ -148,9 +178,18 @@ impl PictureCoding {
     fn container(&self, clip: bool) -> ([u8; 16], u8) {
         let w = if clip { 0x02 } else { 0x01 };
         match self {
-            PictureCoding::Vc3 { .. } => (essence_container(0x0A, 0x11, w, 0x00), if clip { 0x0D } else { 0x0C }),
-            PictureCoding::ProRes { .. } => (essence_container(0x0D, 0x1C, w, 0x00), if clip { 0x18 } else { 0x17 }),
-            PictureCoding::Avc { .. } => (essence_container(0x0A, 0x10, 0x60, w), if clip { 0x16 } else { 0x15 }),
+            PictureCoding::Vc3 { .. } => (
+                essence_container(0x0A, 0x11, w, 0x00),
+                if clip { 0x0D } else { 0x0C },
+            ),
+            PictureCoding::ProRes { .. } => (
+                essence_container(0x0D, 0x1C, w, 0x00),
+                if clip { 0x18 } else { 0x17 },
+            ),
+            PictureCoding::Avc { .. } => (
+                essence_container(0x0A, 0x10, 0x60, w),
+                if clip { 0x16 } else { 0x15 },
+            ),
         }
     }
 }
@@ -188,10 +227,22 @@ impl PictureDesc {
         let g = gcd(width.max(1), height.max(1));
         let (depth, subsampling) = match coding {
             PictureCoding::Avc { .. } => (8, (2, 2)),
-            PictureCoding::ProRes { profile } => (if profile >= 5 { 12 } else { 10 }, if profile >= 5 { (1, 1) } else { (2, 1) }),
-            PictureCoding::Vc3 { cid } => {
-                (if matches!(cid, 1235 | 1241 | 1250 | 1256 | 1270 | 1271) { 10 } else { 8 }, if matches!(cid, 1256 | 1270) { (1, 1) } else { (2, 1) })
-            }
+            PictureCoding::ProRes { profile } => (
+                if profile >= 5 { 12 } else { 10 },
+                if profile >= 5 { (1, 1) } else { (2, 1) },
+            ),
+            PictureCoding::Vc3 { cid } => (
+                if matches!(cid, 1235 | 1241 | 1250 | 1256 | 1270 | 1271) {
+                    10
+                } else {
+                    8
+                },
+                if matches!(cid, 1256 | 1270) {
+                    (1, 1)
+                } else {
+                    (2, 1)
+                },
+            ),
         };
         PictureDesc {
             coding,
@@ -206,7 +257,11 @@ impl PictureDesc {
 }
 
 fn gcd(a: u32, b: u32) -> u32 {
-    if b == 0 { a } else { gcd(b, a % b) }
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
+    }
 }
 
 /// A PCM sound track (Broadcast Wave mapping, little-endian interleaved samples).
@@ -282,7 +337,16 @@ impl Timestamp {
     }
     fn bytes(&self) -> [u8; 8] {
         let y = self.year.to_be_bytes();
-        [y[0], y[1], self.month, self.day, self.hour, self.minute, self.second, (self.millisecond / 4) as u8]
+        [
+            y[0],
+            y[1],
+            self.month,
+            self.day,
+            self.hour,
+            self.minute,
+            self.second,
+            (self.millisecond / 4) as u8,
+        ]
     }
 }
 
@@ -370,7 +434,11 @@ pub struct FrameInfo {
 impl FrameInfo {
     /// An independently decodable picture presented in stored order.
     pub fn intra() -> Self {
-        FrameInfo { key: true, kind: CodedKind::Intra, display: None }
+        FrameInfo {
+            key: true,
+            kind: CodedKind::Intra,
+            display: None,
+        }
     }
 }
 
@@ -482,13 +550,17 @@ struct Set {
 
 impl Set {
     fn new(kind: u8, uid: [u8; 16]) -> Set {
-        let mut s = Set { key: set_key(kind), v: Vec::new() };
+        let mut s = Set {
+            key: set_key(kind),
+            v: Vec::new(),
+        };
         s.p(0x3C0A, &uid);
         s
     }
     fn p(&mut self, tag: u16, v: &[u8]) -> &mut Set {
         self.v.extend_from_slice(&tag.to_be_bytes());
-        self.v.extend_from_slice(&(v.len().min(0xFFFF) as u16).to_be_bytes());
+        self.v
+            .extend_from_slice(&(v.len().min(0xFFFF) as u16).to_be_bytes());
         self.v.extend_from_slice(&v[..v.len().min(0xFFFF)]);
         self
     }
@@ -527,30 +599,56 @@ impl<W: Write + Seek> MxfWriter<W> {
     /// Start a file: writes the header partition and the body partition pack.
     pub fn new(mut w: W, cfg: WriterConfig) -> io::Result<Self> {
         if !cfg.edit_rate.is_valid() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "MXF edit rate must be positive"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "MXF edit rate must be positive",
+            ));
         }
         let n_essence = cfg.picture.is_some() as usize + cfg.sound.len();
         if n_essence == 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "MXF file without essence tracks"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "MXF file without essence tracks",
+            ));
         }
         if cfg.pattern == Pattern::OpAtom && n_essence != 1 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "OP-Atom files hold exactly one essence track"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "OP-Atom files hold exactly one essence track",
+            ));
         }
-        if cfg.sound.iter().any(|s| s.sample_rate == 0 || s.channels == 0 || !(1..=32).contains(&s.bits)) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid PCM sound description"));
+        if cfg
+            .sound
+            .iter()
+            .any(|s| s.sample_rate == 0 || s.channels == 0 || !(1..=32).contains(&s.bits))
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid PCM sound description",
+            ));
         }
         let clip = cfg.pattern == Pattern::OpAtom;
         let mut tracks = Vec::new();
         let mut id = cfg.first_track_id.max(2);
         if let Some(p) = &cfg.picture {
             let (container, et) = p.coding.container(clip);
-            tracks.push(TrackW { id, kind: TrackKind::Picture, element_key: element_key(0x15, 1, et, 1), container });
+            tracks.push(TrackW {
+                id,
+                kind: TrackKind::Picture,
+                element_key: element_key(0x15, 1, et, 1),
+                container,
+            });
             id += 1;
         }
         let ns = cfg.sound.len() as u8;
         for k in 0..cfg.sound.len() {
             let container = essence_container(0x01, 0x06, if clip { 0x02 } else { 0x01 }, 0x00);
-            tracks.push(TrackW { id, kind: TrackKind::Sound(k), element_key: element_key(0x16, ns, if clip { 0x02 } else { 0x01 }, k as u8 + 1), container });
+            tracks.push(TrackW {
+                id,
+                kind: TrackKind::Sound(k),
+                element_key: element_key(0x16, ns, if clip { 0x02 } else { 0x01 }, k as u8 + 1),
+                container,
+            });
             id += 1;
         }
         let base = w.stream_position()?;
@@ -638,7 +736,18 @@ impl<W: Write + Seek> MxfWriter<W> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn partition_pack(&self, kind: u8, status: u8, this: u64, prev: u64, footer: u64, hbc: u64, ibc: u64, index_sid: u32, body_sid: u32) -> Vec<u8> {
+    fn partition_pack(
+        &self,
+        kind: u8,
+        status: u8,
+        this: u64,
+        prev: u64,
+        footer: u64,
+        hbc: u64,
+        ibc: u64,
+        index_sid: u32,
+        body_sid: u32,
+    ) -> Vec<u8> {
         let mut v = Vec::with_capacity(160);
         v.extend_from_slice(&1u16.to_be_bytes());
         v.extend_from_slice(&3u16.to_be_bytes());
@@ -688,7 +797,10 @@ impl<W: Write + Seek> MxfWriter<W> {
     /// of their edit unit is there too.
     pub fn push_picture(&mut self, data: &[u8], info: FrameInfo) -> io::Result<()> {
         if self.cfg.picture.is_none() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "this MXF file has no picture track"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "this MXF file has no picture track",
+            ));
         }
         match self.cfg.pattern {
             Pattern::Op1a => {
@@ -696,7 +808,11 @@ impl<W: Write + Seek> MxfWriter<W> {
                 self.emit(false)
             }
             Pattern::OpAtom => {
-                self.entries.push(Entry { offset: self.clip_len, slices: Vec::new(), info });
+                self.entries.push(Entry {
+                    offset: self.clip_len,
+                    slices: Vec::new(),
+                    info,
+                });
                 self.put(data)?;
                 self.clip_len += data.len() as u64;
                 Ok(())
@@ -707,11 +823,17 @@ impl<W: Write + Seek> MxfWriter<W> {
     /// Push interleaved little-endian PCM of sound track `track` (whole sample frames).
     pub fn push_sound(&mut self, track: usize, pcm: &[u8]) -> io::Result<()> {
         let Some(sd) = self.cfg.sound.get(track).copied() else {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("no sound track {track}")));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("no sound track {track}"),
+            ));
         };
         let ba = sd.block_align() as usize;
         if !pcm.len().is_multiple_of(ba) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "PCM data is not a whole number of sample frames"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "PCM data is not a whole number of sample frames",
+            ));
         }
         match self.cfg.pattern {
             Pattern::Op1a => {
@@ -736,7 +858,11 @@ impl<W: Write + Seek> MxfWriter<W> {
             if has_pic && self.pending.is_empty() {
                 return Ok(());
             }
-            let need: Vec<usize> = (0..self.cfg.sound.len()).map(|k| self.unit_samples(k, i) as usize * self.cfg.sound[k].block_align() as usize).collect();
+            let need: Vec<usize> = (0..self.cfg.sound.len())
+                .map(|k| {
+                    self.unit_samples(k, i) as usize * self.cfg.sound[k].block_align() as usize
+                })
+                .collect();
             let enough = need.iter().zip(&self.sound_buf).all(|(n, b)| b.len() >= *n);
             if !enough && !flush {
                 return Ok(());
@@ -744,7 +870,11 @@ impl<W: Write + Seek> MxfWriter<W> {
             if !has_pic && self.sound_buf.iter().all(Vec::is_empty) {
                 return Ok(());
             }
-            let pic = if has_pic { self.pending.pop_front() } else { None };
+            let pic = if has_pic {
+                self.pending.pop_front()
+            } else {
+                None
+            };
             let mut cp = Vec::new();
             let mut slices = Vec::new();
             if let Some((data, _)) = &pic {
@@ -761,7 +891,11 @@ impl<W: Write + Seek> MxfWriter<W> {
                 klv(&mut cp, &self.tracks[first_sound + k].element_key, &chunk);
             }
             let info = pic.map(|p| p.1).unwrap_or_else(FrameInfo::intra);
-            self.entries.push(Entry { offset: self.pos - self.essence_start, slices, info });
+            self.entries.push(Entry {
+                offset: self.pos - self.essence_start,
+                slices,
+                info,
+            });
             self.put(&cp)?;
         }
     }
@@ -784,7 +918,12 @@ impl<W: Write + Seek> MxfWriter<W> {
         let containers = self.containers();
         // Preface
         let mut s = Set::new(0x2F, self.uid(1));
-        s.p(0x3B02, &ts).u16(0x3B05, 0x0103).u32(0x3B07, 1).refs(0x3B06, &[self.uid(2)]).p(0x3B03, &self.uid(3)).p(0x3B09, &self.op_label());
+        s.p(0x3B02, &ts)
+            .u16(0x3B05, 0x0103)
+            .u32(0x3B07, 1)
+            .refs(0x3B06, &[self.uid(2)])
+            .p(0x3B03, &self.uid(3))
+            .p(0x3B09, &self.op_label());
         let ec: Vec<&[u8]> = containers.iter().map(|c| &c[..]).collect();
         s.p(0x3B0A, &batch(&ec, 16)).p(0x3B0B, &batch(&[], 16));
         s.write(&mut out);
@@ -799,10 +938,13 @@ impl<W: Write + Seek> MxfWriter<W> {
         s.write(&mut out);
         // Content storage, essence container data
         let mut s = Set::new(0x18, self.uid(3));
-        s.refs(0x1901, &[self.uid(1000), self.uid(2000)]).refs(0x1902, &[self.uid(4)]);
+        s.refs(0x1901, &[self.uid(1000), self.uid(2000)])
+            .refs(0x1902, &[self.uid(4)]);
         s.write(&mut out);
         let mut s = Set::new(0x23, self.uid(4));
-        s.p(0x2701, &cfg.ids.file.0).u32(0x3F06, INDEX_SID).u32(0x3F07, BODY_SID);
+        s.p(0x2701, &cfg.ids.file.0)
+            .u32(0x3F06, INDEX_SID)
+            .u32(0x3F07, BODY_SID);
         s.write(&mut out);
         // Packages
         for (pkg, base) in [(0u8, 1000u32), (1, 2000)] {
@@ -810,7 +952,11 @@ impl<W: Write + Seek> MxfWriter<W> {
             let n = 1 + self.tracks.len() as u32;
             let track_uids: Vec<[u8; 16]> = (0..n).map(|k| self.uid(base + 1 + 3 * k)).collect();
             let mut s = Set::new(if material { 0x36 } else { 0x37 }, self.uid(base));
-            let (umid, name) = if material { (cfg.ids.material, &cfg.ids.material_name) } else { (cfg.ids.file, &cfg.ids.file_name) };
+            let (umid, name) = if material {
+                (cfg.ids.material, &cfg.ids.material_name)
+            } else {
+                (cfg.ids.file, &cfg.ids.file_name)
+            };
             s.p(0x4401, &umid.0);
             if !name.is_empty() {
                 s.p(0x4402, &utf16(name));
@@ -821,20 +967,43 @@ impl<W: Write + Seek> MxfWriter<W> {
             }
             s.write(&mut out);
             // timecode track (id 1)
-            let tc = cfg.timecode.unwrap_or(StartTimecode { frames: 0, rate: cfg.edit_rate, drop_frame: false });
-            let tc_rate = if cfg.picture.is_some() || !tc.rate.is_valid() { cfg.edit_rate } else { tc.rate };
+            let tc = cfg.timecode.unwrap_or(StartTimecode {
+                frames: 0,
+                rate: cfg.edit_rate,
+                drop_frame: false,
+            });
+            let tc_rate = if cfg.picture.is_some() || !tc.rate.is_valid() {
+                cfg.edit_rate
+            } else {
+                tc.rate
+            };
             let tc_dur = if d.essence < 0 {
                 -1
             } else {
                 let er = cfg.edit_rate;
                 {
-                    let (a, b) = (d.essence as i128 * tc_rate.num as i128 * er.den as i128, (tc_rate.den as i128 * er.num as i128).max(1));
+                    let (a, b) = (
+                        d.essence as i128 * tc_rate.num as i128 * er.den as i128,
+                        (tc_rate.den as i128 * er.num as i128).max(1),
+                    );
                     ((a + b - 1) / b) as i64
                 }
             };
-            self.track_sets(&mut out, base + 1, 1, 0, tc_rate, DEF_TIMECODE, tc_dur, if material { Some("TC1") } else { None }, |s| {
-                s.u16(0x1502, tc.rounded_base()).i64(0x1501, tc.frames).u8(0x1503, tc.drop_frame as u8);
-            });
+            self.track_sets(
+                &mut out,
+                base + 1,
+                1,
+                0,
+                tc_rate,
+                DEF_TIMECODE,
+                tc_dur,
+                if material { Some("TC1") } else { None },
+                |s| {
+                    s.u16(0x1502, tc.rounded_base())
+                        .i64(0x1501, tc.frames)
+                        .u8(0x1503, tc.drop_frame as u8);
+                },
+            );
             let mut vi = 0;
             let mut ai = 0;
             for (k, t) in self.tracks.iter().enumerate() {
@@ -848,24 +1017,48 @@ impl<W: Write + Seek> MxfWriter<W> {
                         (DEF_SOUND, format!("A{ai}"))
                     }
                 };
-                let number = if material { 0 } else { u32::from_be_bytes(t.element_key[12..16].try_into().unwrap_or([0; 4])) };
+                let number = if material {
+                    0
+                } else {
+                    u32::from_be_bytes(t.element_key[12..16].try_into().unwrap_or([0; 4]))
+                };
                 let file = cfg.ids.file;
-                self.track_sets(&mut out, base + 4 + 3 * k as u32, t.id, number, cfg.edit_rate, def, d.essence, material.then_some(label.as_str()), |s| {
-                    let (src, src_track) = if material { (file, t.id) } else { (Umid([0; 32]), 0) };
-                    s.i64(0x1201, 0).p(0x1101, &src.0).u32(0x1102, src_track);
-                });
+                self.track_sets(
+                    &mut out,
+                    base + 4 + 3 * k as u32,
+                    t.id,
+                    number,
+                    cfg.edit_rate,
+                    def,
+                    d.essence,
+                    material.then_some(label.as_str()),
+                    |s| {
+                        let (src, src_track) = if material {
+                            (file, t.id)
+                        } else {
+                            (Umid([0; 32]), 0)
+                        };
+                        s.i64(0x1201, 0).p(0x1101, &src.0).u32(0x1102, src_track);
+                    },
+                );
             }
         }
         // Descriptors
         let multiple = self.tracks.len() > 1;
         let mut desc_uids = Vec::new();
         for (k, t) in self.tracks.iter().enumerate() {
-            let uid = if multiple { self.uid(3001 + k as u32) } else { self.uid(3000) };
+            let uid = if multiple {
+                self.uid(3001 + k as u32)
+            } else {
+                self.uid(3000)
+            };
             desc_uids.push(uid);
             match t.kind {
                 TrackKind::Picture => {
                     // Picture tracks exist only with a picture configuration.
-                    let Some(p) = cfg.picture.as_ref() else { continue };
+                    let Some(p) = cfg.picture.as_ref() else {
+                        continue;
+                    };
                     let mut s = Set::new(0x28, uid);
                     if multiple {
                         s.u32(0x3006, t.id);
@@ -892,7 +1085,10 @@ impl<W: Write + Seek> MxfWriter<W> {
                         .u32(0x3209, p.width)
                         .u32(0x3208, p.height)
                         .rat(0x320E, p.aspect)
-                        .p(0x320D, &batch(&[&0u32.to_be_bytes(), &0u32.to_be_bytes()], 4))
+                        .p(
+                            0x320D,
+                            &batch(&[&0u32.to_be_bytes(), &0u32.to_be_bytes()], 4),
+                        )
                         .p(0x3201, &p.coding.coding_label())
                         .p(0x3210, &tcl)
                         .p(0x321A, &ce)
@@ -976,7 +1172,10 @@ impl<W: Write + Seek> MxfWriter<W> {
         let rate = self.cfg.edit_rate;
         let mut seg_uid = 4000;
         let mut segment = |out: &mut Vec<u8>, f: &mut dyn FnMut(&mut Set)| {
-            let mut s = Set { key: INDEX_KEY, v: Vec::new() };
+            let mut s = Set {
+                key: INDEX_KEY,
+                v: Vec::new(),
+            };
             s.p(0x3C0A, &self.uid(seg_uid));
             seg_uid += 1;
             s.rat(0x3F0B, rate);
@@ -987,11 +1186,16 @@ impl<W: Write + Seek> MxfWriter<W> {
         // OP-Atom sound at one sample per edit unit: constant bytes per edit unit
         if self.cfg.pattern == Pattern::OpAtom && self.cfg.picture.is_none() {
             let sd = self.cfg.sound[0];
-            let per_unit = (sd.sample_rate as i64 * rate.den as i64) % rate.num as i64 == 0 && (sd.sample_rate as i64 * rate.den as i64) / rate.num as i64 == 1;
+            let per_unit = (sd.sample_rate as i64 * rate.den as i64) % rate.num as i64 == 0
+                && (sd.sample_rate as i64 * rate.den as i64) / rate.num as i64 == 1;
             if per_unit {
                 let units = self.essence_units();
                 segment(&mut out, &mut |s| {
-                    s.i64(0x3F0C, 0).i64(0x3F0D, units).u32(0x3F05, sd.block_align()).u8(0x3F08, 0).u8(0x3F0E, 0);
+                    s.i64(0x3F0C, 0)
+                        .i64(0x3F0D, units)
+                        .u32(0x3F05, sd.block_align())
+                        .u8(0x3F08, 0)
+                        .u8(0x3F0E, 0);
                 });
                 return out;
             }
@@ -1000,8 +1204,13 @@ impl<W: Write + Seek> MxfWriter<W> {
             let ba = sd.block_align() as u64;
             let entries: Vec<Entry> = (0..units)
                 .map(|i| {
-                    let s = (i as u128 * sd.sample_rate as u128 * rate.den as u128 / rate.num as u128) as u64;
-                    Entry { offset: s * ba, slices: Vec::new(), info: FrameInfo::intra() }
+                    let s = (i as u128 * sd.sample_rate as u128 * rate.den as u128
+                        / rate.num as u128) as u64;
+                    Entry {
+                        offset: s * ba,
+                        slices: Vec::new(),
+                        info: FrameInfo::intra(),
+                    }
                 })
                 .collect();
             self.entry_segments(&mut out, &entries, &mut segment);
@@ -1011,7 +1220,12 @@ impl<W: Write + Seek> MxfWriter<W> {
         out
     }
 
-    fn entry_segments(&self, out: &mut Vec<u8>, entries: &[Entry], segment: &mut dyn FnMut(&mut Vec<u8>, &mut dyn FnMut(&mut Set))) {
+    fn entry_segments(
+        &self,
+        out: &mut Vec<u8>,
+        entries: &[Entry],
+        segment: &mut dyn FnMut(&mut Vec<u8>, &mut dyn FnMut(&mut Set)),
+    ) {
         let n = entries.len();
         let nslices = entries.iter().map(|e| e.slices.len()).max().unwrap_or(0);
         // temporal offsets: display d is stored at d + TO[d]
@@ -1025,18 +1239,33 @@ impl<W: Write + Seek> MxfWriter<W> {
             }
             stored_of[d as usize] = s;
         }
-        let intra = self.cfg.picture.as_ref().is_none_or(|p| p.coding.intra_only());
-        let avc = matches!(self.cfg.picture.as_ref().map(|p| p.coding), Some(PictureCoding::Avc { .. }));
+        let intra = self
+            .cfg
+            .picture
+            .as_ref()
+            .is_none_or(|p| p.coding.intra_only());
+        let avc = matches!(
+            self.cfg.picture.as_ref().map(|p| p.coding),
+            Some(PictureCoding::Avc { .. })
+        );
         let mut rows: Vec<Vec<u8>> = Vec::with_capacity(n);
         let mut last_key = 0usize;
         for (s, e) in entries.iter().enumerate() {
-            let to = if valid { (stored_of[s] as i64 - s as i64).clamp(-128, 127) as i8 } else { 0 };
+            let to = if valid {
+                (stored_of[s] as i64 - s as i64).clamp(-128, 127) as i8
+            } else {
+                0
+            };
             if e.info.key || intra {
                 last_key = s;
             }
             let kfo = (last_key as i64 - s as i64).max(-128) as i8;
             let flags: u8 = if e.info.key || intra {
-                if avc { 0xC0 } else { 0x80 }
+                if avc {
+                    0xC0
+                } else {
+                    0x80
+                }
             } else {
                 match e.info.kind {
                     CodedKind::Intra => 0x00,
@@ -1052,8 +1281,14 @@ impl<W: Write + Seek> MxfWriter<W> {
             rows.push(r);
         }
         // delta entries: element k of the content package is in slice k (picture in slice 0)
-        let n_el = if self.cfg.pattern == Pattern::Op1a { self.tracks.len() } else { 1 };
-        let deltas: Vec<[u8; 6]> = (0..n_el).map(|k| [0, k.min(nslices) as u8, 0, 0, 0, 0]).collect();
+        let n_el = if self.cfg.pattern == Pattern::Op1a {
+            self.tracks.len()
+        } else {
+            1
+        };
+        let deltas: Vec<[u8; 6]> = (0..n_el)
+            .map(|k| [0, k.min(nslices) as u8, 0, 0, 0, 0])
+            .collect();
         let delta_items: Vec<&[u8]> = deltas.iter().map(|d| &d[..]).collect();
         let delta = batch(&delta_items, 6);
         let entry_size = 11 + 4 * nslices;
@@ -1087,17 +1322,30 @@ impl<W: Write + Seek> MxfWriter<W> {
         } else {
             // patch the clip element length
             let end = self.pos;
-            self.w.seek(SeekFrom::Start(self.base + self.clip_kl + 16))?;
+            self.w
+                .seek(SeekFrom::Start(self.base + self.clip_kl + 16))?;
             let mut l = vec![0x88];
             l.extend_from_slice(&self.clip_len.to_be_bytes());
             self.w.write_all(&l)?;
             self.w.seek(SeekFrom::Start(self.base + end))?;
         }
-        let d = Durations { essence: self.essence_units() };
+        let d = Durations {
+            essence: self.essence_units(),
+        };
         let meta = self.metadata(d);
         let index = self.index();
         let footer = self.pos;
-        let pack = self.partition_pack(4, 4, footer, self.body_partition, footer, meta.len() as u64, index.len() as u64, INDEX_SID, 0);
+        let pack = self.partition_pack(
+            4,
+            4,
+            footer,
+            self.body_partition,
+            footer,
+            meta.len() as u64,
+            index.len() as u64,
+            INDEX_SID,
+            0,
+        );
         let mut out = pack;
         out.extend_from_slice(&meta);
         out.extend_from_slice(&index);
@@ -1125,7 +1373,8 @@ impl<W: Write + Seek> MxfWriter<W> {
             self.w.write_all(&h)?;
         }
         let body = self.partition_pack(3, 4, self.body_partition, 0, footer, 0, 0, 0, BODY_SID);
-        self.w.seek(SeekFrom::Start(self.base + self.body_partition))?;
+        self.w
+            .seek(SeekFrom::Start(self.base + self.body_partition))?;
         self.w.write_all(&body)?;
         self.w.seek(SeekFrom::Start(self.base + end))?;
         self.w.flush()?;
@@ -1147,7 +1396,9 @@ pub fn encode_pcm(planar: &[Vec<f32>], bits: u32) -> Vec<u8> {
                 1 => out.push(((s * 127.0).round() as i32 + 128) as u8),
                 2 => out.extend_from_slice(&((s * 32767.0).round() as i16).to_le_bytes()),
                 3 => out.extend_from_slice(&((s * 8_388_607.0).round() as i32).to_le_bytes()[..3]),
-                _ => out.extend_from_slice(&((s as f64 * 2_147_483_647.0).round() as i32).to_le_bytes()),
+                _ => out.extend_from_slice(
+                    &((s as f64 * 2_147_483_647.0).round() as i32).to_le_bytes(),
+                ),
             }
         }
     }
@@ -1170,8 +1421,14 @@ pub struct OpAtomPcm {
 /// A complete OP-Atom PCM file in memory. `samples` are interleaved integer sample values in the
 /// range of `bits` (e.g. -32768..=32767 for 16 bits).
 pub fn write_opatom_pcm(opts: &OpAtomPcm, samples: &[i32]) -> io::Result<Vec<u8>> {
-    let sd = SoundDesc { sample_rate: opts.sample_rate, channels: opts.channels.max(1), bits: opts.bits };
-    let rate = opts.edit_rate.unwrap_or(Rational::new(opts.sample_rate as i32, 1));
+    let sd = SoundDesc {
+        sample_rate: opts.sample_rate,
+        channels: opts.channels.max(1),
+        bits: opts.bits,
+    };
+    let rate = opts
+        .edit_rate
+        .unwrap_or(Rational::new(opts.sample_rate as i32, 1));
     let mut cfg = WriterConfig::new(Pattern::OpAtom, rate, opts.ids.clone());
     cfg.sound = vec![sd];
     cfg.timecode = opts.timecode;

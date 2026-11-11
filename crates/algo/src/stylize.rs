@@ -4,9 +4,9 @@ use rust_motion_color::PixelFormat;
 use rust_motion_geom::Rect;
 use rust_motion_raster::{from_rgba, to_rgba};
 
-use crate::Ctx;
 use crate::fxutil::subtractive;
 use crate::image::Image;
+use crate::Ctx;
 
 fn fmt(ctx: &Ctx) -> PixelFormat {
     PixelFormat::new(ctx.mode, rust_motion_color::SampleType::F32, ctx.alpha)
@@ -68,8 +68,12 @@ pub(crate) fn mosaic(src: &Image, out: Rect, ctx: &Ctx, cell: f32) -> Vec<f32> {
     }
     let cs = cell.max(1.0).round() as i32;
     let b = ctx.bounds;
-    let Some(row_stride) = width.checked_mul(n) else { return Vec::new() };
-    let Some(len) = row_stride.checked_mul(height) else { return Vec::new() };
+    let Some(row_stride) = width.checked_mul(n) else {
+        return Vec::new();
+    };
+    let Some(len) = row_stride.checked_mul(height) else {
+        return Vec::new();
+    };
     let mut res = vec![0.0f32; len];
     let mut acc = vec![0.0f32; n];
     let cx0 = (out.x0 - b.x0).div_euclid(cs);
@@ -80,18 +84,31 @@ pub(crate) fn mosaic(src: &Image, out: Rect, ctx: &Ctx, cell: f32) -> Vec<f32> {
     // Average each cell once per tile, rather than once per output scanline.
     for cy in cy0..=cy1 {
         for cx in cx0..=cx1 {
-            let cell_rect = Rect::new(b.x0 + cx * cs, b.y0 + cy * cs, b.x0 + (cx + 1) * cs, b.y0 + (cy + 1) * cs);
+            let cell_rect = Rect::new(
+                b.x0 + cx * cs,
+                b.y0 + cy * cs,
+                b.x0 + (cx + 1) * cs,
+                b.y0 + (cy + 1) * cs,
+            );
             let r = cell_rect.intersect(&b);
             acc.fill(0.0);
             let mut count = 0.0;
-            let mosaic_opt = if n == 4 { mosaic_sum4(src, r, ctx.alpha) } else { None };
+            let mosaic_opt = if n == 4 {
+                mosaic_sum4(src, r, ctx.alpha)
+            } else {
+                None
+            };
             if let Some((sum, samples)) = mosaic_opt {
                 acc.copy_from_slice(&sum);
                 count = samples;
             } else {
                 for yy in r.y0..r.y1 {
                     for xx in r.x0..r.x1 {
-                        let a = if ctx.alpha { src.get(xx, yy, n - 1) } else { 1.0 };
+                        let a = if ctx.alpha {
+                            src.get(xx, yy, n - 1)
+                        } else {
+                            1.0
+                        };
                         for (c, v) in acc.iter_mut().enumerate() {
                             let s = src.get(xx, yy, c);
                             *v += if ctx.alpha && c < n - 1 { s * a } else { s };
@@ -117,8 +134,16 @@ pub(crate) fn mosaic(src: &Image, out: Rect, ctx: &Ctx, cell: f32) -> Vec<f32> {
             let write = cell_rect.intersect(&out);
             let first_row = write.y0.abs_diff(out.y0) as usize;
             let first_pixel = write.x0.abs_diff(out.x0) as usize;
-            for row in res.chunks_exact_mut(row_stride).skip(first_row).take(write.height() as usize) {
-                for px in row.chunks_exact_mut(n).skip(first_pixel).take(write.width() as usize) {
+            for row in res
+                .chunks_exact_mut(row_stride)
+                .skip(first_row)
+                .take(write.height() as usize)
+            {
+                for px in row
+                    .chunks_exact_mut(n)
+                    .skip(first_pixel)
+                    .take(write.width() as usize)
+                {
                     px.copy_from_slice(&acc);
                 }
             }
@@ -139,7 +164,9 @@ fn mosaic_sum4(src: &Image, r: Rect, alpha: bool) -> Option<([f32; 4], f32)> {
     let mut sum = [0.0; 4];
     let mut count = 0.0;
     for y in r.y0..r.y1 {
-        let start = (y.abs_diff(src.rect.y0) as usize).checked_mul(stride)?.checked_add(offset)?;
+        let start = (y.abs_diff(src.rect.y0) as usize)
+            .checked_mul(stride)?
+            .checked_add(offset)?;
         let row = src.data.get(start..start.checked_add(width)?)?;
         for pixel in row.as_chunks::<4>().0 {
             let a = if alpha { pixel[3] } else { 1.0 };
@@ -154,7 +181,14 @@ fn mosaic_sum4(src: &Image, r: Rect, alpha: bool) -> Option<([f32; 4], f32)> {
 }
 
 /// Emboss: gray relief from luminance differences along the light angle.
-pub(crate) fn emboss(src: &Image, out: Rect, ctx: &Ctx, angle: f32, height: f32, amount: f32) -> Vec<f32> {
+pub(crate) fn emboss(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    angle: f32,
+    height: f32,
+    amount: f32,
+) -> Vec<f32> {
     let n = src.ch;
     let (s, c) = angle.to_radians().sin_cos();
     let h = height.max(1.0);

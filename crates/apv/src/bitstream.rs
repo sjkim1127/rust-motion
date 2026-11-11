@@ -5,7 +5,17 @@
 //! - [`unescape_rbsp`] / [`escape_rbsp`]: remove/insert H.264/HEVC emulation-prevention bytes.
 //! - [`annexb_nals`] / [`length_prefixed_nals`]: split Annex-B byte streams and AVCC/HVCC samples into NAL units.
 
-#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
 
 use std::fmt;
 
@@ -148,7 +158,11 @@ impl<'a> BitReader<'a> {
 
     /// Truncated Exp-Golomb `te(v)` with range `max`.
     pub fn read_te(&mut self, max: u32) -> Result<u32> {
-        if max > 1 { self.read_ue() } else { Ok(!self.read_bit()? as u32) }
+        if max > 1 {
+            self.read_ue()
+        } else {
+            Ok(!self.read_bit()? as u32)
+        }
     }
 
     /// H.264/HEVC `more_rbsp_data()`: true if there is data before the rbsp trailing bits.
@@ -302,7 +316,11 @@ pub fn annexb_nals(data: &[u8]) -> Vec<&[u8]> {
     }
     let mut out = Vec::with_capacity(starts.len());
     for (k, &s) in starts.iter().enumerate() {
-        let mut e = if k + 1 < starts.len() { starts[k + 1] - 3 } else { data.len() };
+        let mut e = if k + 1 < starts.len() {
+            starts[k + 1] - 3
+        } else {
+            data.len()
+        };
         // trim trailing zero bytes (part of a 4-byte start code or trailing_zero_8bits)
         while e > s && data[e - 1] == 0 {
             e -= 1;
@@ -342,7 +360,11 @@ pub fn crc32(data: &[u8]) -> u32 {
     for &b in data {
         crc ^= b as u32;
         for _ in 0..8 {
-            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
         }
     }
     !crc
@@ -411,14 +433,20 @@ mod tests {
     fn signed_exp_golomb_rejects_positive_overflow() {
         // 32 zero bits, 1, then 32 zero bits: codeNum = 2^32 - 1 -> +2^31, not an i32.
         let bytes = [0, 0, 0, 0, 0x80, 0, 0, 0, 0];
-        assert_eq!(BitReader::new(&bytes).read_se(), Err(BitError::InvalidExpGolomb));
+        assert_eq!(
+            BitReader::new(&bytes).read_se(),
+            Err(BitError::InvalidExpGolomb)
+        );
     }
 
     #[test]
     fn unsigned_exp_golomb_keeps_u32_range() {
         // codeNum = 2^32 is a valid se(v) code but does not fit ue(v)'s u32.
         let bytes = [0, 0, 0, 0, 0x80, 0, 0, 0, 0x80];
-        assert_eq!(BitReader::new(&bytes).read_ue(), Err(BitError::InvalidExpGolomb));
+        assert_eq!(
+            BitReader::new(&bytes).read_ue(),
+            Err(BitError::InvalidExpGolomb)
+        );
     }
 
     #[test]
@@ -431,11 +459,19 @@ mod tests {
 
     #[test]
     fn annexb_split() {
-        let s = [0, 0, 0, 1, 0x67, 1, 2, 0, 0, 1, 0x68, 3, 0, 0, 0, 1, 0x65, 9, 9];
+        let s = [
+            0, 0, 0, 1, 0x67, 1, 2, 0, 0, 1, 0x68, 3, 0, 0, 0, 1, 0x65, 9, 9,
+        ];
         let n = annexb_nals(&s);
-        assert_eq!(n, vec![&[0x67, 1, 2][..], &[0x68, 3][..], &[0x65, 9, 9][..]]);
+        assert_eq!(
+            n,
+            vec![&[0x67, 1, 2][..], &[0x68, 3][..], &[0x65, 9, 9][..]]
+        );
         let l = [0, 0, 0, 2, 0x67, 1, 0, 0, 0, 1, 0x68];
-        assert_eq!(length_prefixed_nals(&l, 4).unwrap(), vec![&[0x67, 1][..], &[0x68][..]]);
+        assert_eq!(
+            length_prefixed_nals(&l, 4).unwrap(),
+            vec![&[0x67, 1][..], &[0x68][..]]
+        );
     }
 
     #[test]

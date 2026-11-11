@@ -121,7 +121,11 @@ impl State {
             }
             return Update::Set(Some(self.sample(e)));
         }
-        if mouse { Update::Set(None) } else { Update::Keep }
+        if mouse {
+            Update::Set(None)
+        } else {
+            Update::Keep
+        }
     }
 
     fn proximity(&mut self, e: &RawEvent) -> Update {
@@ -136,11 +140,23 @@ impl State {
         }
         self.eraser = e.device == device::ERASER;
         // Hovering: no pressure yet, but the end in use is known (the eraser switch happens now).
-        Update::Set(Some(Sample { pressure: 0.0, tilt_x: 0.0, tilt_y: 0.0, rotation: 0.0, eraser: self.eraser }))
+        Update::Set(Some(Sample {
+            pressure: 0.0,
+            tilt_x: 0.0,
+            tilt_y: 0.0,
+            rotation: 0.0,
+            eraser: self.eraser,
+        }))
     }
 
     fn sample(&self, e: &RawEvent) -> Sample {
-        let tilt = |v: f64| if v.is_finite() { (v.clamp(-1.0, 1.0) * TILT_DEGREES) as f32 } else { 0.0 };
+        let tilt = |v: f64| {
+            if v.is_finite() {
+                (v.clamp(-1.0, 1.0) * TILT_DEGREES) as f32
+            } else {
+                0.0
+            }
+        };
         Sample {
             pressure: e.pressure,
             tilt_x: tilt(e.tilt.0),
@@ -158,7 +174,14 @@ mod tests {
     use super::*;
 
     fn pen(kind: usize, pressure: f32, tilt: (f64, f64), rotation: f32) -> RawEvent {
-        RawEvent { kind, subtype: subtype::TABLET_POINT, pressure, tilt, rotation, ..Default::default() }
+        RawEvent {
+            kind,
+            subtype: subtype::TABLET_POINT,
+            pressure,
+            tilt,
+            rotation,
+            ..Default::default()
+        }
     }
 
     fn set(u: Update) -> Option<Sample> {
@@ -171,8 +194,23 @@ mod tests {
     #[test]
     fn tablet_mouse_events_carry_pressure_tilt_and_rotation() {
         let mut st = State::default();
-        let s = set(st.handle(&pen(event_type::LEFT_MOUSE_DRAGGED, 0.5, (0.5, -0.25), 30.0))).unwrap();
-        assert_eq!(s, Sample { pressure: 0.5, tilt_x: 30.0, tilt_y: 15.0, rotation: 30.0, eraser: false });
+        let s = set(st.handle(&pen(
+            event_type::LEFT_MOUSE_DRAGGED,
+            0.5,
+            (0.5, -0.25),
+            30.0,
+        )))
+        .unwrap();
+        assert_eq!(
+            s,
+            Sample {
+                pressure: 0.5,
+                tilt_x: 30.0,
+                tilt_y: 15.0,
+                rotation: 30.0,
+                eraser: false
+            }
+        );
         let s = set(st.handle(&pen(event_type::TABLET_POINT, 0.8, (-1.0, 1.0), 0.0))).unwrap();
         assert_eq!((s.pressure, s.tilt_x, s.tilt_y), (0.8, -60.0, -60.0));
     }
@@ -182,15 +220,29 @@ mod tests {
     #[test]
     fn lifting_the_pen_keeps_the_strokes_pressure() {
         let mut st = State::default();
-        assert!(set(st.handle(&pen(event_type::LEFT_MOUSE_DRAGGED, 0.7, (0.0, 0.0), 0.0))).is_some());
-        for kind in [event_type::LEFT_MOUSE_UP, event_type::RIGHT_MOUSE_UP, event_type::OTHER_MOUSE_UP] {
-            assert_eq!(st.handle(&pen(kind, 0.0, (0.0, 0.0), 0.0)), Update::Keep, "type {kind}");
+        assert!(
+            set(st.handle(&pen(event_type::LEFT_MOUSE_DRAGGED, 0.7, (0.0, 0.0), 0.0))).is_some()
+        );
+        for kind in [
+            event_type::LEFT_MOUSE_UP,
+            event_type::RIGHT_MOUSE_UP,
+            event_type::OTHER_MOUSE_UP,
+        ] {
+            assert_eq!(
+                st.handle(&pen(kind, 0.0, (0.0, 0.0), 0.0)),
+                Update::Keep,
+                "type {kind}"
+            );
         }
         // Hovering afterwards reports the pen with no pressure.
         let s = set(st.handle(&pen(event_type::MOUSE_MOVED, 0.0, (0.0, 0.0), 0.0))).unwrap();
         assert_eq!(s.pressure, 0.0);
         // A mouse's button-up is still a mouse.
-        let e = RawEvent { kind: event_type::LEFT_MOUSE_UP, subtype: subtype::MOUSE, ..Default::default() };
+        let e = RawEvent {
+            kind: event_type::LEFT_MOUSE_UP,
+            subtype: subtype::MOUSE,
+            ..Default::default()
+        };
         assert_eq!(st.handle(&e), Update::Set(None));
     }
 
@@ -198,43 +250,115 @@ mod tests {
     fn mouse_events_are_full_pressure_mice() {
         let mut st = State::default();
         for sub in [subtype::MOUSE, subtype::TOUCH, 99] {
-            let e = RawEvent { kind: event_type::LEFT_MOUSE_DOWN, subtype: sub, pressure: 1.0, ..Default::default() };
+            let e = RawEvent {
+                kind: event_type::LEFT_MOUSE_DOWN,
+                subtype: sub,
+                pressure: 1.0,
+                ..Default::default()
+            };
             assert_eq!(st.handle(&e), Update::Set(None), "subtype {sub}");
         }
         // Unrelated event types (keys, scroll, pressure-trackpad) don't touch the sample.
         for kind in [0, 10, 22, 29, 34, usize::MAX] {
-            assert_eq!(st.handle(&RawEvent { kind, ..Default::default() }), Update::Keep, "type {kind}");
+            assert_eq!(
+                st.handle(&RawEvent {
+                    kind,
+                    ..Default::default()
+                }),
+                Update::Keep,
+                "type {kind}"
+            );
         }
     }
 
     #[test]
     fn proximity_tracks_the_eraser_end() {
         let mut st = State::default();
-        let prox = |device, entering| RawEvent { kind: event_type::TABLET_PROXIMITY, device, entering, ..Default::default() };
+        let prox = |device, entering| RawEvent {
+            kind: event_type::TABLET_PROXIMITY,
+            device,
+            entering,
+            ..Default::default()
+        };
         let s = set(st.handle(&prox(device::ERASER, true))).unwrap();
         assert!(s.eraser && s.pressure == 0.0);
-        assert!(set(st.handle(&pen(event_type::LEFT_MOUSE_DOWN, 0.4, (0.0, 0.0), 0.0))).unwrap().eraser);
+        assert!(
+            set(st.handle(&pen(event_type::LEFT_MOUSE_DOWN, 0.4, (0.0, 0.0), 0.0)))
+                .unwrap()
+                .eraser
+        );
         assert_eq!(st.handle(&prox(device::ERASER, false)), Update::Set(None));
         assert!(!st.eraser);
         assert!(!set(st.handle(&prox(device::PEN, true))).unwrap().eraser);
-        assert!(!set(st.handle(&pen(event_type::LEFT_MOUSE_DRAGGED, 0.4, (0.0, 0.0), 0.0))).unwrap().eraser);
+        assert!(
+            !set(st.handle(&pen(event_type::LEFT_MOUSE_DRAGGED, 0.4, (0.0, 0.0), 0.0)))
+                .unwrap()
+                .eraser
+        );
         // A puck is a mouse; unknown devices paint as a pen tip.
         assert_eq!(st.handle(&prox(device::CURSOR, true)), Update::Set(None));
         assert!(!set(st.handle(&prox(device::UNKNOWN, true))).unwrap().eraser);
         // Proximity as a mouse-event subtype works the same.
-        let e = RawEvent { kind: event_type::MOUSE_MOVED, subtype: subtype::TABLET_PROXIMITY, device: device::ERASER, entering: true, ..Default::default() };
+        let e = RawEvent {
+            kind: event_type::MOUSE_MOVED,
+            subtype: subtype::TABLET_PROXIMITY,
+            device: device::ERASER,
+            entering: true,
+            ..Default::default()
+        };
         assert!(set(st.handle(&e)).unwrap().eraser);
     }
 
     #[test]
     fn malformed_values_are_clamped_not_trusted() {
         let mut st = State::default();
-        let s = set(st.handle(&pen(event_type::LEFT_MOUSE_DRAGGED, f32::NAN, (f64::NAN, f64::INFINITY), f32::NAN))).unwrap();
-        assert_eq!(s, Sample { pressure: 1.0, tilt_x: 0.0, tilt_y: 0.0, rotation: 0.0, eraser: false });
-        let s = set(st.handle(&pen(event_type::LEFT_MOUSE_DRAGGED, 4.0, (7.0, -9.0), -30.0))).unwrap();
-        assert_eq!(s, Sample { pressure: 1.0, tilt_x: 60.0, tilt_y: 60.0, rotation: 330.0, eraser: false });
-        let s = set(st.handle(&pen(event_type::LEFT_MOUSE_DRAGGED, -1.0, (f64::MAX, f64::MIN), f32::MAX))).unwrap();
-        assert!(s.pressure == 0.0 && s.tilt_x == 60.0 && s.tilt_y == 60.0 && (0.0..360.0).contains(&s.rotation));
+        let s = set(st.handle(&pen(
+            event_type::LEFT_MOUSE_DRAGGED,
+            f32::NAN,
+            (f64::NAN, f64::INFINITY),
+            f32::NAN,
+        )))
+        .unwrap();
+        assert_eq!(
+            s,
+            Sample {
+                pressure: 1.0,
+                tilt_x: 0.0,
+                tilt_y: 0.0,
+                rotation: 0.0,
+                eraser: false
+            }
+        );
+        let s = set(st.handle(&pen(
+            event_type::LEFT_MOUSE_DRAGGED,
+            4.0,
+            (7.0, -9.0),
+            -30.0,
+        )))
+        .unwrap();
+        assert_eq!(
+            s,
+            Sample {
+                pressure: 1.0,
+                tilt_x: 60.0,
+                tilt_y: 60.0,
+                rotation: 330.0,
+                eraser: false
+            }
+        );
+        let s = set(st.handle(&pen(
+            event_type::LEFT_MOUSE_DRAGGED,
+            -1.0,
+            (f64::MAX, f64::MIN),
+            f32::MAX,
+        )))
+        .unwrap();
+        assert!(
+            s.pressure == 0.0
+                && s.tilt_x == 60.0
+                && s.tilt_y == 60.0
+                && (0.0..360.0).contains(&s.rotation)
+        );
     }
 
     #[test]

@@ -61,9 +61,9 @@ cargo install rust-motion-cli --features rhai
 
 ---
 
-Rust Motion is a production-quality programmatic video rendering platform. Its native export path renders a registered `Composition` into a deterministic scene graph, rasterizes frames with `tiny-skia` or `wgpu`, and streams a bounded window of ordered RGBA frames to FFmpeg while rendering subsequent frames. Local video frames are decoded through FFmpeg, and declared audio tracks are mixed into the encoded output. The same native scene can be previewed in the Dioxus Player through `NativeCompositionPreview` or edited in the interactive Studio shell.
+Rust Motion is a high-performance, lean programmatic video rendering engine written in pure Rust. Its native export path renders compositions into a deterministic scene graph (`Scene`), rasterizes frames with `tiny-skia` or `wgpu`, and streams ordered RGBA frames directly to FFmpeg. Local video frames are decoded through FFmpeg, and declared audio tracks are mixed into the encoded output.
 
-The repository also contains Dioxus timeline, media, shape, transition, player, and Studio-preview components. The opt-in `rust-motion-vdom` adapter can translate ordinary Dioxus elements, a documented CSS subset, text, local media elements, and basic SVG shapes into the native scene graph. Existing explicit `Scene` and `SceneEmitter` APIs remain available for precise rendering control.
+Rust Motion provides 1:1 Remotion-compatible TypeScript bindings (`crates/ts`), a Python SDK (`crates/python`), and a fast multi-threaded CLI (`crates/cli`) with sandboxed Rhai scripting support. Existing explicit `Scene` and `SceneEmitter` APIs provide direct rendering control without any webview or desktop GUI overhead.
 
 ## What works today
 
@@ -112,28 +112,25 @@ General Dioxus preview
       -> Dioxus web or desktop UI
 ```
 
-Native compositions share one `Scene` contract between preview and export. `VdomComposition` crosses the Dioxus/native boundary for its supported DOM and CSS subset, while direct `Scene` and `SceneEmitter` compositions bypass that conversion when exact scene control is preferable.
+Native compositions share one `Scene` contract between preview and export. Pure Rust `Scene` and `SceneEmitter` compositions provide precise rendering control with zero webview overhead.
 
 ## Workspace
 
 | Package | Purpose |
 |---|---|
 | `rust-motion-animation` | Interpolation, easing, springs, and color interpolation |
-| `rust-motion-composition` | Shared native composition contract, registry, and built-in composition |
-| `rust-motion-core` | Dioxus composition timeline, sequence, freeze, Lottie, and hooks |
-| `rust-motion-media` | Native media helpers and scene emitters, with optional Dioxus image, video, and audio components |
-| `rust-motion-player` | Interactive player, controls, and native Scene preview adapter |
-| `rust-motion-shapes` | Procedural SVG paths and optional Dioxus components |
+| `rust-motion-composition` | Shared native composition contract, timeline sequencing, and emitters |
+| `rust-motion-media` | Native media decoders, sample extractors, and audio visualization |
+| `rust-motion-shapes` | Procedural SVG paths and geometric scene nodes |
 | `rust-motion-paths` | SVG path parsing, metrics, and transforms |
-| `rust-motion-captions` | Subtitle parsing, native scene captions, and optional Dioxus components |
-| `rust-motion-noise` | Deterministic simplex noise helpers |
-| `rust-motion-transitions` | Dioxus fade and slide transitions |
+| `rust-motion-captions` | Subtitle parsing (SRT/VTT/Whisper/ASS) and kinetic animated captions |
+| `rust-motion-noise` | Deterministic simplex noise generators |
+| `rust-motion-transitions` | Native transition presentations and scene emitters (Fade, Slide, Wipe, etc.) |
 | `rust-motion-rasterizer` | Scene IR, CPU renderer, experimental GPU renderer, FFmpeg pipe |
-| `rust-motion-vdom` | Dioxus VDOM mutation renderer, CSS cascade, Taffy layout, and Scene conversion |
 | `rust-motion-renderer` | Static server and PNG-sequence encoding utilities |
-| `rust-motion-cli` | Render command and Rhai composition runtime |
-| `apps/example` | Dioxus web composition preview |
-| `apps/studio` | Dioxus desktop preview shell |
+| `rust-motion-cli` | Render CLI, migrate command, and Rhai composition runtime |
+| `rust-motion-ts` | TypeScript/Remotion SDK & FFI bridge (`@rust-motion/remotion`) |
+| `rust-motion-python` | Python SDK & PyO3 native bindings |
 
 ## Prerequisites
 
@@ -497,7 +494,6 @@ Tokens must never be committed, placed in a tag, or written into workflow files.
 
 ## Current limitations
 
-- `rust-motion-vdom` translates an explicit DOM/CSS subset, not a browser engine. Complex selectors, intrinsic browser layout, general DOM APIs, events, animations, and advanced paint effects still require direct Scene APIs or further adapter work. Basic CSS linear/radial gradients, translate/scale/rotate transforms, borders, non-inset `box-shadow`, common pixel filters (including `drop-shadow`), `mix-blend-mode`, and the cross-backend `CanvasImage` source fallback are supported; arbitrary canvas/WebGL drawing remains a Browser/Three.js concern.
 - Native video and audio sources are local files, while image nodes additionally accept local SVG files and base64 `data:image/png`, `data:image/jpeg`, `data:image/webp`, and `data:image/svg+xml` sources up to 32 MiB. SVG assets are rasterized through the same bounded image cache. Project renders can opt into downloading HTTP(S) assets with `--asset-cache-dir`; the CLI caps each asset at 256 MiB and the project at 1 GiB by default (`--max-total-asset-bytes` changes the total). Direct remote URLs are still not opened by the rasterizer itself.
 - Video frames use cached FFprobe stream metadata, up to four persistent FFmpeg decoder sources, fixed-output-FPS sampling for VFR input, and a 128 MiB frame LRU. Backward or large forward seeks restart only the affected decoder.
 - Audio declarations may be supplied by `PreparedComposition::audio_tracks()` as
@@ -506,20 +502,16 @@ Tokens must never be committed, placed in a tag, or written into workflow files.
   method returns `None`, so it includes tracks first emitted after frame zero.
   This legacy fallback renders frames once before encoding; implement
   `audio_tracks()` to avoid the extra pass.
-- `SceneLayer` supports rectangular or SVG-path clips, alpha or luminance masks, twelve blend modes, ordered blur/brightness/grayscale/opacity filters, and drop shadows. These effects use CPU offscreen surfaces for export and SVG/CSS equivalents for Player preview.
+- `SceneLayer` supports rectangular or SVG-path clips, alpha or luminance masks, twelve blend modes, ordered blur/brightness/grayscale/opacity filters, and drop shadows.
 - GPU acceleration covers rectangles, circles, tessellated path fills and strokes, nested group transforms and opacity, plain normal layers, gradients with up to 16 stops, cached image/video/Lottie textures, and text atlas draws. Unsupported shaders, gradients beyond the stop limit, and some composited mask/blend/filter combinations use CPU fallback; the supported texture/text paths have dedicated CPU/GPU parity tests.
 - Text nodes accept ordered local TTF/OTF `font_sources`; native rendering caches those files, shapes glyph runs with Rustybuzz, and falls through per grapheme. `SceneTextBlock` and Rhai `text_box` add Unicode line breaking, fitting, alignment, line limits, and ellipsis. Text without explicit sources still uses platform font discovery and is not pixel-identical across platforms; full mixed-direction paragraph layout remains incomplete.
-- Studio project loading and Tauri render-queue controls are available; timeline editing and media management are not yet a full editor.
 
 ## Roadmap
 
-1. Expand VDOM/CSS conversion beyond the current simple-selector and native-paint subset.
-2. Full bidirectional paragraph layout, variable-font axes, and advanced typography controls.
-3. Complete GPU parity for text, media, composited layers, masks, blend modes, and filters.
-4. Additional color, distortion, and convolution filter primitives.
-5. Studio timeline editing and media management on top of the shared project/job contract.
-
-6. A first-class dynamic audio provider for compositions whose audio topology
+1. Full bidirectional paragraph layout, variable-font axes, and advanced typography controls.
+2. Complete GPU parity for text, media, composited layers, masks, blend modes, and filters.
+3. Additional color, distortion, and convolution filter primitives.
+4. A first-class dynamic audio provider for compositions whose audio topology
    changes over time, without requiring a frame-by-frame scene scan.
 
 ## License

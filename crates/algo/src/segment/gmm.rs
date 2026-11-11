@@ -24,24 +24,47 @@ impl Component {
         for (i, row) in c.iter_mut().enumerate() {
             row[i] += reg;
         }
-        let det = c[0][0] * (c[1][1] * c[2][2] - c[1][2] * c[2][1]) - c[0][1] * (c[1][0] * c[2][2] - c[1][2] * c[2][0])
+        let det = c[0][0] * (c[1][1] * c[2][2] - c[1][2] * c[2][1])
+            - c[0][1] * (c[1][0] * c[2][2] - c[1][2] * c[2][0])
             + c[0][2] * (c[1][0] * c[2][1] - c[1][1] * c[2][0]);
         if det <= 1e-30 || weight <= 0.0 {
             return None;
         }
         let inv = [
-            [(c[1][1] * c[2][2] - c[1][2] * c[2][1]) / det, (c[0][2] * c[2][1] - c[0][1] * c[2][2]) / det, (c[0][1] * c[1][2] - c[0][2] * c[1][1]) / det],
-            [(c[1][2] * c[2][0] - c[1][0] * c[2][2]) / det, (c[0][0] * c[2][2] - c[0][2] * c[2][0]) / det, (c[0][2] * c[1][0] - c[0][0] * c[1][2]) / det],
-            [(c[1][0] * c[2][1] - c[1][1] * c[2][0]) / det, (c[0][1] * c[2][0] - c[0][0] * c[2][1]) / det, (c[0][0] * c[1][1] - c[0][1] * c[1][0]) / det],
+            [
+                (c[1][1] * c[2][2] - c[1][2] * c[2][1]) / det,
+                (c[0][2] * c[2][1] - c[0][1] * c[2][2]) / det,
+                (c[0][1] * c[1][2] - c[0][2] * c[1][1]) / det,
+            ],
+            [
+                (c[1][2] * c[2][0] - c[1][0] * c[2][2]) / det,
+                (c[0][0] * c[2][2] - c[0][2] * c[2][0]) / det,
+                (c[0][2] * c[1][0] - c[0][0] * c[1][2]) / det,
+            ],
+            [
+                (c[1][0] * c[2][1] - c[1][1] * c[2][0]) / det,
+                (c[0][1] * c[2][0] - c[0][0] * c[2][1]) / det,
+                (c[0][0] * c[1][1] - c[0][1] * c[1][0]) / det,
+            ],
         ];
         let log_norm = weight.ln() - 0.5 * det.ln() - 1.5 * (2.0 * std::f64::consts::PI).ln();
-        Some(Component { weight: weight as f32, mean: mean.map(|v| v as f32), cov: c.map(|r| r.map(|v| v as f32)), inv, log_norm })
+        Some(Component {
+            weight: weight as f32,
+            mean: mean.map(|v| v as f32),
+            cov: c.map(|r| r.map(|v| v as f32)),
+            inv,
+            log_norm,
+        })
     }
 
     /// `ln(weight · N(z; μ, Σ))`.
     #[inline]
     pub fn log_weighted(&self, z: [f32; 3]) -> f64 {
-        let d = [(z[0] - self.mean[0]) as f64, (z[1] - self.mean[1]) as f64, (z[2] - self.mean[2]) as f64];
+        let d = [
+            (z[0] - self.mean[0]) as f64,
+            (z[1] - self.mean[1]) as f64,
+            (z[2] - self.mean[2]) as f64,
+        ];
         let m = &self.inv;
         let q = d[0] * (m[0][0] * d[0] + m[0][1] * d[1] + m[0][2] * d[2])
             + d[1] * (m[1][0] * d[0] + m[1][1] * d[1] + m[1][2] * d[2])
@@ -153,8 +176,14 @@ impl Gmm {
             }
         }
         let total = samples.len() as f64;
-        let comps: Vec<Component> = acc.iter().filter_map(|a| a.component(total, self.reg)).collect();
-        (!comps.is_empty()).then_some(Gmm { comps, reg: self.reg })
+        let comps: Vec<Component> = acc
+            .iter()
+            .filter_map(|a| a.component(total, self.reg))
+            .collect();
+        (!comps.is_empty()).then_some(Gmm {
+            comps,
+            reg: self.reg,
+        })
     }
 
     /// GrabCut update: assign each sample to its most likely component and re-estimate.
@@ -243,7 +272,11 @@ pub fn kmeans(samples: &[[f32; 3]], k: usize, iters: usize) -> Vec<[f32; 3]> {
             }
             sums[i].1 += 1;
         }
-        let new: Vec<[f32; 3]> = sums.iter().filter(|s| s.1 > 0).map(|(s, n)| s.map(|v| (v / *n as f64) as f32)).collect();
+        let new: Vec<[f32; 3]> = sums
+            .iter()
+            .filter(|s| s.1 > 0)
+            .map(|(s, n)| s.map(|v| (v / *n as f64) as f32))
+            .collect();
         let done = new == centers;
         centers = new;
         if done {

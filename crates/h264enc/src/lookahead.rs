@@ -18,14 +18,19 @@ impl LowRes {
             let r0 = f.y.idx(0, (2 * y) as isize);
             let r1 = f.y.idx(0, (2 * y + 1) as isize);
             for x in 0..w {
-                let s = f.y.data[r0 + 2 * x] as u32 + f.y.data[r0 + 2 * x + 1] as u32 + f.y.data[r1 + 2 * x] as u32 + f.y.data[r1 + 2 * x + 1] as u32;
+                let s = f.y.data[r0 + 2 * x] as u32
+                    + f.y.data[r0 + 2 * x + 1] as u32
+                    + f.y.data[r1 + 2 * x] as u32
+                    + f.y.data[r1 + 2 * x + 1] as u32;
                 out[x] = ((s + 2) >> 2) as u8;
             }
         };
         #[cfg(feature = "threads")]
         {
             use rayon::prelude::*;
-            data.par_chunks_mut(w).enumerate().for_each(|(y, r)| row(y, r));
+            data.par_chunks_mut(w)
+                .enumerate()
+                .for_each(|(y, r)| row(y, r));
         }
         #[cfg(not(feature = "threads"))]
         for (y, r) in data.chunks_mut(w).enumerate() {
@@ -47,7 +52,10 @@ fn block_rows<F: Fn(usize) -> (u64, u64) + Sync + Send>(rows: usize, f: F) -> (u
     #[cfg(feature = "threads")]
     {
         use rayon::prelude::*;
-        (0..rows).into_par_iter().map(f).reduce(|| (0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
+        (0..rows)
+            .into_par_iter()
+            .map(f)
+            .reduce(|| (0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
     }
     #[cfg(not(feature = "threads"))]
     {
@@ -76,7 +84,9 @@ pub fn complexity(cur: &LowRes, prev: Option<&LowRes>) -> Complexity {
                         blk[y * 8 + x] = match mode {
                             0 => {
                                 if x0 > 0 && y0 > 0 {
-                                    ((cur.data[(y0 - 1) * cur.w + x0 + x] as u32 + cur.data[(y0 + y) * cur.w + x0 - 1] as u32) / 2) as u8
+                                    ((cur.data[(y0 - 1) * cur.w + x0 + x] as u32
+                                        + cur.data[(y0 + y) * cur.w + x0 - 1] as u32)
+                                        / 2) as u8
                                 } else {
                                     128
                                 }
@@ -99,12 +109,28 @@ pub fn complexity(cur: &LowRes, prev: Option<&LowRes>) -> Complexity {
                     if x < 0 || y < 0 || x + 8 > p.w as i32 || y + 8 > p.h as i32 {
                         return u32::MAX;
                     }
-                    sad(&cur.data[base..], cur.w, &p.data[y as usize * p.w + x as usize..], p.w, 8, 8)
+                    sad(
+                        &cur.data[base..],
+                        cur.w,
+                        &p.data[y as usize * p.w + x as usize..],
+                        p.w,
+                        8,
+                        8,
+                    )
                 };
                 let mut bc = cost_at(0, 0);
                 for _ in 0..8 {
                     let c = bmv;
-                    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1), (-2, 0), (2, 0), (0, -2), (0, 2)] {
+                    for (dx, dy) in [
+                        (-1, 0),
+                        (1, 0),
+                        (0, -1),
+                        (0, 1),
+                        (-2, 0),
+                        (2, 0),
+                        (0, -2),
+                        (0, 2),
+                    ] {
                         let k = cost_at(c.0 + dx, c.1 + dy);
                         if k < bc {
                             bc = k;
@@ -117,7 +143,8 @@ pub fn complexity(cur: &LowRes, prev: Option<&LowRes>) -> Complexity {
                 }
                 let x = (x0 as i32 + bmv.0) as usize;
                 let y = (y0 as i32 + bmv.1) as usize;
-                let inter_c = satd(&cur.data[base..], cur.w, &p.data[y * p.w + x..], p.w, 8, 8) as u64 + 8;
+                let inter_c =
+                    satd(&cur.data[base..], cur.w, &p.data[y * p.w + x..], p.w, 8, 8) as u64 + 8;
                 cp += inter_c.min(intra_c);
             } else {
                 cp += intra_c;
@@ -145,12 +172,16 @@ pub fn aq_offsets(f: &Frame, mbw: usize, mbh: usize, strength: f32) -> Vec<f32> 
     #[cfg(feature = "threads")]
     {
         use rayon::prelude::*;
-        e.par_chunks_mut(mbw).enumerate().for_each(|(my, r)| row(my, r));
+        e.par_chunks_mut(mbw)
+            .enumerate()
+            .for_each(|(my, r)| row(my, r));
     }
     #[cfg(not(feature = "threads"))]
     for (my, r) in e.chunks_mut(mbw).enumerate() {
         row(my, r);
     }
     let mean = e.iter().sum::<f32>() / e.len() as f32;
-    e.iter().map(|&v| (strength * (v - mean)).clamp(-8.0, 8.0)).collect()
+    e.iter()
+        .map(|&v| (strength * (v - mean)).clamp(-8.0, 8.0))
+        .collect()
 }

@@ -41,11 +41,19 @@ impl ResponseCurve {
     pub const MAX_POINTS: usize = MAX;
 
     /// The identity: input passes through unchanged.
-    pub const LINEAR: Self = Self { n: 2, xs: padded(0.0, 1.0), ys: padded(0.0, 1.0), ms: padded(1.0, 1.0) };
+    pub const LINEAR: Self = Self {
+        n: 2,
+        xs: padded(0.0, 1.0),
+        ys: padded(0.0, 1.0),
+        ms: padded(1.0, 1.0),
+    };
 
     pub fn new(points: &[[f32; 2]]) -> Self {
-        let mut pts: Vec<[f32; 2]> =
-            points.iter().filter(|p| p[0].is_finite() && p[1].is_finite()).map(|p| [p[0].clamp(0.0, 1.0), p[1].clamp(0.0, 1.0)]).collect();
+        let mut pts: Vec<[f32; 2]> = points
+            .iter()
+            .filter(|p| p[0].is_finite() && p[1].is_finite())
+            .map(|p| [p[0].clamp(0.0, 1.0), p[1].clamp(0.0, 1.0)])
+            .collect();
         pts.sort_by(|a, b| a[0].total_cmp(&b[0]));
         pts.dedup_by(|b, a| {
             // Same input: keep the later point's output.
@@ -60,7 +68,12 @@ impl ResponseCurve {
         if n < 2 {
             return Self::LINEAR;
         }
-        let mut c = Self { n: n as u8, xs: [0.0; MAX], ys: [0.0; MAX], ms: [0.0; MAX] };
+        let mut c = Self {
+            n: n as u8,
+            xs: [0.0; MAX],
+            ys: [0.0; MAX],
+            ms: [0.0; MAX],
+        };
         let mut prev = 0.0f32;
         for (k, p) in pts.iter().enumerate() {
             c.xs[k] = p[0];
@@ -77,7 +90,11 @@ impl ResponseCurve {
         c.ms[0] = d[0];
         c.ms[n - 1] = d[n - 2];
         for k in 1..n - 1 {
-            c.ms[k] = if d[k - 1] * d[k] <= 0.0 { 0.0 } else { (d[k - 1] + d[k]) / 2.0 };
+            c.ms[k] = if d[k - 1] * d[k] <= 0.0 {
+                0.0
+            } else {
+                (d[k - 1] + d[k]) / 2.0
+            };
         }
         for (k, &dk) in d.iter().enumerate().take(n - 1) {
             if dk == 0.0 {
@@ -98,7 +115,12 @@ impl ResponseCurve {
 
     /// The control points (sanitised).
     pub fn points(&self) -> Vec<[f32; 2]> {
-        self.xs.iter().zip(&self.ys).take(usize::from(self.n)).map(|(&x, &y)| [x, y]).collect()
+        self.xs
+            .iter()
+            .zip(&self.ys)
+            .take(usize::from(self.n))
+            .map(|(&x, &y)| [x, y])
+            .collect()
     }
 
     /// The curve's output for input `x` (0..1; anything else is clamped, NaN reads as 0).
@@ -108,23 +130,41 @@ impl ResponseCurve {
             return x;
         }
         let n = usize::from(self.n).min(MAX);
-        let (xs, ys, ms) = (self.xs.get(..n).unwrap_or(&[]), self.ys.get(..n).unwrap_or(&[]), self.ms.get(..n).unwrap_or(&[]));
-        let (Some(&x0), Some(&xn)) = (xs.first(), xs.last()) else { return x };
+        let (xs, ys, ms) = (
+            self.xs.get(..n).unwrap_or(&[]),
+            self.ys.get(..n).unwrap_or(&[]),
+            self.ms.get(..n).unwrap_or(&[]),
+        );
+        let (Some(&x0), Some(&xn)) = (xs.first(), xs.last()) else {
+            return x;
+        };
         if x <= x0 {
             return ys.first().copied().unwrap_or(x);
         }
         if x >= xn {
             return ys.last().copied().unwrap_or(x);
         }
-        let k = xs.partition_point(|&v| v <= x).saturating_sub(1).min(n.saturating_sub(2));
-        let (Some(&xa), Some(&xb), Some(&ya), Some(&yb), Some(&ma), Some(&mb)) = (xs.get(k), xs.get(k + 1), ys.get(k), ys.get(k + 1), ms.get(k), ms.get(k + 1))
-        else {
+        let k = xs
+            .partition_point(|&v| v <= x)
+            .saturating_sub(1)
+            .min(n.saturating_sub(2));
+        let (Some(&xa), Some(&xb), Some(&ya), Some(&yb), Some(&ma), Some(&mb)) = (
+            xs.get(k),
+            xs.get(k + 1),
+            ys.get(k),
+            ys.get(k + 1),
+            ms.get(k),
+            ms.get(k + 1),
+        ) else {
             return x;
         };
         let h = xb - xa;
         let t = (x - xa) / h;
         let (t2, t3) = (t * t, t * t * t);
-        let y = (2.0 * t3 - 3.0 * t2 + 1.0) * ya + (t3 - 2.0 * t2 + t) * h * ma + (-2.0 * t3 + 3.0 * t2) * yb + (t3 - t2) * h * mb;
+        let y = (2.0 * t3 - 3.0 * t2 + 1.0) * ya
+            + (t3 - 2.0 * t2 + t) * h * ma
+            + (-2.0 * t3 + 3.0 * t2) * yb
+            + (t3 - t2) * h * mb;
         y.clamp(ya.min(yb), ya.max(yb))
     }
 
@@ -153,8 +193,14 @@ mod tests {
     #[test]
     fn a_curve_is_monotone_sanitised_and_round_trips_as_points() {
         assert!(ResponseCurve::new(&[[0.0, 0.0], [1.0, 1.0]]).is_linear());
-        assert_eq!(ResponseCurve::new(&[[0.0, 0.0], [1.0, 1.0]]), ResponseCurve::LINEAR);
-        assert!(ResponseCurve::new(&[[f32::NAN, 0.3]]).is_linear(), "fewer than two usable points is linear");
+        assert_eq!(
+            ResponseCurve::new(&[[0.0, 0.0], [1.0, 1.0]]),
+            ResponseCurve::LINEAR
+        );
+        assert!(
+            ResponseCurve::new(&[[f32::NAN, 0.3]]).is_linear(),
+            "fewer than two usable points is linear"
+        );
         let c = ResponseCurve::new(&[[1.0, 1.0], [0.5, 0.2], [0.0, 0.0]]);
         assert!((c.eval(0.5) - 0.2).abs() < 1e-6);
         let mut prev = 0.0;
@@ -168,6 +214,9 @@ mod tests {
         let back: ResponseCurve = serde_json::from_str(&json).unwrap_or_default();
         assert_eq!(back, c);
         let many: Vec<[f32; 2]> = (0..40).map(|i| [i as f32 / 40.0, 0.5]).collect();
-        assert_eq!(ResponseCurve::new(&many).points().len(), ResponseCurve::MAX_POINTS);
+        assert_eq!(
+            ResponseCurve::new(&many).points().len(),
+            ResponseCurve::MAX_POINTS
+        );
     }
 }

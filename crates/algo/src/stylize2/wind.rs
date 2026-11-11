@@ -1,7 +1,7 @@
 //! Scatter each source streak once, retaining the old nearest-source tie rule.
 
 use super::{read_px, wind_reach};
-use crate::fxutil::{MAXC, luma};
+use crate::fxutil::{luma, MAXC};
 use crate::image::Image;
 use crate::noise::hash01;
 use crate::{Ctx, WindMethod};
@@ -9,7 +9,14 @@ use rust_motion_geom::Rect;
 
 const MAX_ROW: usize = 1_048_576;
 
-pub(super) fn streaks(src: &Image, out: Rect, ctx: &Ctx, method: WindMethod, from_right: bool, seed: u32) -> Option<Vec<f32>> {
+pub(super) fn streaks(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    method: WindMethod,
+    from_right: bool,
+    seed: u32,
+) -> Option<Vec<f32>> {
     if method == WindMethod::Stagger || src.ch == 0 || src.ch > MAXC {
         return None;
     }
@@ -21,7 +28,11 @@ pub(super) fn streaks(src: &Image, out: Rect, ctx: &Ctx, method: WindMethod, fro
     let lmax = wind_reach(method) as i32;
     let d = if from_right { -1 } else { 1 };
     // Include the upstream halo and one more source for the edge difference.
-    let start = if from_right { out.x1.checked_add(lmax - 1)? } else { out.x0.checked_sub(lmax)? };
+    let start = if from_right {
+        out.x1.checked_add(lmax - 1)?
+    } else {
+        out.x0.checked_sub(lmax)?
+    };
     start.checked_sub(d)?;
     let sources = w.checked_add(lmax as usize)?;
     let mut best = Vec::new();
@@ -29,13 +40,18 @@ pub(super) fn streaks(src: &Image, out: Rect, ctx: &Ctx, method: WindMethod, fro
     best.resize(w, (0.0f32, lmax + 1));
     let mut res = src.crop(out);
     let mut tmp = [0.0f32; MAXC];
-    let strength = if method == WindMethod::Blast { 8.0 } else { 4.0 };
+    let strength = if method == WindMethod::Blast {
+        8.0
+    } else {
+        4.0
+    };
     for y in out.y0..out.y1 {
         best.fill((0.0, lmax + 1));
         read_px(src, start - d, y, &mut tmp[..n]);
         let mut prev = luma(ctx, &tmp[..n]);
         for step in 0..sources {
-            let s = i32::try_from(i64::from(start) + i64::from(d) * i64::try_from(step).ok()?).ok()?;
+            let s =
+                i32::try_from(i64::from(start) + i64::from(d) * i64::try_from(step).ok()?).ok()?;
             read_px(src, s, y, &mut tmp[..n]);
             let lum = luma(ctx, &tmp[..n]);
             let edge = ((lum - prev).abs() * strength).min(1.0);

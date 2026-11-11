@@ -373,7 +373,14 @@ impl Animatable for f32 {
         t_normalized: f64,
         delta_t_sec: f64,
     ) -> Self {
-        solve_ae_bezier_1d(*self as f64, *other as f64, out_ease, in_ease, t_normalized, delta_t_sec) as f32
+        solve_ae_bezier_1d(
+            *self as f64,
+            *other as f64,
+            out_ease,
+            in_ease,
+            t_normalized,
+            delta_t_sec,
+        ) as f32
     }
 
     #[inline]
@@ -385,7 +392,14 @@ impl Animatable for f32 {
         t_normalized: f64,
         delta_t_sec: f64,
     ) -> Self {
-        solve_ae_bezier_derivative_1d(*self as f64, *other as f64, out_ease, in_ease, t_normalized, delta_t_sec) as f32
+        solve_ae_bezier_derivative_1d(
+            *self as f64,
+            *other as f64,
+            out_ease,
+            in_ease,
+            t_normalized,
+            delta_t_sec,
+        ) as f32
     }
 }
 
@@ -432,13 +446,8 @@ impl<const N: usize> Animatable for [f32; N] {
     ) -> Self {
         let mut res = [0.0f32; N];
         for i in 0..N {
-            res[i] = self[i].velocity_ae_curve(
-                &other[i],
-                out_ease,
-                in_ease,
-                t_normalized,
-                delta_t_sec,
-            );
+            res[i] =
+                self[i].velocity_ae_curve(&other[i], out_ease, in_ease, t_normalized, delta_t_sec);
         }
         res
     }
@@ -487,13 +496,8 @@ impl<const N: usize> Animatable for [f64; N] {
     ) -> Self {
         let mut res = [0.0f64; N];
         for i in 0..N {
-            res[i] = self[i].velocity_ae_curve(
-                &other[i],
-                out_ease,
-                in_ease,
-                t_normalized,
-                delta_t_sec,
-            );
+            res[i] =
+                self[i].velocity_ae_curve(&other[i], out_ease, in_ease, t_normalized, delta_t_sec);
         }
         res
     }
@@ -525,7 +529,11 @@ impl<T: Animatable> KeyframeTrack<T> {
 
     /// Inserts a keyframe, maintaining ascending order by frame number.
     pub fn insert_keyframe(&mut self, kf: Keyframe<T>) {
-        if let Some(pos) = self.keyframes.iter().position(|k| (k.frame - kf.frame).abs() < 1e-6) {
+        if let Some(pos) = self
+            .keyframes
+            .iter()
+            .position(|k| (k.frame - kf.frame).abs() < 1e-6)
+        {
             self.keyframes[pos] = kf;
         } else {
             let pos = self.keyframes.partition_point(|k| k.frame < kf.frame);
@@ -571,45 +579,51 @@ impl<T: Animatable> KeyframeTrack<T> {
         {
             k0.value.interpolate_linear(&k1.value, t_norm)
         } else {
-            k0.value.interpolate_ae_curve(
-                &k1.value,
-                k0.out_ease,
-                k1.in_ease,
-                t_norm,
-                delta_t_sec,
-            )
+            k0.value
+                .interpolate_ae_curve(&k1.value, k0.out_ease, k1.in_ease, t_norm, delta_t_sec)
         }
     }
 
     /// Computes instantaneous velocity (units per second) at the given frame number.
     pub fn velocity(&self, frame: f64) -> T {
         if self.keyframes.len() < 2 {
-            return self.default_value.interpolate_linear(&self.default_value, 0.0);
+            return self
+                .default_value
+                .interpolate_linear(&self.default_value, 0.0);
         }
 
         if frame < self.keyframes[0].frame || frame > self.keyframes.last().unwrap().frame {
-            return self.default_value.interpolate_linear(&self.default_value, 0.0);
+            return self
+                .default_value
+                .interpolate_linear(&self.default_value, 0.0);
         }
 
         let idx = self.keyframes.partition_point(|k| k.frame <= frame);
         let (k0, k1) = if idx == 0 {
             (&self.keyframes[0], &self.keyframes[1])
         } else if idx >= self.keyframes.len() {
-            (&self.keyframes[self.keyframes.len() - 2], &self.keyframes[self.keyframes.len() - 1])
+            (
+                &self.keyframes[self.keyframes.len() - 2],
+                &self.keyframes[self.keyframes.len() - 1],
+            )
         } else {
             (&self.keyframes[idx - 1], &self.keyframes[idx])
         };
 
         let span_frames = k1.frame - k0.frame;
         if span_frames <= 0.0 {
-            return self.default_value.interpolate_linear(&self.default_value, 0.0);
+            return self
+                .default_value
+                .interpolate_linear(&self.default_value, 0.0);
         }
 
         let t_norm = (frame - k0.frame) / span_frames;
         let delta_t_sec = span_frames / self.fps;
 
         if k0.interpolation_out == InterpolationType::Hold {
-            return self.default_value.interpolate_linear(&self.default_value, 0.0);
+            return self
+                .default_value
+                .interpolate_linear(&self.default_value, 0.0);
         }
 
         let (out_e, in_e) = if k0.interpolation_out == InterpolationType::Linear
@@ -619,7 +633,8 @@ impl<T: Animatable> KeyframeTrack<T> {
         } else {
             (k0.out_ease, k1.in_ease)
         };
-        k0.value.velocity_ae_curve(&k1.value, out_e, in_e, t_norm, delta_t_sec)
+        k0.value
+            .velocity_ae_curve(&k1.value, out_e, in_e, t_norm, delta_t_sec)
     }
 
     /// Samples the track value at time in seconds (`time_sec * fps`).
@@ -637,12 +652,22 @@ impl<T: Animatable> KeyframeTrack<T> {
 
 impl KeyframeTrack<f64> {
     /// Evaluates After Effects `loopOut(type, numKeyframes)` on this track.
-    pub fn loop_out(&self, loop_type: crate::expressions::LoopType, num_keyframes: usize, time_sec: f64) -> f64 {
+    pub fn loop_out(
+        &self,
+        loop_type: crate::expressions::LoopType,
+        num_keyframes: usize,
+        time_sec: f64,
+    ) -> f64 {
         crate::expressions::loop_out(self, loop_type, num_keyframes, time_sec)
     }
 
     /// Evaluates After Effects `loopIn(type, numKeyframes)` on this track.
-    pub fn loop_in(&self, loop_type: crate::expressions::LoopType, num_keyframes: usize, time_sec: f64) -> f64 {
+    pub fn loop_in(
+        &self,
+        loop_type: crate::expressions::LoopType,
+        num_keyframes: usize,
+        time_sec: f64,
+    ) -> f64 {
         crate::expressions::loop_in(self, loop_type, num_keyframes, time_sec)
     }
 }
@@ -693,17 +718,29 @@ mod tests {
         // Slow start (first 10 frames advance much less than 1/6th of total)
         let early = track.evaluate(10.0);
         let linear_early = 1000.0 * (10.0 / 60.0);
-        assert!(early < linear_early, "Easy ease should start slower than linear");
+        assert!(
+            early < linear_early,
+            "Easy ease should start slower than linear"
+        );
 
         // Velocity at start and end should be zero
         let v_start = track.velocity(0.0);
         let v_end = track.velocity(60.0);
-        assert!(v_start.abs() < 1.0, "Start velocity should be near zero: {v_start}");
-        assert!(v_end.abs() < 1.0, "End velocity should be near zero: {v_end}");
+        assert!(
+            v_start.abs() < 1.0,
+            "Start velocity should be near zero: {v_start}"
+        );
+        assert!(
+            v_end.abs() < 1.0,
+            "End velocity should be near zero: {v_end}"
+        );
 
         // Midpoint velocity should be peak
         let v_mid = track.velocity(30.0);
-        assert!(v_mid > 1000.0, "Midpoint velocity should peak above average: {v_mid}");
+        assert!(
+            v_mid > 1000.0,
+            "Midpoint velocity should peak above average: {v_mid}"
+        );
     }
 
     #[test]

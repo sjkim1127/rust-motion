@@ -17,10 +17,15 @@ pub(crate) struct Node {
 
 impl Node {
     pub fn attr(&self, k: &str) -> Option<&str> {
-        self.attrs.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str())
+        self.attrs
+            .iter()
+            .find(|(n, _)| n == k)
+            .map(|(_, v)| v.as_str())
     }
     pub fn num(&self, k: &str) -> Option<f64> {
-        self.attr(k).and_then(|v| v.trim().parse::<f64>().ok()).filter(|v| v.is_finite())
+        self.attr(k)
+            .and_then(|v| v.trim().parse::<f64>().ok())
+            .filter(|v| v.is_finite())
     }
     pub fn kids<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a Node> + 'a {
         self.children.iter().filter(move |c| c.name == name)
@@ -29,7 +34,9 @@ impl Node {
         self.children.iter().find(|c| c.name == name)
     }
     pub fn kid_text(&self, name: &str) -> Option<&str> {
-        self.kid(name).map(|n| n.text.trim()).filter(|t| !t.is_empty())
+        self.kid(name)
+            .map(|n| n.text.trim())
+            .filter(|t| !t.is_empty())
     }
 }
 
@@ -57,7 +64,10 @@ fn unescape(s: &str) -> String {
     while let Some(i) = rest.find('&') {
         out.push_str(rest.get(..i).unwrap_or_default());
         let tail = rest.get(i..).unwrap_or_default();
-        match tail.find(';').and_then(|j| entity(tail.get(1..j)?).map(|c| (c, j))) {
+        match tail
+            .find(';')
+            .and_then(|j| entity(tail.get(1..j)?).map(|c| (c, j)))
+        {
             Some((c, j)) => {
                 out.push(c);
                 rest = tail.get(j + 1..).unwrap_or_default();
@@ -75,7 +85,10 @@ fn unescape(s: &str) -> String {
 pub(crate) fn parse(s: &str) -> Result<Node, Error> {
     let mut reader = quick_xml::Reader::from_str(s);
     reader.config_mut().check_end_names = false;
-    let mut stack = vec![Node { name: "#root".into(), ..Default::default() }];
+    let mut stack = vec![Node {
+        name: "#root".into(),
+        ..Default::default()
+    }];
     let mut count = 0usize;
     loop {
         let ev = reader.read_event().map_err(|e| Error::Xml(e.to_string()))?;
@@ -91,7 +104,11 @@ pub(crate) fn parse(s: &str) -> Result<Node, Error> {
                     .flatten()
                     .map(|a| (a.key.as_ref().to_string(), unescape(&a.value)))
                     .collect();
-                let node = Node { name: e.name().as_ref().to_string(), attrs, ..Default::default() };
+                let node = Node {
+                    name: e.name().as_ref().to_string(),
+                    attrs,
+                    ..Default::default()
+                };
                 if matches!(ev, Event::Empty(_)) {
                     if let Some(p) = stack.last_mut() {
                         p.children.push(node);

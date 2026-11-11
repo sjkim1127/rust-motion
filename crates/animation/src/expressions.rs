@@ -99,26 +99,14 @@ pub fn wiggle_seeded(
 }
 
 /// After Effects 2D `wiggle` producing independent X and Y jitter.
-pub fn wiggle_2d(
-    freq: f64,
-    amp: f64,
-    octaves: usize,
-    amp_mult: f64,
-    time: f64,
-) -> (f64, f64) {
+pub fn wiggle_2d(freq: f64, amp: f64, octaves: usize, amp_mult: f64, time: f64) -> (f64, f64) {
     let x = wiggle_seeded(freq, amp, octaves, amp_mult, time, 101);
     let y = wiggle_seeded(freq, amp, octaves, amp_mult, time, 202);
     (x, y)
 }
 
 /// After Effects 3D `wiggle` producing independent X, Y, and Z jitter.
-pub fn wiggle_3d(
-    freq: f64,
-    amp: f64,
-    octaves: usize,
-    amp_mult: f64,
-    time: f64,
-) -> (f64, f64, f64) {
+pub fn wiggle_3d(freq: f64, amp: f64, octaves: usize, amp_mult: f64, time: f64) -> (f64, f64, f64) {
     let x = wiggle_seeded(freq, amp, octaves, amp_mult, time, 101);
     let y = wiggle_seeded(freq, amp, octaves, amp_mult, time, 202);
     let z = wiggle_seeded(freq, amp, octaves, amp_mult, time, 303);
@@ -473,13 +461,20 @@ mod tests {
         for i in 0..100 {
             let t = i as f64 * 0.1;
             let val = perlin_noise_1d(t, 42);
-            assert!(val >= -2.0 && val <= 2.0, "noise val {} out of bounds", val);
+            assert!(
+                (-2.0..=2.0).contains(&val),
+                "noise val {} out of bounds",
+                val
+            );
         }
 
         // Check continuity across integer boundaries
         let v0 = perlin_noise_1d(0.999, 42);
         let v1 = perlin_noise_1d(1.001, 42);
-        assert!((v0 - v1).abs() < 0.05, "noise should be smooth across integers");
+        assert!(
+            (v0 - v1).abs() < 0.05,
+            "noise should be smooth across integers"
+        );
     }
 
     #[test]
@@ -526,7 +521,7 @@ mod tests {
     #[test]
     fn test_loop_out_cycle() {
         let mut track = KeyframeTrack::new(0.0, 30.0);
-        track.insert_keyframe(Keyframe::linear(0.0, 0.0));   // t = 0.0s, val = 0
+        track.insert_keyframe(Keyframe::linear(0.0, 0.0)); // t = 0.0s, val = 0
         track.insert_keyframe(Keyframe::linear(30.0, 100.0)); // t = 1.0s, val = 100
 
         // In-range evaluations
@@ -542,7 +537,7 @@ mod tests {
     #[test]
     fn test_loop_out_ping_pong() {
         let mut track = KeyframeTrack::new(0.0, 30.0);
-        track.insert_keyframe(Keyframe::linear(0.0, 0.0));   // t = 0.0s
+        track.insert_keyframe(Keyframe::linear(0.0, 0.0)); // t = 0.0s
         track.insert_keyframe(Keyframe::linear(30.0, 100.0)); // t = 1.0s
 
         // t = 1.0s: 100

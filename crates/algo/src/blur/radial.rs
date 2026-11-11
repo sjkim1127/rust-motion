@@ -25,7 +25,15 @@ pub(crate) struct Plan {
 impl Plan {
     #[cfg(test)]
     pub(crate) fn new(bounds: Rect, amount: f32, method: RadialMethod, center: (f32, f32)) -> Self {
-        Self::with_quality(bounds, amount, method, RadialQuality::Draft, center, &Interrupt::NONE).unwrap_or(Self {
+        Self::with_quality(
+            bounds,
+            amount,
+            method,
+            RadialQuality::Draft,
+            center,
+            &Interrupt::NONE,
+        )
+        .unwrap_or(Self {
             center: (0.0, 0.0),
             extent: 0.0,
             method,
@@ -69,11 +77,15 @@ impl Plan {
         area: Option<Rect>,
         ctl: &Interrupt<'_>,
     ) -> Option<Self> {
-        if !amount.is_finite() || !center.0.is_finite() || !center.1.is_finite() || ctl.cancelled() {
+        if !amount.is_finite() || !center.0.is_finite() || !center.1.is_finite() || ctl.cancelled()
+        {
             return None;
         }
         let amount = amount.clamp(0.0, 100.0);
-        let center = (bounds.x0 as f32 + bounds.width() as f32 * center.0, bounds.y0 as f32 + bounds.height() as f32 * center.1);
+        let center = (
+            bounds.x0 as f32 + bounds.width() as f32 * center.0,
+            bounds.y0 as f32 + bounds.height() as f32 * center.1,
+        );
         if !center.0.is_finite() || !center.1.is_finite() {
             return None;
         }
@@ -96,7 +108,9 @@ impl Plan {
             extent * radius
         });
         let max_intervals = super::radial_intervals(path, quality);
-        let count = max_intervals.checked_mul(max_intervals.checked_add(3)?)?.checked_div(2)?;
+        let count = max_intervals
+            .checked_mul(max_intervals.checked_add(3)?)?
+            .checked_div(2)?;
         let mut tables = Vec::new();
         tables.try_reserve_exact(count).ok()?;
         for n in 1..=max_intervals {
@@ -110,12 +124,25 @@ impl Plan {
                 });
             }
         }
-        Some(Self { center, extent, method, tables, max_intervals, valid: true })
+        Some(Self {
+            center,
+            extent,
+            method,
+            tables,
+            max_intervals,
+            valid: true,
+        })
     }
 
     /// `None` on cancellation or invalid image storage or allocation failure. Sampling beyond
     /// `src.rect` is transparent, including the individual taps at its edges.
-    pub(crate) fn filter(&self, src: &Image, out: Rect, ctx: &Ctx, ctl: &Interrupt<'_>) -> Option<Vec<f32>> {
+    pub(crate) fn filter(
+        &self,
+        src: &Image,
+        out: Rect,
+        ctx: &Ctx,
+        ctl: &Interrupt<'_>,
+    ) -> Option<Vec<f32>> {
         if !self.valid || ctl.cancelled() || src.ch == 0 {
             return None;
         }
@@ -138,7 +165,14 @@ impl Plan {
         Some(result)
     }
 
-    fn dispatch_fixed<const N: usize>(&self, src: &Source<'_>, out: Rect, alpha: bool, ctl: &Interrupt<'_>, dst: &mut [f32]) -> Option<()> {
+    fn dispatch_fixed<const N: usize>(
+        &self,
+        src: &Source<'_>,
+        out: Rect,
+        alpha: bool,
+        ctl: &Interrupt<'_>,
+        dst: &mut [f32],
+    ) -> Option<()> {
         match (alpha, self.method) {
             (true, RadialMethod::Spin) => self.fixed::<N, true, true>(src, out, ctl, dst),
             (false, RadialMethod::Spin) => self.fixed::<N, false, true>(src, out, ctl, dst),
@@ -147,7 +181,13 @@ impl Plan {
         }
     }
 
-    fn fixed<const N: usize, const ALPHA: bool, const SPIN: bool>(&self, src: &Source<'_>, out: Rect, ctl: &Interrupt<'_>, dst: &mut [f32]) -> Option<()> {
+    fn fixed<const N: usize, const ALPHA: bool, const SPIN: bool>(
+        &self,
+        src: &Source<'_>,
+        out: Rect,
+        ctl: &Interrupt<'_>,
+        dst: &mut [f32],
+    ) -> Option<()> {
         let row_len = (out.width() as usize).checked_mul(N)?;
         for (row_index, row) in dst.chunks_exact_mut(row_len).enumerate() {
             if row_index.is_multiple_of(8) && ctl.cancelled() {
@@ -169,7 +209,14 @@ impl Plan {
         Some(())
     }
 
-    fn dispatch_generic(&self, src: &Source<'_>, out: Rect, alpha: bool, ctl: &Interrupt<'_>, dst: &mut [f32]) -> Option<()> {
+    fn dispatch_generic(
+        &self,
+        src: &Source<'_>,
+        out: Rect,
+        alpha: bool,
+        ctl: &Interrupt<'_>,
+        dst: &mut [f32],
+    ) -> Option<()> {
         match (alpha, self.method) {
             (true, RadialMethod::Spin) => self.generic::<true, true>(src, out, ctl, dst),
             (false, RadialMethod::Spin) => self.generic::<false, true>(src, out, ctl, dst),
@@ -178,7 +225,13 @@ impl Plan {
         }
     }
 
-    fn generic<const ALPHA: bool, const SPIN: bool>(&self, src: &Source<'_>, out: Rect, ctl: &Interrupt<'_>, dst: &mut [f32]) -> Option<()> {
+    fn generic<const ALPHA: bool, const SPIN: bool>(
+        &self,
+        src: &Source<'_>,
+        out: Rect,
+        ctl: &Interrupt<'_>,
+        dst: &mut [f32],
+    ) -> Option<()> {
         let n = src.image.ch;
         let row_len = (out.width() as usize).checked_mul(n)?;
         let mut sample = Vec::new();
@@ -207,17 +260,27 @@ impl Plan {
         let radius = (dx * dx + dy * dy).sqrt();
         let n = ((self.extent * radius).ceil() as usize).clamp(1, self.max_intervals);
         let start = (n - 1).checked_mul(n.checked_add(2)?)?.checked_div(2)?;
-        self.tables.get(start..start.checked_add(n.checked_add(1)?)?)
+        self.tables
+            .get(start..start.checked_add(n.checked_add(1)?)?)
     }
 
     #[inline]
     fn position<const SPIN: bool>(&self, dx: f32, dy: f32, (s, c): (f32, f32)) -> (f32, f32) {
-        if SPIN { (self.center.0 + dx * c - dy * s, self.center.1 + dx * s + dy * c) } else { (self.center.0 + dx * c, self.center.1 + dy * c) }
+        if SPIN {
+            (
+                self.center.0 + dx * c - dy * s,
+                self.center.1 + dx * s + dy * c,
+            )
+        } else {
+            (self.center.0 + dx * c, self.center.1 + dy * c)
+        }
     }
 }
 
 fn sample_len(rect: Rect, channels: usize) -> Option<usize> {
-    (rect.width() as usize).checked_mul(rect.height() as usize)?.checked_mul(channels)
+    (rect.width() as usize)
+        .checked_mul(rect.height() as usize)?
+        .checked_mul(channels)
 }
 
 /// Storage dimensions are checked once, before coordinate-derived offset arithmetic.
@@ -231,18 +294,26 @@ impl<'a> Source<'a> {
         if image.ch == 0 || sample_len(image.rect, image.ch)? != image.data.len() {
             return None;
         }
-        Some(Self { image, width: image.rect.width() as usize })
+        Some(Self {
+            image,
+            width: image.rect.width() as usize,
+        })
     }
 
     #[inline]
     fn pixel(&self, x: i64, y: i64) -> Option<&'a [f32]> {
         let b = self.image.rect;
-        if x < i64::from(b.x0) || x >= i64::from(b.x1) || y < i64::from(b.y0) || y >= i64::from(b.y1) {
+        if x < i64::from(b.x0)
+            || x >= i64::from(b.x1)
+            || y < i64::from(b.y0)
+            || y >= i64::from(b.y1)
+        {
             return None;
         }
         // The rectangular storage length was checked by Source::new, and the
         // coordinates above are inside that rectangle, so these products fit.
-        let i = ((y - i64::from(b.y0)) as usize * self.width + (x - i64::from(b.x0)) as usize) * self.image.ch;
+        let i = ((y - i64::from(b.y0)) as usize * self.width + (x - i64::from(b.x0)) as usize)
+            * self.image.ch;
         self.image.data.get(i..i + self.image.ch)
     }
 }
@@ -258,19 +329,33 @@ fn taps(x: f32, y: f32) -> Option<[(i64, i64, f32); 4]> {
     // f32 casts saturate, and i64 leaves room for the neighbouring tap even
     // when an adversarial center places a sample outside the i32 image domain.
     let (x0, y0) = (i64::from(x0 as i32), i64::from(y0 as i32));
-    Some([(x0, y0, (1.0 - ax) * (1.0 - ay)), (x0 + 1, y0, ax * (1.0 - ay)), (x0, y0 + 1, (1.0 - ax) * ay), (x0 + 1, y0 + 1, ax * ay)])
+    Some([
+        (x0, y0, (1.0 - ax) * (1.0 - ay)),
+        (x0 + 1, y0, ax * (1.0 - ay)),
+        (x0, y0 + 1, (1.0 - ax) * ay),
+        (x0 + 1, y0 + 1, ax * ay),
+    ])
 }
 
 #[inline]
-fn sample_fixed<const N: usize, const ALPHA: bool>(src: &Source<'_>, x: f32, y: f32, acc: &mut [f32; N]) {
+fn sample_fixed<const N: usize, const ALPHA: bool>(
+    src: &Source<'_>,
+    x: f32,
+    y: f32,
+    acc: &mut [f32; N],
+) {
     let Some(taps) = taps(x, y) else { return };
     let mut sample = [0.0; N];
     for (x, y, weight) in taps {
         if weight <= 0.0 {
             continue;
         }
-        let Some(pixel) = src.pixel(x, y) else { continue };
-        let Ok(pixel) = <&[f32; N]>::try_from(pixel) else { continue };
+        let Some(pixel) = src.pixel(x, y) else {
+            continue;
+        };
+        let Ok(pixel) = <&[f32; N]>::try_from(pixel) else {
+            continue;
+        };
         if ALPHA {
             let alpha = pixel.last().copied().unwrap_or(0.0);
             for (sum, &value) in sample.iter_mut().zip(pixel).take(N.saturating_sub(1)) {
@@ -289,14 +374,22 @@ fn sample_fixed<const N: usize, const ALPHA: bool>(src: &Source<'_>, x: f32, y: 
 }
 
 #[inline]
-fn sample_generic<const ALPHA: bool>(src: &Source<'_>, x: f32, y: f32, acc: &mut [f32], sample: &mut [f32]) {
+fn sample_generic<const ALPHA: bool>(
+    src: &Source<'_>,
+    x: f32,
+    y: f32,
+    acc: &mut [f32],
+    sample: &mut [f32],
+) {
     let Some(taps) = taps(x, y) else { return };
     sample.fill(0.0);
     for (x, y, weight) in taps {
         if weight <= 0.0 {
             continue;
         }
-        let Some(pixel) = src.pixel(x, y) else { continue };
+        let Some(pixel) = src.pixel(x, y) else {
+            continue;
+        };
         if ALPHA {
             let alpha = pixel.last().copied().unwrap_or(0.0);
             let colours = sample.len().saturating_sub(1);
@@ -347,7 +440,14 @@ fn finish(pixel: &mut [f32], reciprocal: f32, alpha: bool) {
 
 /// Original implementation, retained only as a quality/performance oracle.
 #[cfg(test)]
-pub(crate) fn reference(src: &Image, out: Rect, ctx: &Ctx, amount: f32, method: RadialMethod, center: (f32, f32)) -> Vec<f32> {
+pub(crate) fn reference(
+    src: &Image,
+    out: Rect,
+    ctx: &Ctx,
+    amount: f32,
+    method: RadialMethod,
+    center: (f32, f32),
+) -> Vec<f32> {
     super::radial(src, out, ctx, amount, method, RadialQuality::Draft, center)
 }
 

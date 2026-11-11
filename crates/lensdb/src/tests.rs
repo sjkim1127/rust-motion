@@ -56,7 +56,14 @@ fn db() -> LensDb {
 }
 
 fn shot(focal: f64) -> Shot {
-    Shot { focal, aperture: Some(2.8), distance: None, crop_factor: Some(1.0), width: 6000.0, height: 4000.0 }
+    Shot {
+        focal,
+        aperture: Some(2.8),
+        distance: None,
+        crop_factor: Some(1.0),
+        width: 6000.0,
+        height: 4000.0,
+    }
 }
 
 /// The DNG `WarpRectilinear` source position (the pipeline's formula, radial part).
@@ -74,9 +81,16 @@ fn dng_source(wp: &EmbeddedWarp, ch: usize, x: f64, y: f64, w: f64, h: f64) -> (
 fn parses_cameras_lenses_and_skips_invalid_entries() {
     let db = db();
     assert_eq!(db.cameras.len(), 2);
-    assert_eq!(db.lenses.len(), 3, "the lens without valid calibration points is dropped");
+    assert_eq!(
+        db.lenses.len(),
+        3,
+        "the lens without valid calibration points is dropped"
+    );
     let z = &db.lenses[0];
-    assert_eq!(z.models[0], "Testcam 24-70mm f/2.8 & Co", "entities decoded");
+    assert_eq!(
+        z.models[0], "Testcam 24-70mm f/2.8 & Co",
+        "entities decoded"
+    );
     assert_eq!(z.distortion.len(), 2);
     assert_eq!(z.tca.len(), 2);
     assert_eq!(z.vignetting.len(), 3);
@@ -96,7 +110,12 @@ fn malformed_documents_are_errors_not_panics() {
 #[test]
 fn finds_cameras_by_exif_strings() {
     let db = db();
-    assert_eq!(db.find_camera("TESTCAM CORPORATION", "TC-1").unwrap().crop_factor, 1.5);
+    assert_eq!(
+        db.find_camera("TESTCAM CORPORATION", "TC-1")
+            .unwrap()
+            .crop_factor,
+        1.5
+    );
     assert_eq!(db.find_camera("Testcam", "tc-ff").unwrap().crop_factor, 1.0);
     assert!(db.find_camera("Testcam", "TC-2").is_none());
     assert!(db.find_camera("Other", "TC-1").is_none());
@@ -108,9 +127,18 @@ fn finds_lenses_by_exif_model_with_or_without_the_maker() {
     let cam = db.find_camera("Testcam", "TC-FF");
     let l = db.find_lens(None, "24-70mm F2.8 Zoom", cam).unwrap();
     assert_eq!(l.maker, "Testcam");
-    assert!(db.find_lens(Some("Testcam"), "Testcam 50mm F1.8", cam).is_some());
-    assert!(db.find_lens(None, "24-105mm F4", cam).is_none(), "focal lengths must agree");
-    assert!(db.find_lens(Some("Otherco"), "24-70mm f/2.8 Zoom", cam).is_none(), "lens maker must agree");
+    assert!(db
+        .find_lens(Some("Testcam"), "Testcam 50mm F1.8", cam)
+        .is_some());
+    assert!(
+        db.find_lens(None, "24-105mm F4", cam).is_none(),
+        "focal lengths must agree"
+    );
+    assert!(
+        db.find_lens(Some("Otherco"), "24-70mm f/2.8 Zoom", cam)
+            .is_none(),
+        "lens maker must agree"
+    );
     assert!(db.find_lens(None, "", cam).is_none());
 }
 
@@ -182,8 +210,14 @@ fn tca_scales_red_and_blue_planes() {
     let (rx, _) = dng_source(&wp, 0, w, h / 2.0, w, h);
     let (gx, _) = dng_source(&wp, 1, w, h / 2.0, w, h);
     let (bx, _) = dng_source(&wp, 2, w, h / 2.0, w, h);
-    assert!(((rx - w / 2.0) / (gx - w / 2.0) - 1.0004).abs() < 1e-5, "{rx} {gx}");
-    assert!(((bx - w / 2.0) / (gx - w / 2.0) - 0.9997).abs() < 1e-5, "{bx} {gx}");
+    assert!(
+        ((rx - w / 2.0) / (gx - w / 2.0) - 1.0004).abs() < 1e-5,
+        "{rx} {gx}"
+    );
+    assert!(
+        ((bx - w / 2.0) / (gx - w / 2.0) - 0.9997).abs() < 1e-5,
+        "{bx} {gx}"
+    );
 }
 
 #[test]
@@ -198,7 +232,12 @@ fn vignetting_interpolates_in_aperture_and_focal() {
     assert!((at(47.0, 2.8) - 0.625).abs() < 1e-9);
     // the gain undoes the falloff at the corner
     let v = l.correction(&shot(24.0)).unwrap().vignette.unwrap();
-    let g: f64 = 1.0 + v.k.iter().enumerate().map(|(i, k)| k * 1f64.powi(2 * (i as i32 + 1))).sum::<f64>();
+    let g: f64 = 1.0
+        + v.k
+            .iter()
+            .enumerate()
+            .map(|(i, k)| k * 1f64.powi(2 * (i as i32 + 1)))
+            .sum::<f64>();
     assert!((g * 0.55 - 1.0).abs() < 0.01, "{g}");
 }
 
@@ -208,20 +247,42 @@ fn crop_factor_scales_the_profile() {
     let db = db();
     let l = &db.lenses[1];
     let ff = l.correction(&shot(50.0)).unwrap().warp.unwrap();
-    let aps = l.correction(&Shot { crop_factor: Some(1.5), ..shot(50.0) }).unwrap().warp.unwrap();
+    let aps = l
+        .correction(&Shot {
+            crop_factor: Some(1.5),
+            ..shot(50.0)
+        })
+        .unwrap()
+        .warp
+        .unwrap();
     let corner = |wp: &EmbeddedWarp| dng_source(wp, 1, 0.0, 0.0, 6000.0, 4000.0);
     let (a, b) = (corner(&ff), corner(&aps));
     let r = |(x, y): (f64, f64)| (x - 3000.0).hypot(y - 2000.0);
     let rc = 3000f64.hypot(2000.0);
-    assert!((r(a) - rc).abs() > (r(b) - rc).abs() * 1.5, "{} {}", r(a) - rc, r(b) - rc);
+    assert!(
+        (r(a) - rc).abs() > (r(b) - rc).abs() * 1.5,
+        "{} {}",
+        r(a) - rc,
+        r(b) - rc
+    );
 }
 
 #[test]
 fn fisheyes_get_no_rectilinear_warp_and_bad_shots_none() {
     let db = db();
     assert!(db.lenses[2].correction(&shot(8.0)).is_none());
-    assert!(db.lenses[0].correction(&Shot { width: f64::NAN, ..shot(24.0) }).is_none());
-    assert!(db.lenses[0].correction(&Shot { focal: 0.0, ..shot(24.0) }).is_none());
+    assert!(db.lenses[0]
+        .correction(&Shot {
+            width: f64::NAN,
+            ..shot(24.0)
+        })
+        .is_none());
+    assert!(db.lenses[0]
+        .correction(&Shot {
+            focal: 0.0,
+            ..shot(24.0)
+        })
+        .is_none());
 }
 
 #[test]
@@ -240,6 +301,9 @@ fn load_dir_reads_xml_files_and_reports_bad_ones() {
 
 #[test]
 fn tokens_split_names_like_exif_writes_them() {
-    assert_eq!(tokens("FE 24-105mm F4.0 G OSS"), ["fe", "24", "105", "mm", "f", "4", "g", "oss"]);
+    assert_eq!(
+        tokens("FE 24-105mm F4.0 G OSS"),
+        ["fe", "24", "105", "mm", "f", "4", "g", "oss"]
+    );
     assert_eq!(tokens("f/2.8"), ["f", "2.8"]);
 }

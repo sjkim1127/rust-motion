@@ -1,45 +1,8 @@
-//! `<Spark>` 4-point star/spark shape component and path generator.
+//! 4-point star/spark shape path generator.
 
-#[cfg(feature = "dioxus")]
-use crate::render_svg::RenderSvg;
 use crate::shape_output::ShapeOutput;
-#[cfg(feature = "dioxus")]
-use dioxus::prelude::*;
 
 const KAPPA: f64 = 0.5522847498307936;
-
-/// Props for the `<Spark>` shape component.
-#[cfg(feature = "dioxus")]
-#[derive(Props, Clone, PartialEq)]
-pub struct SparkProps {
-    /// Bounding box width in pixels.
-    #[props(default = 100.0)]
-    pub width: f64,
-    /// Bounding box height in pixels.
-    #[props(default = 100.0)]
-    pub height: f64,
-    /// Curvature of the inward edges (0.0 = straight diamond, 1.0 = deep concave spark).
-    #[props(default = 0.5)]
-    pub edge_roundness: f64,
-    /// Corner radius for rounded caps at the four points.
-    #[props(default = 0.0)]
-    pub corner_radius: f64,
-    /// Fill color.
-    #[props(default = "#ffffff".to_string())]
-    pub fill: String,
-    /// Stroke color.
-    #[props(default = "none".to_string())]
-    pub stroke: String,
-    /// Stroke width in pixels.
-    #[props(default = 0.0)]
-    pub stroke_width: f64,
-    /// Opacity (0.0 to 1.0).
-    #[props(default = 1.0)]
-    pub opacity: f64,
-    /// Custom CSS styles.
-    #[props(default)]
-    pub style: String,
-}
 
 /// Generates parametric SVG path data and metadata for a 4-point spark shape.
 pub fn make_spark(width: f64, height: f64, edge_roundness: f64, corner_radius: f64) -> ShapeOutput {
@@ -92,67 +55,54 @@ pub fn make_spark(width: f64, height: f64, edge_roundness: f64, corner_radius: f
              C {} {} 0 {} 0 {cy} \
              C 0 {} {} {} {r} {} \
              C {} {} {} {} {} {r} Z",
-            // Start at top cap left
             cx - r,
-            // Top cap quad 1
             cx - r,
             r - cap_k,
             cx - cap_k,
-            // Top cap quad 2
             cx + cap_k,
             cx + r,
             r - cap_k,
             cx + r,
-            // Edge Top -> Right
             cx + r,
             r + dy * k,
             w - r - dx * k,
             cy - r,
             w - r,
             cy - r,
-            // Right cap quad 1
             w - r + cap_k,
             cy - r,
             cy - cap_k,
-            // Right cap quad 2
             cy + cap_k,
             w - r + cap_k,
             cy + r,
             w - r,
             cy + r,
-            // Edge Right -> Bottom
             w - r - dx * k,
             cy + r,
             cx + r,
             h - r - dy * k,
             cx + r,
             h - r,
-            // Bottom cap quad 1
             cx + r,
             h - r + cap_k,
             cx + cap_k,
-            // Bottom cap quad 2
             cx - cap_k,
             cx - r,
             h - r + cap_k,
             cx - r,
             h - r,
-            // Edge Bottom -> Left
             cx - r,
             h - r - dy * k,
             r + dx * k,
             cy + r,
             cy + r,
-            // Left cap quad 1
             r - cap_k,
             cy + r,
             cy + cap_k,
-            // Left cap quad 2
             cy - cap_k,
             r - cap_k,
             cy - r,
             cy - r,
-            // Edge Left -> Top
             r + dx * k,
             cy - r,
             cx - r,
@@ -162,31 +112,6 @@ pub fn make_spark(width: f64, height: f64, edge_roundness: f64, corner_radius: f
     };
 
     ShapeOutput::new(path, w, h, format!("{cx} {cy}"))
-}
-
-/// Renders a procedural SVG Spark.
-#[cfg(feature = "dioxus")]
-#[component]
-pub fn Spark(props: SparkProps) -> Element {
-    let shape = make_spark(
-        props.width,
-        props.height,
-        props.edge_roundness,
-        props.corner_radius,
-    );
-
-    rsx! {
-        RenderSvg {
-            path: shape.path,
-            width: shape.width,
-            height: shape.height,
-            fill: props.fill,
-            stroke: props.stroke,
-            stroke_width: props.stroke_width,
-            opacity: props.opacity,
-            style: props.style,
-        }
-    }
 }
 
 #[cfg(test)]

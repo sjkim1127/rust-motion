@@ -3,13 +3,19 @@
 //! Detection is stereo-linked (the loudest channel drives one common gain) so the image does
 //! not shift. Gain computers work in dB; attack/release are one-pole smoothers on the gain.
 
-use crate::oversample::{Interpolator, PolyphaseBank, true_peak_factor};
-use crate::{AudioEffect, ParamSpec, ParamValues, Smoothed, Unit, block_len, db_to_gain, param_plumbing};
+use crate::oversample::{true_peak_factor, Interpolator, PolyphaseBank};
+use crate::{
+    block_len, db_to_gain, param_plumbing, AudioEffect, ParamSpec, ParamValues, Smoothed, Unit,
+};
 use std::collections::VecDeque;
 
 /// One-pole coefficient for a time constant in ms.
 fn coef(ms: f32, sr: f32) -> f32 {
-    if ms <= 0.0 { 0.0 } else { (-1.0 / (ms * 0.001 * sr)).exp() }
+    if ms <= 0.0 {
+        0.0
+    } else {
+        (-1.0 / (ms * 0.001 * sr)).exp()
+    }
 }
 
 #[inline]
@@ -31,7 +37,11 @@ pub fn compressor_curve(x: f32, threshold: f32, ratio: f32, knee: f32) -> f32 {
 
 /// Static downward-expander curve (output level in dB), attenuation limited to `range` dB.
 pub fn expander_curve(x: f32, threshold: f32, ratio: f32, range: f32) -> f32 {
-    if x >= threshold { x } else { x + ((x - threshold) * (ratio - 1.0)).max(-range) }
+    if x >= threshold {
+        x
+    } else {
+        x + ((x - threshold) * (ratio - 1.0)).max(-range)
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -141,7 +151,11 @@ impl AudioEffect for Compressor {
                 lin_to_db(peak)
             };
             let target = self.curve(level_db) - level_db;
-            let c = if target < self.env { self.att } else { self.rel };
+            let c = if target < self.env {
+                self.att
+            } else {
+                self.rel
+            };
             self.env = c * self.env + (1.0 - c) * target;
             if self.env.abs() < 1e-9 {
                 self.env = 0.0;
@@ -345,7 +359,9 @@ impl AudioEffect for Limiter {
     fn reset(&mut self) {
         self.in_gain.snap();
         self.interp.iter_mut().for_each(Interpolator::reset);
-        self.delay.iter_mut().for_each(|d| d.iter_mut().for_each(|v| *v = 0.0));
+        self.delay
+            .iter_mut()
+            .for_each(|d| d.iter_mut().for_each(|v| *v = 0.0));
         self.wpos = 0;
         self.minq.clear();
         self.box_ring.iter_mut().for_each(|v| *v = 1.0);
@@ -369,10 +385,18 @@ impl AudioEffect for Limiter {
                 let x = channels[ch][i] * g_in;
                 self.delay[ch][self.wpos] = x;
                 let aligned = self.delay[ch][det_pos].abs();
-                let tp = if self.true_peak { self.interp[ch].push_peak(&self.bank, x) } else { 0.0 };
+                let tp = if self.true_peak {
+                    self.interp[ch].push_peak(&self.bank, x)
+                } else {
+                    0.0
+                };
                 det = det.max(aligned.max(tp));
             }
-            let greq = if det > self.ceiling { self.ceiling / det } else { 1.0 };
+            let greq = if det > self.ceiling {
+                self.ceiling / det
+            } else {
+                1.0
+            };
             // Sliding minimum over the last `window` values.
             while let Some(&(_, v)) = self.minq.back() {
                 if v >= greq {
@@ -391,7 +415,11 @@ impl AudioEffect for Limiter {
             }
             let m = self.minq.front().map_or(1.0, |&(_, v)| v);
             // Release.
-            self.rel_state = if m < self.rel_state { m } else { self.rel_state + (m - self.rel_state) * (1.0 - self.rel) };
+            self.rel_state = if m < self.rel_state {
+                m
+            } else {
+                self.rel_state + (m - self.rel_state) * (1.0 - self.rel)
+            };
             // Moving average over look+1 samples.
             self.box_sum += self.rel_state as f64 - self.box_ring[self.box_pos] as f64;
             self.box_ring[self.box_pos] = self.rel_state;
@@ -459,7 +487,10 @@ mod tests {
                 c.process(&mut [&mut l, &mut r]);
                 let out_db = lin_to_db(l[47999]);
                 let expect = compressor_curve(level_db, -20.0, 4.0, 0.0) + 3.0;
-                assert!((out_db - expect).abs() < 0.05, "det {detector} in {level_db}: {out_db} vs {expect}");
+                assert!(
+                    (out_db - expect).abs() < 0.05,
+                    "det {detector} in {level_db}: {out_db} vs {expect}"
+                );
                 assert_eq!(l[47999], -r[47999]);
             }
         }
@@ -477,7 +508,10 @@ mod tests {
         // After one time constant ~63% of the final reduction (in dB) is applied.
         let final_db = compressor_curve(0.0, -20.0, 20.0, 0.0);
         let at_tau = lin_to_db(x[480]);
-        assert!((at_tau / final_db - 0.632).abs() < 0.02, "{at_tau} / {final_db}");
+        assert!(
+            (at_tau / final_db - 0.632).abs() < 0.02,
+            "{at_tau} / {final_db}"
+        );
     }
 
     #[test]
@@ -490,13 +524,19 @@ mod tests {
         g.set_param("release", 10.0);
         let loud = db_to_gain(-10.0);
         let quiet = db_to_gain(-50.0);
-        let mut x: Vec<f32> = (0..48000).map(|i| if i < 24000 { loud } else { quiet }).collect();
+        let mut x: Vec<f32> = (0..48000)
+            .map(|i| if i < 24000 { loud } else { quiet })
+            .collect();
         g.process(&mut [&mut x]);
         assert!((lin_to_db(x[23999]) + 10.0).abs() < 0.01);
         // During hold (100 ms) the gate stays open.
         assert!((lin_to_db(x[24000 + 2400]) + 50.0).abs() < 0.01);
         // Well after hold + release: attenuated by the full range.
-        assert!((lin_to_db(x[47999]) + 90.0).abs() < 0.1, "{}", lin_to_db(x[47999]));
+        assert!(
+            (lin_to_db(x[47999]) + 90.0).abs() < 0.1,
+            "{}",
+            lin_to_db(x[47999])
+        );
         assert!((expander_curve(-40.0, -30.0, 2.0, 60.0) + 50.0).abs() < 1e-6);
     }
 

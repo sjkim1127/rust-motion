@@ -14,7 +14,10 @@ pub struct Lut3d {
 impl Lut3d {
     /// Samples a 3-input transform (1-output transforms are replicated to gray).
     pub fn from_transform(t: &Transform, size: usize) -> Lut3d {
-        assert!(t.inputs() == 3 && (t.outputs() == 3 || t.outputs() == 1), "display LUTs need a 3→3 or 3→1 transform");
+        assert!(
+            t.inputs() == 3 && (t.outputs() == 3 || t.outputs() == 1),
+            "display LUTs need a 3→3 or 3→1 transform"
+        );
         assert!(size >= 2, "LUT size");
         let mut data = vec![[0.0f32, 0.0, 0.0, 1.0]; size * size * size];
         let s = (size - 1) as f32;
@@ -23,7 +26,11 @@ impl Lut3d {
             for g in 0..size {
                 for r in 0..size {
                     t.eval(&[r as f32 / s, g as f32 / s, b as f32 / s], &mut out);
-                    let v = if t.outputs() == 1 { [out[0]; 3] } else { [out[0], out[1], out[2]] };
+                    let v = if t.outputs() == 1 {
+                        [out[0]; 3]
+                    } else {
+                        [out[0], out[1], out[2]]
+                    };
                     data[r + g * size + b * size * size] = [v[0], v[1], v[2], 1.0];
                 }
             }
@@ -49,7 +56,8 @@ impl Lut3d {
             let x00 = c(r0, g0, b0) + (c(r0 + 1, g0, b0) - c(r0, g0, b0)) * fr;
             let x10 = c(r0, g0 + 1, b0) + (c(r0 + 1, g0 + 1, b0) - c(r0, g0 + 1, b0)) * fr;
             let x01 = c(r0, g0, b0 + 1) + (c(r0 + 1, g0, b0 + 1) - c(r0, g0, b0 + 1)) * fr;
-            let x11 = c(r0, g0 + 1, b0 + 1) + (c(r0 + 1, g0 + 1, b0 + 1) - c(r0, g0 + 1, b0 + 1)) * fr;
+            let x11 =
+                c(r0, g0 + 1, b0 + 1) + (c(r0 + 1, g0 + 1, b0 + 1) - c(r0, g0 + 1, b0 + 1)) * fr;
             let y0 = x00 + (x10 - x00) * fg;
             let y1 = x01 + (x11 - x01) * fg;
             *ov = y0 + (y1 - y0) * fb;
@@ -70,7 +78,10 @@ impl Lut3d {
 
     /// RGBA8 texels (for backends without float 3D textures).
     pub fn to_rgba8(&self) -> Vec<u8> {
-        self.data.iter().flat_map(|p| p.map(|v| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8)).collect()
+        self.data
+            .iter()
+            .flat_map(|p| p.map(|v| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8))
+            .collect()
     }
 }
 

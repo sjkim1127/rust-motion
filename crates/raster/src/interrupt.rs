@@ -22,7 +22,9 @@ fn ignore(_: f32) {}
 
 impl std::fmt::Debug for Interrupt<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Interrupt").field("cancelled", &self.cancelled()).finish()
+        f.debug_struct("Interrupt")
+            .field("cancelled", &self.cancelled())
+            .finish()
     }
 }
 
@@ -34,7 +36,10 @@ impl Default for Interrupt<'_> {
 
 impl<'a> Interrupt<'a> {
     /// Never cancelled; progress is ignored.
-    pub const NONE: Interrupt<'static> = Interrupt { cancel: &never, progress: &ignore };
+    pub const NONE: Interrupt<'static> = Interrupt {
+        cancel: &never,
+        progress: &ignore,
+    };
 
     /// An interrupt from a cancellation check and a progress sink (`0.0..=1.0`).
     pub fn new(cancel: &'a (dyn Fn() -> bool + Sync), progress: &'a (dyn Fn(f32) + Sync)) -> Self {
@@ -43,7 +48,10 @@ impl<'a> Interrupt<'a> {
 
     /// Only a cancellation check (progress is ignored).
     pub fn cancel_only(cancel: &'a (dyn Fn() -> bool + Sync)) -> Self {
-        Self { cancel, progress: &ignore }
+        Self {
+            cancel,
+            progress: &ignore,
+        }
     }
 
     /// Has the operation been cancelled? Algorithms stop as soon as they see `true`.
@@ -60,7 +68,11 @@ impl<'a> Interrupt<'a> {
 
     /// `Err(Cancelled)` once cancelled, for `?` in loops.
     pub fn check(&self) -> Result<(), Cancelled> {
-        if self.cancelled() { Err(Cancelled) } else { Ok(()) }
+        if self.cancelled() {
+            Err(Cancelled)
+        } else {
+            Ok(())
+        }
     }
 }
 

@@ -29,7 +29,11 @@ pub fn trace_mask(values: &[f32], rect: Rect, outside: f32, tolerance: f64) -> P
     for (i, lp) in loops.iter().enumerate() {
         // Fit to half the tolerance: the worst point may deviate by the full amount only rarely.
         let mut s = fit_closed(lp, (tolerance * 0.5).max(0.05), 1.5);
-        s.op = if i == 0 { PathOp::Combine } else { PathOp::Exclude };
+        s.op = if i == 0 {
+            PathOp::Combine
+        } else {
+            PathOp::Exclude
+        };
         subpaths.push(s);
     }
     Path::new(subpaths)
@@ -39,15 +43,28 @@ pub fn trace_mask(values: &[f32], rect: Rect, outside: f32, tolerance: f64) -> P
 pub fn contours(values: &[f32], rect: Rect, outside: f32) -> Vec<Vec<P>> {
     let w = rect.width() as i64;
     let h = rect.height() as i64;
-    let get = |x: i64, y: i64| -> f32 { if x < 0 || y < 0 || x >= w || y >= h { outside } else { values[(y * w + x) as usize] } };
+    let get = |x: i64, y: i64| -> f32 {
+        if x < 0 || y < 0 || x >= w || y >= h {
+            outside
+        } else {
+            values[(y * w + x) as usize]
+        }
+    };
     // Edge ids: horizontal edge between (x,y)-(x+1,y) = (x, y, 0); vertical (x,y)-(x,y+1) = (x, y, 1).
     let lvl = 0.5f32;
     let point = |a: (i64, i64), b: (i64, i64)| -> P {
         let (va, vb) = (get(a.0, a.1), get(b.0, b.1));
-        let t = if (vb - va).abs() > 1e-9 { f64::from((lvl - va) / (vb - va)).clamp(0.0, 1.0) } else { 0.5 };
+        let t = if (vb - va).abs() > 1e-9 {
+            f64::from((lvl - va) / (vb - va)).clamp(0.0, 1.0)
+        } else {
+            0.5
+        };
         let (ax, ay) = (a.0 as f64 + 0.5, a.1 as f64 + 0.5);
         let (bx, by) = (b.0 as f64 + 0.5, b.1 as f64 + 0.5);
-        (f64::from(rect.x0) + ax + (bx - ax) * t, f64::from(rect.y0) + ay + (by - ay) * t)
+        (
+            f64::from(rect.x0) + ax + (bx - ax) * t,
+            f64::from(rect.y0) + ay + (by - ay) * t,
+        )
     };
     // Segments from edge -> edge, oriented with the inside on the left (y down).
     let mut next: HashMap<(i64, i64, u8), (i64, i64, u8)> = HashMap::new();
@@ -75,7 +92,9 @@ pub fn contours(values: &[f32], rect: Rect, outside: f32) -> Vec<Vec<P>> {
                 3 => seg(left, right),
                 4 => seg(right, bottom),
                 5 => {
-                    let centre = (get(cx, cy) + get(cx + 1, cy) + get(cx + 1, cy + 1) + get(cx, cy + 1)) / 4.0;
+                    let centre =
+                        (get(cx, cy) + get(cx + 1, cy) + get(cx + 1, cy + 1) + get(cx, cy + 1))
+                            / 4.0;
                     if centre >= lvl {
                         seg(left, bottom);
                         seg(right, top);
@@ -89,7 +108,9 @@ pub fn contours(values: &[f32], rect: Rect, outside: f32) -> Vec<Vec<P>> {
                 8 => seg(bottom, left),
                 9 => seg(bottom, top),
                 10 => {
-                    let centre = (get(cx, cy) + get(cx + 1, cy) + get(cx + 1, cy + 1) + get(cx, cy + 1)) / 4.0;
+                    let centre =
+                        (get(cx, cy) + get(cx + 1, cy) + get(cx + 1, cy + 1) + get(cx, cy + 1))
+                            / 4.0;
                     if centre >= lvl {
                         seg(top, left);
                         seg(bottom, right);
@@ -106,7 +127,13 @@ pub fn contours(values: &[f32], rect: Rect, outside: f32) -> Vec<Vec<P>> {
             }
         }
     }
-    let edge_point = |e: (i64, i64, u8)| if e.2 == 0 { point((e.0, e.1), (e.0 + 1, e.1)) } else { point((e.0, e.1), (e.0, e.1 + 1)) };
+    let edge_point = |e: (i64, i64, u8)| {
+        if e.2 == 0 {
+            point((e.0, e.1), (e.0 + 1, e.1))
+        } else {
+            point((e.0, e.1), (e.0, e.1 + 1))
+        }
+    };
     let mut keys: Vec<(i64, i64, u8)> = next.keys().copied().collect();
     keys.sort_unstable_by_key(|k| (k.1, k.0, k.2));
     let mut out = Vec::new();
@@ -149,7 +176,11 @@ fn len(a: P) -> f64 {
 }
 fn norm(a: P) -> P {
     let l = len(a);
-    if l > 1e-12 { (a.0 / l, a.1 / l) } else { (0.0, 0.0) }
+    if l > 1e-12 {
+        (a.0 / l, a.1 / l)
+    } else {
+        (0.0, 0.0)
+    }
 }
 
 /// Point `window` px of arc length away from `i` (forwards or backwards) on a closed loop, or on
@@ -162,7 +193,11 @@ fn walk(lp: &[P], i: usize, window: f64, fwd: bool, closed: bool) -> P {
         if !closed && (if fwd { cur + 1 >= n } else { cur == 0 }) {
             break;
         }
-        let nx = if fwd { (cur + 1) % n } else { (cur + n - 1) % n };
+        let nx = if fwd {
+            (cur + 1) % n
+        } else {
+            (cur + n - 1) % n
+        };
         let d = len(sub(lp[nx], lp[cur]));
         if acc + d >= window {
             let t = (window - acc) / d.max(1e-12);
@@ -273,13 +308,22 @@ fn fit_closed(lp: &[P], tol: f64, window: f64) -> Subpath {
     let mut knots: Vec<Knot> = Vec::with_capacity(segs.len());
     let pt = |p: P| Point::new(p.0, p.1);
     for (i, s) in segs.iter().enumerate() {
-        knots.push(Knot { anchor: pt(s[0]), in_ctrl: pt(s[0]), out_ctrl: pt(s[1]), smooth: !corner_at_start[i] });
+        knots.push(Knot {
+            anchor: pt(s[0]),
+            in_ctrl: pt(s[0]),
+            out_ctrl: pt(s[1]),
+            smooth: !corner_at_start[i],
+        });
     }
     let m = segs.len();
     for i in 0..m {
         knots[(i + 1) % m].in_ctrl = pt(segs[i][2]);
     }
-    Subpath { closed: true, knots, op: PathOp::Combine }
+    Subpath {
+        closed: true,
+        knots,
+        op: PathOp::Combine,
+    }
 }
 
 /// Most pointer samples [`fit_trace`] fits: a longer trace is thinned evenly first, so the work
@@ -292,7 +336,11 @@ pub const MAX_TRACE_POINTS: usize = 4096;
 /// anchors are smooth. A `closed` trace becomes a closed subpath. Non-finite samples are skipped;
 /// `None` when fewer than two distinct points remain (three when `closed`).
 pub fn fit_trace(points: &[[f64; 2]], tolerance: f64, closed: bool) -> Option<Subpath> {
-    let tol = if tolerance.is_finite() { tolerance.clamp(0.1, 100.0) } else { 2.0 };
+    let tol = if tolerance.is_finite() {
+        tolerance.clamp(0.1, 100.0)
+    } else {
+        2.0
+    };
     let window = (2.0 * tol).max(1.5);
     let min_step = (tol * 0.25).min(0.5);
     let stride = points.len().div_ceil(MAX_TRACE_POINTS).max(1);
@@ -315,7 +363,12 @@ pub fn fit_trace(points: &[[f64; 2]], tolerance: f64, closed: bool) -> Option<Su
         }
     }
     if closed {
-        while lp.len() > 3 && lp.last().zip(lp.first()).is_some_and(|(a, b)| len(sub(*a, *b)) < min_step) {
+        while lp.len() > 3
+            && lp
+                .last()
+                .zip(lp.first())
+                .is_some_and(|(a, b)| len(sub(*a, *b)) < min_step)
+        {
             lp.pop();
         }
         return (lp.len() >= 3).then(|| fit_closed(&lp, tol, window));
@@ -333,7 +386,9 @@ fn fit_open(lp: &[P], tol: f64, window: f64) -> Subpath {
     let mut segs: Vec<[P; 4]> = Vec::new();
     let mut corner_at_start: Vec<bool> = Vec::new();
     for w in cuts.windows(2) {
-        let Some(pts) = lp.get(w[0]..=w[1]) else { continue };
+        let Some(pts) = lp.get(w[0]..=w[1]) else {
+            continue;
+        };
         let m = pts.len();
         if m < 2 {
             continue;
@@ -358,26 +413,47 @@ fn fit_open(lp: &[P], tol: f64, window: f64) -> Subpath {
     let mut knots: Vec<Knot> = Vec::with_capacity(segs.len() + 1);
     for (i, s) in segs.iter().enumerate() {
         let in_ctrl = if i == 0 { s[0] } else { segs[i - 1][2] };
-        knots.push(Knot { anchor: pt(s[0]), in_ctrl: pt(in_ctrl), out_ctrl: pt(s[1]), smooth: i > 0 && !corner_at_start[i] });
+        knots.push(Knot {
+            anchor: pt(s[0]),
+            in_ctrl: pt(in_ctrl),
+            out_ctrl: pt(s[1]),
+            smooth: i > 0 && !corner_at_start[i],
+        });
     }
     if let Some(s) = segs.last() {
-        knots.push(Knot { anchor: pt(s[3]), in_ctrl: pt(s[2]), out_ctrl: pt(s[3]), smooth: false });
+        knots.push(Knot {
+            anchor: pt(s[3]),
+            in_ctrl: pt(s[2]),
+            out_ctrl: pt(s[3]),
+            smooth: false,
+        });
     }
-    Subpath { closed: false, knots, op: PathOp::Combine }
+    Subpath {
+        closed: false,
+        knots,
+        op: PathOp::Combine,
+    }
 }
 
 /// Distance from `q` to the segment `a`–`b`.
 fn segment_distance(q: P, a: P, b: P) -> f64 {
     let ab = sub(b, a);
     let l2 = dot(ab, ab);
-    let t = if l2 > 1e-18 { (dot(sub(q, a), ab) / l2).clamp(0.0, 1.0) } else { 0.0 };
+    let t = if l2 > 1e-18 {
+        (dot(sub(q, a), ab) / l2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     len(sub(q, add(a, mul(ab, t))))
 }
 
 fn bezier(b: &[P; 4], t: f64) -> P {
     let mt = 1.0 - t;
     let (a, bb, c, d) = (mt * mt * mt, 3.0 * mt * mt * t, 3.0 * mt * t * t, t * t * t);
-    (a * b[0].0 + bb * b[1].0 + c * b[2].0 + d * b[3].0, a * b[0].1 + bb * b[1].1 + c * b[2].1 + d * b[3].1)
+    (
+        a * b[0].0 + bb * b[1].0 + c * b[2].0 + d * b[3].0,
+        a * b[0].1 + bb * b[1].1 + c * b[2].1 + d * b[3].1,
+    )
 }
 
 fn bezier_d1(b: &[P; 4], t: f64) -> P {
@@ -432,7 +508,11 @@ fn generate(pts: &[P], u: &[f64], t1: P, t2: P) -> [P; 4] {
     let det = c[0][0] * c[1][1] - c[1][0] * c[0][1];
     let det0 = c[0][0] * x[1] - c[1][0] * x[0];
     let det1 = x[0] * c[1][1] - x[1] * c[0][1];
-    let (mut al, mut ar) = if det.abs() > 1e-12 { (det1 / det, det0 / det) } else { (0.0, 0.0) };
+    let (mut al, mut ar) = if det.abs() > 1e-12 {
+        (det1 / det, det0 / det)
+    } else {
+        (0.0, 0.0)
+    };
     let seg = len(sub(p3, p0));
     let eps = 1e-6 * seg;
     if al < eps || ar < eps {
@@ -463,7 +543,11 @@ fn reparam(pts: &[P], u: &[f64], b: &[P; 4]) -> Vec<f64> {
             let d2 = bezier_d2(b, t);
             let num = dot(sub(q, *p), d1);
             let den = dot(d1, d1) + dot(sub(q, *p), d2);
-            if den.abs() < 1e-12 { t } else { (t - num / den).clamp(0.0, 1.0) }
+            if den.abs() < 1e-12 {
+                t
+            } else {
+                (t - num / den).clamp(0.0, 1.0)
+            }
         })
         .collect()
 }
@@ -472,7 +556,12 @@ fn fit_cubic(pts: &[P], t1: P, t2: P, err2: f64, out: &mut Vec<[P; 4]>, depth: u
     let n = pts.len();
     if n == 2 || depth > 40 {
         let d = len(sub(pts[n - 1], pts[0])) / 3.0;
-        out.push([pts[0], add(pts[0], mul(t1, d)), add(pts[n - 1], mul(t2, d)), pts[n - 1]]);
+        out.push([
+            pts[0],
+            add(pts[0], mul(t1, d)),
+            add(pts[n - 1], mul(t2, d)),
+            pts[n - 1],
+        ]);
         return;
     }
     let mut u = chord_params(pts);
@@ -499,7 +588,11 @@ fn fit_cubic(pts: &[P], t1: P, t2: P, err2: f64, out: &mut Vec<[P; 4]>, depth: u
     }
     let split = split.clamp(1, n - 2);
     let tc = norm(sub(pts[split - 1], pts[split + 1]));
-    let tc = if len(tc) < 0.5 { norm(sub(pts[split - 1], pts[split])) } else { tc };
+    let tc = if len(tc) < 0.5 {
+        norm(sub(pts[split - 1], pts[split]))
+    } else {
+        tc
+    };
     fit_cubic(&pts[..=split], t1, tc, err2, out, depth + 1);
     fit_cubic(&pts[split..], mul(tc, -1.0), t2, err2, out, depth + 1);
 }
@@ -556,11 +649,24 @@ mod tests {
             .segments()
             .iter()
             .flat_map(|s| {
-                let b = [(s[0].x, s[0].y), (s[1].x, s[1].y), (s[2].x, s[2].y), (s[3].x, s[3].y)];
+                let b = [
+                    (s[0].x, s[0].y),
+                    (s[1].x, s[1].y),
+                    (s[2].x, s[2].y),
+                    (s[3].x, s[3].y),
+                ];
                 (0..=400).map(move |k| bezier(&b, k as f64 / 400.0))
             })
             .collect();
-        samples.iter().map(|q| curve.iter().map(|c| len(sub(*c, (q[0], q[1])))).fold(f64::MAX, f64::min)).fold(0.0, f64::max)
+        samples
+            .iter()
+            .map(|q| {
+                curve
+                    .iter()
+                    .map(|c| len(sub(*c, (q[0], q[1]))))
+                    .fold(f64::MAX, f64::min)
+            })
+            .fold(0.0, f64::max)
     }
 
     /// Freeform Pen fixtures at the default 2 px Curve Fit. Every sample stays within the
@@ -574,36 +680,79 @@ mod tests {
         use std::f64::consts::TAU;
         let tol = 2.0;
         // Straight drag with ±0.5 px of hand jitter, 3 px apart.
-        let line: Vec<[f64; 2]> = (0..=100).map(|i| [10.0 + 3.0 * i as f64, 50.0 + if i % 2 == 0 { 0.5 } else { -0.5 }]).collect();
+        let line: Vec<[f64; 2]> = (0..=100)
+            .map(|i| {
+                [
+                    10.0 + 3.0 * i as f64,
+                    50.0 + if i % 2 == 0 { 0.5 } else { -0.5 },
+                ]
+            })
+            .collect();
         let sp = fit_trace(&line, tol, false).unwrap();
         assert!(!sp.closed);
         assert_eq!(sp.knots.len(), 2, "a straight drag is one segment");
         assert!(max_deviation(&sp, &line) <= tol + 0.05);
         // Zig-zag: five 60 px legs at right angles, sampled every 2 px.
-        let turns = [[0.0, 0.0], [60.0, 0.0], [60.0, 60.0], [120.0, 60.0], [120.0, 120.0], [180.0, 120.0]];
+        let turns = [
+            [0.0, 0.0],
+            [60.0, 0.0],
+            [60.0, 60.0],
+            [120.0, 60.0],
+            [120.0, 120.0],
+            [180.0, 120.0],
+        ];
         let zig: Vec<[f64; 2]> = turns
             .windows(2)
-            .flat_map(|w| (0..30).map(move |k| [w[0][0] + (w[1][0] - w[0][0]) * k as f64 / 30.0, w[0][1] + (w[1][1] - w[0][1]) * k as f64 / 30.0]))
+            .flat_map(|w| {
+                (0..30).map(move |k| {
+                    [
+                        w[0][0] + (w[1][0] - w[0][0]) * k as f64 / 30.0,
+                        w[0][1] + (w[1][1] - w[0][1]) * k as f64 / 30.0,
+                    ]
+                })
+            })
             .chain([turns[5]])
             .collect();
         let sp = fit_trace(&zig, tol, false).unwrap();
         let anchors: Vec<[f64; 2]> = sp.knots.iter().map(|k| [k.anchor.x, k.anchor.y]).collect();
-        assert_eq!(anchors, turns, "the corners are kept as anchors, nothing between");
+        assert_eq!(
+            anchors, turns,
+            "the corners are kept as anchors, nothing between"
+        );
         assert!(sp.knots[1..5].iter().all(|k| !k.smooth));
         assert!(max_deviation(&sp, &zig) <= tol + 0.05);
         // Circle, radius 80, 180 samples, closed.
-        let circle: Vec<[f64; 2]> = (0..180).map(|i| (i as f64).to_radians() * 2.0).map(|a| [100.0 + 80.0 * a.cos(), 100.0 + 80.0 * a.sin()]).collect();
+        let circle: Vec<[f64; 2]> = (0..180)
+            .map(|i| (i as f64).to_radians() * 2.0)
+            .map(|a| [100.0 + 80.0 * a.cos(), 100.0 + 80.0 * a.sin()])
+            .collect();
         let sp = fit_trace(&circle, tol, true).unwrap();
         assert!(sp.closed);
-        assert!((2..=8).contains(&sp.knots.len()), "{} anchors", sp.knots.len());
+        assert!(
+            (2..=8).contains(&sp.knots.len()),
+            "{} anchors",
+            sp.knots.len()
+        );
         assert!(sp.knots.iter().all(|k| k.smooth), "a circle has no corners");
         assert!(max_deviation(&sp, &circle) <= tol + 0.05);
         // Two periods of a sine wave (amplitude 40, wavelength 200) with the same jitter: at most
         // two segments per half period.
-        let sine: Vec<[f64; 2]> =
-            (0..=200).map(|i| i as f64 * 2.0).enumerate().map(|(i, x)| [x, 100.0 + 40.0 * (x / 200.0 * TAU).sin() + 0.5 - (i % 2) as f64]).collect();
+        let sine: Vec<[f64; 2]> = (0..=200)
+            .map(|i| i as f64 * 2.0)
+            .enumerate()
+            .map(|(i, x)| {
+                [
+                    x,
+                    100.0 + 40.0 * (x / 200.0 * TAU).sin() + 0.5 - (i % 2) as f64,
+                ]
+            })
+            .collect();
         let sp = fit_trace(&sine, tol, false).unwrap();
-        assert!((3..=9).contains(&sp.knots.len()), "{} anchors", sp.knots.len());
+        assert!(
+            (3..=9).contains(&sp.knots.len()),
+            "{} anchors",
+            sp.knots.len()
+        );
         assert!(sp.knots[1..sp.knots.len() - 1].iter().all(|k| k.smooth));
         assert!(max_deviation(&sp, &sine) <= tol + 0.05);
     }
@@ -612,9 +761,22 @@ mod tests {
     fn fit_trace_survives_hostile_input() {
         assert!(fit_trace(&[], 2.0, false).is_none());
         assert!(fit_trace(&[[1.0, 1.0]; 50], 2.0, false).is_none());
-        assert!(fit_trace(&[[f64::NAN, 0.0], [f64::INFINITY, 1.0], [1e300, 2.0]], f64::NAN, true).is_none());
-        let long: Vec<[f64; 2]> = (0..200_000).map(|i| [i as f64 * 0.01, ((i as f64) * 0.001).sin() * 40.0]).collect();
+        assert!(fit_trace(
+            &[[f64::NAN, 0.0], [f64::INFINITY, 1.0], [1e300, 2.0]],
+            f64::NAN,
+            true
+        )
+        .is_none());
+        let long: Vec<[f64; 2]> = (0..200_000)
+            .map(|i| [i as f64 * 0.01, ((i as f64) * 0.001).sin() * 40.0])
+            .collect();
         let sp = fit_trace(&long, -5.0, false).unwrap();
-        assert!(sp.knots.len() >= 2 && sp.knots.iter().all(|k| k.anchor.x.is_finite() && k.out_ctrl.y.is_finite()));
+        assert!(
+            sp.knots.len() >= 2
+                && sp
+                    .knots
+                    .iter()
+                    .all(|k| k.anchor.x.is_finite() && k.out_ctrl.y.is_finite())
+        );
     }
 }

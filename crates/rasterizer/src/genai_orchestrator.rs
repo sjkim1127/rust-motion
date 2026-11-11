@@ -101,7 +101,9 @@ impl GenAiPromptSpec {
                     "format": "gaussian_splat_3d",
                 }),
             ),
-            GenAiProviderModel::MidjourneyV6 | GenAiProviderModel::Flux1Pro | GenAiProviderModel::SdxlTurbo => (
+            GenAiProviderModel::MidjourneyV6
+            | GenAiProviderModel::Flux1Pro
+            | GenAiProviderModel::SdxlTurbo => (
                 "https://api.fal.run/fal-ai/flux-pro/v1.1".into(),
                 serde_json::json!({
                     "prompt": self.prompt,
@@ -148,7 +150,8 @@ impl GaussianSplatCloud {
     pub fn generate_from_prompt(prompt: &str, seed: u64, count: usize) -> Self {
         let mut splats = Vec::with_capacity(count);
         let lower = prompt.to_lowercase();
-        let warm_palette = lower.contains("sunset") || lower.contains("desert") || lower.contains("fire");
+        let warm_palette =
+            lower.contains("sunset") || lower.contains("desert") || lower.contains("fire");
 
         for i in 0..count {
             let mut h = seed.wrapping_add((i as u64).wrapping_mul(0x9E3779B97F4A7C15));
@@ -165,9 +168,17 @@ impl GaussianSplatCloud {
             let z = 2.0 + next_f() * 6.0;
             let radius = 0.06 + next_f() * 0.14;
             let color = if warm_palette {
-                [0.85 + next_f() * 0.15, 0.35 + next_f() * 0.45, 0.15 + next_f() * 0.25]
+                [
+                    0.85 + next_f() * 0.15,
+                    0.35 + next_f() * 0.45,
+                    0.15 + next_f() * 0.25,
+                ]
             } else {
-                [0.20 + next_f() * 0.40, 0.55 + next_f() * 0.40, 0.75 + next_f() * 0.25]
+                [
+                    0.20 + next_f() * 0.40,
+                    0.55 + next_f() * 0.40,
+                    0.75 + next_f() * 0.25,
+                ]
             };
             splats.push(GaussianSplat3D {
                 position: [x, y, z],

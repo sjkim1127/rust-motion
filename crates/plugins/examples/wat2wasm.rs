@@ -17,7 +17,13 @@ fn main() {
         }
     };
     match Plugin::load(&bytes, Limits::default()) {
-        Ok(p) => println!("{} ({}): {} bytes, params {}", p.manifest().name, p.id(), bytes.len(), p.manifest().params_notation()),
+        Ok(p) => println!(
+            "{} ({}): {} bytes, params {}",
+            p.manifest().name,
+            p.id(),
+            bytes.len(),
+            p.manifest().params_notation()
+        ),
         Err(e) => {
             eprintln!("not a valid plug-in: {e}");
             std::process::exit(1);

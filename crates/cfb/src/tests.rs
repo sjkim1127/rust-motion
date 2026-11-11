@@ -1,7 +1,9 @@
 use crate::*;
 
 fn pattern(n: usize, seed: u8) -> Vec<u8> {
-    (0..n).map(|i| (i as u32).wrapping_mul(31).wrapping_add(seed as u32) as u8).collect()
+    (0..n)
+        .map(|i| (i as u32).wrapping_mul(31).wrapping_add(seed as u32) as u8)
+        .collect()
 }
 
 /// A tree with mini and regular streams, nested storages and many siblings.
@@ -11,7 +13,10 @@ fn sample(version: Version, siblings: usize) -> (Vec<u8>, Vec<(String, Vec<u8>)>
     let mut expect = Vec::new();
     let a = w.storage(Writer::ROOT, "Header-2", [1; 16]).unwrap();
     let b = w.storage(a, "Content-3b03", [2; 16]).unwrap();
-    for (i, size) in [0usize, 1, 63, 64, 65, 4095, 4096, 4097, 20_000].iter().enumerate() {
+    for (i, size) in [0usize, 1, 63, 64, 65, 4095, 4096, 4097, 20_000]
+        .iter()
+        .enumerate()
+    {
         let name = format!("s{i}");
         let data = pattern(*size, i as u8);
         w.stream(b, &name, data.clone()).unwrap();
@@ -54,7 +59,11 @@ fn check_red_black(bytes: &[u8]) {
         // the writer stores the directory contiguously
         let at = (dir_start as usize + 1) * ss + i as usize * 128;
         let e = &bytes[at..at + 128];
-        (u32::from_le_bytes(e[68..72].try_into().unwrap()), u32::from_le_bytes(e[72..76].try_into().unwrap()), e[67])
+        (
+            u32::from_le_bytes(e[68..72].try_into().unwrap()),
+            u32::from_le_bytes(e[72..76].try_into().unwrap()),
+            e[67],
+        )
     };
     fn black_height(raw: &dyn Fn(u32) -> (u32, u32, u8), n: u32, parent_red: bool) -> usize {
         if n == NOSTREAM {
@@ -94,7 +103,11 @@ fn round_trip_v3_and_v4() {
 }
 
 fn v_sector(v: Version) -> usize {
-    if v == Version::V3 { 512 } else { 4096 }
+    if v == Version::V3 {
+        512
+    } else {
+        4096
+    }
 }
 
 #[test]
@@ -107,7 +120,11 @@ fn header_fields() {
     let (b, _) = sample(Version::V3, 3);
     assert_eq!(&b[26..28], &3u16.to_le_bytes());
     assert_eq!(&b[30..32], &9u16.to_le_bytes());
-    assert_eq!(&b[40..44], &0u32.to_le_bytes(), "version 3 leaves the directory sector count 0");
+    assert_eq!(
+        &b[40..44],
+        &0u32.to_le_bytes(),
+        "version 3 leaves the directory sector count 0"
+    );
     assert_eq!(CompoundFile::open(&b).unwrap().version, 3);
 }
 
@@ -136,9 +153,15 @@ fn names() {
     assert!(validate_name(&"x".repeat(31)).is_ok());
     let mut w = Writer::default();
     w.stream(Writer::ROOT, "Name", vec![]).unwrap();
-    assert!(matches!(w.stream(Writer::ROOT, "NAME", vec![]), Err(Error::BadName(_))));
+    assert!(matches!(
+        w.stream(Writer::ROOT, "NAME", vec![]),
+        Err(Error::BadName(_))
+    ));
     let s = w.stream(Writer::ROOT, "x", vec![]).unwrap();
-    assert!(w.storage(s, "y", [0; 16]).is_err(), "streams have no children");
+    assert!(
+        w.storage(s, "y", [0; 16]).is_err(),
+        "streams have no children"
+    );
     let cf_bytes = w.finish();
     let cf = CompoundFile::open(&cf_bytes).unwrap();
     assert!(cf.find("name").is_ok(), "lookups are case-insensitive");
@@ -149,7 +172,8 @@ fn names() {
 #[test]
 fn unicode_names() {
     let mut w = Writer::default();
-    w.stream(Writer::ROOT, "Ünïcødé ストリーム", vec![9; 10]).unwrap();
+    w.stream(Writer::ROOT, "Ünïcødé ストリーム", vec![9; 10])
+        .unwrap();
     let b = w.finish();
     let cf = CompoundFile::open(&b).unwrap();
     assert_eq!(cf.read_path("üNÏCØDÉ ストリーム").unwrap(), vec![9; 10]);
@@ -189,7 +213,11 @@ fn mutation_never_panics_or_hangs() {
             seed ^= seed >> 7;
             seed ^= seed << 17;
             // bias towards the header, FAT and directory (the end of the file)
-            let at = if seed & 1 == 0 { (seed >> 8) as usize % 512 } else { g.len() - 1 - (seed >> 8) as usize % 2048.min(g.len()) };
+            let at = if seed & 1 == 0 {
+                (seed >> 8) as usize % 512
+            } else {
+                g.len() - 1 - (seed >> 8) as usize % 2048.min(g.len())
+            };
             g[at] = (seed >> 40) as u8;
         }
         if let Ok(cf) = CompoundFile::open(&g) {
@@ -238,7 +266,10 @@ fn difat_self_loop_fails_fast() {
     b.extend_from_slice(&difat);
     // The message names the bound the walk stopped at: the file's 3 sectors, not the header's
     // 100,000,000 (the old guard allowed 100,000,003 passes).
-    let expect = format!("DIFAT chain loops: more than 3 sectors in a {}-byte file", b.len());
+    let expect = format!(
+        "DIFAT chain loops: more than 3 sectors in a {}-byte file",
+        b.len()
+    );
     assert_eq!(CompoundFile::open(&b).unwrap_err(), Error::Invalid(expect));
 }
 
@@ -260,9 +291,12 @@ fn duplicated_fat_sector_chain_loop_fails_fast() {
     put_u32(&mut fat, 0, 0); // FAT[0] = 0: sector 0 is followed by itself
     b.extend_from_slice(&fat);
     b.resize(110 * ss, 0); // big enough for 109 FAT sectors to pass the size check
-    // The message names the bound the walk stopped at: 111, this file's 110 sectors + 1, not the
-    // 109 * 1024 = 111,616 entries of the inflated FAT that the old guard allowed (a 457 MB buffer).
-    let expect = format!("sector chain loops: more than 111 sectors in a {}-byte file", b.len());
+                           // The message names the bound the walk stopped at: 111, this file's 110 sectors + 1, not the
+                           // 109 * 1024 = 111,616 entries of the inflated FAT that the old guard allowed (a 457 MB buffer).
+    let expect = format!(
+        "sector chain loops: more than 111 sectors in a {}-byte file",
+        b.len()
+    );
     assert_eq!(CompoundFile::open(&b).unwrap_err(), Error::Invalid(expect));
 }
 
@@ -275,10 +309,14 @@ fn chains_filling_the_file_still_read() {
         let ss = v_sector(v);
         let mut w = Writer::new(v);
         for i in 0..1000 {
-            w.stream(Writer::ROOT, &format!("e{i}"), Vec::new()).unwrap();
+            w.stream(Writer::ROOT, &format!("e{i}"), Vec::new())
+                .unwrap();
         }
         let b = w.finish();
-        assert!(b.len() / ss <= (1001 * 128usize).div_ceil(ss) + 3, "header, directory, FAT");
+        assert!(
+            b.len() / ss <= (1001 * 128usize).div_ceil(ss) + 3,
+            "header, directory, FAT"
+        );
         let cf = CompoundFile::open(&b).unwrap();
         assert_eq!(cf.root().children.len(), 1000);
         assert_eq!(cf.read_path("e999").unwrap(), Vec::<u8>::new());
@@ -288,6 +326,9 @@ fn chains_filling_the_file_still_read() {
         w.stream(Writer::ROOT, "big", data.clone()).unwrap();
         let b = w.finish();
         assert_eq!(b.len(), (1 + 64 + 2) * ss, "header, stream, directory, FAT");
-        assert_eq!(CompoundFile::open(&b).unwrap().read_path("big").unwrap(), data);
+        assert_eq!(
+            CompoundFile::open(&b).unwrap().read_path("big").unwrap(),
+            data
+        );
     }
 }

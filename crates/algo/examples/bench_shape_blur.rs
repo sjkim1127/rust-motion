@@ -2,14 +2,19 @@
 //! Arguments: width height repetitions radius (or all) depth (8/16/32) shape (or all).
 use std::{hint::black_box, time::Instant};
 
-use rust_motion_algo::{BlurShape, FilterParams, apply_in};
+use rust_motion_algo::{apply_in, BlurShape, FilterParams};
 use rust_motion_color::{ColorMode, PixelFormat, SampleType};
 use rust_motion_geom::Rect;
 use rust_motion_raster::Surface;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let arg = |i: usize, default: &str| args.get(i).map(String::as_str).unwrap_or(default).to_owned();
+    let arg = |i: usize, default: &str| {
+        args.get(i)
+            .map(String::as_str)
+            .unwrap_or(default)
+            .to_owned()
+    };
     let w: i32 = arg(0, "6000").parse()?;
     let h: i32 = arg(1, "4000").parse()?;
     let repeats: usize = arg(2, "3").parse()?;
@@ -17,8 +22,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("size or repetition count outside benchmark limits".into());
     }
     let radius = arg(3, "all");
-    let radii = if radius == "all" { vec![5.0, 25.0, 100.0] } else { vec![radius.parse::<f32>()?] };
-    if radii.iter().any(|r| !r.is_finite() || !(0.0..=1000.0).contains(r)) {
+    let radii = if radius == "all" {
+        vec![5.0, 25.0, 100.0]
+    } else {
+        vec![radius.parse::<f32>()?]
+    };
+    if radii
+        .iter()
+        .any(|r| !r.is_finite() || !(0.0..=1000.0).contains(r))
+    {
         return Err("radius outside 0..=1000".into());
     }
     let depth = arg(4, "8");
@@ -34,7 +46,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Write in rows: input setup does not need a full-image float buffer.
     for y in 0..h {
         let data: Vec<f32> = (0..w)
-            .flat_map(|x| [(x % 256) as f32 / 255.0, ((x * 3 + y) % 256) as f32 / 255.0, ((x ^ y) % 256) as f32 / 255.0, ((x + y) % 5) as f32 / 4.0])
+            .flat_map(|x| {
+                [
+                    (x % 256) as f32 / 255.0,
+                    ((x * 3 + y) % 256) as f32 / 255.0,
+                    ((x ^ y) % 256) as f32 / 255.0,
+                    ((x + y) % 5) as f32 / 4.0,
+                ]
+            })
             .collect();
         src.write_region(Rect::new(0, y, w, y + 1), &data);
     }

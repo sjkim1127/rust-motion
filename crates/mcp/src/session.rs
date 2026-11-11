@@ -87,12 +87,18 @@ impl McpSession {
         self.timeline = NleTimeline::new(name, fps, width, height);
         self.timeline.duration_frames = duration_frames;
 
-        Ok(format!("Created project '{name}' ({width}x{height} @ {fps}fps, {duration_frames} frames)"))
+        Ok(format!(
+            "Created project '{name}' ({width}x{height} @ {fps}fps, {duration_frames} frames)"
+        ))
     }
 
     /// Add a track to the timeline.
     pub fn add_track(&mut self, kind: TrackKind, name: &str) -> Result<String, String> {
-        let track_id = format!("track_{}_{}", name.to_lowercase().replace(' ', "_"), self.timeline.tracks.len() + 1);
+        let track_id = format!(
+            "track_{}_{}",
+            name.to_lowercase().replace(' ', "_"),
+            self.timeline.tracks.len() + 1
+        );
         let track = NleTrack::new(track_id.clone(), name, kind);
         self.timeline.tracks.push(track);
 
@@ -119,7 +125,11 @@ impl McpSession {
         let track_in = (start_secs * fps).round() as u32;
         let duration = (duration_secs * fps).round().max(1.0) as u32;
 
-        let clip_id = format!("clip_{}_{}", name.to_lowercase().replace(' ', "_"), track_in);
+        let clip_id = format!(
+            "clip_{}_{}",
+            name.to_lowercase().replace(' ', "_"),
+            track_in
+        );
         let mut clip = NleClip::new(clip_id.clone(), name, track_in, duration, 0);
         clip.asset_id = asset_id;
 
@@ -149,7 +159,12 @@ impl McpSession {
     }
 
     /// Trim clip edge.
-    pub fn trim_clip(&mut self, clip_id: &str, edge_in: bool, new_time_secs: f64) -> Result<String, String> {
+    pub fn trim_clip(
+        &mut self,
+        clip_id: &str,
+        edge_in: bool,
+        new_time_secs: f64,
+    ) -> Result<String, String> {
         let fps = self.timeline.fps;
         let target_frame = (new_time_secs * fps).round() as u32;
         let edge = if edge_in { TrimEdge::In } else { TrimEdge::Out };
@@ -171,7 +186,11 @@ impl McpSession {
     }
 
     /// Split clip at time offset.
-    pub fn split_clip(&mut self, clip_id: &str, split_time_secs: f64) -> Result<(String, String), String> {
+    pub fn split_clip(
+        &mut self,
+        clip_id: &str,
+        split_time_secs: f64,
+    ) -> Result<(String, String), String> {
         let fps = self.timeline.fps;
         let split_frame = (split_time_secs * fps).round() as u32;
 
@@ -186,14 +205,23 @@ impl McpSession {
     }
 
     /// Apply color grade parameters to a clip.
-    pub fn apply_color_grade(&mut self, clip_id: &str, params: ColorGradeParams) -> Result<String, String> {
+    pub fn apply_color_grade(
+        &mut self,
+        clip_id: &str,
+        params: ColorGradeParams,
+    ) -> Result<String, String> {
         self.active_grades.retain(|(id, _)| id != clip_id);
         self.active_grades.push((clip_id.to_string(), params));
         Ok(format!("Applied color grading to clip '{clip_id}'"))
     }
 
     /// Render frame preview at time (secs) and return base64 PNG data URL.
-    pub fn render_frame_preview(&self, time_secs: f64, width: u32, height: u32) -> Result<String, String> {
+    pub fn render_frame_preview(
+        &self,
+        time_secs: f64,
+        width: u32,
+        height: u32,
+    ) -> Result<String, String> {
         let fps = self.timeline.fps;
         let frame = (time_secs * fps).round() as u32;
 
@@ -221,7 +249,9 @@ impl McpSession {
                     let mut filters = Vec::new();
 
                     // Check if clip has active color grading
-                    if let Some((_, grade)) = self.active_grades.iter().find(|(id, _)| id == &clip.id) {
+                    if let Some((_, grade)) =
+                        self.active_grades.iter().find(|(id, _)| id == &clip.id)
+                    {
                         if let Some(cube) = &grade.lut_cube {
                             filters.push(SceneFilter::Lut3D {
                                 cube_content: cube.clone(),
@@ -229,7 +259,10 @@ impl McpSession {
                                 tetrahedral: true,
                             });
                         }
-                        if grade.contrast.is_some() || grade.saturation.is_some() || grade.gamma.is_some() {
+                        if grade.contrast.is_some()
+                            || grade.saturation.is_some()
+                            || grade.gamma.is_some()
+                        {
                             filters.push(SceneFilter::ColorGrading {
                                 contrast: grade.contrast.unwrap_or(1.0),
                                 saturation: grade.saturation.unwrap_or(1.0),
@@ -268,11 +301,17 @@ impl McpSession {
         }
 
         let config = FrameConfig::new(width, height, frame, fps);
-        let img = self.backend.render_frame(&scene, &config).map_err(|e| e.to_string())?;
+        let img = self
+            .backend
+            .render_frame(&scene, &config)
+            .map_err(|e| e.to_string())?;
 
         let mut png_bytes = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut png_bytes), image::ImageFormat::Png)
-            .map_err(|e| e.to_string())?;
+        img.write_to(
+            &mut std::io::Cursor::new(&mut png_bytes),
+            image::ImageFormat::Png,
+        )
+        .map_err(|e| e.to_string())?;
 
         let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &png_bytes);
         Ok(format!("data:image/png;base64,{b64}"))

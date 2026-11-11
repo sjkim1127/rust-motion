@@ -27,7 +27,10 @@ pub use multiband::{DynamicsRack, MultibandCompressor, TubeCompressor};
 pub use pitch::PitchShifter;
 pub use restoration::{DeHum, DeNoise};
 pub use reverbs::{ConvolutionReverb, SurroundReverb};
-pub use special::{AmbisonicsPanner, Binauralizer, ChannelMixer, Distortion, GuitarSuite, LoudnessMeterFx, Mastering, Mute, StereoExpander, VocalEnhancer};
+pub use special::{
+    AmbisonicsPanner, Binauralizer, ChannelMixer, Distortion, GuitarSuite, LoudnessMeterFx,
+    Mastering, Mute, StereoExpander, VocalEnhancer,
+};
 pub use time::{Delay, Reverb};
 
 use crate::{AudioEffect, ParamSpec};
@@ -70,12 +73,23 @@ impl std::fmt::Debug for EffectInfo {
 
 macro_rules! entry {
     ($id:literal, $name:literal, $cat:ident, $ty:ty) => {
-        EffectInfo { id: $id, name: $name, category: Category::$cat, params: <$ty>::PARAMS, create: |sr, ch| Box::new(<$ty>::new(sr, ch)) }
+        EffectInfo {
+            id: $id,
+            name: $name,
+            category: Category::$cat,
+            params: <$ty>::PARAMS,
+            create: |sr, ch| Box::new(<$ty>::new(sr, ch)),
+        }
     };
 }
 
 static REGISTRY: &[EffectInfo] = &[
-    entry!("parametric_eq", "Parametric Equalizer", Filter, ParametricEq),
+    entry!(
+        "parametric_eq",
+        "Parametric Equalizer",
+        Filter,
+        ParametricEq
+    ),
     entry!("simple_eq", "Simple 3-Band EQ", Filter, SimpleEq),
     entry!("compressor", "Compressor", Dynamics, Compressor),
     entry!("gate", "Expander / Gate", Dynamics, Gate),
@@ -115,32 +129,97 @@ static REGISTRY: &[EffectInfo] = &[
     entry!("speech_enhance", "Enhance Speech", Filter, SpeechEnhance),
     entry!("stereo_width", "Stereo Width", Channel, StereoWidth),
     // Premiere audio-effect set (M7.7)
-    entry!("graphic_eq_10", "Graphic Equalizer (10 Bands)", Filter, GraphicEq<10>),
-    entry!("graphic_eq_20", "Graphic Equalizer (20 Bands)", Filter, GraphicEq<20>),
-    entry!("graphic_eq_30", "Graphic Equalizer (30 Bands)", Filter, GraphicEq<30>),
-    entry!("parametric_eq_full", "Parametric Equalizer (full)", Filter, FullParametricEq),
+    entry!(
+        "graphic_eq_10",
+        "Graphic Equalizer (10 Bands)",
+        Filter,
+        GraphicEq<10>
+    ),
+    entry!(
+        "graphic_eq_20",
+        "Graphic Equalizer (20 Bands)",
+        Filter,
+        GraphicEq<20>
+    ),
+    entry!(
+        "graphic_eq_30",
+        "Graphic Equalizer (30 Bands)",
+        Filter,
+        GraphicEq<30>
+    ),
+    entry!(
+        "parametric_eq_full",
+        "Parametric Equalizer (full)",
+        Filter,
+        FullParametricEq
+    ),
     entry!("notch_filter", "Notch Filter", Filter, NotchFilter),
-    entry!("scientific_filter", "Scientific Filter", Filter, ScientificFilter),
+    entry!(
+        "scientific_filter",
+        "Scientific Filter",
+        Filter,
+        ScientificFilter
+    ),
     entry!("fft_filter", "FFT Filter", Filter, FftFilter),
     entry!("dynamics_rack", "Dynamics", Dynamics, DynamicsRack),
-    entry!("multiband_compressor", "Multiband Compressor", Dynamics, MultibandCompressor),
-    entry!("tube_compressor", "Tube-modeled Compressor", Dynamics, TubeCompressor),
-    entry!("chorus_flanger", "Chorus/Flanger", Modulation, ChorusFlanger),
+    entry!(
+        "multiband_compressor",
+        "Multiband Compressor",
+        Dynamics,
+        MultibandCompressor
+    ),
+    entry!(
+        "tube_compressor",
+        "Tube-modeled Compressor",
+        Dynamics,
+        TubeCompressor
+    ),
+    entry!(
+        "chorus_flanger",
+        "Chorus/Flanger",
+        Modulation,
+        ChorusFlanger
+    ),
     entry!("flanger", "Flanger", Modulation, Flanger),
     entry!("phaser", "Phaser", Modulation, Phaser),
     entry!("analog_delay", "Analog Delay", Time, AnalogDelay),
     entry!("multitap_delay", "Multitap Delay", Time, MultitapDelay),
-    entry!("convolution_reverb", "Convolution Reverb", Reverb, ConvolutionReverb),
+    entry!(
+        "convolution_reverb",
+        "Convolution Reverb",
+        Reverb,
+        ConvolutionReverb
+    ),
     entry!("surround_reverb", "Surround Reverb", Reverb, SurroundReverb),
-    entry!("click_remover", "Automatic Click Remover", Restoration, ClickRemover),
+    entry!(
+        "click_remover",
+        "Automatic Click Remover",
+        Restoration,
+        ClickRemover
+    ),
     entry!("channel_mixer", "Channel Mixer", Channel, ChannelMixer),
     entry!("distortion", "Distortion", Special, Distortion),
     entry!("guitar_suite", "GuitarSuite", Special, GuitarSuite),
     entry!("mastering", "Mastering", Special, Mastering),
     entry!("vocal_enhancer", "Vocal Enhancer", Special, VocalEnhancer),
-    entry!("stereo_expander", "Stereo Expander", Channel, StereoExpander),
-    entry!("binauralizer", "Binauralizer - Ambisonics", Special, Binauralizer),
-    entry!("ambisonics_panner", "Panner - Ambisonics", Special, AmbisonicsPanner),
+    entry!(
+        "stereo_expander",
+        "Stereo Expander",
+        Channel,
+        StereoExpander
+    ),
+    entry!(
+        "binauralizer",
+        "Binauralizer - Ambisonics",
+        Special,
+        Binauralizer
+    ),
+    entry!(
+        "ambisonics_panner",
+        "Panner - Ambisonics",
+        Special,
+        AmbisonicsPanner
+    ),
     entry!("loudness_meter", "Loudness Meter", Special, LoudnessMeterFx),
     entry!("mute", "Mute", Channel, Mute),
 ];
@@ -163,8 +242,8 @@ pub fn create_effect(id: &str, sample_rate: f32, channels: usize) -> Option<Box<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Unit;
     use crate::testutil::*;
+    use crate::Unit;
 
     const SR: f32 = 48000.0;
 
@@ -196,7 +275,12 @@ mod tests {
             let mut pids = std::collections::HashSet::new();
             for p in e.params {
                 assert!(pids.insert(p.id), "{}: duplicate param {}", e.id, p.id);
-                assert!(p.min <= p.default && p.default <= p.max, "{}.{}", e.id, p.id);
+                assert!(
+                    p.min <= p.default && p.default <= p.max,
+                    "{}.{}",
+                    e.id,
+                    p.id
+                );
                 assert_eq!(fx.param(p.id), Some(p.default));
                 if p.unit == Unit::Choice {
                     assert_eq!(p.choices.len() as f32, p.max + 1.0);
@@ -247,10 +331,23 @@ mod tests {
                 2 => (rng.next_u64() % 64) as usize,
                 _ => (rng.next_u64() % 3000) as usize,
             });
-            for (a, b) in big.0.iter().chain(&big.1).zip(small.0.iter().chain(&small.1)) {
-                assert!((a - b).abs() <= 1e-6, "{}: block-size dependent output", e.id);
+            for (a, b) in big
+                .0
+                .iter()
+                .chain(&big.1)
+                .zip(small.0.iter().chain(&small.1))
+            {
+                assert!(
+                    (a - b).abs() <= 1e-6,
+                    "{}: block-size dependent output",
+                    e.id
+                );
             }
-            assert!(big.0.iter().chain(&big.1).all(|v| v.is_finite()), "{}", e.id);
+            assert!(
+                big.0.iter().chain(&big.1).all(|v| v.is_finite()),
+                "{}",
+                e.id
+            );
         }
     }
 
@@ -282,7 +379,11 @@ mod tests {
                 l[100] = 1e6;
                 r[200] = -1e6;
                 fx.process(&mut [&mut l, &mut r]);
-                assert!(l.iter().chain(&r).all(|v| v.is_finite()), "{} setting {setting}", e.id);
+                assert!(
+                    l.iter().chain(&r).all(|v| v.is_finite()),
+                    "{} setting {setting}",
+                    e.id
+                );
                 // Long silence afterwards: output decays without denormals.
                 fx.reset();
                 let mut l = noise(3, 4800, 0.5);
@@ -292,7 +393,13 @@ mod tests {
                     let mut l = vec![0.0f32; 48000];
                     let mut r = vec![0.0f32; 48000];
                     fx.process(&mut [&mut l, &mut r]);
-                    assert!(l.iter().chain(&r).all(|v| v.is_finite() && !v.is_subnormal()), "{} setting {setting}: denormal/NaN in tail", e.id);
+                    assert!(
+                        l.iter()
+                            .chain(&r)
+                            .all(|v| v.is_finite() && !v.is_subnormal()),
+                        "{} setting {setting}: denormal/NaN in tail",
+                        e.id
+                    );
                 }
             }
         }

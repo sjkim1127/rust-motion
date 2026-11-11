@@ -4,7 +4,14 @@ use crate::tile::GrayTile;
 use rust_motion_geom::Point;
 
 impl BrushContext {
-    fn rasterize_reference(&self, d: &Dab, dual: bool, rect: Rect, out: &mut Vec<f32>, mut depth: Option<&mut Vec<f32>>) {
+    fn rasterize_reference(
+        &self,
+        d: &Dab,
+        dual: bool,
+        rect: Rect,
+        out: &mut Vec<f32>,
+        mut depth: Option<&mut Vec<f32>>,
+    ) {
         let (w, h) = (rect.width() as usize, rect.height() as usize);
         out.clear();
         out.resize(w * h, 0.0);
@@ -13,14 +20,25 @@ impl BrushContext {
             dp.resize(w * h, 0.0);
         }
         let b = &self.brush;
-        let (hardness, mips) = if dual { (b.dual_brush.hardness, self.dual_tip.as_deref()) } else { (b.hardness, self.tip.as_deref()) };
+        let (hardness, mips) = if dual {
+            (b.dual_brush.hardness, self.dual_tip.as_deref())
+        } else {
+            (b.hardness, self.tip.as_deref())
+        };
         let aliased = b.aliased && !dual;
         let wet = b.wet_edges && !dual && depth.is_none();
         let noise = b.noise && !dual;
         let tex_tip = !dual && b.texture.enabled && b.texture.each_tip && self.texture.is_some();
-        let (cx, cy) = if aliased { grid_center(d.center.x, d.center.y, 2.0 * d.radius) } else { (d.center.x as f32, d.center.y as f32) };
+        let (cx, cy) = if aliased {
+            grid_center(d.center.x, d.center.y, 2.0 * d.radius)
+        } else {
+            (d.center.x as f32, d.center.y as f32)
+        };
         let (sn, cs) = d.angle.sin_cos();
-        let (fx, fy) = (if d.flip_x { -1.0 } else { 1.0 }, if d.flip_y { -1.0 } else { 1.0 });
+        let (fx, fy) = (
+            if d.flip_x { -1.0 } else { 1.0 },
+            if d.flip_y { -1.0 } else { 1.0 },
+        );
         // Brush Projection: stretch the sampling coordinates along the tilt direction, which
         // foreshortens the tip there by `proj_scale`.
         let proj = (!dual && d.proj_scale < 0.999).then(|| {
@@ -30,14 +48,23 @@ impl BrushContext {
         let r = d.radius;
         let ro = d.roundness.max(0.5 / r).min(1.0);
         let rm = (r * ro).max(0.5);
-        let reach = if aliased || mips.is_some() { rm } else { crate::tip_reach(rm, hardness).max(rm) };
+        let reach = if aliased || mips.is_some() {
+            rm
+        } else {
+            crate::tip_reach(rm, hardness).max(rm)
+        };
         let reach2 = (reach + 0.5) * (reach + 0.5);
         // Sampled-tip mapping.
         let (level, inv_scale, tw, th) = match mips {
             Some(m) => {
                 let (w0, h0, _) = &m.levels[0];
                 let big = *w0.max(h0) as f32;
-                (m.level_for(2.0 * r * ro.max(0.25)), big / (2.0 * r), *w0 as f32, *h0 as f32)
+                (
+                    m.level_for(2.0 * r * ro.max(0.25)),
+                    big / (2.0 * r),
+                    *w0 as f32,
+                    *h0 as f32,
+                )
             }
             None => (0, 1.0, 1.0, 1.0),
         };
@@ -84,7 +111,10 @@ impl BrushContext {
                                 sum += tip_falloff(sd, rm, hardness);
                             }
                         }
-                        (sum / (SUBPIXEL.len() * SUBPIXEL.len()) as f32, d2.sqrt() / rm)
+                        (
+                            sum / (SUBPIXEL.len() * SUBPIXEL.len()) as f32,
+                            d2.sqrt() / rm,
+                        )
                     }
                     None => {
                         let d2 = (u * ro).powi(2) + v * v;
@@ -92,7 +122,15 @@ impl BrushContext {
                             continue;
                         }
                         let dd = d2.sqrt();
-                        let val = if aliased { if dd <= rm { 1.0 } else { 0.0 } } else { dab_coverage(dd, rm, hardness) };
+                        let val = if aliased {
+                            if dd <= rm {
+                                1.0
+                            } else {
+                                0.0
+                            }
+                        } else {
+                            dab_coverage(dd, rm, hardness)
+                        };
                         (val, dd / rm)
                     }
                     Some(m) => {
@@ -101,7 +139,15 @@ impl BrushContext {
                             continue;
                         }
                         let s = m.sample_clamped(level, px / tw, py / th);
-                        let val = if aliased { if s >= 0.5 { 1.0 } else { 0.0 } } else { s };
+                        let val = if aliased {
+                            if s >= 0.5 {
+                                1.0
+                            } else {
+                                0.0
+                            }
+                        } else {
+                            s
+                        };
                         (val, 1.0 - s)
                     }
                 };
@@ -132,12 +178,34 @@ fn compare(ctx: &BrushContext, dab: &Dab, dual: bool, rect: Rect, with_depth: bo
     // Reused, dirty buffers also check clearing and resizing.
     let (mut actual, mut expected) = (vec![0.75; 19], vec![0.75; 19]);
     let (mut actual_depth, mut expected_depth) = (vec![0.25; 23], vec![0.25; 23]);
-    ctx.rasterize_into(dab, dual, rect, &mut actual, with_depth.then_some(&mut actual_depth));
-    ctx.rasterize_reference(dab, dual, rect, &mut expected, with_depth.then_some(&mut expected_depth));
-    for (label, a, b) in [("coverage", actual, expected), ("depth", actual_depth, expected_depth)] {
+    ctx.rasterize_into(
+        dab,
+        dual,
+        rect,
+        &mut actual,
+        with_depth.then_some(&mut actual_depth),
+    );
+    ctx.rasterize_reference(
+        dab,
+        dual,
+        rect,
+        &mut expected,
+        with_depth.then_some(&mut expected_depth),
+    );
+    for (label, a, b) in [
+        ("coverage", actual, expected),
+        ("depth", actual_depth, expected_depth),
+    ] {
         assert_eq!(a.len(), b.len());
-        let mismatch = a.iter().zip(&b).enumerate().find(|(_, (a, b))| a.to_bits() != b.to_bits());
-        assert!(mismatch.is_none(), "{label} mismatch {mismatch:?}; {dab:?}; dual={dual}, rect={rect:?}");
+        let mismatch = a
+            .iter()
+            .zip(&b)
+            .enumerate()
+            .find(|(_, (a, b))| a.to_bits() != b.to_bits());
+        assert!(
+            mismatch.is_none(),
+            "{label} mismatch {mismatch:?}; {dab:?}; dual={dual}, rect={rect:?}"
+        );
     }
 }
 
@@ -145,7 +213,11 @@ fn compare(ctx: &BrushContext, dab: &Dab, dual: bool, rect: Rect, with_depth: bo
 fn computed_tips_match_scalar_bits() {
     for aliased in [false, true] {
         for hardness in [-0.5, 0.0, 0.1, 0.5, 0.9999, 1.0, 1.5] {
-            let ctx = BrushContext::new(&BrushSettings { aliased, hardness, ..Default::default() });
+            let ctx = BrushContext::new(&BrushSettings {
+                aliased,
+                hardness,
+                ..Default::default()
+            });
             for radius in [0.5, 1.0, 2.99, 3.0, 3.01, 15.0, 31.5] {
                 for roundness in [0.0, 0.1, 0.4, 1.0] {
                     for alpha in [-0.5, -0.0, 0.0, 0.37, 1.0] {
@@ -164,14 +236,21 @@ fn computed_tips_match_scalar_bits() {
 #[test]
 fn large_corner_dabs_keep_off_canvas_coverage() {
     for (hardness, aliased) in [(0.0, false), (1.0, false), (1.0, true)] {
-        let ctx = BrushContext::new(&BrushSettings { hardness, aliased, ..Default::default() });
+        let ctx = BrushContext::new(&BrushSettings {
+            hardness,
+            aliased,
+            ..Default::default()
+        });
         let d = Dab::round(Point::new(-1050.25, -1050.75), 1500.0, 0.73);
         let rect = ctx.dab_rect(&d, false);
         compare(&ctx, &d, false, rect, false);
         let mut coverage = Vec::new();
         ctx.rasterize(&d, false, rect, &mut coverage);
         // The layer is an infinite plane: paint outside the visible document must survive.
-        assert!(coverage.iter().enumerate().any(|(i, v)| *v > 0.0 && rect.x0 + ((i % rect.width() as usize) as i32) < 0));
+        assert!(coverage
+            .iter()
+            .enumerate()
+            .any(|(i, v)| *v > 0.0 && rect.x0 + ((i % rect.width() as usize) as i32) < 0));
         compare(&ctx, &d, false, Rect::new(0, 0, 32, 32), false);
         compare(&ctx, &d, false, Rect::new(0, 0, 0, 0), false);
     }
@@ -181,7 +260,10 @@ fn large_corner_dabs_keep_off_canvas_coverage() {
 fn feature_and_exceptional_dabs_match_scalar_bits() {
     let tip = GrayTile::from_fn(8, 5, |x, y| ((x + y) % 7) as f32 / 6.0);
     for feature in 0..7 {
-        let mut b = BrushSettings { hardness: 0.25, ..Default::default() };
+        let mut b = BrushSettings {
+            hardness: 0.25,
+            ..Default::default()
+        };
         match feature {
             0 => b.noise = true,
             1 => b.wet_edges = true,
@@ -212,7 +294,12 @@ fn feature_and_exceptional_dabs_match_scalar_bits() {
         }
     }
     let ctx = BrushContext::new(&BrushSettings::default());
-    for value in [f32::NAN, f32::from_bits(0x7f80_0123), f32::INFINITY, f32::NEG_INFINITY] {
+    for value in [
+        f32::NAN,
+        f32::from_bits(0x7f80_0123),
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+    ] {
         for field in 0..4 {
             let mut d = Dab::round(Point::new(0.0, 0.0), 15.0, 1.0);
             match field {
@@ -223,18 +310,36 @@ fn feature_and_exceptional_dabs_match_scalar_bits() {
             }
             compare(&ctx, &d, false, Rect::new(-4, -4, 4, 4), false);
         }
-        let ctx = BrushContext::new(&BrushSettings { hardness: value, ..Default::default() });
-        compare(&ctx, &Dab::round(Point::new(0.0, 0.0), 15.0, 1.0), false, Rect::new(-16, -16, 16, 16), false);
+        let ctx = BrushContext::new(&BrushSettings {
+            hardness: value,
+            ..Default::default()
+        });
+        compare(
+            &ctx,
+            &Dab::round(Point::new(0.0, 0.0), 15.0, 1.0),
+            false,
+            Rect::new(-16, -16, 16, 16),
+            false,
+        );
     }
 }
 
 #[test]
 fn computed_tips_match_at_pixel_and_float_boundaries() {
     for aliased in [false, true] {
-        for center in [Point::new(0.0, -0.0), Point::new(0.5, 0.5), Point::new(255.9999, -256.0001), Point::new(16_777_216.25, -16_777_216.75)] {
+        for center in [
+            Point::new(0.0, -0.0),
+            Point::new(0.5, 0.5),
+            Point::new(255.9999, -256.0001),
+            Point::new(16_777_216.25, -16_777_216.75),
+        ] {
             for radius in [3.0, 3.5, 15.25, 113.75] {
                 for hardness in [0.0, 0.6, 1.0] {
-                    let ctx = BrushContext::new(&BrushSettings { hardness, aliased, ..Default::default() });
+                    let ctx = BrushContext::new(&BrushSettings {
+                        hardness,
+                        aliased,
+                        ..Default::default()
+                    });
                     let mut d = Dab::round(center, radius, 0.137);
                     d.roundness = 0.375;
                     compare(&ctx, &d, false, ctx.dab_rect(&d, false), false);

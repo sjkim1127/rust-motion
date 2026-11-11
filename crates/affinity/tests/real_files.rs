@@ -5,14 +5,17 @@
 
 use std::path::{Path, PathBuf};
 
-use rust_motion_affinity::{Archive, Limits, stream};
+use rust_motion_affinity::{stream, Archive, Limits};
 
 fn files(dir: &Path, out: &mut Vec<PathBuf>) {
     for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
         let p = e.path();
         if p.is_dir() {
             files(&p, out);
-        } else if p.extension().and_then(|e| e.to_str()).is_some_and(|e| ["af", "afdesign", "afphoto", "afpub", "aftemplate"].contains(&e))
+        } else if p
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| ["af", "afdesign", "afphoto", "afpub", "aftemplate"].contains(&e))
             && std::fs::read(&p).is_ok_and(|b| b.starts_with(rust_motion_affinity::MAGIC))
         {
             out.push(p);
@@ -22,7 +25,9 @@ fn files(dir: &Path, out: &mut Vec<PathBuf>) {
 
 fn samples() -> Option<PathBuf> {
     let pinned = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/affinity");
-    std::env::var_os("AFFINITY_SAMPLES").map(PathBuf::from).or_else(|| pinned.join("SOURCES.md").exists().then_some(pinned))
+    std::env::var_os("AFFINITY_SAMPLES")
+        .map(PathBuf::from)
+        .or_else(|| pinned.join("SOURCES.md").exists().then_some(pinned))
 }
 
 #[test]
@@ -43,7 +48,13 @@ fn public_documents_parse_completely() {
             Err(e) => failures.push(format!("{}: {e}", p.display())),
         }
     }
-    assert!(failures.is_empty(), "{} of {} failed:\n{}", failures.len(), paths.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} of {} failed:\n{}",
+        failures.len(),
+        paths.len(),
+        failures.join("\n")
+    );
     eprintln!("{} Affinity documents parsed", paths.len());
 }
 

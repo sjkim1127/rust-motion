@@ -10,10 +10,13 @@ use crate::blend::BlendMode;
 use crate::compression::Compression;
 use crate::descriptor::{Descriptor, Id, UnicodeString, Value, VersionedDescriptor};
 use crate::file::{GlobalLayerMask, LayerInfoPlacement, PsdFile};
-use crate::header::{ColorMode, Header, Version, row_bytes};
+use crate::header::{row_bytes, ColorMode, Header, Version};
 use crate::image_data::ImageData;
-use crate::layer::{BlendingRanges, ChannelData, LayerFlags, LayerInfo, LayerMask, LayerRecord, MaskData, MaskParameters, RealMask, Rect};
-use crate::resources::{ImageResource, ResolutionInfo, ids, version_info_resource};
+use crate::layer::{
+    BlendingRanges, ChannelData, LayerFlags, LayerInfo, LayerMask, LayerRecord, MaskData,
+    MaskParameters, RealMask, Rect,
+};
+use crate::resources::{ids, version_info_resource, ImageResource, ResolutionInfo};
 use crate::tagged::{SectionType, TaggedBlock};
 
 /// A named generated file.
@@ -39,7 +42,11 @@ pub fn pattern_plane(w: usize, h: usize, depth: u16, seed: u32) -> Vec<u8> {
             8 => {
                 for x in 0..w {
                     // Mix smooth gradients and runs so RLE sees both.
-                    let v = if (x / 4 + y) % 3 == 0 { (s * 17) as u8 } else { (x * 3 + y * 7 + s) as u8 };
+                    let v = if (x / 4 + y) % 3 == 0 {
+                        (s * 17) as u8
+                    } else {
+                        (x * 3 + y * 7 + s) as u8
+                    };
                     out.push(v);
                 }
             }
@@ -79,8 +86,16 @@ pub fn mode_depths(mode: ColorMode) -> &'static [u16] {
 }
 
 /// All color modes covered.
-pub const MODES: [ColorMode; 8] =
-    [ColorMode::Bitmap, ColorMode::Grayscale, ColorMode::Indexed, ColorMode::Rgb, ColorMode::Cmyk, ColorMode::Lab, ColorMode::Multichannel, ColorMode::Duotone];
+pub const MODES: [ColorMode; 8] = [
+    ColorMode::Bitmap,
+    ColorMode::Grayscale,
+    ColorMode::Indexed,
+    ColorMode::Rgb,
+    ColorMode::Cmyk,
+    ColorMode::Lab,
+    ColorMode::Multichannel,
+    ColorMode::Duotone,
+];
 
 fn color_mode_data(mode: ColorMode) -> Vec<u8> {
     match mode {
@@ -95,7 +110,10 @@ fn base_resources() -> Vec<ImageResource> {
     let mut named = ImageResource::new(2000, vec![1, 2, 3]);
     named.name = b"Path 1".to_vec();
     vec![
-        ImageResource::new(ids::RESOLUTION_INFO, ResolutionInfo::from_dpi(72.0).to_bytes()),
+        ImageResource::new(
+            ids::RESOLUTION_INFO,
+            ResolutionInfo::from_dpi(72.0).to_bytes(),
+        ),
         ImageResource::new(ids::GLOBAL_ANGLE, 30i32.to_be_bytes().to_vec()),
         ImageResource::new(ids::GLOBAL_ALTITUDE, 30i32.to_be_bytes().to_vec()),
         ImageResource::new(ids::ICC_PROFILE, vec![0x42; 13]),
@@ -106,14 +124,24 @@ fn base_resources() -> Vec<ImageResource> {
 }
 
 /// A flattened file (no layer section) with a patterned merged image.
-pub fn merged_only(version: Version, mode: ColorMode, depth: u16, compression: Compression, w: u32, h: u32) -> PsdFile {
+pub fn merged_only(
+    version: Version,
+    mode: ColorMode,
+    depth: u16,
+    compression: Compression,
+    w: u32,
+    h: u32,
+) -> PsdFile {
     let channels = mode_channels(mode);
     let header = Header::new(version, w, h, channels, depth, mode);
     let mut planes = Vec::new();
     for c in 0..channels {
         planes.extend(pattern_plane(w as usize, h as usize, depth, u32::from(c)));
     }
-    let image_data = ImageData::encode(compression, &planes, &header).unwrap_or(ImageData { compression, data: Vec::new() });
+    let image_data = ImageData::encode(compression, &planes, &header).unwrap_or(ImageData {
+        compression,
+        data: Vec::new(),
+    });
     PsdFile {
         header,
         color_mode_data: color_mode_data(mode),
@@ -146,16 +174,42 @@ fn raster_layer(g: LayerGen<'_>) -> LayerRecord {
     let mut channels = Vec::new();
     for id in -1..cc {
         let plane = pattern_plane(w, h, depth, g.seed + (id + 1) as u32);
-        let comp = if id == -1 && g.compression == Compression::Rle { Compression::Zip } else { g.compression };
+        let comp = if id == -1 && g.compression == Compression::Rle {
+            Compression::Zip
+        } else {
+            g.compression
+        };
         channels.push(ChannelData::encode(id, comp, &plane, w, h, depth, v).expect("encode"));
     }
     let mut mask_data = MaskData::None;
     if let Some(m) = g.mask {
         let (mw, mh) = m.rect.size().unwrap_or((0, 0));
-        channels.push(ChannelData::encode(-2, g.compression, &pattern_plane(mw, mh, depth, g.seed + 99), mw, mh, depth, v).expect("encode"));
+        channels.push(
+            ChannelData::encode(
+                -2,
+                g.compression,
+                &pattern_plane(mw, mh, depth, g.seed + 99),
+                mw,
+                mh,
+                depth,
+                v,
+            )
+            .expect("encode"),
+        );
         if let Some(real) = m.real {
             let (rw, rh) = real.rect.size().unwrap_or((0, 0));
-            channels.push(ChannelData::encode(-3, g.compression, &pattern_plane(rw, rh, depth, g.seed + 7), rw, rh, depth, v).expect("encode"));
+            channels.push(
+                ChannelData::encode(
+                    -3,
+                    g.compression,
+                    &pattern_plane(rw, rh, depth, g.seed + 7),
+                    rw,
+                    rh,
+                    depth,
+                    v,
+                )
+                .expect("encode"),
+            );
         }
         mask_data = MaskData::Mask(m);
     }
@@ -172,14 +226,29 @@ fn raster_layer(g: LayerGen<'_>) -> LayerRecord {
         mask: mask_data,
         blending_ranges: BlendingRanges::full(cc as usize),
         name: crate::io::encode_legacy_name(g.name),
-        blocks: vec![TaggedBlock::unicode_name(g.name), TaggedBlock::layer_id(g.seed + 1)],
+        blocks: vec![
+            TaggedBlock::unicode_name(g.name),
+            TaggedBlock::layer_id(g.seed + 1),
+        ],
         extra_trailing: Vec::new(),
     }
 }
 
-fn group_record(header: &Header, name: &str, kind: SectionType, blend: BlendMode, id: u32) -> LayerRecord {
+fn group_record(
+    header: &Header,
+    name: &str,
+    kind: SectionType,
+    blend: BlendMode,
+    id: u32,
+) -> LayerRecord {
     let cc = mode_channels(header.color_mode) as i16;
-    let channels = (-1..cc).map(|c| ChannelData { id: c, compression: Some(Compression::Raw), data: Vec::new() }).collect();
+    let channels = (-1..cc)
+        .map(|c| ChannelData {
+            id: c,
+            compression: Some(Compression::Raw),
+            data: Vec::new(),
+        })
+        .collect();
     let lsct = if kind == SectionType::BoundingDivider {
         TaggedBlock::section_divider(kind, None, None)
     } else {
@@ -190,7 +259,11 @@ fn group_record(header: &Header, name: &str, kind: SectionType, blend: BlendMode
         blend_mode: blend,
         name: crate::io::encode_legacy_name(name),
         blending_ranges: BlendingRanges::full(cc as usize),
-        blocks: vec![TaggedBlock::unicode_name(name), TaggedBlock::layer_id(id), lsct],
+        blocks: vec![
+            TaggedBlock::unicode_name(name),
+            TaggedBlock::layer_id(id),
+            lsct,
+        ],
         ..Default::default()
     }
 }
@@ -199,20 +272,46 @@ fn group_record(header: &Header, name: &str, kind: SectionType, blend: BlendMode
 pub fn sample_descriptor() -> VersionedDescriptor {
     VersionedDescriptor::new(
         Descriptor::new("null")
-            .with("Scl ", Value::UnitFloat { unit: *b"#Prc", value: 100.0 })
+            .with(
+                "Scl ",
+                Value::UnitFloat {
+                    unit: *b"#Prc",
+                    value: 100.0,
+                },
+            )
             .with("masterFXSwitch", Value::Boolean(true))
             .with(
                 "DrSh",
                 Value::Descriptor(
                     Descriptor::new("DrSh")
                         .with("enab", Value::Boolean(true))
-                        .with("Md  ", Value::Enumerated { type_id: Id::new("BlnM"), value: Id::new("Mltp") })
-                        .with("Clr ", Value::Descriptor(Descriptor::new("RGBC").with("Rd  ", Value::Double(0.0))))
-                        .with("lagl", Value::UnitFloat { unit: *b"#Ang", value: 120.0 })
+                        .with(
+                            "Md  ",
+                            Value::Enumerated {
+                                type_id: Id::new("BlnM"),
+                                value: Id::new("Mltp"),
+                            },
+                        )
+                        .with(
+                            "Clr ",
+                            Value::Descriptor(
+                                Descriptor::new("RGBC").with("Rd  ", Value::Double(0.0)),
+                            ),
+                        )
+                        .with(
+                            "lagl",
+                            Value::UnitFloat {
+                                unit: *b"#Ang",
+                                value: 120.0,
+                            },
+                        )
                         .with("Nm  ", Value::Text(UnicodeString::new_nul("Shadow"))),
                 ),
             )
-            .with("list", Value::List(vec![Value::Integer(1), Value::LargeInteger(-2)])),
+            .with(
+                "list",
+                Value::List(vec![Value::Integer(1), Value::LargeInteger(-2)]),
+            ),
     )
 }
 
@@ -247,64 +346,179 @@ pub fn layered(version: Version, mode: ColorMode, depth: u16, compression: Compr
     let header = Header::new(version, w, h, channels, depth, mode);
     let mut layers = Vec::new();
     let mut seed = 0u32;
-    let mut next = |layers: &mut Vec<LayerRecord>, rect: Rect, name: &str, blend: BlendMode, mask: Option<LayerMask>| {
+    let mut next = |layers: &mut Vec<LayerRecord>,
+                    rect: Rect,
+                    name: &str,
+                    blend: BlendMode,
+                    mask: Option<LayerMask>| {
         seed += 1;
-        let mut rec = raster_layer(LayerGen { header: &header, compression, rect, name, blend, mask, seed });
+        let mut rec = raster_layer(LayerGen {
+            header: &header,
+            compression,
+            rect,
+            name,
+            blend,
+            mask,
+            seed,
+        });
         if seed.is_multiple_of(3) {
             rec.blocks.extend(extra_blocks(seed));
         }
         layers.push(rec);
     };
     // Background.
-    next(&mut layers, Rect::from_xywh(0, 0, w, h), "Background", BlendMode::Normal, None);
+    next(
+        &mut layers,
+        Rect::from_xywh(0, 0, w, h),
+        "Background",
+        BlendMode::Normal,
+        None,
+    );
     // Negative offsets + simple mask.
     next(
         &mut layers,
         Rect::from_xywh(-5, -3, 10, 7),
         "Neg offset \u{1F600}",
         BlendMode::Multiply,
-        Some(LayerMask::new(Rect::from_xywh(-2, -2, 6, 5), 0, LayerMask::FLAG_RELATIVE)),
+        Some(LayerMask::new(
+            Rect::from_xywh(-2, -2, 6, 5),
+            0,
+            LayerMask::FLAG_RELATIVE,
+        )),
     );
     // Empty layer.
-    next(&mut layers, Rect::default(), "Empty", BlendMode::Screen, None);
+    next(
+        &mut layers,
+        Rect::default(),
+        "Empty",
+        BlendMode::Screen,
+        None,
+    );
     // Large-ish bounds beyond the canvas.
-    next(&mut layers, Rect::from_xywh(-100, 5, 400, 2), "Wide", BlendMode::Overlay, None);
+    next(
+        &mut layers,
+        Rect::from_xywh(-100, 5, 400, 2),
+        "Wide",
+        BlendMode::Overlay,
+        None,
+    );
     // Nested groups: outer [ layer, inner [ masked layer (real mask + params) ] ].
     let id0 = 1000;
-    layers.push(group_record(&header, "</Layer group>", SectionType::BoundingDivider, BlendMode::Normal, id0));
-    next(&mut layers, Rect::from_xywh(2, 2, 5, 5), "In outer", BlendMode::Darken, None);
-    layers.push(group_record(&header, "</Layer group>", SectionType::BoundingDivider, BlendMode::Normal, id0 + 1));
+    layers.push(group_record(
+        &header,
+        "</Layer group>",
+        SectionType::BoundingDivider,
+        BlendMode::Normal,
+        id0,
+    ));
+    next(
+        &mut layers,
+        Rect::from_xywh(2, 2, 5, 5),
+        "In outer",
+        BlendMode::Darken,
+        None,
+    );
+    layers.push(group_record(
+        &header,
+        "</Layer group>",
+        SectionType::BoundingDivider,
+        BlendMode::Normal,
+        id0 + 1,
+    ));
     let real_mask = LayerMask {
         rect: Rect::from_xywh(1, 1, 4, 3),
         default_color: 255,
         flags: LayerMask::FLAG_PARAMETERS,
-        parameters: Some(MaskParameters { flags: 0b0011, user_density: Some(200), user_feather: Some(1.5), vector_density: None, vector_feather: None }),
-        real: Some(RealMask { flags: 0, background: 255, rect: Rect::from_xywh(0, 0, 3, 3) }),
+        parameters: Some(MaskParameters {
+            flags: 0b0011,
+            user_density: Some(200),
+            user_feather: Some(1.5),
+            vector_density: None,
+            vector_feather: None,
+        }),
+        real: Some(RealMask {
+            flags: 0,
+            background: 255,
+            rect: Rect::from_xywh(0, 0, 3, 3),
+        }),
         trailing: Vec::new(),
         real_first: true,
     };
-    next(&mut layers, Rect::from_xywh(3, 3, 6, 4), "Grüße", BlendMode::ColorDodge, Some(real_mask));
-    layers.push(group_record(&header, "Inner", SectionType::ClosedFolder, BlendMode::Normal, id0 + 2));
-    layers.push(group_record(&header, "Outer", SectionType::OpenFolder, BlendMode::PassThrough, id0 + 3));
+    next(
+        &mut layers,
+        Rect::from_xywh(3, 3, 6, 4),
+        "Grüße",
+        BlendMode::ColorDodge,
+        Some(real_mask),
+    );
+    layers.push(group_record(
+        &header,
+        "Inner",
+        SectionType::ClosedFolder,
+        BlendMode::Normal,
+        id0 + 2,
+    ));
+    layers.push(group_record(
+        &header,
+        "Outer",
+        SectionType::OpenFolder,
+        BlendMode::PassThrough,
+        id0 + 3,
+    ));
     // One small layer per blend mode.
     for (i, m) in BlendMode::ALL.iter().enumerate() {
         let name = format!("blend {:?}", m);
-        next(&mut layers, Rect::from_xywh(i as i32 % 20, i as i32 % 12, 3, 2), &name, *m, None);
+        next(
+            &mut layers,
+            Rect::from_xywh(i as i32 % 20, i as i32 % 12, 3, 2),
+            &name,
+            *m,
+            None,
+        );
     }
-    next(&mut layers, Rect::from_xywh(0, 0, 2, 2), "unknown blend", BlendMode::Unknown(*b"zzzz"), None);
+    next(
+        &mut layers,
+        Rect::from_xywh(0, 0, 2, 2),
+        "unknown blend",
+        BlendMode::Unknown(*b"zzzz"),
+        None,
+    );
 
     let mut planes = Vec::new();
     for c in 0..channels {
-        planes.extend(pattern_plane(w as usize, h as usize, depth, 50 + u32::from(c)));
+        planes.extend(pattern_plane(
+            w as usize,
+            h as usize,
+            depth,
+            50 + u32::from(c),
+        ));
     }
     let image_data = ImageData::encode(compression, &planes, &header).expect("encode merged");
-    let layer_info = LayerInfo { merged_alpha: true, layers, padding: None };
+    let layer_info = LayerInfo {
+        merged_alpha: true,
+        layers,
+        padding: None,
+    };
     let (placement, blocks) = match depth {
         16 | 32 => (
-            LayerInfoPlacement::GlobalBlock { index: 1, signature: *b"8BIM", key: if depth == 16 { *b"Lr16" } else { *b"Lr32" }, padding: None },
-            vec![TaggedBlock::new(*b"Patt", vec![]), TaggedBlock::new(*b"Txt2", vec![0, 1, 2, 3])],
+            LayerInfoPlacement::GlobalBlock {
+                index: 1,
+                signature: *b"8BIM",
+                key: if depth == 16 { *b"Lr16" } else { *b"Lr32" },
+                padding: None,
+            },
+            vec![
+                TaggedBlock::new(*b"Patt", vec![]),
+                TaggedBlock::new(*b"Txt2", vec![0, 1, 2, 3]),
+            ],
         ),
-        _ => (LayerInfoPlacement::Section, vec![TaggedBlock::new(*b"Patt", vec![]), TaggedBlock::new(*b"FMsk", vec![0; 10])]),
+        _ => (
+            LayerInfoPlacement::Section,
+            vec![
+                TaggedBlock::new(*b"Patt", vec![]),
+                TaggedBlock::new(*b"FMsk", vec![0; 10]),
+            ],
+        ),
     };
     PsdFile {
         header,
@@ -312,7 +526,9 @@ pub fn layered(version: Version, mode: ColorMode, depth: u16, compression: Compr
         resources: base_resources(),
         layer_info: Some(layer_info),
         layer_info_placement: placement,
-        global_layer_mask: Some(GlobalLayerMask { data: vec![0, 0, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 50, 128, 0] }),
+        global_layer_mask: Some(GlobalLayerMask {
+            data: vec![0, 0, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 50, 128, 0],
+        }),
         global_blocks: blocks,
         layer_mask_trailing: Vec::new(),
         image_data,
@@ -333,9 +549,29 @@ pub fn small(version: Version, compression: Compression) -> PsdFile {
             mask: Some(mask),
             seed: 1,
         }),
-        group_record(&header, "</Layer group>", SectionType::BoundingDivider, BlendMode::Normal, 9),
-        raster_layer(LayerGen { header: &header, compression, rect: Rect::from_xywh(-1, 1, 2, 2), name: "b", blend: BlendMode::Screen, mask: None, seed: 2 }),
-        group_record(&header, "g", SectionType::OpenFolder, BlendMode::PassThrough, 10),
+        group_record(
+            &header,
+            "</Layer group>",
+            SectionType::BoundingDivider,
+            BlendMode::Normal,
+            9,
+        ),
+        raster_layer(LayerGen {
+            header: &header,
+            compression,
+            rect: Rect::from_xywh(-1, 1, 2, 2),
+            name: "b",
+            blend: BlendMode::Screen,
+            mask: None,
+            seed: 2,
+        }),
+        group_record(
+            &header,
+            "g",
+            SectionType::OpenFolder,
+            BlendMode::PassThrough,
+            10,
+        ),
     ];
     let mut planes = Vec::new();
     for c in 0..4 {
@@ -344,8 +580,15 @@ pub fn small(version: Version, compression: Compression) -> PsdFile {
     PsdFile {
         header: header.clone(),
         color_mode_data: Vec::new(),
-        resources: vec![ImageResource::new(ids::RESOLUTION_INFO, ResolutionInfo::from_dpi(72.0).to_bytes())],
-        layer_info: Some(LayerInfo { merged_alpha: true, layers, padding: None }),
+        resources: vec![ImageResource::new(
+            ids::RESOLUTION_INFO,
+            ResolutionInfo::from_dpi(72.0).to_bytes(),
+        )],
+        layer_info: Some(LayerInfo {
+            merged_alpha: true,
+            layers,
+            padding: None,
+        }),
         layer_info_placement: LayerInfoPlacement::Section,
         global_layer_mask: Some(GlobalLayerMask::default()),
         global_blocks: vec![TaggedBlock::new(*b"Patt", vec![1, 2])],
@@ -361,21 +604,38 @@ pub fn all_cases() -> Vec<Case> {
         for mode in MODES {
             for &depth in mode_depths(mode) {
                 for c in Compression::ALL {
-                    v.push(Case { name: format!("merged {version:?} {mode:?} {depth}bit {c:?}"), file: merged_only(version, mode, depth, c, 13, 7) });
+                    v.push(Case {
+                        name: format!("merged {version:?} {mode:?} {depth}bit {c:?}"),
+                        file: merged_only(version, mode, depth, c, 13, 7),
+                    });
                 }
             }
         }
-        for mode in [ColorMode::Grayscale, ColorMode::Rgb, ColorMode::Cmyk, ColorMode::Lab] {
+        for mode in [
+            ColorMode::Grayscale,
+            ColorMode::Rgb,
+            ColorMode::Cmyk,
+            ColorMode::Lab,
+        ] {
             for &depth in mode_depths(mode).iter().filter(|&&d| d >= 8) {
                 for c in Compression::ALL {
-                    v.push(Case { name: format!("layered {version:?} {mode:?} {depth}bit {c:?}"), file: layered(version, mode, depth, c) });
+                    v.push(Case {
+                        name: format!("layered {version:?} {mode:?} {depth}bit {c:?}"),
+                        file: layered(version, mode, depth, c),
+                    });
                 }
             }
         }
         for c in Compression::ALL {
-            v.push(Case { name: format!("small {version:?} {c:?}"), file: small(version, c) });
+            v.push(Case {
+                name: format!("small {version:?} {c:?}"),
+                file: small(version, c),
+            });
         }
-        v.push(Case { name: format!("1x1 canvas {version:?}"), file: merged_only(version, ColorMode::Rgb, 8, Compression::Rle, 1, 1) });
+        v.push(Case {
+            name: format!("1x1 canvas {version:?}"),
+            file: merged_only(version, ColorMode::Rgb, 8, Compression::Rle, 1, 1),
+        });
     }
     v
 }

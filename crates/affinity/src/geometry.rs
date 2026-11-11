@@ -9,11 +9,18 @@ const MAX_NODES: usize = 4_000_000;
 
 /// The node-space outline of a curve, shape or compound node, and whether it fills even-odd.
 /// Instances (master-page or symbol copies) take the geometry of their master.
-pub(crate) fn outline(r: &mut Reader, id: ObjId, class: Tag, world: Affine) -> Option<(Path, bool)> {
+pub(crate) fn outline(
+    r: &mut Reader,
+    id: ObjId,
+    class: Tag,
+    world: Affine,
+) -> Option<(Path, bool)> {
     let s = r.s;
     match &class.0.to_be_bytes() {
         b"PCrv" | b"TxtC" => {
-            let crvs = s.obj(id, b"Crvs").or_else(|| s.obj(id, b"MCrM").and_then(|m| s.obj(m, b"Crvs")))?;
+            let crvs = s
+                .obj(id, b"Crvs")
+                .or_else(|| s.obj(id, b"MCrM").and_then(|m| s.obj(m, b"Crvs")))?;
             let path = curves(r, crvs)?;
             let multi = path.subpaths.len() > 1;
             Some((path, multi))
@@ -24,9 +31,14 @@ pub(crate) fn outline(r: &mut Reader, id: ObjId, class: Tag, world: Affine) -> O
             // added operands would differ.
             let mut path = Path::default();
             for c in s.objs(id, b"Chld") {
-                let local = s.floats::<6>(c, b"Xfrm").map(Affine::from_xfrm).unwrap_or(Affine::IDENTITY);
+                let local = s
+                    .floats::<6>(c, b"Xfrm")
+                    .map(Affine::from_xfrm)
+                    .unwrap_or(Affine::IDENTITY);
                 let class = s.class(c)?;
-                if s.enumeration(c, b"ComO").is_some_and(|(op, _)| op != 0 && op != 2) {
+                if s.enumeration(c, b"ComO")
+                    .is_some_and(|(op, _)| op != 0 && op != 2)
+                {
                     r.warn("compound shapes that intersect or exclude (imported as add)");
                 }
                 if let Some((p, _)) = outline(r, c, class, local.then(world)) {
@@ -62,7 +74,9 @@ pub(crate) fn curves(r: &mut Reader, crvs: ObjId) -> Option<Path> {
         Value::UInt(n) => usize::try_from(*n).ok()?,
         _ => return None,
     };
-    let corners = s.obj(crvs, b"CnrD").and_then(|c| corner_radii(s.positional(c).collect()));
+    let corners = s
+        .obj(crvs, b"CnrD")
+        .and_then(|c| corner_radii(s.positional(c).collect()));
     let mut path = Path::default();
     let mut seen = 0usize;
     for index in 0..count {
@@ -70,7 +84,9 @@ pub(crate) fn curves(r: &mut Reader, crvs: ObjId) -> Option<Path> {
             Value::Bool(b) => *b,
             _ => return None,
         };
-        let Value::Array(records) = fields.next()? else { return None };
+        let Value::Array(records) = fields.next()? else {
+            return None;
+        };
         seen = seen.checked_add(records.len())?;
         if seen > MAX_NODES {
             r.warn("curves with more than four million nodes");
@@ -116,7 +132,12 @@ fn anchors(records: &[Value]) -> Option<Vec<Anchor>> {
         let (p, role) = record(v)?;
         match role {
             0 => {
-                out.push(Anchor { p, inh: pending_in.take(), out: None, record: i });
+                out.push(Anchor {
+                    p,
+                    inh: pending_in.take(),
+                    out: None,
+                    record: i,
+                });
             }
             1 => {
                 // A leading out-handle without an anchor is edit state only.
@@ -134,15 +155,20 @@ fn anchors(records: &[Value]) -> Option<Vec<Anchor>> {
 fn subpath(anchors: &[Anchor], closed: bool, radii: Option<&Vec<(usize, f64)>>) -> Option<SubPath> {
     let first = anchors.first()?;
     if let Some(radii) = radii.filter(|r| !r.is_empty()) {
-        let corner = |a: &Anchor| radii.iter().filter(|(rec, _)| *rec == a.record).map(|(_, r)| *r).fold(0.0, f64::max);
-        let polyline = anchors.iter().all(|a| a.inh.is_none_or(|h| h == a.p) && a.out.is_none_or(|h| h == a.p));
+        let corner = |a: &Anchor| {
+            radii
+                .iter()
+                .filter(|(rec, _)| *rec == a.record)
+                .map(|(_, r)| *r)
+                .fold(0.0, f64::max)
+        };
+        let polyline = anchors
+            .iter()
+            .all(|a| a.inh.is_none_or(|h| h == a.p) && a.out.is_none_or(|h| h == a.p));
         if polyline {
             let mut pts: Vec<(Point, f64)> = anchors.iter().map(|a| (a.p, corner(a))).collect();
             // A closed subpath repeats its first anchor; its radius may be on either copy.
-            if closed
-                && pts.len() > 1
-                && pts.first().map(|p| p.0) == pts.last().map(|p| p.0)
-            {
+            if closed && pts.len() > 1 && pts.first().map(|p| p.0) == pts.last().map(|p| p.0) {
                 if let Some((_, r)) = pts.pop() {
                     if let Some(f) = pts.first_mut() {
                         f.1 = f.1.max(r);
@@ -159,17 +185,25 @@ fn subpath(anchors: &[Anchor], closed: bool, radii: Option<&Vec<(usize, f64)>>) 
             Some([a.out.unwrap_or(a.p), b.inh.unwrap_or(b.p), b.p])
         })
         .collect();
-    Some(SubPath { start: first.p, segments, closed })
+    Some(SubPath {
+        start: first.p,
+        segments,
+        closed,
+    })
 }
 
 /// `CnrD`: positional `[u8, i32[] record indices, f64[] radii, u8[] types]`.
 fn corner_radii(fields: Vec<&Value>) -> Option<Vec<(usize, f64)>> {
-    let (Some(Value::Array(idx)), Some(Value::Array(rad))) = (fields.get(1), fields.get(2)) else { return None };
+    let (Some(Value::Array(idx)), Some(Value::Array(rad))) = (fields.get(1), fields.get(2)) else {
+        return None;
+    };
     Some(
         idx.iter()
             .zip(rad)
             .filter_map(|(i, r)| match (i, r) {
-                (Value::Int(i), Value::Float(r)) if r.is_finite() && *r > 0.0 => Some((usize::try_from(*i).ok()?, *r)),
+                (Value::Int(i), Value::Float(r)) if r.is_finite() && *r > 0.0 => {
+                    Some((usize::try_from(*i).ok()?, *r))
+                }
                 _ => None,
             })
             .collect(),

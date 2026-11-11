@@ -18,7 +18,17 @@
 //! [`Plugin::apply`] runs a filter on a [`rust_motion_raster::Surface`], blending by the selection.
 //! The process-wide [`registry`] holds the installed plug-ins.
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
 
 mod apply;
 pub mod manifest;
@@ -27,7 +37,7 @@ mod runtime;
 
 pub use apply::format_code;
 pub use manifest::{Area, Kind, Manifest, ParamSpec};
-pub use runtime::{ABI_VERSION, Limits, Plugin};
+pub use runtime::{Limits, Plugin, ABI_VERSION};
 
 /// A plug-in error. Every way a module can misbehave ends here, never in a panic.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

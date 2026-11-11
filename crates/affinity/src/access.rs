@@ -31,7 +31,16 @@ impl Stream {
     /// An array of objects (nulls skipped).
     pub fn objs(&self, id: ObjId, tag: &[u8; 4]) -> Vec<ObjId> {
         match self.field(id, tag) {
-            Some(Value::Array(a)) => a.iter().filter_map(|v| if let Value::Obj(Some(o)) = v { Some(*o) } else { None }).collect(),
+            Some(Value::Array(a)) => a
+                .iter()
+                .filter_map(|v| {
+                    if let Value::Obj(Some(o)) = v {
+                        Some(*o)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
             _ => Vec::new(),
         }
     }
@@ -100,6 +109,8 @@ impl Stream {
 
     /// Untagged fields of a positional object, in order.
     pub fn positional(&self, id: ObjId) -> impl Iterator<Item = &Value> {
-        self.object(id).into_iter().flat_map(|o| o.fields.iter().map(|(_, v)| v))
+        self.object(id)
+            .into_iter()
+            .flat_map(|o| o.fields.iter().map(|(_, v)| v))
     }
 }

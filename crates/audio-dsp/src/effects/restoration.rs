@@ -1,8 +1,10 @@
 //! Restoration: DeHum (harmonic notch comb) and DeNoise (STFT spectral gating).
 
-use super::stft::{Spectral, StftChannel, fft_size};
+use super::stft::{fft_size, Spectral, StftChannel};
 use crate::biquad::{Biquad, Coeffs, FilterType};
-use crate::{AudioEffect, ParamSpec, ParamValues, Smoothed, Unit, block_len, db_to_gain, param_plumbing};
+use crate::{
+    block_len, db_to_gain, param_plumbing, AudioEffect, ParamSpec, ParamValues, Smoothed, Unit,
+};
 
 const MAX_HARMONICS: usize = 10;
 
@@ -20,7 +22,14 @@ pub struct DeHum {
 impl DeHum {
     pub const PARAMS: &'static [ParamSpec] = &[
         ParamSpec::choice("frequency", "Frequency", &["50 Hz", "60 Hz"], 0),
-        ParamSpec::new("harmonics", "Harmonics", 1.0, MAX_HARMONICS as f32, 5.0, Unit::None),
+        ParamSpec::new(
+            "harmonics",
+            "Harmonics",
+            1.0,
+            MAX_HARMONICS as f32,
+            5.0,
+            Unit::None,
+        ),
         ParamSpec::log("q", "Notch Q", 1.0, 100.0, 30.0, Unit::Q),
         ParamSpec::new("amount", "Amount", 0.0, 100.0, 100.0, Unit::Percent),
     ];
@@ -39,7 +48,11 @@ impl DeHum {
     }
 
     fn apply_params(&mut self, snap: bool) {
-        let f0 = if self.pv.idx("frequency") == 1 { 60.0 } else { 50.0 };
+        let f0 = if self.pv.idx("frequency") == 1 {
+            60.0
+        } else {
+            50.0
+        };
         let h = self.pv.v("harmonics").round() as usize;
         let q = self.pv.v("q") as f64;
         for k in 0..MAX_HARMONICS {
@@ -61,7 +74,9 @@ impl DeHum {
 impl AudioEffect for DeHum {
     param_plumbing!("dehum");
     fn reset(&mut self) {
-        self.state.iter_mut().for_each(|s| s.iter_mut().for_each(Biquad::reset));
+        self.state
+            .iter_mut()
+            .for_each(|s| s.iter_mut().for_each(Biquad::reset));
         self.stage_mix.iter_mut().for_each(Smoothed::snap);
         self.amount.snap();
     }
@@ -165,7 +180,9 @@ impl DeNoise {
         let n = fft_size(sample_rate);
         let hop = n / 4;
         let bins = n / 2 + 1;
-        let sub_frames = ((MS_WINDOW_S * sample_rate / hop as f32 / MS_SUBWINDOWS as f32).round() as usize).max(1);
+        let sub_frames = ((MS_WINDOW_S * sample_rate / hop as f32 / MS_SUBWINDOWS as f32).round()
+            as usize)
+            .max(1);
         let ch = channels.max(1);
         let mut s = DeNoise {
             pv: ParamValues::new(Self::PARAMS),
@@ -216,7 +233,11 @@ impl AudioEffect for DeNoise {
                 let bins = n / 2 + 1;
                 for k in 0..bins {
                     let p = spec.re[k] * spec.re[k] + spec.im[k] * spec.im[k];
-                    st.psd[k] = if st.started { PSD_SMOOTH * st.psd[k] + (1.0 - PSD_SMOOTH) * p } else { p };
+                    st.psd[k] = if st.started {
+                        PSD_SMOOTH * st.psd[k] + (1.0 - PSD_SMOOTH) * p
+                    } else {
+                        p
+                    };
                     st.cur_min[k] = st.cur_min[k].min(st.psd[k]);
                 }
                 st.started = true;
@@ -301,7 +322,12 @@ mod tests {
         let mut y = x.clone();
         d.process(&mut [&mut y]);
         for i in lat..x.len() {
-            assert!((y[i] - x[i - lat]).abs() < 1e-4, "i {i}: {} vs {}", y[i], x[i - lat]);
+            assert!(
+                (y[i] - x[i - lat]).abs() < 1e-4,
+                "i {i}: {} vs {}",
+                y[i],
+                x[i - lat]
+            );
         }
     }
 
@@ -316,7 +342,9 @@ mod tests {
         let tone = sine(1000.0, 0.3, SR as f64, n, 0.0);
         // Tone bursts: on for 0.5 s, off for 0.5 s.
         let on = |i: usize| (i / (SR as usize / 2)) % 2 == 1;
-        let x: Vec<f32> = (0..n).map(|i| noise[i] + if on(i) { tone[i] } else { 0.0 }).collect();
+        let x: Vec<f32> = (0..n)
+            .map(|i| noise[i] + if on(i) { tone[i] } else { 0.0 })
+            .collect();
         let mut y = x.clone();
         d.process(&mut [&mut y]);
         let half = SR as usize / 2;

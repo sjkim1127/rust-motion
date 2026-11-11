@@ -145,7 +145,10 @@ fn vowel_formants(vowel: char, formant_scale: f32) -> (f32, f32, f32) {
 }
 
 /// Synthesize speech from text and produce synchronized word tokens.
-pub fn synthesize_speech(text: &str, options: &VoiceOptions) -> Result<SynthesizedSpeech, TtsError> {
+pub fn synthesize_speech(
+    text: &str,
+    options: &VoiceOptions,
+) -> Result<SynthesizedSpeech, TtsError> {
     let text = text.trim();
     if text.is_empty() {
         return Err(TtsError::EmptyText);
@@ -185,7 +188,11 @@ pub fn synthesize_speech(text: &str, options: &VoiceOptions) -> Result<Synthesiz
         let word_start_ms = current_ms;
         let word_end_ms = word_start_ms + (base_word_dur_s * 1000.0).round() as u64;
 
-        word_tokens.push(CaptionToken::new(clean_word.clone(), word_start_ms, word_end_ms));
+        word_tokens.push(CaptionToken::new(
+            clean_word.clone(),
+            word_start_ms,
+            word_end_ms,
+        ));
 
         // Pitch declination curve across words
         let progress = (w_idx as f32) / (words.len().max(1) as f32);

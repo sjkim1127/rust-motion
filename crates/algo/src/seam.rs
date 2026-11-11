@@ -49,7 +49,15 @@ pub fn energy(w: usize, h: usize, ch: usize, img: &[f32]) -> Vec<f32> {
 /// [`energy`] of one pixel of a `cw`-wide image whose rows are `stride` pixels apart. Shared by
 /// the full map and the per-seam updates so both give bit-identical values.
 #[inline]
-fn energy_at(img: &[f32], stride: usize, cw: usize, h: usize, ch: usize, x: usize, y: usize) -> f32 {
+fn energy_at(
+    img: &[f32],
+    stride: usize,
+    cw: usize,
+    h: usize,
+    ch: usize,
+    x: usize,
+    y: usize,
+) -> f32 {
     let (xl, xr) = (x.saturating_sub(1), (x + 1).min(cw - 1));
     let (yu, yd) = (y.saturating_sub(1), (y + 1).min(h - 1));
     let at = |xx: usize, yy: usize, c: usize| img[(yy * stride + xx) * ch + c];
@@ -95,22 +103,36 @@ impl Dp {
             if cw == 1 {
                 (next[0], from[0]) = (cost[0] + e[0], 1);
             } else {
-                let (b, d) = if cost[1] < cost[0] { (cost[1], 2) } else { (cost[0], 1) };
+                let (b, d) = if cost[1] < cost[0] {
+                    (cost[1], 2)
+                } else {
+                    (cost[0], 1)
+                };
                 (next[0], from[0]) = (b + e[0], d);
                 // The interior has all three parents: no edge tests in the hot loop.
-                let inner = next[1..cw - 1].iter_mut().zip(&mut from[1..cw - 1]).zip(&e[1..cw - 1]).zip(cost.windows(3));
+                let inner = next[1..cw - 1]
+                    .iter_mut()
+                    .zip(&mut from[1..cw - 1])
+                    .zip(&e[1..cw - 1])
+                    .zip(cost.windows(3));
                 for (((n, f), &ev), c) in inner {
                     let (b, d) = if c[0] < c[1] { (c[0], 0) } else { (c[1], 1) };
                     let (b, d) = if c[2] < b { (c[2], 2) } else { (b, d) };
                     (*n, *f) = (b + ev, d);
                 }
-                let (b, d) = if cost[cw - 2] < cost[cw - 1] { (cost[cw - 2], 0) } else { (cost[cw - 1], 1) };
+                let (b, d) = if cost[cw - 2] < cost[cw - 1] {
+                    (cost[cw - 2], 0)
+                } else {
+                    (cost[cw - 1], 1)
+                };
                 (next[cw - 1], from[cw - 1]) = (b + e[cw - 1], d);
             }
             std::mem::swap(&mut self.cost, &mut self.next);
         }
         let cost = &self.cost[..cw];
-        let mut x = (0..cw).min_by(|a, b| cost[*a].total_cmp(&cost[*b])).unwrap_or(0);
+        let mut x = (0..cw)
+            .min_by(|a, b| cost[*a].total_cmp(&cost[*b]))
+            .unwrap_or(0);
         let mut seam = vec![0usize; h];
         for y in (0..h).rev() {
             seam[y] = x;
@@ -145,7 +167,14 @@ struct Carver {
 }
 
 impl Carver {
-    fn new(w: usize, h: usize, ch: usize, img: Vec<f32>, prot: Option<Vec<f32>>, track: bool) -> Self {
+    fn new(
+        w: usize,
+        h: usize,
+        ch: usize,
+        img: Vec<f32>,
+        prot: Option<Vec<f32>>,
+        track: bool,
+    ) -> Self {
         let mut e = energy(w, h, ch, &img);
         if let Some(p) = &prot {
             for (e, p) in e.iter_mut().zip(p) {
@@ -153,7 +182,17 @@ impl Carver {
             }
         }
         let idx = track.then(|| (0..h).flat_map(|_| 0..w).collect());
-        Carver { stride: w, cw: w, h, ch, img, prot, e, idx, dp: Dp::default() }
+        Carver {
+            stride: w,
+            cw: w,
+            h,
+            ch,
+            img,
+            prot,
+            e,
+            idx,
+            dp: Dp::default(),
+        }
     }
 
     /// Remove the lowest-energy seam. Returns, per row, the removed column (the original column
@@ -162,7 +201,11 @@ impl Carver {
         let (stride, cw, h, ch) = (self.stride, self.cw, self.h, self.ch);
         let seam = self.dp.seam(stride, cw, h, &self.e);
         let removed = match &self.idx {
-            Some(idx) => seam.iter().enumerate().map(|(y, &x)| idx[y * stride + x]).collect(),
+            Some(idx) => seam
+                .iter()
+                .enumerate()
+                .map(|(y, &x)| idx[y * stride + x])
+                .collect(),
             None => seam.clone(),
         };
         shift_rows(&mut self.img, stride * ch, &seam, ch, cw);
@@ -213,7 +256,11 @@ impl Carver {
         if row == used {
             return self.img;
         }
-        self.img.chunks(row).flat_map(|r| &r[..used]).copied().collect()
+        self.img
+            .chunks(row)
+            .flat_map(|r| &r[..used])
+            .copied()
+            .collect()
     }
 }
 
@@ -224,7 +271,9 @@ fn shift_rows<T: Copy + Send>(buf: &mut [T], row_len: usize, seam: &[usize], n: 
     #[cfg(not(target_arch = "wasm32"))]
     {
         use rayon::prelude::*;
-        buf.par_chunks_mut(row_len).zip(seam.par_iter()).for_each(shift);
+        buf.par_chunks_mut(row_len)
+            .zip(seam.par_iter())
+            .for_each(shift);
     }
     #[cfg(target_arch = "wasm32")]
     buf.chunks_mut(row_len).zip(seam).for_each(shift);
@@ -242,13 +291,29 @@ fn transpose(w: usize, h: usize, ch: usize, img: &[f32]) -> Vec<f32> {
 }
 
 /// Change the width of `img` to `new_w` by removing or duplicating vertical seams.
-pub fn carve_width(w: usize, h: usize, ch: usize, img: &[f32], protect: Option<&[f32]>, new_w: usize) -> Vec<f32> {
+pub fn carve_width(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    protect: Option<&[f32]>,
+    new_w: usize,
+) -> Vec<f32> {
     // Never cancelled; the fallback is unreachable.
-    carve_width_with(w, h, ch, img, protect, new_w, &Interrupt::NONE).unwrap_or_else(|_| img.to_vec())
+    carve_width_with(w, h, ch, img, protect, new_w, &Interrupt::NONE)
+        .unwrap_or_else(|_| img.to_vec())
 }
 
 /// [`carve_width`] that checks `ctl` before every seam and reports progress per seam.
-pub fn carve_width_with(w: usize, h: usize, ch: usize, img: &[f32], protect: Option<&[f32]>, new_w: usize, ctl: &Interrupt) -> Result<Vec<f32>, Cancelled> {
+pub fn carve_width_with(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    protect: Option<&[f32]>,
+    new_w: usize,
+    ctl: &Interrupt,
+) -> Result<Vec<f32>, Cancelled> {
     let new_w = new_w.max(1);
     if new_w == w || w == 0 || h == 0 {
         return Ok(img.to_vec());
@@ -325,7 +390,15 @@ pub fn carve_width_with(w: usize, h: usize, ch: usize, img: &[f32], protect: Opt
 /// row. Keeping output pixels at full resolution avoids the quality loss of resizing the result;
 /// only the seam decisions use the coarser vertical signal. Small operations retain the exact
 /// full-resolution algorithm above.
-fn carve_width_proxy_height(w: usize, h: usize, ch: usize, img: &[f32], protect: Option<&[f32]>, new_w: usize, ctl: &Interrupt) -> Result<Vec<f32>, Cancelled> {
+fn carve_width_proxy_height(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    protect: Option<&[f32]>,
+    new_w: usize,
+    ctl: &Interrupt,
+) -> Result<Vec<f32>, Cancelled> {
     let step = h.div_ceil(SEAM_SEARCH_MAX_HEIGHT);
     let proxy_h = h.div_ceil(step);
     let row_len = w * ch;
@@ -404,9 +477,18 @@ fn carve_width_proxy_height(w: usize, h: usize, ch: usize, img: &[f32], protect:
 }
 
 /// Content-aware resize of `img` to `new_w × new_h` (width first, then height by transposing).
-pub fn carve(w: usize, h: usize, ch: usize, img: &[f32], protect: Option<&[f32]>, new_w: usize, new_h: usize) -> Vec<f32> {
+pub fn carve(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    protect: Option<&[f32]>,
+    new_w: usize,
+    new_h: usize,
+) -> Vec<f32> {
     // Never cancelled; the fallback is unreachable.
-    carve_with(w, h, ch, img, protect, new_w, new_h, &Interrupt::NONE).unwrap_or_else(|_| img.to_vec())
+    carve_with(w, h, ch, img, protect, new_w, new_h, &Interrupt::NONE)
+        .unwrap_or_else(|_| img.to_vec())
 }
 
 /// [`carve`] that checks `ctl` before every seam (a cancel takes effect within one seam) and
@@ -428,7 +510,15 @@ pub fn carve_with(
     let split = if sw + sh > 0.0 { sw / (sw + sh) } else { 1.0 };
     let cancel = || ctl.cancelled();
     let first = |f: f32| ctl.progress(f * split);
-    let wide = carve_width_with(w, h, ch, img, protect, new_w, &Interrupt::new(&cancel, &first))?;
+    let wide = carve_width_with(
+        w,
+        h,
+        ch,
+        img,
+        protect,
+        new_w,
+        &Interrupt::new(&cancel, &first),
+    )?;
     if new_h == h {
         return Ok(wide);
     }
@@ -436,12 +526,27 @@ pub fn carve_with(
     let prot_t = protect.map(|p| transpose(new_w, h, 1, &resize_bilinear(w, h, 1, p, new_w, h)));
     let t = transpose(new_w, h, ch, &wide);
     let second = |f: f32| ctl.progress(split + f * (1.0 - split));
-    let tall = carve_width_with(h, new_w, ch, &t, prot_t.as_deref(), new_h, &Interrupt::new(&cancel, &second))?;
+    let tall = carve_width_with(
+        h,
+        new_w,
+        ch,
+        &t,
+        prot_t.as_deref(),
+        new_h,
+        &Interrupt::new(&cancel, &second),
+    )?;
     Ok(transpose(new_h, new_w, ch, &tall))
 }
 
 /// Plain bilinear resize (the non-content-aware part of the Amount blend).
-pub fn resize_bilinear(w: usize, h: usize, ch: usize, img: &[f32], nw: usize, nh: usize) -> Vec<f32> {
+pub fn resize_bilinear(
+    w: usize,
+    h: usize,
+    ch: usize,
+    img: &[f32],
+    nw: usize,
+    nh: usize,
+) -> Vec<f32> {
     let mut out = vec![0.0f32; nw * nh * ch];
     if w == 0 || h == 0 {
         return out;
@@ -476,7 +581,14 @@ pub fn skin_mask(w: usize, h: usize, ch: usize, img: &[f32]) -> Vec<f32> {
         let p = &img[i * ch..i * ch + 3];
         let (r, g, b) = (p[0] * 255.0, p[1] * 255.0, p[2] * 255.0);
         let (mx, mn) = (r.max(g).max(b), r.min(g).min(b));
-        if r > 95.0 && g > 40.0 && b > 20.0 && mx - mn > 15.0 && (r - g).abs() > 15.0 && r > g && r > b {
+        if r > 95.0
+            && g > 40.0
+            && b > 20.0
+            && mx - mn > 15.0
+            && (r - g).abs() > 15.0
+            && r > g
+            && r > b
+        {
             *v = 1.0;
         }
     }
@@ -490,7 +602,7 @@ mod tests {
     /// The straightforward implementation the per-seam carver replaced (full energy map, fresh
     /// seam search and a new buffer per seam), kept as the oracle for `carver_matches_reference`.
     mod reference {
-        use super::super::{PROTECT_ENERGY, resize_bilinear, transpose};
+        use super::super::{resize_bilinear, transpose, PROTECT_ENERGY};
 
         pub(super) fn energy(w: usize, h: usize, ch: usize, img: &[f32]) -> Vec<f32> {
             let mut e = vec![0.0f32; w * h];
@@ -528,7 +640,9 @@ mod tests {
                 }
                 std::mem::swap(&mut cost, &mut next);
             }
-            let mut x = (0..w).min_by(|a, b| cost[*a].total_cmp(&cost[*b])).unwrap_or(0);
+            let mut x = (0..w)
+                .min_by(|a, b| cost[*a].total_cmp(&cost[*b]))
+                .unwrap_or(0);
             let mut seam = vec![0usize; h];
             for y in (0..h).rev() {
                 seam[y] = x;
@@ -551,7 +665,14 @@ mod tests {
             }
             out
         }
-        pub(super) fn carve_width(w: usize, h: usize, ch: usize, img: &[f32], protect: Option<&[f32]>, new_w: usize) -> Vec<f32> {
+        pub(super) fn carve_width(
+            w: usize,
+            h: usize,
+            ch: usize,
+            img: &[f32],
+            protect: Option<&[f32]>,
+            new_w: usize,
+        ) -> Vec<f32> {
             let new_w = new_w.max(1);
             if new_w == w || w == 0 || h == 0 {
                 return img.to_vec();
@@ -636,13 +757,22 @@ mod tests {
             cur
         }
 
-        pub(super) fn carve(w: usize, h: usize, ch: usize, img: &[f32], protect: Option<&[f32]>, new_w: usize, new_h: usize) -> Vec<f32> {
+        pub(super) fn carve(
+            w: usize,
+            h: usize,
+            ch: usize,
+            img: &[f32],
+            protect: Option<&[f32]>,
+            new_w: usize,
+            new_h: usize,
+        ) -> Vec<f32> {
             let (new_w, new_h) = (new_w.max(1), new_h.max(1));
             let wide = carve_width(w, h, ch, img, protect, new_w);
             if new_h == h {
                 return wide;
             }
-            let prot_t = protect.map(|p| transpose(new_w, h, 1, &resize_bilinear(w, h, 1, p, new_w, h)));
+            let prot_t =
+                protect.map(|p| transpose(new_w, h, 1, &resize_bilinear(w, h, 1, p, new_w, h)));
             let t = transpose(new_w, h, ch, &wide);
             let tall = carve_width(h, new_w, ch, &t, prot_t.as_deref(), new_h);
             transpose(new_h, new_w, ch, &tall)
@@ -670,16 +800,29 @@ mod tests {
             let got = carve(w, h, ch, &img, protect.as_deref(), nw, nh);
             let want = reference::carve(w, h, ch, &img, protect.as_deref(), nw, nh);
             let bits = |v: &[f32]| v.iter().map(|f| f.to_bits()).collect::<Vec<_>>();
-            assert_eq!(bits(&got), bits(&want), "case {case}: {w}x{h}x{ch} -> {nw}x{nh}, levels {levels}, protect {}", protect.is_some());
+            assert_eq!(
+                bits(&got),
+                bits(&want),
+                "case {case}: {w}x{h}x{ch} -> {nw}x{nh}, levels {levels}, protect {}",
+                protect.is_some()
+            );
         }
         // The seam search alone, on raw energy maps full of ties.
         for case in 0..200u32 {
             let (w, h) = (1 + next(40), 1 + next(30));
             let e = noise(w * h, [2, 3, 1000][next(3)], 7 + case);
-            assert_eq!(find_seam(w, h, &e), reference::find_seam(w, h, &e), "seam case {case}: {w}x{h}");
+            assert_eq!(
+                find_seam(w, h, &e),
+                reference::find_seam(w, h, &e),
+                "seam case {case}: {w}x{h}"
+            );
             let img = noise(w * h * 3, 7, 3 + case);
             let bits = |v: Vec<f32>| v.into_iter().map(f32::to_bits).collect::<Vec<_>>();
-            assert_eq!(bits(energy(w, h, 3, &img)), bits(reference::energy(w, h, 3, &img)), "energy case {case}");
+            assert_eq!(
+                bits(energy(w, h, 3, &img)),
+                bits(reference::energy(w, h, 3, &img)),
+                "energy case {case}"
+            );
         }
     }
 
@@ -688,8 +831,14 @@ mod tests {
         let (w, h) = (40, 20);
         let img = vec![0.5f32; w * h * 3];
         let yes = || true;
-        assert_eq!(carve_with(w, h, 3, &img, None, 30, 15, &Interrupt::cancel_only(&yes)), Err(Cancelled));
-        assert_eq!(carve_with(w, h, 3, &img, None, 30, 15, &Interrupt::NONE).unwrap(), carve(w, h, 3, &img, None, 30, 15));
+        assert_eq!(
+            carve_with(w, h, 3, &img, None, 30, 15, &Interrupt::cancel_only(&yes)),
+            Err(Cancelled)
+        );
+        assert_eq!(
+            carve_with(w, h, 3, &img, None, 30, 15, &Interrupt::NONE).unwrap(),
+            carve(w, h, 3, &img, None, 30, 15)
+        );
     }
 
     /// A flat grey image with a salient vertical bar at x = 10..14 (red/blue columns).
@@ -697,7 +846,11 @@ mod tests {
         let mut v = vec![0.5f32; w * h * 3];
         for y in 0..h {
             for x in 10..14 {
-                let c = if x % 2 == 0 { [1.0, 0.0, 0.0] } else { [0.0, 0.0, 1.0] };
+                let c = if x % 2 == 0 {
+                    [1.0, 0.0, 0.0]
+                } else {
+                    [0.0, 0.0, 1.0]
+                };
                 v[(y * w + x) * 3..(y * w + x) * 3 + 3].copy_from_slice(&c);
             }
         }
@@ -706,8 +859,12 @@ mod tests {
 
     /// Columns that are pure red or pure blue top to bottom.
     fn red_columns(w: usize, h: usize, img: &[f32]) -> usize {
-        let pure = |p: &[f32]| p[1] < 0.05 && ((p[0] > 0.95 && p[2] < 0.05) || (p[2] > 0.95 && p[0] < 0.05));
-        (0..w).filter(|x| (0..h).all(|y| pure(&img[(y * w + x) * 3..(y * w + x) * 3 + 3]))).count()
+        let pure = |p: &[f32]| {
+            p[1] < 0.05 && ((p[0] > 0.95 && p[2] < 0.05) || (p[2] > 0.95 && p[0] < 0.05))
+        };
+        (0..w)
+            .filter(|x| (0..h).all(|y| pure(&img[(y * w + x) * 3..(y * w + x) * 3 + 3])))
+            .count()
     }
 
     #[test]
@@ -743,13 +900,21 @@ mod tests {
             protect[y * w + 256] = 1.0;
         }
 
-        let out = carve_width_with(w, h, ch, &img, Some(&protect), new_w, &Interrupt::NONE).unwrap();
+        let out =
+            carve_width_with(w, h, ch, &img, Some(&protect), new_w, &Interrupt::NONE).unwrap();
 
         assert_eq!(out.len(), new_w * h * ch);
-        assert_eq!(red_columns(new_w, h, &out), 4, "the full-resolution bar survives");
+        assert_eq!(
+            red_columns(new_w, h, &out),
+            4,
+            "the full-resolution bar survives"
+        );
         for y in 0..h {
             let row = &out[y * new_w * ch..(y + 1) * new_w * ch];
-            assert!(row.chunks_exact(ch).any(|px| px == [0.03, 0.87, 0.42]), "protected mark survives row {y}");
+            assert!(
+                row.chunks_exact(ch).any(|px| px == [0.03, 0.87, 0.42]),
+                "protected mark survives row {y}"
+            );
         }
     }
 
@@ -758,7 +923,18 @@ mod tests {
         let (w, h, ch) = (128, PROXY_SHRINK_MIN_HEIGHT, 3);
         let img = vec![0.5; w * h * ch];
         let cancelled = || true;
-        assert_eq!(carve_width_with(w, h, ch, &img, None, 64, &Interrupt::cancel_only(&cancelled)), Err(Cancelled));
+        assert_eq!(
+            carve_width_with(
+                w,
+                h,
+                ch,
+                &img,
+                None,
+                64,
+                &Interrupt::cancel_only(&cancelled)
+            ),
+            Err(Cancelled)
+        );
     }
 
     #[test]
@@ -780,7 +956,12 @@ mod tests {
         }
         let out = carve(w, h, 1, &img, None, w, 18);
         assert_eq!(out.len(), w * 18);
-        assert_eq!((0..18).filter(|y| (0..w).all(|x| out[y * w + x] > 0.9)).count(), 1);
+        assert_eq!(
+            (0..18)
+                .filter(|y| (0..w).all(|x| out[y * w + x] > 0.9))
+                .count(),
+            1
+        );
         // Protecting a flat region keeps it: the seams go elsewhere.
         let flat = vec![0.5f32; 16 * 4];
         let mut protect = vec![0.0f32; 16 * 4];
@@ -792,7 +973,9 @@ mod tests {
             marked[y * 16 + 3] = 0.51;
         }
         let out = carve(16, 4, 1, &marked, Some(&protect), 8, 4);
-        assert!((0..4).all(|y| out[y * 8..y * 8 + 8].iter().any(|v| (*v - 0.51).abs() < 1e-6)));
+        assert!((0..4).all(|y| out[y * 8..y * 8 + 8]
+            .iter()
+            .any(|v| (*v - 0.51).abs() < 1e-6)));
     }
 
     /// Noise quantised to `levels` values, so the energy map is full of exact ties.
@@ -809,7 +992,11 @@ mod tests {
     }
 
     fn fnv(v: &[f32]) -> u64 {
-        v.iter().flat_map(|f| f.to_bits().to_le_bytes()).fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3))
+        v.iter()
+            .flat_map(|f| f.to_bits().to_le_bytes())
+            .fold(0xcbf2_9ce4_8422_2325, |h, b| {
+                (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3)
+            })
     }
 
     /// The exact output bits of a spread of carves (shrink, enlarge past half the width, both
@@ -857,12 +1044,28 @@ mod tests {
         // Width 1 has no seam to spare: its one column is repeated. Height 1 likewise (through
         // the transposed pass), alone or with the other axis.
         let col = [0.1f32, 0.2, 0.3, 0.4, 0.5];
-        assert_eq!(carve(1, 5, 1, &col, None, 4, 5), col.iter().flat_map(|v| [*v; 4]).collect::<Vec<_>>());
+        assert_eq!(
+            carve(1, 5, 1, &col, None, 4, 5),
+            col.iter().flat_map(|v| [*v; 4]).collect::<Vec<_>>()
+        );
         assert_eq!(carve(5, 1, 1, &col, None, 5, 3), col.repeat(3));
-        assert_eq!(carve(1, 1, 3, &[0.7, 0.8, 0.9], None, 3, 2), [0.7, 0.8, 0.9].repeat(6));
-        for (w, h, nw, nh) in [(1, 5, 6, 10), (1, 17, 6, 34), (16, 1, 21, 2), (7, 1, 3, 8), (2, 1, 1, 8)] {
+        assert_eq!(
+            carve(1, 1, 3, &[0.7, 0.8, 0.9], None, 3, 2),
+            [0.7, 0.8, 0.9].repeat(6)
+        );
+        for (w, h, nw, nh) in [
+            (1, 5, 6, 10),
+            (1, 17, 6, 34),
+            (16, 1, 21, 2),
+            (7, 1, 3, 8),
+            (2, 1, 1, 8),
+        ] {
             let img = vec![0.5f32; w * h * 4];
-            assert_eq!(carve(w, h, 4, &img, Some(&vec![1.0; w * h]), nw, nh).len(), nw * nh * 4, "{w}x{h} -> {nw}x{nh}");
+            assert_eq!(
+                carve(w, h, 4, &img, Some(&vec![1.0; w * h]), nw, nh).len(),
+                nw * nh * 4,
+                "{w}x{h} -> {nw}x{nh}"
+            );
         }
     }
 

@@ -15,7 +15,17 @@
 //! (a, b, c) as documented by the PanoTools wiki, Adobe DNG specification 1.6 (opcodes `WarpRectilinear`,
 //! `FixVignetteRadial`). Interpolation and fitting: own design.
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
 
 pub mod model;
 mod xml;
@@ -191,7 +201,9 @@ impl LensDb {
     /// Parse one lensfun-format XML document.
     pub fn parse(xml: &str) -> Result<LensDb, Error> {
         let root = xml::parse(xml)?;
-        let Some(top) = root.kid("lensdatabase") else { return Err(Error::Xml("no <lensdatabase> element".into())) };
+        let Some(top) = root.kid("lensdatabase") else {
+            return Err(Error::Xml("no <lensdatabase> element".into()));
+        };
         let cameras = top.kids("camera").filter_map(camera).collect();
         let lenses = top.kids("lens").flat_map(lens).collect();
         Ok(LensDb { cameras, lenses })
@@ -212,12 +224,19 @@ impl LensDb {
         if md.is_empty() {
             return None;
         }
-        self.cameras.iter().find(|c| tokens(&c.model) == md && maker_matches(&tokens(&c.maker), &mk))
+        self.cameras
+            .iter()
+            .find(|c| tokens(&c.model) == md && maker_matches(&tokens(&c.maker), &mk))
     }
 
     /// The best profile for an EXIF lens model (and lens make, when the file has one), preferring lenses for the
     /// camera's mount. `None` when no name is a convincing match.
-    pub fn find_lens(&self, lens_make: Option<&str>, lens_model: &str, camera: Option<&Camera>) -> Option<&Profile> {
+    pub fn find_lens(
+        &self,
+        lens_make: Option<&str>,
+        lens_model: &str,
+        camera: Option<&Camera>,
+    ) -> Option<&Profile> {
         let exif = tokens(lens_model);
         if exif.is_empty() {
             return None;
@@ -229,9 +248,18 @@ impl LensDb {
             if !make.is_empty() && !maker.is_empty() && !maker_matches(&maker, &make) {
                 continue;
             }
-            let mut score = lens.models.iter().map(|m| name_score(&tokens(m), &exif, &maker)).fold(0.0, f64::max);
+            let mut score = lens
+                .models
+                .iter()
+                .map(|m| name_score(&tokens(m), &exif, &maker))
+                .fold(0.0, f64::max);
             if let Some(cam) = camera {
-                if !lens.mounts.is_empty() && !lens.mounts.iter().any(|m| m.eq_ignore_ascii_case(&cam.mount)) {
+                if !lens.mounts.is_empty()
+                    && !lens
+                        .mounts
+                        .iter()
+                        .any(|m| m.eq_ignore_ascii_case(&cam.mount))
+                {
                     score *= 0.8;
                 }
             }
@@ -244,7 +272,9 @@ impl LensDb {
 }
 
 fn read_capped(path: &Path) -> Result<String, Error> {
-    let len = std::fs::metadata(path).map_err(|e| Error::Io(e.to_string()))?.len();
+    let len = std::fs::metadata(path)
+        .map_err(|e| Error::Io(e.to_string()))?
+        .len();
     if len > MAX_FILE_BYTES {
         return Err(Error::TooLarge);
     }
@@ -306,7 +336,9 @@ fn name_score(db: &[String], exif: &[String], maker: &[String]) -> f64 {
     if db.is_empty() || exif.is_empty() {
         return 0.0;
     }
-    if db.iter().any(|t| is_number(t) && !exif.contains(t)) || exif.iter().any(|t| is_number(t) && !db.contains(t)) {
+    if db.iter().any(|t| is_number(t) && !exif.contains(t))
+        || exif.iter().any(|t| is_number(t) && !db.contains(t))
+    {
         return 0.0;
     }
     let common = db.iter().filter(|t| exif.contains(t)).count() as f64;
@@ -323,7 +355,8 @@ fn camera(n: &xml::Node) -> Option<Camera> {
 }
 
 fn crop_of(s: Option<&str>) -> Option<f64> {
-    s.and_then(|v| v.trim().parse::<f64>().ok()).filter(|v| v.is_finite() && (0.05..=20.0).contains(v))
+    s.and_then(|v| v.trim().parse::<f64>().ok())
+        .filter(|v| v.is_finite() && (0.05..=20.0).contains(v))
 }
 
 fn aspect_of(s: Option<&str>) -> Option<f64> {
@@ -342,15 +375,27 @@ fn positive(v: Option<f64>) -> Option<f64> {
 
 /// One `<lens>` element → one profile per `<calibration>` (newer files give each its own crop factor and aspect).
 fn lens(n: &xml::Node) -> Vec<Profile> {
-    let Some(maker) = n.kid_text("maker") else { return Vec::new() };
-    let models: Vec<String> = n.kids("model").map(|m| m.text.trim().to_string()).filter(|m| !m.is_empty()).collect();
+    let Some(maker) = n.kid_text("maker") else {
+        return Vec::new();
+    };
+    let models: Vec<String> = n
+        .kids("model")
+        .map(|m| m.text.trim().to_string())
+        .filter(|m| !m.is_empty())
+        .collect();
     if models.is_empty() {
         return Vec::new();
     }
     let crop = crop_of(n.kid_text("cropfactor")).unwrap_or(1.0);
     let aspect = aspect_of(n.kid_text("aspect-ratio")).unwrap_or(1.5);
-    let rectilinear = n.kid_text("type").is_none_or(|t| t.eq_ignore_ascii_case("rectilinear"));
-    let mounts = n.kids("mount").map(|m| m.text.trim().to_string()).filter(|m| !m.is_empty()).collect::<Vec<_>>();
+    let rectilinear = n
+        .kid_text("type")
+        .is_none_or(|t| t.eq_ignore_ascii_case("rectilinear"));
+    let mounts = n
+        .kids("mount")
+        .map(|m| m.text.trim().to_string())
+        .filter(|m| !m.is_empty())
+        .collect::<Vec<_>>();
     n.kids("calibration")
         .map(|cal| {
             let mut p = Profile {
@@ -365,26 +410,71 @@ fn lens(n: &xml::Node) -> Vec<Profile> {
                 vignetting: Vec::new(),
             };
             for c in &cal.children {
-                let Some(focal) = positive(c.num("focal")) else { continue };
+                let Some(focal) = positive(c.num("focal")) else {
+                    continue;
+                };
                 let k = |name: &str| c.num(name).unwrap_or(0.0);
                 match (c.name.as_str(), c.attr("model")) {
-                    ("distortion", Some("poly3")) => p.distortion.push((focal, Distortion::Poly3 { k1: k("k1") })),
-                    ("distortion", Some("poly5")) => p.distortion.push((focal, Distortion::Poly5 { k1: k("k1"), k2: k("k2") })),
-                    ("distortion", Some("ptlens")) => p.distortion.push((focal, Distortion::PtLens { a: k("a"), b: k("b"), c: k("c") })),
+                    ("distortion", Some("poly3")) => p
+                        .distortion
+                        .push((focal, Distortion::Poly3 { k1: k("k1") })),
+                    ("distortion", Some("poly5")) => p.distortion.push((
+                        focal,
+                        Distortion::Poly5 {
+                            k1: k("k1"),
+                            k2: k("k2"),
+                        },
+                    )),
+                    ("distortion", Some("ptlens")) => p.distortion.push((
+                        focal,
+                        Distortion::PtLens {
+                            a: k("a"),
+                            b: k("b"),
+                            c: k("c"),
+                        },
+                    )),
                     ("tca", Some("linear")) => {
                         let one = |name: &str| c.num(name).unwrap_or(1.0);
-                        p.tca.push((focal, Tca::Linear { kr: one("kr"), kb: one("kb") }));
+                        p.tca.push((
+                            focal,
+                            Tca::Linear {
+                                kr: one("kr"),
+                                kb: one("kb"),
+                            },
+                        ));
                     }
                     ("tca", Some("poly3")) => {
                         let one = |name: &str| c.num(name).unwrap_or(1.0);
-                        p.tca.push((focal, Tca::Poly3 { vr: one("vr"), vb: one("vb"), cr: k("cr"), cb: k("cb"), br: k("br"), bb: k("bb") }));
+                        p.tca.push((
+                            focal,
+                            Tca::Poly3 {
+                                vr: one("vr"),
+                                vb: one("vb"),
+                                cr: k("cr"),
+                                cb: k("cb"),
+                                br: k("br"),
+                                bb: k("bb"),
+                            },
+                        ));
                     }
                     ("vignetting", Some("pa")) => {
-                        let (Some(aperture), distance) = (positive(c.num("aperture")), positive(c.num("distance")).unwrap_or(1000.0)) else {
+                        let (Some(aperture), distance) = (
+                            positive(c.num("aperture")),
+                            positive(c.num("distance")).unwrap_or(1000.0),
+                        ) else {
                             continue;
                         };
-                        let model = Vignetting { k1: k("k1"), k2: k("k2"), k3: k("k3") };
-                        p.vignetting.push(VignettingPoint { focal, aperture, distance, model });
+                        let model = Vignetting {
+                            k1: k("k1"),
+                            k2: k("k2"),
+                            k3: k("k3"),
+                        };
+                        p.vignetting.push(VignettingPoint {
+                            focal,
+                            aperture,
+                            distance,
+                            model,
+                        });
                     }
                     _ => {}
                 }
@@ -436,24 +526,40 @@ impl Profile {
 
     /// Vignetting attenuation at radius `r` (half-diagonal units): linear in focal length, in stops of aperture and
     /// in 1 / distance between the calibrated points.
-    pub fn vignetting_attenuation(&self, focal: f64, aperture: Option<f64>, distance: Option<f64>, r: f64) -> Option<f64> {
+    pub fn vignetting_attenuation(
+        &self,
+        focal: f64,
+        aperture: Option<f64>,
+        distance: Option<f64>,
+        r: f64,
+    ) -> Option<f64> {
         let mut focals: Vec<f64> = self.vignetting.iter().map(|v| v.focal).collect();
         focals.sort_by(f64::total_cmp);
         focals.dedup();
         let (lo, hi, t) = bracket(&focals, focal)?;
         let at = |f: f64| -> Option<f64> {
-            let pts: Vec<&VignettingPoint> = self.vignetting.iter().filter(|v| v.focal == f).collect();
+            let pts: Vec<&VignettingPoint> =
+                self.vignetting.iter().filter(|v| v.focal == f).collect();
             // the calibrated distance nearest the shot's (in 1/d; infinity when unknown)
             let inv = |d: f64| 1.0 / d.max(0.01);
             let want = distance.map_or(0.0, inv);
-            let near = pts.iter().map(|v| v.distance).min_by(|a, b| (inv(*a) - want).abs().total_cmp(&(inv(*b) - want).abs()))?;
-            let mut at_d: Vec<&&VignettingPoint> = pts.iter().filter(|v| v.distance == near).collect();
+            let near = pts
+                .iter()
+                .map(|v| v.distance)
+                .min_by(|a, b| (inv(*a) - want).abs().total_cmp(&(inv(*b) - want).abs()))?;
+            let mut at_d: Vec<&&VignettingPoint> =
+                pts.iter().filter(|v| v.distance == near).collect();
             at_d.sort_by(|a, b| a.aperture.total_cmp(&b.aperture));
             let stops: Vec<f64> = at_d.iter().map(|v| v.aperture.log2()).collect();
             // unknown aperture: the widest calibrated one (the strongest falloff)
-            let n = aperture.filter(|a| *a > 0.0).map_or(stops.first().copied()?, f64::log2);
+            let n = aperture
+                .filter(|a| *a > 0.0)
+                .map_or(stops.first().copied()?, f64::log2);
             let (i, j, u) = bracket(&stops, n)?;
-            let (a, b) = (at_d.get(i)?.model.attenuation(r), at_d.get(j)?.model.attenuation(r));
+            let (a, b) = (
+                at_d.get(i)?.model.attenuation(r),
+                at_d.get(j)?.model.attenuation(r),
+            );
             Some(a + (b - a) * u)
         };
         let (a, b) = (at(*focals.get(lo)?)?, at(*focals.get(hi)?)?);
@@ -465,10 +571,19 @@ impl Profile {
     /// ([`MAX_WARP_ERROR`], [`MAX_VIGNETTE_ERROR`]) or that would fold the image is left out.
     pub fn correction(&self, shot: &Shot) -> Option<EmbeddedLens> {
         let (w, h) = (shot.width, shot.height);
-        if !(w >= 2.0 && h >= 2.0 && w.is_finite() && h.is_finite() && shot.focal.is_finite() && shot.focal > 0.0) {
+        if !(w >= 2.0
+            && h >= 2.0
+            && w.is_finite()
+            && h.is_finite()
+            && shot.focal.is_finite()
+            && shot.focal > 0.0)
+        {
             return None;
         }
-        let cam = shot.crop_factor.filter(|c| c.is_finite() && *c > 0.0).unwrap_or(self.crop_factor);
+        let cam = shot
+            .crop_factor
+            .filter(|c| c.is_finite() && *c > 0.0)
+            .unwrap_or(self.crop_factor);
         // DNG radius (1 = image half diagonal) → lensfun radii
         let to_vig = self.crop_factor / cam;
         let to_dist = to_vig * (1.0 + self.aspect_ratio * self.aspect_ratio).sqrt();
@@ -488,11 +603,18 @@ impl Profile {
                 (err <= MAX_WARP_ERROR).then_some([k[0], k[1], k[2], k[3], 0.0, 0.0])
             };
             if let (Some(r), Some(g), Some(b)) = (plane(0), plane(1), plane(2)) {
-                lens.warp = Some(EmbeddedWarp { planes: [r, g, b], center, radius });
+                lens.warp = Some(EmbeddedWarp {
+                    planes: [r, g, b],
+                    center,
+                    radius,
+                });
             }
         }
         if !self.vignetting.is_empty() {
-            let att = |r: f64| self.vignetting_attenuation(f, shot.aperture, shot.distance, r * to_vig).unwrap_or(1.0);
+            let att = |r: f64| {
+                self.vignetting_attenuation(f, shot.aperture, shot.distance, r * to_vig)
+                    .unwrap_or(1.0)
+            };
             if let Some((k, err)) = model::fit_gain5(|r| 1.0 / att(r).max(0.05)) {
                 if err <= MAX_VIGNETTE_ERROR {
                     lens.vignette = Some(EmbeddedVignette { k, center, radius });

@@ -92,9 +92,15 @@ impl FloatImage {
         for (dst, &[r, g, b, a]) in out.pixels_mut().iter_mut().zip(self.pixels.iter()) {
             let alpha = a.clamp(0.0, 1.0);
             let out_a = (alpha * 255.0).round() as u8;
-            let out_r = ((r.clamp(0.0, 1.0) * alpha) * 255.0).round().min(out_a as f32) as u8;
-            let out_g = ((g.clamp(0.0, 1.0) * alpha) * 255.0).round().min(out_a as f32) as u8;
-            let out_b = ((b.clamp(0.0, 1.0) * alpha) * 255.0).round().min(out_a as f32) as u8;
+            let out_r = ((r.clamp(0.0, 1.0) * alpha) * 255.0)
+                .round()
+                .min(out_a as f32) as u8;
+            let out_g = ((g.clamp(0.0, 1.0) * alpha) * 255.0)
+                .round()
+                .min(out_a as f32) as u8;
+            let out_b = ((b.clamp(0.0, 1.0) * alpha) * 255.0)
+                .round()
+                .min(out_a as f32) as u8;
             *dst = PremultipliedColorU8::from_rgba(out_r, out_g, out_b, out_a)
                 .unwrap_or(PremultipliedColorU8::TRANSPARENT);
         }

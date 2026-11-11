@@ -16,7 +16,17 @@
 //! [`apply`] runs a filter over an area, tile by tile (in parallel with
 //! rayon on native targets; single-threaded on wasm).
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
 
 mod artistic;
 mod artistic_fx;
@@ -84,7 +94,9 @@ mod video;
 pub mod warp;
 pub mod wideangle;
 
-pub use artistic::{GALLERY_CATEGORIES, GalleryEffect, GalleryFilter, GalleryParam, GalleryParamKind};
+pub use artistic::{
+    GalleryEffect, GalleryFilter, GalleryParam, GalleryParamKind, GALLERY_CATEGORIES,
+};
 pub use image::{Edge, Image};
 pub use params_ext::*;
 
@@ -198,7 +210,11 @@ pub enum PolarMode {
 /// A filter and its parameters, in Photoshop's dialog units (pixels,
 /// percent, degrees, levels 0–255).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "filter", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "filter",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum FilterParams {
     /// Radius = Gaussian standard deviation in pixels (0.1–1000).
     GaussianBlur {
@@ -560,12 +576,21 @@ impl FilterParams {
             | FilterParams::Median { radius }
             | FilterParams::DustAndScratches { radius, .. }
             | FilterParams::Minimum { radius, .. }
-            | FilterParams::Maximum { radius, .. } => Halo::Radius(radius.max(0.0).ceil() as i32 + 1),
-            FilterParams::MotionBlur { distance, .. } => Halo::Radius((distance.abs() / 2.0).ceil() as i32 + 2),
-            FilterParams::Mosaic { cell_size } => Halo::Radius(cell_size.max(1.0).ceil() as i32 + 1),
+            | FilterParams::Maximum { radius, .. } => {
+                Halo::Radius(radius.max(0.0).ceil() as i32 + 1)
+            }
+            FilterParams::MotionBlur { distance, .. } => {
+                Halo::Radius((distance.abs() / 2.0).ceil() as i32 + 2)
+            }
+            FilterParams::Mosaic { cell_size } => {
+                Halo::Radius(cell_size.max(1.0).ceil() as i32 + 1)
+            }
             FilterParams::Emboss { height, .. } => Halo::Radius(height.abs().ceil() as i32 + 2),
             FilterParams::FindEdges => Halo::Radius(1),
-            FilterParams::AddNoise { .. } | FilterParams::Solarize | FilterParams::Invert | FilterParams::Desaturate => Halo::Radius(0),
+            FilterParams::AddNoise { .. }
+            | FilterParams::Solarize
+            | FilterParams::Invert
+            | FilterParams::Desaturate => Halo::Radius(0),
             FilterParams::RadialBlur { .. }
             | FilterParams::Offset { .. }
             | FilterParams::Twirl { .. }
@@ -582,7 +607,11 @@ impl FilterParams {
     /// depends on size (Relight's shading blur) request the neighbourhood they actually read.
     pub fn halo_for(&self, bounds: Rect) -> Halo {
         match self {
-            FilterParams::Relight { intensity, softness, .. } if *intensity != 0.0 => Halo::Radius(relight::halo_radius(*softness, bounds)),
+            FilterParams::Relight {
+                intensity,
+                softness,
+                ..
+            } if *intensity != 0.0 => Halo::Radius(relight::halo_radius(*softness, bounds)),
             _ => self.halo(),
         }
     }
@@ -686,14 +715,24 @@ fn halo_ext(p: &FilterParams) -> Halo {
         FilterParams::Pointillize { cell_size, .. } => r(cell_size.max(1.0) * 2.0),
         FilterParams::Facet => r(3.0),
         FilterParams::Fragment => r(4.0),
-        FilterParams::Mezzotint { .. } | FilterParams::HsbHsl { .. } | FilterParams::ColorToAlpha { .. } | FilterParams::NtscColors => Halo::Radius(0),
+        FilterParams::Mezzotint { .. }
+        | FilterParams::HsbHsl { .. }
+        | FilterParams::ColorToAlpha { .. }
+        | FilterParams::NtscColors => Halo::Radius(0),
         FilterParams::Diffuse { .. } => r(1.0),
-        FilterParams::Extrude { size, depth, .. } => r(stylize2::extrude_reach(*depth) + size.clamp(2.0, 255.0) * 3.0 + 1.0),
-        FilterParams::OilPaint { stylization, scale, .. } => r(oil::reach(*stylization, *scale)),
+        FilterParams::Extrude { size, depth, .. } => {
+            r(stylize2::extrude_reach(*depth) + size.clamp(2.0, 255.0) * 3.0 + 1.0)
+        }
+        FilterParams::OilPaint {
+            stylization, scale, ..
+        } => r(oil::reach(*stylization, *scale)),
         FilterParams::Tiles { .. } => Halo::Bounds,
         FilterParams::TraceContour { .. } => r(1.0),
         FilterParams::Wind { method, .. } => r(stylize2::wind_reach(*method)),
-        FilterParams::Displace { .. } | FilterParams::Shear { .. } | FilterParams::ZigZag { .. } | FilterParams::SpinBlur { .. } => Halo::Bounds,
+        FilterParams::Displace { .. }
+        | FilterParams::Shear { .. }
+        | FilterParams::ZigZag { .. }
+        | FilterParams::SpinBlur { .. } => Halo::Bounds,
         // Generators and per-pixel renders only need the bounds geometry (always in the context).
         FilterParams::Fibers { .. } | FilterParams::LensFlare { .. } => Halo::Radius(0),
         FilterParams::LightingEffects { .. } => r(1.0),
@@ -704,9 +743,15 @@ fn halo_ext(p: &FilterParams) -> Halo {
         FilterParams::LensBlur { radius, .. } => r(*radius),
         FilterParams::ShapeBlur { radius, .. } => r(shape_blur::radius(*radius)),
         FilterParams::TiltShift { blur, .. } => r(gallery::reach(*blur)),
-        FilterParams::IrisBlur { pins } => r(gallery::reach(pins.iter().map(|p| p.blur).fold(0.0, f32::max))),
-        FilterParams::FieldBlur { pins } => r(gallery::reach(pins.iter().map(|p| p.blur).fold(0.0, f32::max))),
-        FilterParams::PathBlur { paths } => r(paths.iter().map(|p| p.speed.abs()).fold(0.0, f32::max) / 2.0 + 1.0),
+        FilterParams::IrisBlur { pins } => r(gallery::reach(
+            pins.iter().map(|p| p.blur).fold(0.0, f32::max),
+        )),
+        FilterParams::FieldBlur { pins } => r(gallery::reach(
+            pins.iter().map(|p| p.blur).fold(0.0, f32::max),
+        )),
+        FilterParams::PathBlur { paths } => {
+            r(paths.iter().map(|p| p.speed.abs()).fold(0.0, f32::max) / 2.0 + 1.0)
+        }
         FilterParams::Custom { .. } => r(2.0),
         FilterParams::DeInterlace { .. } => r(1.0),
         FilterParams::FilterGallery { effects } => Halo::Radius(artistic_fx::reach(effects)),
@@ -732,22 +777,65 @@ pub fn kernel(params: &FilterParams, src: &Image, out: Rect, ctx: &Ctx) -> Vec<f
     match params {
         FilterParams::GaussianBlur { radius } => blur::gaussian(src, out, ctx, *radius),
         FilterParams::BoxBlur { radius } => blur::boxed(src, out, ctx, *radius),
-        FilterParams::MotionBlur { angle, distance } => blur::motion(src, out, ctx, *angle, *distance),
-        FilterParams::RadialBlur { amount, method, quality, center_x, center_y } => {
-            blur::radial(src, out, ctx, *amount, *method, *quality, (*center_x, *center_y))
+        FilterParams::MotionBlur { angle, distance } => {
+            blur::motion(src, out, ctx, *angle, *distance)
         }
-        FilterParams::SurfaceBlur { radius, threshold } => blur::surface(src, out, ctx, *radius, *threshold),
-        FilterParams::UnsharpMask { amount, radius, threshold } => sharpen::unsharp(src, out, ctx, *amount, *radius, *threshold),
-        FilterParams::SmartSharpen { amount, radius, reduce_noise } => sharpen::smart(src, out, ctx, *amount, *radius, *reduce_noise),
+        FilterParams::RadialBlur {
+            amount,
+            method,
+            quality,
+            center_x,
+            center_y,
+        } => blur::radial(
+            src,
+            out,
+            ctx,
+            *amount,
+            *method,
+            *quality,
+            (*center_x, *center_y),
+        ),
+        FilterParams::SurfaceBlur { radius, threshold } => {
+            blur::surface(src, out, ctx, *radius, *threshold)
+        }
+        FilterParams::UnsharpMask {
+            amount,
+            radius,
+            threshold,
+        } => sharpen::unsharp(src, out, ctx, *amount, *radius, *threshold),
+        FilterParams::SmartSharpen {
+            amount,
+            radius,
+            reduce_noise,
+        } => sharpen::smart(src, out, ctx, *amount, *radius, *reduce_noise),
         FilterParams::HighPass { radius } => sharpen::high_pass(src, out, ctx, *radius),
-        FilterParams::AddNoise { amount, distribution, monochromatic, seed } => noise::add(src, out, ctx, *amount, *distribution, *monochromatic, *seed),
+        FilterParams::AddNoise {
+            amount,
+            distribution,
+            monochromatic,
+            seed,
+        } => noise::add(src, out, ctx, *amount, *distribution, *monochromatic, *seed),
         FilterParams::Median { radius } => noise::median(src, out, *radius, None),
-        FilterParams::DustAndScratches { radius, threshold } => noise::median(src, out, *radius, Some(*threshold)),
-        FilterParams::Minimum { radius, preserve } => other::min_max_preserve(src, out, *radius, false, *preserve),
-        FilterParams::Maximum { radius, preserve } => other::min_max_preserve(src, out, *radius, true, *preserve),
-        FilterParams::Offset { horizontal, vertical, undefined } => other::offset(src, out, ctx, *horizontal, *vertical, *undefined),
+        FilterParams::DustAndScratches { radius, threshold } => {
+            noise::median(src, out, *radius, Some(*threshold))
+        }
+        FilterParams::Minimum { radius, preserve } => {
+            other::min_max_preserve(src, out, *radius, false, *preserve)
+        }
+        FilterParams::Maximum { radius, preserve } => {
+            other::min_max_preserve(src, out, *radius, true, *preserve)
+        }
+        FilterParams::Offset {
+            horizontal,
+            vertical,
+            undefined,
+        } => other::offset(src, out, ctx, *horizontal, *vertical, *undefined),
         FilterParams::Mosaic { cell_size } => stylize::mosaic(src, out, ctx, *cell_size),
-        FilterParams::Emboss { angle, height, amount } => stylize::emboss(src, out, ctx, *angle, *height, *amount),
+        FilterParams::Emboss {
+            angle,
+            height,
+            amount,
+        } => stylize::emboss(src, out, ctx, *angle, *height, *amount),
         FilterParams::FindEdges => stylize::find_edges(src, out, ctx),
         FilterParams::Solarize => stylize::solarize(src, out, ctx),
         FilterParams::Invert => stylize::per_pixel(src, out, ctx, |v| 1.0 - v),
@@ -755,7 +843,16 @@ pub fn kernel(params: &FilterParams, src: &Image, out: Rect, ctx: &Ctx) -> Vec<f
         FilterParams::Twirl { angle } => distort::twirl(src, out, ctx, *angle),
         FilterParams::Pinch { amount } => distort::pinch(src, out, ctx, *amount),
         FilterParams::Spherize { amount, mode } => distort::spherize(src, out, ctx, *amount, *mode),
-        FilterParams::Wave { generators, wavelength_min, wavelength_max, amplitude_min, amplitude_max, wave_type, undefined, seed } => distort::wave(
+        FilterParams::Wave {
+            generators,
+            wavelength_min,
+            wavelength_max,
+            amplitude_min,
+            amplitude_max,
+            wave_type,
+            undefined,
+            seed,
+        } => distort::wave(
             src,
             out,
             ctx,
@@ -770,14 +867,30 @@ pub fn kernel(params: &FilterParams, src: &Image, out: Rect, ctx: &Ctx) -> Vec<f
         ),
         FilterParams::Ripple { amount, size } => distort::ripple(src, out, ctx, *amount, *size),
         FilterParams::PolarCoordinates { mode } => distort::polar(src, out, ctx, *mode),
-        FilterParams::ColorHalftone { max_radius, angles } => pixelate::color_halftone(src, out, ctx, *max_radius, *angles),
-        FilterParams::Crystallize { cell_size, seed } => pixelate::crystallize(src, out, ctx, *cell_size, *seed),
+        FilterParams::ColorHalftone { max_radius, angles } => {
+            pixelate::color_halftone(src, out, ctx, *max_radius, *angles)
+        }
+        FilterParams::Crystallize { cell_size, seed } => {
+            pixelate::crystallize(src, out, ctx, *cell_size, *seed)
+        }
         FilterParams::Facet => pixelate::facet(src, out, ctx),
         FilterParams::Fragment => pixelate::fragment(src, out, ctx),
         FilterParams::Mezzotint { kind, seed } => pixelate::mezzotint(src, out, ctx, *kind, *seed),
-        FilterParams::Pointillize { cell_size, seed, background } => pixelate::pointillize(src, out, ctx, *cell_size, *seed, *background),
+        FilterParams::Pointillize {
+            cell_size,
+            seed,
+            background,
+        } => pixelate::pointillize(src, out, ctx, *cell_size, *seed, *background),
         FilterParams::Diffuse { mode, seed } => stylize2::diffuse(src, out, ctx, *mode, *seed),
-        FilterParams::Extrude { kind, size, depth, level_based, solid_front, mask_incomplete, seed } => stylize2::extrude(
+        FilterParams::Extrude {
+            kind,
+            size,
+            depth,
+            level_based,
+            solid_front,
+            mask_incomplete,
+            seed,
+        } => stylize2::extrude(
             src,
             out,
             ctx,
@@ -791,7 +904,15 @@ pub fn kernel(params: &FilterParams, src: &Image, out: Rect, ctx: &Ctx) -> Vec<f
                 seed: *seed,
             },
         ),
-        FilterParams::OilPaint { stylization, cleanliness, scale, bristle_detail, lighting, angle, shine } => oil::oil_paint(
+        FilterParams::OilPaint {
+            stylization,
+            cleanliness,
+            scale,
+            bristle_detail,
+            lighting,
+            angle,
+            shine,
+        } => oil::oil_paint(
             src,
             out,
             ctx,
@@ -805,21 +926,85 @@ pub fn kernel(params: &FilterParams, src: &Image, out: Rect, ctx: &Ctx) -> Vec<f
                 shine: *shine,
             },
         ),
-        FilterParams::Tiles { count, max_offset, fill, foreground, background, seed } => {
-            stylize2::tiles(src, out, ctx, *count, *max_offset, *fill, (*foreground, *background), *seed)
+        FilterParams::Tiles {
+            count,
+            max_offset,
+            fill,
+            foreground,
+            background,
+            seed,
+        } => stylize2::tiles(
+            src,
+            out,
+            ctx,
+            *count,
+            *max_offset,
+            *fill,
+            (*foreground, *background),
+            *seed,
+        ),
+        FilterParams::TraceContour { level, upper } => {
+            stylize2::trace_contour(src, out, ctx, *level, *upper)
         }
-        FilterParams::TraceContour { level, upper } => stylize2::trace_contour(src, out, ctx, *level, *upper),
-        FilterParams::Wind { method, from_right, seed } => stylize2::wind(src, out, ctx, *method, *from_right, *seed),
-        FilterParams::Displace { horizontal, vertical, stretch, undefined, map } => {
-            distort2::displace(src, out, ctx, (*horizontal, *vertical), *stretch, *undefined, map.as_deref())
+        FilterParams::Wind {
+            method,
+            from_right,
+            seed,
+        } => stylize2::wind(src, out, ctx, *method, *from_right, *seed),
+        FilterParams::Displace {
+            horizontal,
+            vertical,
+            stretch,
+            undefined,
+            map,
+        } => distort2::displace(
+            src,
+            out,
+            ctx,
+            (*horizontal, *vertical),
+            *stretch,
+            *undefined,
+            map.as_deref(),
+        ),
+        FilterParams::Shear { points, undefined } => {
+            distort2::shear(src, out, ctx, points, *undefined)
         }
-        FilterParams::Shear { points, undefined } => distort2::shear(src, out, ctx, points, *undefined),
-        FilterParams::ZigZag { amount, ridges, style } => distort2::zigzag(src, out, ctx, *amount, *ridges, *style),
-        FilterParams::Fibers { variance, strength, seed, foreground, background } => {
-            render::fibers(src, out, ctx, *variance, *strength, *seed, (*foreground, *background))
-        }
-        FilterParams::LensFlare { brightness, center_x, center_y, lens } => render::lens_flare(src, out, ctx, *brightness, (*center_x, *center_y), *lens),
-        FilterParams::LightingEffects { lights, gloss, metallic, exposure, ambience, texture, height, white_is_high } => render::lighting(
+        FilterParams::ZigZag {
+            amount,
+            ridges,
+            style,
+        } => distort2::zigzag(src, out, ctx, *amount, *ridges, *style),
+        FilterParams::Fibers {
+            variance,
+            strength,
+            seed,
+            foreground,
+            background,
+        } => render::fibers(
+            src,
+            out,
+            ctx,
+            *variance,
+            *strength,
+            *seed,
+            (*foreground, *background),
+        ),
+        FilterParams::LensFlare {
+            brightness,
+            center_x,
+            center_y,
+            lens,
+        } => render::lens_flare(src, out, ctx, *brightness, (*center_x, *center_y), *lens),
+        FilterParams::LightingEffects {
+            lights,
+            gloss,
+            metallic,
+            exposure,
+            ambience,
+            texture,
+            height,
+            white_is_high,
+        } => render::lighting(
             src,
             out,
             ctx,
@@ -834,13 +1019,33 @@ pub fn kernel(params: &FilterParams, src: &Image, out: Rect, ctx: &Ctx) -> Vec<f
                 white_is_high: *white_is_high,
             },
         ),
-        FilterParams::Relight { angle, elevation, intensity, ambient, warmth, softness } => relight::relight(
+        FilterParams::Relight {
+            angle,
+            elevation,
+            intensity,
+            ambient,
+            warmth,
+            softness,
+        } => relight::relight(
             src,
             out,
             ctx,
-            relight::Params { angle: *angle, elevation: *elevation, intensity: *intensity, ambient: *ambient, warmth: *warmth, softness: *softness },
+            relight::Params {
+                angle: *angle,
+                elevation: *elevation,
+                intensity: *intensity,
+                ambient: *ambient,
+                warmth: *warmth,
+                softness: *softness,
+            },
         ),
-        FilterParams::ReduceNoise { strength, preserve_details, reduce_color_noise, sharpen_details, remove_jpeg_artifact } => denoise::reduce_noise(
+        FilterParams::ReduceNoise {
+            strength,
+            preserve_details,
+            reduce_color_noise,
+            sharpen_details,
+            remove_jpeg_artifact,
+        } => denoise::reduce_noise(
             src,
             out,
             ctx,
@@ -852,7 +1057,12 @@ pub fn kernel(params: &FilterParams, src: &Image, out: Rect, ctx: &Ctx) -> Vec<f
                 jpeg: *remove_jpeg_artifact,
             },
         ),
-        FilterParams::SmartBlur { radius, threshold, quality, mode } => blur2::smart_blur(src, out, ctx, *radius, *threshold, *quality, *mode),
+        FilterParams::SmartBlur {
+            radius,
+            threshold,
+            quality,
+            mode,
+        } => blur2::smart_blur(src, out, ctx, *radius, *threshold, *quality, *mode),
         FilterParams::LensBlur {
             radius,
             blades,
@@ -889,20 +1099,52 @@ pub fn kernel(params: &FilterParams, src: &Image, out: Rect, ctx: &Ctx) -> Vec<f
                 depth_map: depth_map.as_deref(),
             },
         ),
-        FilterParams::ShapeBlur { radius, shape } => blur2::shape_blur(src, out, ctx, *radius, *shape),
-        FilterParams::TiltShift { blur, center_x, center_y, angle, focus, transition } => {
-            gallery::tilt_shift(src, out, ctx, *blur, (*center_x, *center_y), *angle, *focus, *transition)
+        FilterParams::ShapeBlur { radius, shape } => {
+            blur2::shape_blur(src, out, ctx, *radius, *shape)
         }
+        FilterParams::TiltShift {
+            blur,
+            center_x,
+            center_y,
+            angle,
+            focus,
+            transition,
+        } => gallery::tilt_shift(
+            src,
+            out,
+            ctx,
+            *blur,
+            (*center_x, *center_y),
+            *angle,
+            *focus,
+            *transition,
+        ),
         FilterParams::IrisBlur { pins } => gallery::iris(src, out, ctx, pins),
         FilterParams::FieldBlur { pins } => gallery::field(src, out, ctx, pins),
         FilterParams::SpinBlur { pins } => gallery::spin(src, out, ctx, pins),
         FilterParams::PathBlur { paths } => gallery::path(src, out, ctx, paths),
-        FilterParams::Custom { kernel, scale, offset } => other2::custom(src, out, ctx, kernel, *scale, *offset),
+        FilterParams::Custom {
+            kernel,
+            scale,
+            offset,
+        } => other2::custom(src, out, ctx, kernel, *scale, *offset),
         FilterParams::HsbHsl { input, output } => other2::hsb_hsl(src, out, ctx, *input, *output),
-        FilterParams::ColorToAlpha { color, transparency_threshold, opacity_threshold } => {
-            color_to_alpha::color_to_alpha(src, out, ctx, *color, *transparency_threshold, *opacity_threshold)
-        }
-        FilterParams::DeInterlace { eliminate_even, interpolate } => video::deinterlace(src, out, ctx, *eliminate_even, *interpolate),
+        FilterParams::ColorToAlpha {
+            color,
+            transparency_threshold,
+            opacity_threshold,
+        } => color_to_alpha::color_to_alpha(
+            src,
+            out,
+            ctx,
+            *color,
+            *transparency_threshold,
+            *opacity_threshold,
+        ),
+        FilterParams::DeInterlace {
+            eliminate_even,
+            interpolate,
+        } => video::deinterlace(src, out, ctx, *eliminate_even, *interpolate),
         FilterParams::NtscColors => video::ntsc(src, out, ctx),
         FilterParams::FilterGallery { effects } => artistic_fx::run(effects, src, out, ctx),
     }
@@ -915,7 +1157,12 @@ pub const TILE: i32 = 256;
 /// global filters and renders that ignore the layer's pixels (Fibers) write the reference
 /// bounds; others the content grown by the halo (blurs spread into transparent areas).
 /// Clipped to the selection's bounds when there is one.
-pub fn output_area(params: &FilterParams, content: Rect, bounds: Rect, selection_bounds: Option<Rect>) -> Rect {
+pub fn output_area(
+    params: &FilterParams,
+    content: Rect,
+    bounds: Rect,
+    selection_bounds: Option<Rect>,
+) -> Rect {
     let mut area = match params.halo_for(bounds) {
         Halo::Bounds => bounds,
         Halo::Radius(_) if params.renders_from_nothing() => bounds,
@@ -935,15 +1182,44 @@ pub fn output_area(params: &FilterParams, content: Rect, bounds: Rect, selection
 
 /// Applies a filter to `area` of `surface`, mixing with the original by the
 /// selection coverage (channel 0 of `selection`). Returns the new surface.
-pub fn apply(surface: &Surface, params: &FilterParams, area: Rect, bounds: Rect, selection: Option<&Surface>) -> Surface {
-    apply_tiled(surface, params, area, bounds, selection, auto_tile(params, bounds), None)
+pub fn apply(
+    surface: &Surface,
+    params: &FilterParams,
+    area: Rect,
+    bounds: Rect,
+    selection: Option<&Surface>,
+) -> Surface {
+    apply_tiled(
+        surface,
+        params,
+        area,
+        bounds,
+        selection,
+        auto_tile(params, bounds),
+        None,
+    )
 }
 
 /// [`apply`] for a layer in a document: neighbourhood filters repeat the edge pixels of `extent`
 /// (the canvas plus any off-canvas pixels the layer has) instead of reading transparency beyond
 /// it, and the output is clipped to `extent`, as Photoshop does at the canvas edge.
-pub fn apply_in(surface: &Surface, params: &FilterParams, area: Rect, bounds: Rect, selection: Option<&Surface>, extent: Rect) -> Surface {
-    apply_tiled(surface, params, area.intersect(&extent), bounds, selection, auto_tile(params, bounds), Some(extent))
+pub fn apply_in(
+    surface: &Surface,
+    params: &FilterParams,
+    area: Rect,
+    bounds: Rect,
+    selection: Option<&Surface>,
+    extent: Rect,
+) -> Surface {
+    apply_tiled(
+        surface,
+        params,
+        area.intersect(&extent),
+        bounds,
+        selection,
+        auto_tile(params, bounds),
+        Some(extent),
+    )
 }
 
 /// [`apply_in`] that can be cancelled (checked before each tile) and reports progress per tile
@@ -958,7 +1234,16 @@ pub fn apply_in_with(
     extent: Rect,
     ctl: &rust_motion_raster::Interrupt,
 ) -> Option<Surface> {
-    apply_tiled_with(surface, params, area.intersect(&extent), bounds, selection, auto_tile(params, bounds), Some(extent), ctl)
+    apply_tiled_with(
+        surface,
+        params,
+        area.intersect(&extent),
+        bounds,
+        selection,
+        auto_tile(params, bounds),
+        Some(extent),
+        ctl,
+    )
 }
 
 /// Results do not depend on the tiling, so wide-halo filters use bigger tiles to keep the
@@ -981,7 +1266,17 @@ pub fn apply_tiled(
     extent: Option<Rect>,
 ) -> Surface {
     // Preserve the input if a checked filter allocation cannot be completed.
-    apply_tiled_with(surface, params, area, bounds, selection, tile, extent, &rust_motion_raster::Interrupt::NONE).unwrap_or_else(|| surface.clone())
+    apply_tiled_with(
+        surface,
+        params,
+        area,
+        bounds,
+        selection,
+        tile,
+        extent,
+        &rust_motion_raster::Interrupt::NONE,
+    )
+    .unwrap_or_else(|| surface.clone())
 }
 
 /// [`apply_tiled`] with cancellation (checked before each tile, so a cancel takes effect within
@@ -998,7 +1293,9 @@ pub fn apply_tiled_with(
     extent: Option<Rect>,
     ctl: &rust_motion_raster::Interrupt,
 ) -> Option<Surface> {
-    apply_tiled_with_impl(surface, params, area, bounds, selection, tile, extent, ctl, true)
+    apply_tiled_with_impl(
+        surface, params, area, bounds, selection, tile, extent, ctl, true,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1016,7 +1313,12 @@ fn apply_tiled_with_impl(
     if ctl.cancelled() {
         return None;
     }
-    if let FilterParams::UnsharpMask { amount, radius, threshold } = *params {
+    if let FilterParams::UnsharpMask {
+        amount,
+        radius,
+        threshold,
+    } = *params
+    {
         if !sharpen::exact::valid_params(amount, radius, threshold)
             || !sharpen::exact::valid_area(area)
             || !sharpen::exact::valid_area(bounds)
@@ -1038,21 +1340,46 @@ fn apply_tiled_with_impl(
     if let Some(boxes) = blur::box_widths(params) {
         return apply_box_blur(out, surface, area, extent, selection, &boxes, ctl);
     }
-    if let Some(result) = blur::motion_apply::apply(surface, params, area, bounds, selection, extent, tile, ctl) {
+    if let Some(result) =
+        blur::motion_apply::apply(surface, params, area, bounds, selection, extent, tile, ctl)
+    {
         return result;
     }
     // The public tile override must not create a zero-step loop or an
     // unbounded scratch buffer for these checked filters. Automatic tiles are unchanged.
-    let tile = if matches!(params, FilterParams::ShapeBlur { .. } | FilterParams::UnsharpMask { .. }) { tile.clamp(1, 2048) } else { tile };
+    let tile = if matches!(
+        params,
+        FilterParams::ShapeBlur { .. } | FilterParams::UnsharpMask { .. }
+    ) {
+        tile.clamp(1, 2048)
+    } else {
+        tile
+    };
     let fmt = surface.format();
-    let ctx = Ctx { bounds, mode: fmt.mode, alpha: fmt.alpha };
+    let ctx = Ctx {
+        bounds,
+        mode: fmt.mode,
+        alpha: fmt.alpha,
+    };
     // Prepare the immutable sample transforms once for all output tiles. If the
     // optional table allocation fails, use the existing sampler; only a real
     // cancellation returns None. Source reads keep their upstream semantics.
     let radial = match params {
-        FilterParams::RadialBlur { amount, method, quality, center_x, center_y } if prepare_fast_paths => {
-            blur::radial::Plan::for_area(bounds, *amount, *method, *quality, (*center_x, *center_y), area, ctl)
-        }
+        FilterParams::RadialBlur {
+            amount,
+            method,
+            quality,
+            center_x,
+            center_y,
+        } if prepare_fast_paths => blur::radial::Plan::for_area(
+            bounds,
+            *amount,
+            *method,
+            *quality,
+            (*center_x, *center_y),
+            area,
+            ctl,
+        ),
         _ => None,
     };
     if ctl.cancelled() {
@@ -1060,13 +1387,26 @@ fn apply_tiled_with_impl(
     }
     let halo = params.halo_for(bounds);
     if matches!(params, FilterParams::UnsharpMask { .. }) {
-        let Halo::Radius(reach) = halo else { return None };
-        let (w, h) = (area.width().min(tile as u32) as usize, area.height().min(tile as u32) as usize);
-        let read_samples = w.checked_add(2 * reach as usize)?.checked_mul(h.checked_add(2 * reach as usize)?)?.checked_mul(fmt.channels())?;
-        let tile_count = u64::from(area.width()).div_ceil(tile as u64).checked_mul(u64::from(area.height()).div_ceil(tile as u64))?;
+        let Halo::Radius(reach) = halo else {
+            return None;
+        };
+        let (w, h) = (
+            area.width().min(tile as u32) as usize,
+            area.height().min(tile as u32) as usize,
+        );
+        let read_samples = w
+            .checked_add(2 * reach as usize)?
+            .checked_mul(h.checked_add(2 * reach as usize)?)?
+            .checked_mul(fmt.channels())?;
+        let tile_count = u64::from(area.width())
+            .div_ceil(tile as u64)
+            .checked_mul(u64::from(area.height()).div_ceil(tile as u64))?;
         // Reject hostile source-window sizes before Image::read allocates them.
         // Ordinary filter parameters and automatic tiles fit these bounds.
-        if read_samples > 512 * 1024 * 1024 || read_samples.checked_mul(std::mem::size_of::<f32>())? > isize::MAX as usize || tile_count > 1_048_576 {
+        if read_samples > 512 * 1024 * 1024
+            || read_samples.checked_mul(std::mem::size_of::<f32>())? > isize::MAX as usize
+            || tile_count > 1_048_576
+        {
             return None;
         }
     }
@@ -1086,7 +1426,12 @@ fn apply_tiled_with_impl(
     while y < area.y1 {
         let mut x = area.x0;
         while x < area.x1 {
-            tiles.push(Rect::new(x, y, x.saturating_add(tile).min(area.x1), y.saturating_add(tile).min(area.y1)));
+            tiles.push(Rect::new(
+                x,
+                y,
+                x.saturating_add(tile).min(area.x1),
+                y.saturating_add(tile).min(area.y1),
+            ));
             x = x.saturating_add(tile);
         }
         y = y.saturating_add(tile);
@@ -1128,7 +1473,11 @@ fn apply_tiled_with_impl(
                 None => Some(kernel(params, src, *t, &ctx)),
             },
             (None, None) => match *params {
-                FilterParams::UnsharpMask { amount, radius, threshold } => sharpen::exact::run(src, *t, &ctx, amount, radius, threshold, ctl),
+                FilterParams::UnsharpMask {
+                    amount,
+                    radius,
+                    threshold,
+                } => sharpen::exact::run(src, *t, &ctx, amount, radius, threshold, ctl),
                 _ => Some(kernel(params, src, *t, &ctx)),
             },
         }) else {
@@ -1166,7 +1515,9 @@ fn apply_tiled_with_impl(
         // Checked filters can reject malformed geometry or an allocation failure.
         // Do not hand an incomplete tile to Surface::write_region.
         if (shape.is_some() || matches!(params, FilterParams::UnsharpMask { .. }))
-            && results.iter().any(|(t, data)| data.len() != t.width() as usize * t.height() as usize * fmt.channels())
+            && results.iter().any(|(t, data)| {
+                data.len() != t.width() as usize * t.height() as usize * fmt.channels()
+            })
         {
             return None;
         }
@@ -1196,26 +1547,48 @@ fn apply_box_blur(
     let n = fmt.channels();
     let reach = i32::try_from(boxes.iter().map(|w| w / 2).sum::<usize>()).unwrap_or(i32::MAX);
     let grown = area.inflate(reach);
-    let src = extent.map(|e| grown.intersect(&e)).filter(|r| !r.is_empty()).unwrap_or(grown);
+    let src = extent
+        .map(|e| grown.intersect(&e))
+        .filter(|r| !r.is_empty())
+        .unwrap_or(grown);
     let read = |r: Rect, buf: &mut Vec<f32>| surface.read_region_into(r, buf);
     // Per output column: the horizontal results for every source row, plus the final samples.
-    let column_bytes = (src.height() as usize + area.height() as usize) * n * std::mem::size_of::<f32>();
-    let band = i32::try_from(RESULT_BUDGET / column_bytes.max(1)).unwrap_or(i32::MAX).max(blur::STRIP) / blur::STRIP * blur::STRIP;
-    let bands: Vec<Rect> = (area.x0..area.x1).step_by(band as usize).map(|x| Rect::new(x, area.y0, x.saturating_add(band).min(area.x1), area.y1)).collect();
+    let column_bytes =
+        (src.height() as usize + area.height() as usize) * n * std::mem::size_of::<f32>();
+    let band = i32::try_from(RESULT_BUDGET / column_bytes.max(1))
+        .unwrap_or(i32::MAX)
+        .max(blur::STRIP)
+        / blur::STRIP
+        * blur::STRIP;
+    let bands: Vec<Rect> = (area.x0..area.x1)
+        .step_by(band as usize)
+        .map(|x| Rect::new(x, area.y0, x.saturating_add(band).min(area.x1), area.y1))
+        .collect();
     for (i, b) in bands.iter().enumerate() {
         let strips = blur::box_blur(src, &read, *b, n, fmt.alpha, boxes, ctl)?;
         // Each strip lies in one tile column: the columns' tiles are written in parallel.
         let mut columns: Vec<(Surface, Vec<blur::Strip>)> = Vec::new();
         for (t, data) in strips {
             match columns.last_mut() {
-                Some((_, v)) if v.first().is_some_and(|(r, _)| r.x0.div_euclid(rust_motion_geom::TILE_SIZE) == t.x0.div_euclid(rust_motion_geom::TILE_SIZE)) => {
+                Some((_, v))
+                    if v.first().is_some_and(|(r, _)| {
+                        r.x0.div_euclid(rust_motion_geom::TILE_SIZE)
+                            == t.x0.div_euclid(rust_motion_geom::TILE_SIZE)
+                    }) =>
+                {
                     v.push((t, data))
                 }
-                _ => columns.push((Surface::with_default(fmt, &surface.default_pixel()), vec![(t, data)])),
+                _ => columns.push((
+                    Surface::with_default(fmt, &surface.default_pixel()),
+                    vec![(t, data)],
+                )),
             }
         }
         for (s, v) in &mut columns {
-            let r = v.iter().fold(Rect::EMPTY, |acc, (t, _)| if acc.is_empty() { *t } else { acc.union(t) });
+            let r = v.iter().fold(
+                Rect::EMPTY,
+                |acc, (t, _)| if acc.is_empty() { *t } else { acc.union(t) },
+            );
             s.put_tiles(out.take_tiles(r));
         }
         let write = |(s, v): &mut (Surface, Vec<blur::Strip>)| {
@@ -1272,7 +1645,11 @@ fn mix_selection(data: &mut [f32], t: Rect, sel: &Surface, orig: &Image, alpha: 
                 let original_weight = original_alpha * (1.0 - k);
                 let filtered_weight = filtered_alpha * k;
                 for (c, v) in px[..a].iter_mut().enumerate() {
-                    *v = if mixed_alpha > 0.0 { (orig.get(x, y, c) * original_weight + *v * filtered_weight) / mixed_alpha } else { 0.0 };
+                    *v = if mixed_alpha > 0.0 {
+                        (orig.get(x, y, c) * original_weight + *v * filtered_weight) / mixed_alpha
+                    } else {
+                        0.0
+                    };
                 }
                 px[a] = mixed_alpha;
                 continue;
@@ -1311,5 +1688,15 @@ fn apply_radial_reference(
     extent: Rect,
     ctl: &rust_motion_raster::Interrupt,
 ) -> Option<Surface> {
-    apply_tiled_with_impl(surface, params, area.intersect(&extent), bounds, selection, auto_tile(params, bounds), Some(extent), ctl, false)
+    apply_tiled_with_impl(
+        surface,
+        params,
+        area.intersect(&extent),
+        bounds,
+        selection,
+        auto_tile(params, bounds),
+        Some(extent),
+        ctl,
+        false,
+    )
 }

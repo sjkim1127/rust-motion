@@ -2,9 +2,11 @@
 //! behaviour, intents, BPC, interpolation accuracy, real-world profiles and an independent
 //! oracle (moxcms, dev-dependency only).
 
-use rust_motion_cms as rust_motion_cms;
+use rust_motion_cms;
 use rust_motion_cms::math::{self, delta_e76};
-use rust_motion_cms::{Builtin, Clut, ColorSpace, Intent, Lut3d, Profile, Transform, TransformOptions};
+use rust_motion_cms::{
+    Builtin, Clut, ColorSpace, Intent, Lut3d, Profile, Transform, TransformOptions,
+};
 
 fn lab() -> &'static Profile {
     Builtin::LabD50.profile()
@@ -18,10 +20,18 @@ fn cmyk() -> &'static Profile {
 
 /// Normalised device Lab (v4 encoding) → float Lab.
 fn dec(o: &[f32]) -> [f64; 3] {
-    [o[0] as f64 * 100.0, o[1] as f64 * 255.0 - 128.0, o[2] as f64 * 255.0 - 128.0]
+    [
+        o[0] as f64 * 100.0,
+        o[1] as f64 * 255.0 - 128.0,
+        o[2] as f64 * 255.0 - 128.0,
+    ]
 }
 fn enc(l: [f64; 3]) -> [f32; 3] {
-    [(l[0] / 100.0) as f32, ((l[1] + 128.0) / 255.0) as f32, ((l[2] + 128.0) / 255.0) as f32]
+    [
+        (l[0] / 100.0) as f32,
+        ((l[1] + 128.0) / 255.0) as f32,
+        ((l[2] + 128.0) / 255.0) as f32,
+    ]
 }
 
 fn to_lab(p: &Profile, dev: &[f32], intent: Intent) -> [f64; 3] {
@@ -45,13 +55,19 @@ fn builtins_encode_and_reparse() {
         Transform::new(p, lab(), Intent::RelativeColorimetric, false).unwrap();
         Transform::new(lab(), p, Intent::RelativeColorimetric, false).unwrap();
     }
-    assert_eq!(Builtin::from_id("Adobe RGB (1998)"), Some(Builtin::AdobeRgbCompat));
+    assert_eq!(
+        Builtin::from_id("Adobe RGB (1998)"),
+        Some(Builtin::AdobeRgbCompat)
+    );
 }
 
 #[test]
 fn srgb_known_lab_values() {
     let w = to_lab(srgb(), &[1.0, 1.0, 1.0], Intent::RelativeColorimetric);
-    assert!((w[0] - 100.0).abs() < 0.01 && w[1].abs() < 0.01 && w[2].abs() < 0.01, "white {w:?}");
+    assert!(
+        (w[0] - 100.0).abs() < 0.01 && w[1].abs() < 0.01 && w[2].abs() < 0.01,
+        "white {w:?}"
+    );
     let k = to_lab(srgb(), &[0.0, 0.0, 0.0], Intent::RelativeColorimetric);
     assert!(k[0].abs() < 0.01, "black {k:?}");
     // ICC PCS is D50: sRGB red Bradford-adapted to D50 is L*a*b* ≈ (54.29, 80.80, 69.89).
@@ -63,7 +79,14 @@ fn srgb_known_lab_values() {
     let b = to_lab(srgb(), &[0.0, 0.0, 1.0], Intent::RelativeColorimetric);
     assert!(delta_e76(b, [29.57, 68.30, -112.03]) < 0.3, "blue {b:?}");
     // Grays are neutral in every RGB builtin.
-    for bi in [Builtin::Srgb, Builtin::DisplayP3, Builtin::AdobeRgbCompat, Builtin::ProPhotoCompat, Builtin::LinearSrgb, Builtin::Rec2020] {
+    for bi in [
+        Builtin::Srgb,
+        Builtin::DisplayP3,
+        Builtin::AdobeRgbCompat,
+        Builtin::ProPhotoCompat,
+        Builtin::LinearSrgb,
+        Builtin::Rec2020,
+    ] {
         let m = to_lab(bi.profile(), &[0.5, 0.5, 0.5], Intent::RelativeColorimetric);
         assert!(m[1].abs() < 0.02 && m[2].abs() < 0.02, "{bi:?} gray {m:?}");
     }
@@ -91,11 +114,18 @@ fn rgb_lab_rgb_roundtrip_8bit_and_float() {
         assert!((*a as f32 - b * 255.0).abs() <= 1.0, "{a} vs {}", b * 255.0);
     }
     // 8-bit RGB stored as 16-bit Lab then back to 8-bit through the lookup tables.
-    let lab16: Vec<u16> = labf.iter().map(|v| (v.clamp(0.0, 1.0) * 65535.0 + 0.5) as u16).collect();
+    let lab16: Vec<u16> = labf
+        .iter()
+        .map(|v| (v.clamp(0.0, 1.0) * 65535.0 + 0.5) as u16)
+        .collect();
     let mut rgb16 = vec![0u16; lab16.len()];
     back.convert_u16(&lab16, 3, &mut rgb16, 3, false);
     for (a, b) in src8.iter().zip(&rgb16) {
-        assert!((*a as f32 - *b as f32 / 257.0).abs() <= 1.0, "{a} vs {}", *b as f32 / 257.0);
+        assert!(
+            (*a as f32 - *b as f32 / 257.0).abs() <= 1.0,
+            "{a} vs {}",
+            *b as f32 / 257.0
+        );
     }
     // Float: 1e-4.
     for (a, b) in f.iter().zip(&rgbf) {
@@ -112,16 +142,31 @@ fn rgb_lab_rgb_roundtrip_8bit_and_float() {
 #[test]
 fn rgb_to_rgb_matrix_shaper_paths_agree() {
     // Integer lookup path vs exact pipeline for pure-gamma destinations (hard near black).
-    for dst in [Builtin::AdobeRgbCompat, Builtin::ProPhotoCompat, Builtin::DisplayP3, Builtin::LinearSrgb] {
+    for dst in [
+        Builtin::AdobeRgbCompat,
+        Builtin::ProPhotoCompat,
+        Builtin::DisplayP3,
+        Builtin::LinearSrgb,
+    ] {
         let t = Transform::new(srgb(), dst.profile(), Intent::RelativeColorimetric, false).unwrap();
         let src: Vec<u8> = (0..=255u8).flat_map(|v| [v, v / 2, 255 - v]).collect();
         let mut out = vec![0u8; src.len()];
         t.convert_u8(&src, 3, &mut out, 3, false);
         for (px, o) in src.chunks(3).zip(out.chunks(3)) {
             let mut e = [0.0f32; 3];
-            t.eval(&[px[0] as f32 / 255.0, px[1] as f32 / 255.0, px[2] as f32 / 255.0], &mut e);
+            t.eval(
+                &[
+                    px[0] as f32 / 255.0,
+                    px[1] as f32 / 255.0,
+                    px[2] as f32 / 255.0,
+                ],
+                &mut e,
+            );
             for k in 0..3 {
-                assert!((o[k] as f32 - e[k].clamp(0.0, 1.0) * 255.0).abs() <= 0.6, "{dst:?} {px:?}: {o:?} vs {e:?}");
+                assert!(
+                    (o[k] as f32 - e[k].clamp(0.0, 1.0) * 255.0).abs() <= 0.6,
+                    "{dst:?} {px:?}: {o:?} vs {e:?}"
+                );
             }
         }
     }
@@ -166,23 +211,43 @@ fn cmyk_profile_is_monotonic_and_in_range() {
             t.eval(&[g, g, g], &mut o);
             assert!(o.iter().all(|c| (-1e-6..=1.0 + 1e-6).contains(c)), "{o:?}");
             assert!(o.iter().sum::<f32>() <= 3.0 + 0.02, "TAC {o:?}");
-            assert!(o[3] >= prev_k - 0.01, "{intent:?} K not monotonic at {v}: {o:?}");
+            assert!(
+                o[3] >= prev_k - 0.01,
+                "{intent:?} K not monotonic at {v}: {o:?}"
+            );
             prev_k = o[3];
             let mut l = [0.0f32; 3];
             back.eval(&o, &mut l);
             let lab = dec(&l);
-            assert!(lab[0] <= prev_l + 0.3, "{intent:?} L* not monotonic at {v}: {lab:?}");
-            assert!(lab[1].abs() < 3.0 && lab[2].abs() < 3.0, "{intent:?} gray {v} not neutral: {lab:?}");
+            assert!(
+                lab[0] <= prev_l + 0.3,
+                "{intent:?} L* not monotonic at {v}: {lab:?}"
+            );
+            assert!(
+                lab[1].abs() < 3.0 && lab[2].abs() < 3.0,
+                "{intent:?} gray {v} not neutral: {lab:?}"
+            );
             prev_l = lab[0];
         }
     }
     // Arbitrary colours: CMYK outputs in range for u8 and float paths.
     let t = Transform::new(srgb(), p, Intent::RelativeColorimetric, true).unwrap();
-    let src: Vec<u8> = (0..4096u32).flat_map(|i| [(i * 37 % 256) as u8, (i * 91 % 256) as u8, (i * 13 % 256) as u8]).collect();
+    let src: Vec<u8> = (0..4096u32)
+        .flat_map(|i| {
+            [
+                (i * 37 % 256) as u8,
+                (i * 91 % 256) as u8,
+                (i * 13 % 256) as u8,
+            ]
+        })
+        .collect();
     let mut out = vec![0u8; 4096 * 4];
     t.convert_u8(&src, 3, &mut out, 4, false);
     for px in out.chunks(4) {
-        assert!(px.iter().map(|v| *v as u32).sum::<u32>() <= 3 * 255 + 8, "{px:?}");
+        assert!(
+            px.iter().map(|v| *v as u32).sum::<u32>() <= 3 * 255 + 8,
+            "{px:?}"
+        );
     }
 }
 
@@ -190,12 +255,22 @@ fn cmyk_profile_is_monotonic_and_in_range() {
 fn in_gamut_colours_survive_cmyk_roundtrip() {
     let to = Transform::new(lab(), cmyk(), Intent::RelativeColorimetric, false).unwrap();
     let back = Transform::new(cmyk(), lab(), Intent::RelativeColorimetric, false).unwrap();
-    for target in [[50.0, 0.0, 0.0], [70.0, 10.0, 10.0], [60.0, -20.0, -20.0], [80.0, 0.0, 40.0], [40.0, 30.0, -10.0]] {
+    for target in [
+        [50.0, 0.0, 0.0],
+        [70.0, 10.0, 10.0],
+        [60.0, -20.0, -20.0],
+        [80.0, 0.0, 40.0],
+        [40.0, 30.0, -10.0],
+    ] {
         let mut c = [0.0f32; 4];
         to.eval(&enc(target), &mut c);
         let mut l = [0.0f32; 3];
         back.eval(&c, &mut l);
-        assert!(delta_e76(dec(&l), target) < 2.0, "{target:?} -> {c:?} -> {:?}", dec(&l));
+        assert!(
+            delta_e76(dec(&l), target) < 2.0,
+            "{target:?} -> {c:?} -> {:?}",
+            dec(&l)
+        );
     }
 }
 
@@ -222,15 +297,22 @@ fn intents_differ_as_expected() {
     assert!(w1.iter().all(|v| *v > 0.995), "{w1:?}");
     assert!(w2[0] < 0.97 && w2[2] > w2[0], "{w2:?}");
     let l = to_lab(cmyk(), &[0.0; 4], Intent::AbsoluteColorimetric);
-    assert!(delta_e76(l, [95.0, 0.0, -2.0]) < 0.6, "absolute paper {l:?}");
+    assert!(
+        delta_e76(l, [95.0, 0.0, -2.0]) < 0.6,
+        "absolute paper {l:?}"
+    );
 }
 
 /// `Builtin::Srgb`'s bytes (a v4 display profile) with the three `wtpt` values replaced.
 fn srgb_with_wtpt(xyz: [i32; 3]) -> Profile {
     let mut b = Builtin::Srgb.profile().to_bytes().to_vec();
-    let be32 = |b: &[u8], at: usize| u32::from_be_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]) as usize;
+    let be32 =
+        |b: &[u8], at: usize| u32::from_be_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]) as usize;
     let count = be32(&b, 128);
-    let rec = (0..count).map(|i| 132 + 12 * i).find(|&r| &b[r..r + 4] == b"wtpt").expect("sRGB has a wtpt tag");
+    let rec = (0..count)
+        .map(|i| 132 + 12 * i)
+        .find(|&r| &b[r..r + 4] == b"wtpt")
+        .expect("sRGB has a wtpt tag");
     let off = be32(&b, rec + 4);
     assert_eq!(&b[off..off + 4], b"XYZ ");
     for (i, v) in xyz.iter().enumerate() {
@@ -249,14 +331,25 @@ fn absolute_colorimetric_refuses_a_degenerate_media_white() {
     zero.white_point = [0.0; 3];
     assert_eq!(zero.media_white(), [0.0; 3]);
     let parsed_zero = srgb_with_wtpt([0, 0, 0]);
-    assert_eq!(parsed_zero.media_white(), [0.0; 3], "a v4 display profile's wtpt is used verbatim");
+    assert_eq!(
+        parsed_zero.media_white(),
+        [0.0; 3],
+        "a v4 display profile's wtpt is used verbatim"
+    );
     let negative = srgb_with_wtpt([-0x10000, 0x10000, 0x10000]);
     let mut nan = srgb().clone();
     nan.white_point = [f64::NAN, 1.0, 1.0];
-    for (name, bad) in [("zero", &zero), ("parsed zero", &parsed_zero), ("negative", &negative), ("nan", &nan)] {
+    for (name, bad) in [
+        ("zero", &zero),
+        ("parsed zero", &parsed_zero),
+        ("negative", &negative),
+        ("nan", &nan),
+    ] {
         for (src, dst) in [(srgb(), bad), (bad, srgb())] {
             match Transform::new(src, dst, Intent::AbsoluteColorimetric, false) {
-                Err(rust_motion_cms::CmsError::Invalid(m)) => assert!(m.contains("media white"), "{name}: {m}"),
+                Err(rust_motion_cms::CmsError::Invalid(m)) => {
+                    assert!(m.contains("media white"), "{name}: {m}")
+                }
                 Err(e) => panic!("{name}: wrong error {e}"),
                 Ok(t) => {
                     let mut out = [0.0f32; 3];
@@ -266,10 +359,40 @@ fn absolute_colorimetric_refuses_a_degenerate_media_white() {
             }
         }
         // Proof Colors with Simulate Paper Color proofs through the absolute intent.
-        assert!(Transform::proof(srgb(), bad, srgb(), Intent::AbsoluteColorimetric, false, true).is_err(), "{name}: paper proof");
-        assert!(Transform::proof(srgb(), bad, srgb(), Intent::RelativeColorimetric, true, true).is_err(), "{name}: paper proof, relative first leg");
+        assert!(
+            Transform::proof(
+                srgb(),
+                bad,
+                srgb(),
+                Intent::AbsoluteColorimetric,
+                false,
+                true
+            )
+            .is_err(),
+            "{name}: paper proof"
+        );
+        assert!(
+            Transform::proof(
+                srgb(),
+                bad,
+                srgb(),
+                Intent::RelativeColorimetric,
+                true,
+                true
+            )
+            .is_err(),
+            "{name}: paper proof, relative first leg"
+        );
         // Without paper simulation the proof leg is relative colorimetric and stays finite.
-        let t = Transform::proof(srgb(), bad, srgb(), Intent::RelativeColorimetric, true, false).unwrap();
+        let t = Transform::proof(
+            srgb(),
+            bad,
+            srgb(),
+            Intent::RelativeColorimetric,
+            true,
+            false,
+        )
+        .unwrap();
         let mut out = [0.0f32; 3];
         t.eval(&[0.2, 0.4, 0.6], &mut out);
         assert!(out.iter().all(|v| v.is_finite()), "{name}: {out:?}");
@@ -290,7 +413,10 @@ fn black_point_compensation() {
     let bp = rust_motion_cms::black_point(cmyk(), Intent::RelativeColorimetric, false).unwrap();
     let bl = math::xyz_to_lab([bp * 0.9642, bp, bp * 0.8249], math::D50)[0];
     assert!(bl > 4.0 && bl < 20.0, "CMYK black L* {bl}");
-    assert_eq!(rust_motion_cms::black_point(srgb(), Intent::RelativeColorimetric, true).unwrap(), 0.0);
+    assert_eq!(
+        rust_motion_cms::black_point(srgb(), Intent::RelativeColorimetric, true).unwrap(),
+        0.0
+    );
     // sRGB → CMYK: without BPC, deep shadows below the paper's black clip together; with BPC
     // they stay distinct.
     let with = Transform::new(srgb(), cmyk(), Intent::RelativeColorimetric, true).unwrap();
@@ -306,7 +432,10 @@ fn black_point_compensation() {
     let (w0, w1) = (l_of(&with, 0.0), l_of(&with, 0.08));
     let (n0, n1) = (l_of(&without, 0.0), l_of(&without, 0.08));
     assert!(w1 - w0 > 1.5, "BPC keeps shadow detail: {w0} {w1}");
-    assert!((n1 - n0).abs() < w1 - w0, "no BPC compresses shadows: {n0} {n1}");
+    assert!(
+        (n1 - n0).abs() < w1 - w0,
+        "no BPC compresses shadows: {n0} {n1}"
+    );
     // CMYK → sRGB: with BPC the darkest CMYK maps to (near) sRGB black.
     let dark = {
         let mut c = [0.0f32; 4];
@@ -318,7 +447,10 @@ fn black_point_compensation() {
     let (mut a, mut b) = ([0.0f32; 3], [0.0f32; 3]);
     rgb_with.eval(&dark, &mut a);
     rgb_without.eval(&dark, &mut b);
-    assert!(a[1] < 0.03 && b[1] > a[1] + 0.03, "with {a:?} without {b:?}");
+    assert!(
+        a[1] < 0.03 && b[1] > a[1] + 0.03,
+        "with {a:?} without {b:?}"
+    );
 }
 
 #[test]
@@ -326,7 +458,8 @@ fn tetrahedral_beats_trilinear() {
     // Sample sRGB → Lab on a coarse grid and compare interpolation against the exact pipeline.
     let exact = Transform::new(srgb(), lab(), Intent::RelativeColorimetric, false).unwrap();
     let clut = Clut::sample(vec![9, 9, 9], 3, |i, o| exact.eval(i, o));
-    let (mut tet_max, mut tri_max, mut tet_sum, mut tri_sum, mut tet_neutral, mut tri_neutral) = (0.0f64, 0.0f64, 0.0, 0.0, 0.0f64, 0.0f64);
+    let (mut tet_max, mut tri_max, mut tet_sum, mut tri_sum, mut tet_neutral, mut tri_neutral) =
+        (0.0f64, 0.0f64, 0.0, 0.0, 0.0f64, 0.0f64);
     let mut n = 0.0;
     let mut seed = 12345u32;
     let mut rnd = || {
@@ -355,34 +488,77 @@ fn tetrahedral_beats_trilinear() {
         tri_sum += db;
         n += 1.0;
     }
-    eprintln!("tetra mean {:.4} max {:.4} | trilinear mean {:.4} max {:.4}", tet_sum / n, tet_max, tri_sum / n, tri_max);
-    assert!(tet_neutral < 0.01, "tetrahedral keeps neutrals neutral: {tet_neutral}");
-    assert!(tet_sum <= tri_sum * 1.05, "tetrahedral mean error {} vs trilinear {}", tet_sum / n, tri_sum / n);
+    eprintln!(
+        "tetra mean {:.4} max {:.4} | trilinear mean {:.4} max {:.4}",
+        tet_sum / n,
+        tet_max,
+        tri_sum / n,
+        tri_max
+    );
+    assert!(
+        tet_neutral < 0.01,
+        "tetrahedral keeps neutrals neutral: {tet_neutral}"
+    );
+    assert!(
+        tet_sum <= tri_sum * 1.05,
+        "tetrahedral mean error {} vs trilinear {}",
+        tet_sum / n,
+        tri_sum / n
+    );
     assert!(tet_max < 4.0);
     let _ = tri_neutral;
 }
 
 #[test]
 fn proof_and_display_lut() {
-    let p = Transform::proof(srgb(), cmyk(), srgb(), Intent::RelativeColorimetric, true, false).unwrap();
+    let p = Transform::proof(
+        srgb(),
+        cmyk(),
+        srgb(),
+        Intent::RelativeColorimetric,
+        true,
+        false,
+    )
+    .unwrap();
     let mut o = [0.0f32; 3];
     // Neutral gray stays (nearly) neutral through the proof.
     p.eval(&[0.5, 0.5, 0.5], &mut o);
-    assert!((o[0] - o[1]).abs() < 0.02 && (o[1] - o[2]).abs() < 0.03, "{o:?}");
+    assert!(
+        (o[0] - o[1]).abs() < 0.02 && (o[1] - o[2]).abs() < 0.03,
+        "{o:?}"
+    );
     // Saturated blue is desaturated by the CMYK gamut.
     p.eval(&[0.0, 0.0, 1.0], &mut o);
     assert!(o[0] > 0.1 || o[1] > 0.1, "{o:?}");
     // Paper simulation darkens white.
-    let sim = Transform::proof(srgb(), cmyk(), srgb(), Intent::RelativeColorimetric, true, true).unwrap();
+    let sim = Transform::proof(
+        srgb(),
+        cmyk(),
+        srgb(),
+        Intent::RelativeColorimetric,
+        true,
+        true,
+    )
+    .unwrap();
     sim.eval(&[1.0, 1.0, 1.0], &mut o);
     assert!(o[0] < 0.97, "{o:?}");
 
-    let t = Transform::new(srgb(), Builtin::DisplayP3.profile(), Intent::RelativeColorimetric, false).unwrap();
+    let t = Transform::new(
+        srgb(),
+        Builtin::DisplayP3.profile(),
+        Intent::RelativeColorimetric,
+        false,
+    )
+    .unwrap();
     let lut = Lut3d::from_transform(&t, 33);
     assert_eq!(lut.to_rgba16f_bytes().len(), 33 * 33 * 33 * 8);
     let mut worst = 0.0f32;
     for i in 0..500u32 {
-        let c = [(i * 7 % 101) as f32 / 100.0, (i * 13 % 101) as f32 / 100.0, (i * 29 % 101) as f32 / 100.0];
+        let c = [
+            (i * 7 % 101) as f32 / 100.0,
+            (i * 13 % 101) as f32 / 100.0,
+            (i * 29 % 101) as f32 / 100.0,
+        ];
         let mut e = [0.0f32; 3];
         t.eval(&c, &mut e);
         let s = lut.sample(c);
@@ -395,7 +571,13 @@ fn proof_and_display_lut() {
 
 #[test]
 fn gray_profiles() {
-    let t = Transform::new(Builtin::SGray.profile(), srgb(), Intent::RelativeColorimetric, false).unwrap();
+    let t = Transform::new(
+        Builtin::SGray.profile(),
+        srgb(),
+        Intent::RelativeColorimetric,
+        false,
+    )
+    .unwrap();
     for v in [0.0f32, 0.2, 0.5, 0.9, 1.0] {
         let mut o = [0.0f32; 3];
         t.eval(&[v], &mut o);
@@ -403,7 +585,13 @@ fn gray_profiles() {
             assert!((c - v).abs() < 1e-3, "sGray {v} -> {o:?}");
         }
     }
-    let t = Transform::new(srgb(), Builtin::GrayGamma22.profile(), Intent::RelativeColorimetric, false).unwrap();
+    let t = Transform::new(
+        srgb(),
+        Builtin::GrayGamma22.profile(),
+        Intent::RelativeColorimetric,
+        false,
+    )
+    .unwrap();
     let mut o = [0.0f32; 1];
     t.eval(&[1.0, 1.0, 1.0], &mut o);
     assert!((o[0] - 1.0).abs() < 1e-3);
@@ -414,17 +602,33 @@ fn gray_profiles() {
 #[test]
 fn hdr_floats_survive_matrix_transforms() {
     let lin = Builtin::LinearSrgb.profile();
-    let t =
-        Transform::with_options(lin, Builtin::Rec2020.profile(), TransformOptions { intent: Intent::RelativeColorimetric, bpc: false, precise_float: true })
-            .unwrap();
-    let back = Transform::new(Builtin::Rec2020.profile(), lin, Intent::RelativeColorimetric, false).unwrap();
+    let t = Transform::with_options(
+        lin,
+        Builtin::Rec2020.profile(),
+        TransformOptions {
+            intent: Intent::RelativeColorimetric,
+            bpc: false,
+            precise_float: true,
+        },
+    )
+    .unwrap();
+    let back = Transform::new(
+        Builtin::Rec2020.profile(),
+        lin,
+        Intent::RelativeColorimetric,
+        false,
+    )
+    .unwrap();
     let src = [4.0f32, 2.0, 0.5];
     let mut mid = [0.0f32; 3];
     let mut out = [0.0f32; 3];
     t.eval(&src, &mut mid);
     back.eval(&mid, &mut out);
     for k in 0..3 {
-        assert!((out[k] - src[k]).abs() < 1e-3 * src[k].max(1.0), "{src:?} -> {mid:?} -> {out:?}");
+        assert!(
+            (out[k] - src[k]).abs() < 1e-3 * src[k].max(1.0),
+            "{src:?} -> {mid:?} -> {out:?}"
+        );
     }
 }
 
@@ -465,9 +669,9 @@ fn cmyk_endpoints_valid(paper: [f64; 3], black: [f64; 3]) -> bool {
 
 #[test]
 fn a_light_black_cmyk_lut_has_the_known_relative_ramp() {
-    use rust_motion_cms::Curve;
     use rust_motion_cms::pipeline::Stage;
     use rust_motion_cms::profile::{Lut, LutKind};
+    use rust_motion_cms::Curve;
 
     let mut p = cmyk().clone();
     // Independent linear test model: L* = 100 - 52 K, neutral a*/b*. Exercise A2B1 only;
@@ -492,10 +696,21 @@ fn a_light_black_cmyk_lut_has_the_known_relative_ramp() {
     assert!(cmyk_endpoints_valid(paper, black), "{paper:?} {black:?}");
     // Explicit expected values, not the validation predicate: also catch wrong channels,
     // intent selection, constant output and incorrect LUT encoding/interpolation.
-    for (k, expected) in [(0.0, 100.0), (0.25, 87.0), (0.5, 74.0), (0.75, 61.0), (1.0, 48.0)] {
+    for (k, expected) in [
+        (0.0, 100.0),
+        (0.25, 87.0),
+        (0.5, 74.0),
+        (0.75, 61.0),
+        (1.0, 48.0),
+    ] {
         let actual = to_lab(&p, &[0.0, 0.0, 0.0, k], Intent::RelativeColorimetric);
         // The writer quantizes the CLUT to 16 bits: at most 0.000763 L* error.
-        assert!((actual[0] - expected).abs() < 0.001 && actual[1].abs() < 1e-4 && actual[2].abs() < 1e-4, "K={k}: {actual:?}");
+        assert!(
+            (actual[0] - expected).abs() < 0.001
+                && actual[1].abs() < 1e-4
+                && actual[2].abs() < 1e-4,
+            "K={k}: {actual:?}"
+        );
     }
 }
 
@@ -513,8 +728,18 @@ fn cmyk_endpoints_reject_invalid_values() {
             assert!(!cmyk_endpoints_valid(paper, k));
         }
     }
-    for (p, k) in [(90.0, 48.0), (100.01, 48.0), (100.0, -0.01), (100.0, 100.01), (100.0, 100.0), (99.0, 100.0)] {
-        assert!(!cmyk_endpoints_valid([p, 0.0, 0.0], [k, 0.0, 0.0]), "L*: paper {p}, black {k}");
+    for (p, k) in [
+        (90.0, 48.0),
+        (100.01, 48.0),
+        (100.0, -0.01),
+        (100.0, 100.01),
+        (100.0, 100.0),
+        (99.0, 100.0),
+    ] {
+        assert!(
+            !cmyk_endpoints_valid([p, 0.0, 0.0], [k, 0.0, 0.0]),
+            "L*: paper {p}, black {k}"
+        );
     }
 }
 
@@ -522,16 +747,28 @@ fn cmyk_endpoints_reject_invalid_values() {
 /// converts through each.
 #[test]
 fn system_profiles() {
-    let dirs = ["/System/Library/ColorSync/Profiles", "/Library/ColorSync/Profiles", "/usr/share/color/icc", "/usr/share/color/icc/colord"];
+    let dirs = [
+        "/System/Library/ColorSync/Profiles",
+        "/Library/ColorSync/Profiles",
+        "/usr/share/color/icc",
+        "/usr/share/color/icc/colord",
+    ];
     let mut seen = 0;
     for d in dirs {
-        let Ok(rd) = std::fs::read_dir(d) else { continue };
+        let Ok(rd) = std::fs::read_dir(d) else {
+            continue;
+        };
         for e in rd.flatten() {
             let path = e.path();
-            if !matches!(path.extension().and_then(|x| x.to_str()), Some("icc" | "icm" | "ICC" | "ICM")) {
+            if !matches!(
+                path.extension().and_then(|x| x.to_str()),
+                Some("icc" | "icm" | "ICC" | "ICM")
+            ) {
                 continue;
             }
-            let Ok(bytes) = std::fs::read(&path) else { continue };
+            let Ok(bytes) = std::fs::read(&path) else {
+                continue;
+            };
             let p = match Profile::parse(&bytes) {
                 Ok(p) => p,
                 // Named-colour profiles are never used for conversions; colord's
@@ -550,9 +787,13 @@ fn system_profiles() {
                 continue;
             }
             assert!(!p.description.is_empty(), "{}", path.display());
-            if matches!(p.color_space, ColorSpace::Rgb | ColorSpace::Gray | ColorSpace::Cmyk | ColorSpace::Lab) {
+            if matches!(
+                p.color_space,
+                ColorSpace::Rgb | ColorSpace::Gray | ColorSpace::Cmyk | ColorSpace::Lab
+            ) {
                 for intent in Intent::ALL {
-                    let t = Transform::new(&p, lab(), intent, true).unwrap_or_else(|e| panic!("{} {intent:?}: {e}", path.display()));
+                    let t = Transform::new(&p, lab(), intent, true)
+                        .unwrap_or_else(|e| panic!("{} {intent:?}: {e}", path.display()));
                     let n = p.channels();
                     let mut o = [0.0f32; 3];
                     t.eval(&vec![0.5; n], &mut o);
@@ -568,16 +809,27 @@ fn system_profiles() {
                 // Real CMYK profile: paper lighter than 100 % K.
                 let w = to_lab(&p, &[0.0; 4], Intent::RelativeColorimetric);
                 let k = to_lab(&p, &[0.0, 0.0, 0.0, 1.0], Intent::RelativeColorimetric);
-                assert!(cmyk_endpoints_valid(w, k), "{}: {w:?} {k:?}", path.display());
+                assert!(
+                    cmyk_endpoints_valid(w, k),
+                    "{}: {w:?} {k:?}",
+                    path.display()
+                );
                 // And it round-trips through its own BToA.
                 if p.b2a[1].is_some() {
-                    let to = Transform::new(lab(), &p, Intent::RelativeColorimetric, false).unwrap();
-                    let back = Transform::new(&p, lab(), Intent::RelativeColorimetric, false).unwrap();
+                    let to =
+                        Transform::new(lab(), &p, Intent::RelativeColorimetric, false).unwrap();
+                    let back =
+                        Transform::new(&p, lab(), Intent::RelativeColorimetric, false).unwrap();
                     let mut c = [0.0f32; 4];
                     to.eval(&enc([60.0, 10.0, -10.0]), &mut c);
                     let mut l = [0.0f32; 3];
                     back.eval(&c, &mut l);
-                    assert!(delta_e76(dec(&l), [60.0, 10.0, -10.0]) < 3.0, "{}: {:?}", path.display(), dec(&l));
+                    assert!(
+                        delta_e76(dec(&l), [60.0, 10.0, -10.0]) < 3.0,
+                        "{}: {:?}",
+                        path.display(),
+                        dec(&l)
+                    );
                 }
             }
         }
@@ -684,7 +936,11 @@ fn gray_profile_with_reversed_lut_type_reencodes() {
 fn srgb_as_v2_tables() -> Profile {
     let mut p = srgb().clone();
     let table = |c: &rust_motion_cms::Curve| {
-        rust_motion_cms::Curve::Table((0..1024).map(|i| ((c.eval64(i as f64 / 1023.0) * 65535.0).round() / 65535.0) as f32).collect())
+        rust_motion_cms::Curve::Table(
+            (0..1024)
+                .map(|i| ((c.eval64(i as f64 / 1023.0) * 65535.0).round() / 65535.0) as f32)
+                .collect(),
+        )
     };
     let trc = p.trc.clone().unwrap();
     p.trc = Some([table(&trc[0]), table(&trc[1]), table(&trc[2])]);
@@ -707,10 +963,19 @@ fn same_colors_ignores_the_encoding() {
 
 #[test]
 fn same_colors_tells_different_spaces_apart() {
-    for other in [Builtin::DisplayP3, Builtin::LinearSrgb, Builtin::AdobeRgbCompat, Builtin::Rec2020, Builtin::CoatedCmyk, Builtin::GrayGamma22] {
+    for other in [
+        Builtin::DisplayP3,
+        Builtin::LinearSrgb,
+        Builtin::AdobeRgbCompat,
+        Builtin::Rec2020,
+        Builtin::CoatedCmyk,
+        Builtin::GrayGamma22,
+    ] {
         assert!(!srgb().same_colors(other.profile()), "{other:?}");
     }
-    assert!(!Builtin::GrayGamma22.profile().same_colors(Builtin::SGray.profile()));
+    assert!(!Builtin::GrayGamma22
+        .profile()
+        .same_colors(Builtin::SGray.profile()));
     // Scaling the red primary's XYZ by 2% makes a different space too.
     let mut moved = srgb().clone();
     let m = moved.matrix.as_mut().unwrap();
@@ -723,7 +988,11 @@ fn same_colors_tells_different_spaces_apart() {
 /// The sRGB IEC61966-2.1 profile Windows ships (the one Photoshop embeds), when present.
 #[test]
 fn windows_srgb_is_the_builtin_srgb() {
-    let Ok(bytes) = std::fs::read("C:/Windows/System32/spool/drivers/color/sRGB Color Space Profile.icm") else { return };
+    let Ok(bytes) =
+        std::fs::read("C:/Windows/System32/spool/drivers/color/sRGB Color Space Profile.icm")
+    else {
+        return;
+    };
     let p = Profile::parse(&bytes).unwrap();
     assert_ne!(p.content_hash(), srgb().content_hash());
     assert!(p.same_colors(srgb()));
@@ -771,13 +1040,27 @@ fn device_link(space: &[u8; 4], out_space: &[u8; 4], inputs: usize, outputs: usi
 /// which must not pass for a Lab-to-Lab one.
 #[test]
 fn device_links_parse_and_are_reported_unsupported() {
-    for (space, out_space, inputs, outputs) in [(b"CMYK", b"CMYK", 4, 4), (b"RGB ", b"CMYK", 3, 4), (b"Lab ", b"CMYK", 3, 4), (b"RGB ", b"RGB ", 3, 3)] {
+    for (space, out_space, inputs, outputs) in [
+        (b"CMYK", b"CMYK", 4, 4),
+        (b"RGB ", b"CMYK", 3, 4),
+        (b"Lab ", b"CMYK", 3, 4),
+        (b"RGB ", b"RGB ", 3, 3),
+    ] {
         let p = Profile::parse(&device_link(space, out_space, inputs, outputs)).unwrap();
         assert_eq!(p.color_space.channels(), inputs);
-        for err in [Transform::new(&p, srgb(), Intent::Perceptual, false).err(), Transform::new(srgb(), &p, Intent::Perceptual, false).err()] {
-            assert!(matches!(err, Some(rust_motion_cms::CmsError::Unsupported(_))), "{err:?}");
+        for err in [
+            Transform::new(&p, srgb(), Intent::Perceptual, false).err(),
+            Transform::new(srgb(), &p, Intent::Perceptual, false).err(),
+        ] {
+            assert!(
+                matches!(err, Some(rust_motion_cms::CmsError::Unsupported(_))),
+                "{err:?}"
+            );
         }
     }
     // The output space still bounds the tag: a CMYK→CMYK link with a 4→3 table is malformed.
-    assert!(matches!(Profile::parse(&device_link(b"CMYK", b"CMYK", 4, 3)), Err(rust_motion_cms::CmsError::Invalid(_))));
+    assert!(matches!(
+        Profile::parse(&device_link(b"CMYK", b"CMYK", 4, 3)),
+        Err(rust_motion_cms::CmsError::Invalid(_))
+    ));
 }

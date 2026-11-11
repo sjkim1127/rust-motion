@@ -21,7 +21,7 @@
 
 #![allow(clippy::needless_range_loop)] // index loops mirror the maths (pixels × channels)
 
-use crate::photo_util::{Normal, linear_to_srgb, par_rows, srgb_to_linear};
+use crate::photo_util::{linear_to_srgb, par_rows, srgb_to_linear, Normal};
 use crate::tone::HdrToning;
 
 fn luma(c: [f32; 4]) -> f32 {
@@ -37,7 +37,10 @@ fn hat(z: f64) -> f64 {
 /// consecutive images (sorted by brightness) are compared on pixels well exposed in both.
 pub fn estimate_exposures(imgs: &[&[[f32; 4]]]) -> Vec<f64> {
     let n = imgs.len();
-    let mean: Vec<f64> = imgs.iter().map(|im| im.iter().map(|p| luma(*p) as f64).sum::<f64>() / im.len().max(1) as f64).collect();
+    let mean: Vec<f64> = imgs
+        .iter()
+        .map(|im| im.iter().map(|p| luma(*p) as f64).sum::<f64>() / im.len().max(1) as f64)
+        .collect();
     let mut order: Vec<usize> = (0..n).collect();
     order.sort_by(|&a, &b| mean[a].total_cmp(&mean[b]));
     let mut ex = vec![1.0f64; n];
@@ -49,11 +52,16 @@ pub fn estimate_exposures(imgs: &[&[[f32; 4]]]) -> Vec<f64> {
             .step_by(7)
             .filter_map(|(pa, pb)| {
                 let (la, lb) = (luma(*pa), luma(*pb));
-                ((0.08..0.92).contains(&la) && (0.08..0.92).contains(&lb)).then(|| srgb_to_linear(lb) as f64 / srgb_to_linear(la).max(1e-6) as f64)
+                ((0.08..0.92).contains(&la) && (0.08..0.92).contains(&lb))
+                    .then(|| srgb_to_linear(lb) as f64 / srgb_to_linear(la).max(1e-6) as f64)
             })
             .collect();
         ratios.sort_by(f64::total_cmp);
-        let r = if ratios.is_empty() { 2.0 } else { ratios[ratios.len() / 2].max(1.0) };
+        let r = if ratios.is_empty() {
+            2.0
+        } else {
+            ratios[ratios.len() / 2].max(1.0)
+        };
         ex[b] = ex[a] * r;
     }
     ex
@@ -67,7 +75,11 @@ fn shrink(w: usize, h: usize, g: &[f32]) -> (usize, usize, Vec<f32>) {
     for y in 0..nh {
         for x in 0..nw {
             let p = |xx: usize, yy: usize| g[yy.min(h - 1) * w + xx.min(w - 1)];
-            out[y * nw + x] = 0.25 * (p(2 * x, 2 * y) + p(2 * x + 1, 2 * y) + p(2 * x, 2 * y + 1) + p(2 * x + 1, 2 * y + 1));
+            out[y * nw + x] = 0.25
+                * (p(2 * x, 2 * y)
+                    + p(2 * x + 1, 2 * y)
+                    + p(2 * x, 2 * y + 1)
+                    + p(2 * x + 1, 2 * y + 1));
         }
     }
     (nw, nh, out)
@@ -77,7 +89,10 @@ fn bitmaps(g: &[f32]) -> (Vec<bool>, Vec<bool>) {
     let mut s: Vec<f32> = g.to_vec();
     s.sort_by(f32::total_cmp);
     let med = s[s.len() / 2];
-    (g.iter().map(|v| *v > med).collect(), g.iter().map(|v| (v - med).abs() > 4.0 / 255.0).collect())
+    (
+        g.iter().map(|v| *v > med).collect(),
+        g.iter().map(|v| (v - med).abs() > 4.0 / 255.0).collect(),
+    )
 }
 
 /// Translation `(dx, dy)` that aligns grey image `img` to `reference` (Ward's MTB), searching
@@ -109,7 +124,10 @@ pub fn mtb_offset(w: usize, h: usize, reference: &[f32], img: &[f32], levels: us
                     if sx < 0 || sx >= w as i32 {
                         continue;
                     }
-                    let (a, b) = ((y as usize) * w + x as usize, (sy as usize) * w + sx as usize);
+                    let (a, b) = (
+                        (y as usize) * w + x as usize,
+                        (sy as usize) * w + sx as usize,
+                    );
                     if (tr[a] != ti[b]) && er[a] && ei[b] {
                         err += 1;
                     }
@@ -135,7 +153,9 @@ pub fn sample_pixels(w: usize, h: usize, middle: &[[f32; 4]], count: usize) -> V
         for x in (2..w.saturating_sub(2)).step_by(step) {
             let i = y * w + x;
             let l = luma(middle[i]);
-            let flat = [i - 2, i + 2, i - 2 * w, i + 2 * w].iter().all(|&j| (luma(middle[j]) - l).abs() < 0.04);
+            let flat = [i - 2, i + 2, i - 2 * w, i + 2 * w]
+                .iter()
+                .all(|&j| (luma(middle[j]) - l).abs() < 0.04);
             if flat {
                 by_bin[((l * 31.99) as usize).min(31)].push(i);
             }
@@ -180,7 +200,12 @@ pub fn response_curve(z: &[Vec<u8>], log_dt: &[f64], lambda: f64) -> Vec<f64> {
     }
     let Some(x) = ne.solve() else {
         // Fall back to the sRGB curve.
-        return (0..256).map(|k| (srgb_to_linear(k as f32 / 255.0).max(1e-5) as f64).ln() - (srgb_to_linear(128.0 / 255.0) as f64).ln()).collect();
+        return (0..256)
+            .map(|k| {
+                (srgb_to_linear(k as f32 / 255.0).max(1e-5) as f64).ln()
+                    - (srgb_to_linear(128.0 / 255.0) as f64).ln()
+            })
+            .collect();
     };
     let mut g: Vec<f64> = x[..256].to_vec();
     // Enforce monotonicity (noise at the extremes can fold the curve).
@@ -230,15 +255,31 @@ pub struct Merged {
 pub fn merge(w: usize, h: usize, imgs: &[&[[f32; 4]]], opts: &MergeOptions) -> Merged {
     let p = imgs.len();
     let log_dt: Vec<f64> = opts.exposures.iter().map(|e| e.max(1e-12).ln()).collect();
-    let well = |im: &[[f32; 4]]| im.iter().step_by(3).filter(|q| (0.1..0.9).contains(&luma(**q))).count();
-    let base = opts.ghost_base.filter(|b| *b < p).unwrap_or_else(|| (0..p).max_by_key(|&j| well(imgs[j])).unwrap_or(0));
+    let well = |im: &[[f32; 4]]| {
+        im.iter()
+            .step_by(3)
+            .filter(|q| (0.1..0.9).contains(&luma(**q)))
+            .count()
+    };
+    let base = opts
+        .ghost_base
+        .filter(|b| *b < p)
+        .unwrap_or_else(|| (0..p).max_by_key(|&j| well(imgs[j])).unwrap_or(0));
     let response = opts.response.clone().unwrap_or_else(|| {
         let mut order: Vec<usize> = (0..p).collect();
         order.sort_by(|&a, &b| opts.exposures[a].total_cmp(&opts.exposures[b]));
         let mid = order[p / 2];
         let samples = sample_pixels(w, h, imgs[mid], 160);
         std::array::from_fn(|c| {
-            let z: Vec<Vec<u8>> = imgs.iter().map(|im| samples.iter().map(|&i| (im[i][c].clamp(0.0, 1.0) * 255.0).round() as u8).collect()).collect();
+            let z: Vec<Vec<u8>> = imgs
+                .iter()
+                .map(|im| {
+                    samples
+                        .iter()
+                        .map(|&i| (im[i][c].clamp(0.0, 1.0) * 255.0).round() as u8)
+                        .collect()
+                })
+                .collect();
             response_curve(&z, &log_dt, 40.0)
         })
     });
@@ -262,7 +303,15 @@ pub fn merge(w: usize, h: usize, imgs: &[&[[f32; 4]]], opts: &MergeOptions) -> M
                 } else {
                     // Saturated everywhere: darkest exposure if bright, brightest if dark.
                     let bright = imgs.iter().map(|im| im[i][c]).sum::<f32>() / p as f32 > 0.5;
-                    let j = (0..p).min_by(|&a, &b| if bright { log_dt[a].total_cmp(&log_dt[b]) } else { log_dt[b].total_cmp(&log_dt[a]) }).unwrap_or(0);
+                    let j = (0..p)
+                        .min_by(|&a, &b| {
+                            if bright {
+                                log_dt[a].total_cmp(&log_dt[b])
+                            } else {
+                                log_dt[b].total_cmp(&log_dt[a])
+                            }
+                        })
+                        .unwrap_or(0);
                     g_at(&resp[c], imgs[j][i][c]) - log_dt[j]
                 };
                 out[c] = le.exp() as f32;
@@ -285,7 +334,9 @@ pub fn merge(w: usize, h: usize, imgs: &[&[[f32; 4]]], opts: &MergeOptions) -> M
                 if wt < 20.0 {
                     continue;
                 }
-                let lr = (0..3).map(|c| 0.33 * (g_at(&response[c], q[c]) - log_dt[j])).sum::<f64>();
+                let lr = (0..3)
+                    .map(|c| 0.33 * (g_at(&response[c], q[c]) - log_dt[j]))
+                    .sum::<f64>();
                 s += wt * lr;
                 s2 += wt * lr * lr;
                 sw += wt;
@@ -324,7 +375,8 @@ pub fn merge(w: usize, h: usize, imgs: &[&[[f32; 4]]], opts: &MergeOptions) -> M
             .step_by(37)
             .filter_map(|i| {
                 let v = imgs[base][i][c];
-                ((0.15..0.85).contains(&v) && px[i][c] > 0.0).then(|| srgb_to_linear(v) as f64 / (px[i][c] as f64 * opts.exposures[base]))
+                ((0.15..0.85).contains(&v) && px[i][c] > 0.0)
+                    .then(|| srgb_to_linear(v) as f64 / (px[i][c] as f64 * opts.exposures[base]))
             })
             .collect();
         r.sort_by(f64::total_cmp);
@@ -333,10 +385,25 @@ pub fn merge(w: usize, h: usize, imgs: &[&[[f32; 4]]], opts: &MergeOptions) -> M
             q[c] = (q[c] as f64 * k) as f32;
         }
     }
-    let mut l: Vec<f32> = px.iter().step_by(13).filter(|q| q[3] > 0.0).map(|q| luma(*q).max(1e-9)).collect();
+    let mut l: Vec<f32> = px
+        .iter()
+        .step_by(13)
+        .filter(|q| q[3] > 0.0)
+        .map(|q| luma(*q).max(1e-9))
+        .collect();
     l.sort_by(f32::total_cmp);
-    let stops = if l.is_empty() { 0.0 } else { (l[(l.len() as f64 * 0.999) as usize % l.len()] as f64 / l[l.len() / 100] as f64).log2() };
-    Merged { px, response, ghost_base: base, ghost_fraction, stops }
+    let stops = if l.is_empty() {
+        0.0
+    } else {
+        (l[(l.len() as f64 * 0.999) as usize % l.len()] as f64 / l[l.len() / 100] as f64).log2()
+    };
+    Merged {
+        px,
+        response,
+        ghost_base: base,
+        ghost_fraction,
+        stops,
+    }
 }
 
 // ---------- tone mapping ----------
@@ -353,7 +420,13 @@ pub enum ToneMethod {
 /// Tone maps linear radiance to display-encoded (sRGB curve) values in `0..=1`.
 pub fn tone_map(px: &mut [[f32; 4]], w: usize, h: usize, method: &ToneMethod) {
     let n = px.iter().filter(|q| q[3] > 0.0).count().max(1);
-    let log_mean = (px.iter().filter(|q| q[3] > 0.0).map(|q| (luma(*q).max(1e-6) as f64).ln()).sum::<f64>() / n as f64).exp() as f32;
+    let log_mean = (px
+        .iter()
+        .filter(|q| q[3] > 0.0)
+        .map(|q| (luma(*q).max(1e-6) as f64).ln())
+        .sum::<f64>()
+        / n as f64)
+        .exp() as f32;
     match method {
         ToneMethod::LocalAdaptation(p) => {
             // Key the scene to middle grey, compress in log luminance, then encode.
@@ -393,7 +466,13 @@ pub fn tone_map(px: &mut [[f32; 4]], w: usize, h: usize, method: &ToneMethod) {
         ToneMethod::EqualizeHistogram => {
             const BINS: usize = 1024;
             let lv: Vec<f32> = px.iter().map(|q| luma(*q).max(1e-7).ln()).collect();
-            let (lo, hi) = lv.iter().zip(px.iter()).filter(|(_, q)| q[3] > 0.0).fold((f32::MAX, f32::MIN), |(a, b), (v, _)| (a.min(*v), b.max(*v)));
+            let (lo, hi) = lv
+                .iter()
+                .zip(px.iter())
+                .filter(|(_, q)| q[3] > 0.0)
+                .fold((f32::MAX, f32::MIN), |(a, b), (v, _)| {
+                    (a.min(*v), b.max(*v))
+                });
             let span = (hi - lo).max(1e-6);
             let mut hist = vec![0f64; BINS];
             for (v, q) in lv.iter().zip(px.iter()) {
@@ -443,7 +522,10 @@ mod tests {
     }
 
     fn shoot(sc: &[[f32; 3]], dt: f32) -> Vec<[f32; 4]> {
-        sc.iter().map(|r| [camera(r[0] * dt), camera(r[1] * dt), camera(r[2] * dt), 1.0]).map(|p| p.map(|v| (v * 255.0).round() / 255.0)).collect()
+        sc.iter()
+            .map(|r| [camera(r[0] * dt), camera(r[1] * dt), camera(r[2] * dt), 1.0])
+            .map(|p| p.map(|v| (v * 255.0).round() / 255.0))
+            .collect()
     }
 
     #[test]
@@ -459,8 +541,17 @@ mod tests {
             let r = est[k] / est[k - 1];
             assert!((2.0..8.0).contains(&r), "ratio {r} ({est:?})");
         }
-        let m =
-            merge(w, h, &refs, &MergeOptions { exposures: dts.iter().map(|d| *d as f64).collect(), remove_ghosts: false, ghost_base: None, response: None });
+        let m = merge(
+            w,
+            h,
+            &refs,
+            &MergeOptions {
+                exposures: dts.iter().map(|d| *d as f64).collect(),
+                remove_ghosts: false,
+                ghost_base: None,
+                response: None,
+            },
+        );
         // Radiance proportional to the scene: check log-ratios across the 12-stop ramp.
         let probe = |x: usize| m.px[(h / 2) * w + x][1] as f64 / sc[(h / 2) * w + x][1] as f64;
         let k0 = probe(w / 2);
@@ -478,7 +569,8 @@ mod tests {
     fn ghosts_come_from_the_base_exposure() {
         let (w, h) = (64usize, 64usize);
         let sc: Vec<[f32; 3]> = vec![[0.2, 0.2, 0.2]; w * h];
-        let mut shots: Vec<Vec<[f32; 4]>> = [0.5f32, 1.0, 2.0].iter().map(|d| shoot(&sc, *d)).collect();
+        let mut shots: Vec<Vec<[f32; 4]>> =
+            [0.5f32, 1.0, 2.0].iter().map(|d| shoot(&sc, *d)).collect();
         // A "person" only in the third exposure.
         for y in 20..40 {
             for x in 20..40 {
@@ -486,12 +578,22 @@ mod tests {
             }
         }
         let refs: Vec<&[[f32; 4]]> = shots.iter().map(Vec::as_slice).collect();
-        let opts = |g| MergeOptions { exposures: vec![0.5, 1.0, 2.0], remove_ghosts: g, ghost_base: Some(1), response: None };
+        let opts = |g| MergeOptions {
+            exposures: vec![0.5, 1.0, 2.0],
+            remove_ghosts: g,
+            ghost_base: Some(1),
+            response: None,
+        };
         let plain = merge(w, h, &refs, &opts(false));
         let clean = merge(w, h, &refs, &opts(true));
         let at = |m: &Merged, x: usize, y: usize| m.px[y * w + x][1];
         let bg = at(&clean, 5, 5);
-        assert!((at(&clean, 30, 30) / bg - 1.0).abs() < 0.15, "ghost kept: {} vs {}", at(&clean, 30, 30), bg);
+        assert!(
+            (at(&clean, 30, 30) / bg - 1.0).abs() < 0.15,
+            "ghost kept: {} vs {}",
+            at(&clean, 30, 30),
+            bg
+        );
         assert!((at(&plain, 30, 30) / at(&plain, 5, 5) - 1.0).abs() > 0.2);
         assert!(clean.ghost_fraction > 0.05 && clean.ghost_base == 1);
     }
@@ -510,7 +612,8 @@ mod tests {
             .map(|i| {
                 let (x, y) = ((i % w) as i32 - dx, (i / w) as i32 - dy);
                 // Darker exposure of the same scene, shifted.
-                img[(y.clamp(0, h as i32 - 1) as usize) * w + x.clamp(0, w as i32 - 1) as usize] * 0.6
+                img[(y.clamp(0, h as i32 - 1) as usize) * w + x.clamp(0, w as i32 - 1) as usize]
+                    * 0.6
             })
             .collect();
         let (ox, oy) = mtb_offset(w, h, &shifted, &img, 4);
@@ -522,19 +625,33 @@ mod tests {
         let (w, h) = (96usize, 32usize);
         let sc = scene(w, h);
         for method in [
-            ToneMethod::LocalAdaptation(HdrToning { radius: 7.0, strength: 0.52, ..Default::default() }),
-            ToneMethod::ExposureGamma { exposure: 0.0, gamma: 1.0 },
+            ToneMethod::LocalAdaptation(HdrToning {
+                radius: 7.0,
+                strength: 0.52,
+                ..Default::default()
+            }),
+            ToneMethod::ExposureGamma {
+                exposure: 0.0,
+                gamma: 1.0,
+            },
             ToneMethod::HighlightCompression,
             ToneMethod::EqualizeHistogram,
         ] {
             let mut px: Vec<[f32; 4]> = sc.iter().map(|r| [r[0], r[1], r[2], 1.0]).collect();
             tone_map(&mut px, w, h, &method);
-            assert!(px.iter().all(|q| q[..3].iter().all(|v| (0.0..=1.0).contains(v))));
+            assert!(px
+                .iter()
+                .all(|q| q[..3].iter().all(|v| (0.0..=1.0).contains(v))));
             let row = |x: usize| px[(h / 2) * w + x][1];
             assert!(row(w - 2) > row(2), "{method:?}: not increasing");
             if !matches!(method, ToneMethod::ExposureGamma { .. }) {
                 // Compression keeps both ends of a 12-stop ramp visible.
-                assert!(row(4) > 0.01 && row(w - 4) < 0.999, "{method:?}: {} {}", row(4), row(w - 4));
+                assert!(
+                    row(4) > 0.01 && row(w - 4) < 0.999,
+                    "{method:?}: {} {}",
+                    row(4),
+                    row(w - 4)
+                );
             }
         }
     }

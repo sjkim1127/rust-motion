@@ -1,4 +1,4 @@
-use rust_motion_algo::transform::{Homography, Interp, warp_surface, warp_surface_clipped};
+use rust_motion_algo::transform::{warp_surface, warp_surface_clipped, Homography, Interp};
 use rust_motion_color::{ColorMode, PixelFormat, SampleType};
 use rust_motion_geom::Rect;
 use rust_motion_raster::Surface;
@@ -11,9 +11,15 @@ fn clipped_warp_matches_the_existing_kernel_at_every_depth() {
         source.fill_rect(Rect::new(20, 24, 32, 36), &[0.1, 0.7, 0.3, 0.4]);
         let clip = Rect::new(10, 10, 52, 52);
         for interpolation in [Interp::Nearest, Interp::Bilinear, Interp::Bicubic] {
-            for h in [Homography([1.2, -0.3, 7.0, 0.3, 1.2, -5.0, 0.0, 0.0, 1.0]), Homography([0.125, 0.0, 24.0, 0.0, 0.125, 30.0, 0.0, 0.0, 1.0])] {
-                let full = warp_surface(&source, source.content_bounds(), &h, interpolation).unwrap();
-                let bounded = warp_surface_clipped(&source, source.content_bounds(), &h, interpolation, clip).unwrap();
+            for h in [
+                Homography([1.2, -0.3, 7.0, 0.3, 1.2, -5.0, 0.0, 0.0, 1.0]),
+                Homography([0.125, 0.0, 24.0, 0.0, 0.125, 30.0, 0.0, 0.0, 1.0]),
+            ] {
+                let full =
+                    warp_surface(&source, source.content_bounds(), &h, interpolation).unwrap();
+                let bounded =
+                    warp_surface_clipped(&source, source.content_bounds(), &h, interpolation, clip)
+                        .unwrap();
                 assert_eq!(full.read_region(clip), bounded.read_region(clip));
                 assert!(clip.contains_rect(&bounded.content_bounds()));
                 assert!(bounded.tiles().count() <= clip.tiles().count());
@@ -27,12 +33,25 @@ fn huge_scaled_warp_allocates_only_the_destination_clip() {
     let mut source = Surface::new(PixelFormat::RGBA8);
     source.fill_rect(Rect::new(8, 8, 12, 12), &[0.2, 0.7, 0.4, 1.0]);
     let clip = Rect::new(0, 0, 64, 64);
-    let h = Homography([10_000.0, 0.0, -99_968.0, 0.0, 10_000.0, -99_968.0, 0.0, 0.0, 1.0]);
-    let output = warp_surface_clipped(&source, source.content_bounds(), &h, Interp::Bicubic, clip).unwrap();
+    let h = Homography([
+        10_000.0, 0.0, -99_968.0, 0.0, 10_000.0, -99_968.0, 0.0, 0.0, 1.0,
+    ]);
+    let output =
+        warp_surface_clipped(&source, source.content_bounds(), &h, Interp::Bicubic, clip).unwrap();
     assert!(clip.contains_rect(&output.content_bounds()));
     assert!(output.tiles().count() <= clip.tiles().count());
     assert_eq!(output.pixel(32, 32), source.pixel(10, 10));
-    assert!(warp_surface_clipped(&source, source.content_bounds(), &h, Interp::Bicubic, Rect::EMPTY).unwrap().tiles().next().is_none());
+    assert!(warp_surface_clipped(
+        &source,
+        source.content_bounds(),
+        &h,
+        Interp::Bicubic,
+        Rect::EMPTY
+    )
+    .unwrap()
+    .tiles()
+    .next()
+    .is_none());
 }
 
 #[test]
@@ -42,7 +61,8 @@ fn inverse_footprint_handles_extreme_finite_affines() {
     // A strongly skewed inverse maps a small visible tile beyond i32 limits.
     let h = Homography([1.0, 1e12, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
     let clip = Rect::new(0, 0, 32, 32);
-    let output = warp_surface_clipped(&source, source.content_bounds(), &h, Interp::Nearest, clip).unwrap();
+    let output =
+        warp_surface_clipped(&source, source.content_bounds(), &h, Interp::Nearest, clip).unwrap();
     assert!(clip.contains_rect(&output.content_bounds()));
     assert!(output.tiles().count() <= clip.tiles().count());
 }
@@ -53,7 +73,18 @@ fn source_center_does_not_add_extreme_coordinates_in_i32() {
     let origin = 1_500_000_000;
     let bounds = Rect::new(origin, origin, origin + 4, origin + 4);
     source.fill_rect(bounds, &[0.2, 0.7, 0.4, 1.0]);
-    let h = Homography([1.0, 0.0, -f64::from(origin), 0.0, 1.0, -f64::from(origin), 0.0, 0.0, 1.0]);
-    let output = warp_surface_clipped(&source, bounds, &h, Interp::Nearest, Rect::new(0, 0, 8, 8)).unwrap();
+    let h = Homography([
+        1.0,
+        0.0,
+        -f64::from(origin),
+        0.0,
+        1.0,
+        -f64::from(origin),
+        0.0,
+        0.0,
+        1.0,
+    ]);
+    let output =
+        warp_surface_clipped(&source, bounds, &h, Interp::Nearest, Rect::new(0, 0, 8, 8)).unwrap();
     assert_eq!(output.pixel(2, 2), source.pixel(origin + 2, origin + 2));
 }

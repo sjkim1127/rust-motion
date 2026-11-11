@@ -75,14 +75,17 @@ impl TimeRemapCurve {
     /// Adds a keyframe point to the time remapping curve.
     pub fn add_point(&mut self, time_out: f64, time_src: f64) -> &mut Self {
         self.points.push(TimeRemapPoint::new(time_out, time_src));
-        self.points.sort_by(|a, b| a.time_out.partial_cmp(&b.time_out).unwrap());
+        self.points
+            .sort_by(|a, b| a.time_out.partial_cmp(&b.time_out).unwrap());
         self
     }
 
     /// Adds a keyframe point with explicit playback speed tangent $(1.0 = 100\%)$.
     pub fn add_point_with_speed(&mut self, time_out: f64, time_src: f64, speed: f64) -> &mut Self {
-        self.points.push(TimeRemapPoint::with_speed(time_out, time_src, speed));
-        self.points.sort_by(|a, b| a.time_out.partial_cmp(&b.time_out).unwrap());
+        self.points
+            .push(TimeRemapPoint::with_speed(time_out, time_src, speed));
+        self.points
+            .sort_by(|a, b| a.time_out.partial_cmp(&b.time_out).unwrap());
         self
     }
 
@@ -103,7 +106,10 @@ impl TimeRemapCurve {
         }
 
         // Find surrounding interval
-        let idx = match self.points.binary_search_by(|p| p.time_out.partial_cmp(&time_out).unwrap()) {
+        let idx = match self
+            .points
+            .binary_search_by(|p| p.time_out.partial_cmp(&time_out).unwrap())
+        {
             Ok(exact) => return self.points[exact].time_src,
             Err(i) => i - 1,
         };
@@ -206,19 +212,30 @@ impl OpticalFlowEngine {
                             // Compute Sum of Absolute Differences (SAD) across block pixels
                             let mut sad = 0u64;
                             for by in 0..b {
-                                let py = (cy - (b as i32) / 2 + by as i32).clamp(0, height as i32 - 1) as usize;
-                                let qy = (ny - (b as i32) / 2 + by as i32).clamp(0, height as i32 - 1) as usize;
+                                let py = (cy - (b as i32) / 2 + by as i32)
+                                    .clamp(0, height as i32 - 1)
+                                    as usize;
+                                let qy = (ny - (b as i32) / 2 + by as i32)
+                                    .clamp(0, height as i32 - 1)
+                                    as usize;
 
                                 for bx in 0..b {
-                                    let px = (cx - (b as i32) / 2 + bx as i32).clamp(0, width as i32 - 1) as usize;
-                                    let qx = (nx - (b as i32) / 2 + bx as i32).clamp(0, width as i32 - 1) as usize;
+                                    let px = (cx - (b as i32) / 2 + bx as i32)
+                                        .clamp(0, width as i32 - 1)
+                                        as usize;
+                                    let qx = (nx - (b as i32) / 2 + bx as i32)
+                                        .clamp(0, width as i32 - 1)
+                                        as usize;
 
                                     let idx_p = (py * width + px) * 4;
                                     let idx_n = (qy * width + qx) * 4;
 
-                                    sad += (p_data[idx_p] as i64 - n_data[idx_n] as i64).unsigned_abs();
-                                    sad += (p_data[idx_p + 1] as i64 - n_data[idx_n + 1] as i64).unsigned_abs();
-                                    sad += (p_data[idx_p + 2] as i64 - n_data[idx_n + 2] as i64).unsigned_abs();
+                                    sad += (p_data[idx_p] as i64 - n_data[idx_n] as i64)
+                                        .unsigned_abs();
+                                    sad += (p_data[idx_p + 1] as i64 - n_data[idx_n + 1] as i64)
+                                        .unsigned_abs();
+                                    sad += (p_data[idx_p + 2] as i64 - n_data[idx_n + 2] as i64)
+                                        .unsigned_abs();
                                 }
                             }
 
@@ -362,7 +379,8 @@ impl OpticalFlowEngine {
                     .for_each(|(i, pixel)| {
                         let idx = i * 4;
                         for c in 0..4 {
-                            let v = p_data[idx + c] as f32 * w_prev + n_data[idx + c] as f32 * w_next;
+                            let v =
+                                p_data[idx + c] as f32 * w_prev + n_data[idx + c] as f32 * w_next;
                             pixel[c] = v.round().clamp(0.0, 255.0) as u8;
                         }
                     });
@@ -386,8 +404,14 @@ mod tests {
         curve.add_point(3.0, 3.0); // 200% fast motion between 2.0s and 3.0s
 
         assert!((curve.eval(0.5) - 0.5).abs() < 1e-3);
-        assert!((curve.eval(1.5) - 1.0).abs() < 1e-3, "should freeze at 1.0s");
-        assert!((curve.eval(2.5) - 2.0).abs() < 1e-3, "should interpolate to 2.0s");
+        assert!(
+            (curve.eval(1.5) - 1.0).abs() < 1e-3,
+            "should freeze at 1.0s"
+        );
+        assert!(
+            (curve.eval(2.5) - 2.0).abs() < 1e-3,
+            "should interpolate to 2.0s"
+        );
 
         let (f0, f1, alpha) = curve.subframe_at(0.25, 30.0);
         assert_eq!(f0, 7);
@@ -402,7 +426,10 @@ mod tests {
         curve.add_point_with_speed(2.0, 0.5, 0.25); // ramp down to 25% slow-mo
 
         let speed_mid = curve.speed_at(1.0);
-        assert!(speed_mid < 1.0 && speed_mid > 0.0, "should decelerate into slow motion");
+        assert!(
+            speed_mid < 1.0 && speed_mid > 0.0,
+            "should decelerate into slow motion"
+        );
     }
 
     #[test]
@@ -432,7 +459,10 @@ mod tests {
 
         // At alpha = 0.5, the square should be centered around x = 20..28
         let center_px = interpolated.pixel(20, 32).unwrap();
-        assert!(center_px.alpha() > 100, "in-between frame should synthesize center square");
+        assert!(
+            center_px.alpha() > 100,
+            "in-between frame should synthesize center square"
+        );
     }
 
     #[test]

@@ -1,39 +1,4 @@
-//! `<Rect>` shape component.
-
-#[cfg(feature = "dioxus")]
-use crate::render_svg::RenderSvg;
-#[cfg(feature = "dioxus")]
-use dioxus::prelude::*;
-
-/// Props for the `<Rect>` shape component.
-#[cfg(feature = "dioxus")]
-#[derive(Props, Clone, PartialEq)]
-pub struct RectProps {
-    /// Width of the rectangle in pixels.
-    #[props(default = 200.0)]
-    pub width: f64,
-    /// Height of the rectangle in pixels.
-    #[props(default = 100.0)]
-    pub height: f64,
-    /// Corner radius for rounded corners (CSS border-radius equivalent).
-    #[props(default = 0.0)]
-    pub corner_radius: f64,
-    /// Fill color.
-    #[props(default = "#ffffff".to_string())]
-    pub fill: String,
-    /// Stroke color.
-    #[props(default = "none".to_string())]
-    pub stroke: String,
-    /// Stroke width.
-    #[props(default = 0.0)]
-    pub stroke_width: f64,
-    /// Opacity.
-    #[props(default = 1.0)]
-    pub opacity: f64,
-    /// Custom CSS styles.
-    #[props(default)]
-    pub style: String,
-}
+//! Rect shape path generation and geometry.
 
 /// Generates SVG path string and dimensions for a rectangle.
 pub fn make_rect(width: f64, height: f64, corner_radius: f64) -> (String, f64, f64) {
@@ -55,26 +20,6 @@ pub fn make_rect(width: f64, height: f64, corner_radius: f64) -> (String, f64, f
     };
 
     (path, w, h)
-}
-
-/// Renders a procedural SVG Rectangle.
-#[cfg(feature = "dioxus")]
-#[component]
-pub fn Rect(props: RectProps) -> Element {
-    let (path, width, height) = make_rect(props.width, props.height, props.corner_radius);
-
-    rsx! {
-        RenderSvg {
-            path,
-            width,
-            height,
-            fill: props.fill,
-            stroke: props.stroke,
-            stroke_width: props.stroke_width,
-            opacity: props.opacity,
-            style: props.style,
-        }
-    }
 }
 
 #[cfg(test)]

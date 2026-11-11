@@ -116,11 +116,7 @@ pub fn evaluate_interpolate(req: &InterpolateRequest) -> f64 {
 }
 
 pub fn evaluate_spring(req: &SpringRequest) -> Result<f64, String> {
-    let config = req
-        .config
-        .clone()
-        .map(Into::into)
-        .unwrap_or_default();
+    let config = req.config.clone().map(Into::into).unwrap_or_default();
 
     let options = SpringOptions {
         from: req.from.unwrap_or(0.0),

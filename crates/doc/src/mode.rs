@@ -22,7 +22,9 @@ impl ColorTable {
     pub fn nearest(&self, c: [f32; 3]) -> usize {
         let mut best = (f32::MAX, 0);
         for (i, e) in self.colors.iter().enumerate() {
-            let d: f32 = (0..3).map(|k| (c[k] - f32::from(e[k]) / 255.0).powi(2)).sum();
+            let d: f32 = (0..3)
+                .map(|k| (c[k] - f32::from(e[k]) / 255.0).powi(2))
+                .sum();
             if d < best.0 {
                 best = (d, i);
             }
@@ -32,7 +34,9 @@ impl ColorTable {
 
     /// Entry `i` as RGB in 0..=1 (black past the end).
     pub fn rgb(&self, i: usize) -> [f32; 3] {
-        self.colors.get(i).map_or([0.0; 3], |e| e.map(|v| f32::from(v) / 255.0))
+        self.colors
+            .get(i)
+            .map_or([0.0; 3], |e| e.map(|v| f32::from(v) / 255.0))
     }
 }
 
@@ -48,7 +52,20 @@ pub struct DuotoneInk {
 
 impl DuotoneInk {
     pub fn new(name: impl Into<String>, color: [f32; 3]) -> Self {
-        DuotoneInk { name: name.into(), color, curve: vec![CurvePoint { input: 0.0, output: 0.0 }, CurvePoint { input: 1.0, output: 1.0 }] }
+        DuotoneInk {
+            name: name.into(),
+            color,
+            curve: vec![
+                CurvePoint {
+                    input: 0.0,
+                    output: 0.0,
+                },
+                CurvePoint {
+                    input: 1.0,
+                    output: 1.0,
+                },
+            ],
+        }
     }
 }
 
@@ -92,7 +109,11 @@ impl Duotone {
             let t = i as f32 / 32.0;
             (t, self.render(t))
         });
-        crate::Adjustment::GradientMap { stops: stops.collect(), reverse: false, dither: false }
+        crate::Adjustment::GradientMap {
+            stops: stops.collect(),
+            reverse: false,
+            dither: false,
+        }
     }
 }
 
@@ -191,7 +212,10 @@ mod tests {
 
     #[test]
     fn color_table_nearest() {
-        let t = ColorTable { colors: vec![[0, 0, 0], [255, 255, 255], [255, 0, 0]], transparent: None };
+        let t = ColorTable {
+            colors: vec![[0, 0, 0], [255, 255, 255], [255, 0, 0]],
+            transparent: None,
+        };
         assert_eq!(t.nearest([0.9, 0.1, 0.1]), 2);
         assert_eq!(t.nearest([0.6, 0.6, 0.6]), 1);
         assert_eq!(t.rgb(2), [1.0, 0.0, 0.0]);
@@ -199,12 +223,21 @@ mod tests {
 
     #[test]
     fn duotone_render_black_ink_is_gray() {
-        let d = Duotone { inks: vec![DuotoneInk::new("Black", [0.0; 3])], psd_raw: None };
+        let d = Duotone {
+            inks: vec![DuotoneInk::new("Black", [0.0; 3])],
+            psd_raw: None,
+        };
         for g in [0.0, 0.25, 1.0] {
             let c = d.render(g);
             assert!((c[0] - g).abs() < 1e-6 && c[0] == c[2]);
         }
-        let d = Duotone { inks: vec![DuotoneInk::new("Black", [0.0; 3]), DuotoneInk::new("Orange", [1.0, 0.5, 0.0])], psd_raw: None };
+        let d = Duotone {
+            inks: vec![
+                DuotoneInk::new("Black", [0.0; 3]),
+                DuotoneInk::new("Orange", [1.0, 0.5, 0.0]),
+            ],
+            psd_raw: None,
+        };
         let c = d.render(0.5);
         assert!(c[0] > c[2], "{c:?}");
     }
