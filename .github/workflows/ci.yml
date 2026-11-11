@@ -137,8 +137,8 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install ffmpeg -y
 
-      - name: Prepare Tauri frontend directory for macro checks
-        run: mkdir -p apps/studio-tauri/dist
+      - name: Prepare TypeScript build directory
+        run: mkdir -p crates/ts/dist
 
       - name: Cargo Check Workspace
         run: cargo check --locked --workspace --all-targets --all-features
@@ -161,114 +161,21 @@ jobs:
       - name: Test GPU scene compilation without device initialization
         run: 'cargo test --locked -p rust-motion-rasterizer --features gpu support_tests::'
 
-  # ── 3. Tauri app bundle and bundled browser worker ────────────────────────
-  tauri_app_bundle:
-    name: Tauri macOS app bundle
-    runs-on: macos-latest
-    needs: [fmt_clippy]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install JavaScript dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-        working-directory: apps/studio-tauri
-
-      - name: Build Tauri app bundle
-        run: npm run tauri -- build --debug --bundles app
-        working-directory: apps/studio-tauri
-
-      - name: Verify bundled browser worker
-        run: test -f "target/debug/bundle/macos/Rust Motion Studio.app/Contents/Resources/_up_/scripts/three-render-worker.mjs"
-
-  tauri_linux_bundle:
-    name: Tauri Linux bundle
+  # ── 3. TypeScript SDK and Remotion Bridge tests ───────────────────────────
+  typescript_sdk:
+    name: TypeScript SDK & Remotion Bridge
     runs-on: ubuntu-latest
     needs: [fmt_clippy]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install Linux desktop and bundling dependencies
+      - name: Run TypeScript Tests
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            rpm
-
-      - name: Install JavaScript dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-        working-directory: apps/studio-tauri
-
-      - name: Build Tauri Debian bundle
-        run: npm run tauri -- build --debug --bundles deb
-        working-directory: apps/studio-tauri
-
-      - name: Verify Linux bundle and browser worker
-        run: |
-          deb=$(find target/debug/bundle/deb -name '*.deb' -type f -print -quit)
-          test -n "$deb"
-          dpkg-deb -c "$deb" | grep -q 'three-render-worker.mjs'
-
-  browser_three_smoke:
-    name: Chromium Three.js worker smoke
-    runs-on: ubuntu-latest
-    needs: [fmt_clippy]
-    timeout-minutes: 10
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install browser and ffmpeg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          if ! command -v google-chrome >/dev/null 2>&1; then
-            wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-            sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get -fy install
-          fi
-
-      - name: Install JavaScript dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-        working-directory: apps/studio-tauri
-
-      - name: Start Vite preview server
-        run: |
-          npm run dev -- --port 1421 > /tmp/rust-motion-vite.log 2>&1 &
-          for attempt in $(seq 1 30); do
-            curl --fail --silent http://127.0.0.1:1421/ > /dev/null && exit 0
-            sleep 1
-          done
-          cat /tmp/rust-motion-vite.log
-          exit 1
-        working-directory: apps/studio-tauri
-
-      - name: Exercise Three.js lifecycle through worker
-        env:
-          RUST_MOTION_BROWSER_URL: http://127.0.0.1:1421
-          CHROME_PATH: /usr/bin/google-chrome
-        run: node benchmarks/browser/three-lifecycle-smoke.mjs
-
-      - name: Exercise WebCodecs contract
-        env:
-          RUST_MOTION_BROWSER_URL: http://127.0.0.1:1421
-          CHROME_PATH: /usr/bin/google-chrome
-        run: node benchmarks/browser/webcodecs-contract-smoke.mjs
+          node --test crates/ts/tests/*.test.mjs
 

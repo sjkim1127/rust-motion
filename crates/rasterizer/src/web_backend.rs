@@ -187,11 +187,11 @@ impl BrowserWorker {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
 
-        // Ensure node can resolve modules from workspace or apps/studio-tauri
+        // Ensure node can resolve modules from workspace or packages
         if let Ok(current_dir) = std::env::current_dir() {
             let candidates = [
                 current_dir.join("node_modules"),
-                current_dir.join("apps/studio-tauri/node_modules"),
+                current_dir.join("crates/ts/node_modules"),
                 current_dir.join("apps/studio-web/node_modules"),
             ];
             let existing = std::env::var("NODE_PATH").unwrap_or_default();

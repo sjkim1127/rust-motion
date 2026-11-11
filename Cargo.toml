@@ -41,10 +41,16 @@ members = [
     "crates/lensdb",
     "crates/inpaint",
     "crates/mcp",
+    "crates/ts",
     "apps/studio",
     "apps/example",
 ]
 
+
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+needless_range_loop = "allow"
+type_complexity = "allow"
 
 [workspace.package]
 version      = "1.0.0"
@@ -153,6 +159,7 @@ rust-motion-plugins     = { version = "1.0.0", path = "crates/plugins" }
 rust-motion-lensdb      = { version = "1.0.0", path = "crates/lensdb" }
 rust-motion-inpaint     = { version = "1.0.0", path = "crates/inpaint" }
 rust-motion-mcp         = { version = "1.0.0", path = "crates/mcp" }
+rust-motion-ts          = { version = "1.0.0", path = "crates/ts" }
 
 [profile.release]
 opt-level  = 3

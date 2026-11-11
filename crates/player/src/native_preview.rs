@@ -671,6 +671,7 @@ fn SceneNodeView(props: SceneNodeViewProps) -> Element {
                 }
             }
         }
+        _ => rsx! {},
     }
 }
 
@@ -807,6 +808,7 @@ fn blend_mode_css(mode: BlendMode) -> &'static str {
         BlendMode::SoftLight => "soft-light",
         BlendMode::Difference => "difference",
         BlendMode::Exclusion => "exclusion",
+        _ => "normal",
     }
 }
 
@@ -849,6 +851,7 @@ fn layer_filter_css(filters: &[SceneFilter], shadow: Option<&SceneShadow>) -> St
                 format!("drop-shadow(0 0 {blur_px:.1}px rgba(255,255,255,{intensity:.2}))")
             }
             SceneFilter::DisplacementMap { .. } | SceneFilter::FractalNoise { .. } => String::new(),
+            _ => String::new(),
         })
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>();

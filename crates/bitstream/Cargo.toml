@@ -6,3 +6,6 @@ description = "Bit-level reading and writing for video codecs (Exp-Golomb, RBSP,
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+
+[dev-dependencies]
+proptest = { workspace = true }

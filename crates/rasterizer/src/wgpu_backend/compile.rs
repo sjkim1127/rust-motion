@@ -212,6 +212,7 @@ pub(crate) fn compile_nodes(
                 h,
                 fit,
                 opacity: node_opacity,
+                ..
             } => {
                 if ![*x, *y, *w, *h, *node_opacity]
                     .iter()
@@ -737,6 +738,7 @@ pub(crate) fn compile_nodes(
 
             SceneNode::Audio { .. } => {}
             SceneNode::Layer { .. } | SceneNode::Shader { .. } => return None,
+            _ => return None,
         }
     }
     Some(())
@@ -1042,6 +1044,7 @@ pub(crate) fn gpu_blend_children_supported(nodes: &[SceneNode]) -> bool {
         | SceneNode::Audio { .. }
         | SceneNode::AudioVisualizer { .. }
         | SceneNode::Shader { .. } => false,
+        _ => false,
     })
 }
 
@@ -1506,7 +1509,7 @@ fn gpu_mask_shapes(
             crate::scene::MaskMode::Luminance if fill.r == fill.g && fill.g == fill.b => {
                 f32::from(fill.r) * f32::from(fill.a) / (255.0 * 255.0)
             }
-            crate::scene::MaskMode::Luminance => return None,
+            _ => return None,
         };
         // Translation and axis-aligned scale remain exact rectangular clips in
         // screen space. Rotation/shear falls back: a bounding box would overdraw.
@@ -1723,6 +1726,7 @@ fn gpu_path_mask_from_node(
 fn path_mask_color(color: Color, mask_mode: crate::scene::MaskMode) -> Color {
     match mask_mode {
         crate::scene::MaskMode::Alpha => Color::rgba(255, 255, 255, color.a),
+        crate::scene::MaskMode::AlphaInverted => Color::rgba(255, 255, 255, 255 - color.a),
         crate::scene::MaskMode::Luminance => {
             let luminance = (0.2126 * f32::from(color.r)
                 + 0.7152 * f32::from(color.g)
@@ -1731,6 +1735,15 @@ fn path_mask_color(color: Color, mask_mode: crate::scene::MaskMode) -> Color {
             .clamp(0.0, 255.0) as u16;
             let alpha = (luminance * u16::from(color.a) + 127) / 255;
             Color::rgba(255, 255, 255, alpha as u8)
+        }
+        crate::scene::MaskMode::LuminanceInverted => {
+            let luminance = (0.2126 * f32::from(color.r)
+                + 0.7152 * f32::from(color.g)
+                + 0.0722 * f32::from(color.b))
+            .round()
+            .clamp(0.0, 255.0) as u16;
+            let alpha = (luminance * u16::from(color.a) + 127) / 255;
+            Color::rgba(255, 255, 255, 255 - (alpha as u8))
         }
     }
 }

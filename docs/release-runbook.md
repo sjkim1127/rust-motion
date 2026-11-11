@@ -64,7 +64,7 @@ To bump to version `X.Y.Z`:
    ```toml
    version = "X.Y.Z"
    ```
-4. Update Studio Tauri version in `apps/studio-tauri/src-tauri/tauri.conf.json`:
+4. Update TypeScript package version in `crates/ts/package.json`:
    ```json
    "version": "X.Y.Z"
    ```

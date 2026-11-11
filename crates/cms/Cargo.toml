@@ -8,6 +8,7 @@ license.workspace = true
 [features]
 default = ["threads"]
 threads = ["dep:rayon"]
+moxcms = []
 
 [dependencies]
 rayon = { workspace = true, optional = true }

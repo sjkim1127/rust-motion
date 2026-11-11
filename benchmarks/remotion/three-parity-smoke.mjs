@@ -7,7 +7,7 @@ import {bundle} from '@remotion/bundler';
 import {openBrowser, renderStill, selectComposition} from '@remotion/renderer';
 
 const root = process.cwd();
-const require = createRequire(new URL('../../apps/studio-tauri/package.json', import.meta.url));
+const require = createRequire(new URL('../../crates/ts/package.json', import.meta.url));
 const {chromium} = require('playwright-core');
 const {PNG} = require('pngjs');
 const browserExecutable = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';

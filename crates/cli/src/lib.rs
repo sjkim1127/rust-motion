@@ -766,7 +766,6 @@ pub fn resolve_browser_worker_path() -> anyhow::Result<std::path::PathBuf> {
 
     let candidates = [
         "scripts/three-render-worker.mjs",
-        "apps/studio-tauri/scripts/three-render-worker.mjs",
         "../scripts/three-render-worker.mjs",
         "../../scripts/three-render-worker.mjs",
     ];

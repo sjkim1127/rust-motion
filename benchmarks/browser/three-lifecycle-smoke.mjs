@@ -4,7 +4,7 @@ import { readFileSync, unlinkSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
 const url = process.env.RUST_MOTION_BROWSER_URL ?? 'http://127.0.0.1:1421';
-const worker = new URL('../../apps/studio-tauri/scripts/three-render-worker.mjs', import.meta.url);
+const worker = new URL('../../scripts/three-render-worker.mjs', import.meta.url);
 const moduleUrl = `${url}/src/three-lifecycle-composition.js`;
 const child = spawn(process.execPath, [worker.pathname, `--url=${url}`, `--composition-module=${moduleUrl}`], {
   stdio: ['pipe', 'pipe', 'inherit'],

@@ -52,7 +52,7 @@ production Rust Motion gains no Node dependency.
 
 ### Three.js lifecycle smoke test
 
-`apps/studio-tauri/src/three-lifecycle-composition.js` demonstrates the
+`scripts/three-render-worker.mjs` demonstrates the
 framework-free `setup/render/dispose` contract. With the Studio Vite server
 running, validate composition registration, persistent scene state, frame
 rendering, and screenshot capture with:

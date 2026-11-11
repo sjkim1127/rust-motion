@@ -5525,6 +5525,9 @@ version = "1.0.0"
 [[package]]
 name = "rust-motion-bitstream"
 version = "1.0.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "rust-motion-captions"
@@ -5945,6 +5948,26 @@ dependencies = [
  "rust-motion-core",
  "rust-motion-rasterizer",
  "serde_json",
+]
+
+[[package]]
+name = "rust-motion-ts"
+version = "1.0.0"
+dependencies = [
+ "base64",
+ "rust-motion-animation",
+ "rust-motion-captions",
+ "rust-motion-cli",
+ "rust-motion-composition",
+ "rust-motion-paths",
+ "rust-motion-rasterizer",
+ "rust-motion-shapes",
+ "rust-motion-transitions",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]

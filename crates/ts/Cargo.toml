@@ -1,0 +1,30 @@
+[package]
+name = "rust-motion-ts"
+description = "Native TypeScript/Node.js bindings and 1:1 Remotion API compatibility bridge for Rust Motion"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "rust_motion_ts"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rust-motion-animation = { workspace = true }
+rust-motion-captions = { workspace = true }
+rust-motion-cli = { workspace = true }
+rust-motion-composition = { workspace = true }
+rust-motion-paths = { workspace = true }
+rust-motion-rasterizer = { workspace = true }
+rust-motion-shapes = { workspace = true }
+rust-motion-transitions = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+base64 = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

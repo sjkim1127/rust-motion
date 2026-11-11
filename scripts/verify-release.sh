@@ -49,17 +49,17 @@ else
     echo "WARN: $PYPROJECT_PATH not found"
 fi
 
-# 4. Verify Tauri config version
-TAURI_CONF_PATH="apps/studio-tauri/src-tauri/tauri.conf.json"
-if [ -f "$TAURI_CONF_PATH" ]; then
-    TAURI_VERSION=$(grep -m 1 '"version":' "$TAURI_CONF_PATH" | sed -E 's/.*"version": *"([^"]+)".*/\1/')
-    if [ "$TAURI_VERSION" != "$WORKSPACE_VERSION" ]; then
-        echo "ERROR: $TAURI_CONF_PATH has version '$TAURI_VERSION', expected '$WORKSPACE_VERSION'"
+# 4. Verify TypeScript package.json version
+TS_PACKAGE_PATH="crates/ts/package.json"
+if [ -f "$TS_PACKAGE_PATH" ]; then
+    TS_VERSION=$(grep -m 1 '"version":' "$TS_PACKAGE_PATH" | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+    if [ "$TS_VERSION" != "$WORKSPACE_VERSION" ]; then
+        echo "ERROR: $TS_PACKAGE_PATH has version '$TS_VERSION', expected '$WORKSPACE_VERSION'"
         exit 1
     fi
-    echo "✓ Tauri tauri.conf.json matches $WORKSPACE_VERSION"
+    echo "✓ TypeScript package.json matches $WORKSPACE_VERSION"
 else
-    echo "WARN: $TAURI_CONF_PATH not found"
+    echo "WARN: $TS_PACKAGE_PATH not found"
 fi
 
 # 5. Verify CHANGELOG.md has an entry for this version

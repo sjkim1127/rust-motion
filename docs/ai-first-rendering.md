@@ -132,7 +132,7 @@ Valid progress states are `queued`, `preparing`, `rendering`, `encoding`,
 The CLI and Tauri host use a persistent worker pool. Configure the pool with:
 
 ```sh
-export RUST_MOTION_BROWSER_WORKER=$PWD/apps/studio-tauri/scripts/three-render-worker.mjs
+export RUST_MOTION_BROWSER_WORKER=$PWD/scripts/three-render-worker.mjs
 # Optional: use a bundled or platform-specific Node.js executable.
 export RUST_MOTION_BROWSER_NODE=node
 # Optional: load an AI-generated/browser composition module after the app loads.

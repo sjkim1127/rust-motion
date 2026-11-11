@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 
-const require = createRequire(new URL('../../apps/studio-tauri/package.json', import.meta.url));
+const require = createRequire(new URL('../../crates/ts/package.json', import.meta.url));
 const { chromium } = require('playwright-core');
 
 const url = process.env.RUST_MOTION_BROWSER_URL ?? 'http://127.0.0.1:1420';

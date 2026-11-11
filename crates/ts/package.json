@@ -1,0 +1,46 @@
+{
+  "name": "@rust-motion/remotion",
+  "version": "1.0.0",
+  "description": "High-performance pure Rust video engine with 1:1 Remotion TypeScript API compatibility",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./renderer": {
+      "types": "./dist/renderer.d.ts",
+      "import": "./dist/renderer.mjs",
+      "require": "./dist/renderer.cjs"
+    },
+    "./player": {
+      "types": "./dist/player.d.ts",
+      "import": "./dist/player.mjs",
+      "require": "./dist/player.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "keywords": [
+    "remotion",
+    "rust-motion",
+    "video",
+    "motion-graphics",
+    "rendering",
+    "animation",
+    "interpolation",
+    "spring"
+  ],
+  "author": "Rust Motion Contributors",
+  "license": "MIT OR Apache-2.0"
+}

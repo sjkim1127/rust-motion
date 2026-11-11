@@ -64,7 +64,7 @@ pub async fn run_studio(port: u16, open: bool, project: Option<&Path>) -> anyhow
     };
 
     let dist_candidates = [
-        PathBuf::from("apps/studio-tauri/dist"),
+        PathBuf::from("apps/studio/dist"),
         PathBuf::from("apps/studio-web/dist"),
         PathBuf::from("dist"),
     ];

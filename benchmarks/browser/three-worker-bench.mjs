@@ -5,7 +5,7 @@ import {createInterface} from 'node:readline';
 import {writeFileSync} from 'node:fs';
 
 const root = new URL('../../', import.meta.url);
-const worker = new URL('../../apps/studio-tauri/scripts/three-render-worker.mjs', import.meta.url);
+const worker = new URL('../../scripts/three-render-worker.mjs', import.meta.url);
 const url = process.env.RUST_MOTION_BROWSER_URL ?? 'http://127.0.0.1:1421';
 const frames = Number(process.env.FRAMES ?? 180);
 const repeats = Number(process.env.REPEATS ?? 3);

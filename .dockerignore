@@ -3,4 +3,4 @@ target
 node_modules
 vendor
 benchmarks/remotion/node_modules
-apps/studio-tauri/dist
+crates/ts/dist

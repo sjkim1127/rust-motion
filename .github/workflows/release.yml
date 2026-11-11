@@ -51,8 +51,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
-      - name: Prepare Tauri frontend directory for macro checks
-        run: mkdir -p apps/studio-tauri/dist
+      - name: Prepare TypeScript build directory
+        run: mkdir -p crates/ts/dist
 
       - name: Verify tag matches workspace version
         shell: bash
@@ -66,9 +66,9 @@ jobs:
             exit 1
           fi
 
-          tauri_version=$(jq -r '.version' apps/studio-tauri/src-tauri/tauri.conf.json)
+          ts_version=$(jq -r '.version' crates/ts/package.json)
           python_version=$(awk -F '"' '/^version = / {print $2; exit}' crates/python/pyproject.toml)
-          for artifact in "Tauri:$tauri_version" "Python:$python_version"; do
+          for artifact in "TypeScript:$ts_version" "Python:$python_version"; do
             artifact_name="${artifact%%:*}"
             artifact_version="${artifact#*:}"
             if [[ "$artifact_version" != "$tag_version" ]]; then
