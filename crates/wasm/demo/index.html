@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Motion — Real-Time WebAssembly Player & Timeline</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>🎬 Rust Motion Player</h1>
+      <span class="badge">Pure WebAssembly</span>
+      <span class="badge" style="background: rgba(129, 140, 248, 0.2); color: #818cf8; border-color: #818cf8;">Remotion 1:1 + TouchDesigner</span>
+    </div>
+    <div class="status-indicator">
+      <span class="status-dot"></span>
+      <span id="engine-status">Engine: Initializing WASM...</span>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <!-- Main Viewport Pane -->
+    <main class="viewport-pane">
+      <div class="canvas-wrapper">
+        <canvas id="rust-motion-canvas" width="960" height="540"></canvas>
+        <div class="canvas-overlay-hud">
+          <div class="hud-pill" id="hud-composition">Comp: HelloWorld</div>
+          <div class="hud-pill" id="hud-stats">Latency: 0.0 ms | 60 FPS</div>
+        </div>
+      </div>
+
+      <!-- Timeline Scrubber & Transport -->
+      <div class="timeline-card">
+        <div class="scrubber-container">
+          <input type="range" id="timeline-scrubber" class="scrubber-slider" min="0" max="149" value="0">
+        </div>
+
+        <div class="controls-row">
+          <div class="btn-group">
+            <button class="btn" id="btn-step-prev" title="Step -1 frame">⏮ -1</button>
+            <button class="btn btn-primary" id="btn-play-pause">▶ Play</button>
+            <button class="btn" id="btn-step-next" title="Step +1 frame">+1 ⏭</button>
+            <button class="btn" id="btn-loop">🔁 Loop: ON</button>
+          </div>
+
+          <div class="btn-group">
+            <span class="timecode-display" id="timecode-display">00:00:00:00</span>
+            <span class="hud-pill" id="frame-display" style="font-size: 0.85rem;">Frame 0 / 150</span>
+          </div>
+
+          <div class="btn-group">
+            <select id="speed-select" class="select-input" style="width: auto; padding: 4px 8px;">
+              <option value="0.5">0.5x</option>
+              <option value="1.0" selected>1.0x</option>
+              <option value="2.0">2.0x</option>
+            </select>
+            <select id="fps-select" class="select-input" style="width: auto; padding: 4px 8px;">
+              <option value="24">24 FPS</option>
+              <option value="30" selected>30 FPS</option>
+              <option value="60">60 FPS</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Sidebar Controls -->
+    <aside class="sidebar-pane">
+      <!-- Composition Switcher -->
+      <div class="panel-card">
+        <h3>🎛 Active Composition</h3>
+        <select id="composition-select" class="select-input">
+          <option value="HelloWorld">HelloWorld</option>
+          <option value="TouchDesignerGenerative">TouchDesignerGenerative (Procedural TOP)</option>
+          <option value="SpringRects">SpringRects</option>
+          <option value="ShapesAndFilters">ShapesAndFilters</option>
+          <option value="CyberpunkGrid">CyberpunkGrid</option>
+          <option value="ComplexGradients">ComplexGradients</option>
+          <option value="PodcastWaveform">PodcastWaveform</option>
+          <option value="KaraokeCaptions">KaraokeCaptions</option>
+          <option value="BarChartRace">BarChartRace</option>
+          <option value="CodeTerminal">CodeTerminal</option>
+        </select>
+      </div>
+
+      <!-- Live Dynamic Props Editor -->
+      <div class="panel-card">
+        <h3>⚙️ Live Dynamic Props (JSON)</h3>
+        <textarea id="props-editor" class="textarea-input" spellcheck="false">{
+  "title": "Rust Motion in WebAssembly",
+  "theme": "cyberpunk"
+}</textarea>
+        <button class="btn btn-primary" id="btn-apply-props">Apply Props</button>
+      </div>
+
+      <!-- TouchDesigner TOPs Live Visualizer -->
+      <div class="panel-card">
+        <h3>🌌 TouchDesigner TOPs (Live Simplex/fBm)</h3>
+        <canvas id="generative-canvas" width="320" height="180"></canvas>
+        <div style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+          Real-time procedural multi-octave fBm Simplex Noise TOP running at 60 FPS in WebAssembly.
+        </div>
+      </div>
+
+      <!-- Telemetry & Performance -->
+      <div class="panel-card">
+        <h3>⚡ Telemetry</h3>
+        <div class="metric-grid">
+          <div class="metric-item">
+            <div class="metric-label">Render Latency</div>
+            <div class="metric-value" id="metric-latency">0.0 ms</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">Max Frame Rate</div>
+            <div class="metric-value" id="metric-fps">~500 FPS</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">IPC Overhead</div>
+            <div class="metric-value">0.0 ms</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">Execution</div>
+            <div class="metric-value">In-Browser</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script type="module" src="player-demo.js"></script>
+</body>
+</html>

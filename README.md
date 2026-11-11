@@ -83,7 +83,7 @@ brew install rust-motion
 
 ---
 
-## 🛠️ Usage Across 4 Ecosystems
+## 🛠️ Usage Across 5 Ecosystems
 
 ### 1. TypeScript & Remotion (`@rust-motion/remotion`)
 
@@ -241,12 +241,44 @@ fn render(ctx, props) {
 
 ---
 
+### 5. WebAssembly & Real-Time In-Browser Player (`rust-motion-wasm`)
+
+Compile the entire video engine, Remotion physics, and TouchDesigner-inspired procedural TOPs directly into WebAssembly (`wasm32-unknown-unknown`) for zero-latency in-browser timeline scrubbing:
+
+```html
+<canvas id="video-canvas" width="1280" height="720"></canvas>
+<input type="range" id="scrubber" min="0" max="149" value="0">
+
+<script type="module">
+  import init, { WasmPlayer, GenerativeCanvas } from './pkg/rust_motion_wasm.js';
+
+  await init();
+
+  // 1. Initialize Player: 1280x720, 30 FPS, 150 frames
+  const player = new WasmPlayer('video-canvas', 1280, 720, 30.0, 150);
+
+  // 2. Instant <3ms timeline scrubbing with direct memory blit
+  document.getElementById('scrubber').addEventListener('input', (e) => {
+    player.seek(Number(e.target.value));
+  });
+
+  // 3. Continuous 60 FPS playback
+  function loop(timestamp) {
+    if (player.is_playing()) player.tick(timestamp);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+</script>
+```
+
+---
+
 ## 🏗️ Architecture
 
 ```text
  ┌────────────────────────────────────────────────────────────────────────┐
  │                      Compositions & Entrypoints                        │
- │   TypeScript (Remotion)  │  Pure Rust  │  Python SDK  │  Rhai Scripts  │
+ │  TypeScript (Remotion) │ Pure Rust │ Python │ Rhai │ WebAssembly (WASM)│
  └───────────────────────────────────┬────────────────────────────────────┘
                                      │ Evaluates Frame (t)
                                      ▼
@@ -284,6 +316,7 @@ fn render(ctx, props) {
 |---|---|
 | [`rust-motion-ts`](crates/ts) | TypeScript/Remotion SDK (`@rust-motion/remotion`) & FFI bridge |
 | [`rust-motion-python`](crates/python) | Python SDK & PyO3 native extensions (`pip install rust-motion`) |
+| [`rust-motion-wasm`](crates/wasm) | WebAssembly engine & real-time in-browser timeline scrubber player |
 | [`rust-motion-cli`](crates/cli) | CLI binary (`rust-motion`), Rhai runner, and Remotion transpiler |
 | [`rust-motion-composition`](crates/composition) | Core native scene contracts, timeline sequencing, and emitters |
 | [`rust-motion-rasterizer`](crates/rasterizer) | Scene IR, CPU rasterizer (`tiny-skia`), GPU rasterizer (`wgpu`) |

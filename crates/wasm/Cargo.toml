@@ -1,0 +1,47 @@
+[package]
+name = "rust-motion-wasm"
+description = "WebAssembly engine and real-time browser canvas player for Rust Motion"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+web-sys = { workspace = true, features = [
+    "CanvasRenderingContext2d",
+    "HtmlCanvasElement",
+    "ImageData",
+    "Window",
+    "Document",
+    "Element",
+    "Performance",
+    "console",
+] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+console_error_panic_hook = { workspace = true, optional = true }
+
+rust-motion-animation = { workspace = true }
+rust-motion-composition = { workspace = true }
+rust-motion-rasterizer = { workspace = true }
+rust-motion-shapes = { workspace = true }
+rust-motion-transitions = { workspace = true }
+rust-motion-captions = { workspace = true }
+rust-motion-noise = { workspace = true }
+
+[features]
+default = ["console_error_panic_hook"]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[package.metadata.wasm-pack.profile.dev]
+wasm-opt = false
+
