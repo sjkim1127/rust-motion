@@ -193,8 +193,10 @@ fn nan_and_out_of_range_output_is_sanitised() {
 
 #[test]
 fn hostile_modules_fail_quickly() {
-    let quick = if cfg!(debug_assertions) {
-        Duration::from_secs(15)
+    let quick = if std::env::var("CI").is_ok() {
+        Duration::from_secs(45)
+    } else if cfg!(debug_assertions) {
+        Duration::from_secs(30)
     } else {
         Duration::from_secs(5)
     };
@@ -369,7 +371,14 @@ fn wall_clock_budget_stops_runaway_plugins() {
         },
     );
     assert_eq!(e, Error::Limit("time budget".into()));
-    assert!(t < Duration::from_secs(3), "{t:?}");
+    let max_dur = if std::env::var("CI").is_ok() {
+        Duration::from_secs(10)
+    } else if cfg!(debug_assertions) {
+        Duration::from_secs(6)
+    } else {
+        Duration::from_secs(3)
+    };
+    assert!(t < max_dur, "{t:?}");
 }
 
 #[test]

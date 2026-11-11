@@ -52,7 +52,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -88,11 +88,12 @@ jobs:
         run: cargo test --locked --workspace --exclude rust-motion-python
 
       # FFmpeg-backed tests share process-level environment and temporary
-      # resources on Windows. Keep the same coverage serial, but split the
-      # targets so a stalled integration test cannot hide unit-test progress.
-      - name: Run Workspace Unit Tests (Windows, serial)
+      # resources on Windows. Run unit tests concurrently to leverage multiple
+      # cores, and serialize integration tests so external FFmpeg processes
+      # do not collide on shared temp files.
+      - name: Run Workspace Unit Tests (Windows)
         if: runner.os == 'Windows'
-        run: cargo test --locked --workspace --exclude rust-motion-python --lib --bins -- --test-threads=1
+        run: cargo test --locked --workspace --exclude rust-motion-python --lib --bins
 
       - name: Run Workspace Integration Tests (Windows, serial)
         if: runner.os == 'Windows'
@@ -113,8 +114,36 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Run TypeScript Tests
         run: |
           node --test crates/ts/tests/*.test.mjs
+
+      - name: Verify npm package distribution
+        run: |
+          cd crates/ts
+          npm pack --dry-run
+
+  # ── 4. WebAssembly Engine & Browser Canvas ────────────────────────────────
+  wasm:
+    name: WebAssembly (WASM Engine & Browser Canvas)
+    runs-on: ubuntu-latest
+    needs: [fmt_clippy]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cargo Check WASM target
+        run: cargo check --locked -p rust-motion-wasm --target wasm32-unknown-unknown
+
+      - name: Run WASM crate native unit tests
+        run: cargo test --locked -p rust-motion-wasm

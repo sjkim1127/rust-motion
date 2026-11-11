@@ -31,8 +31,11 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
+/dist/
 *.whl
+
+# TypeScript SDK dist must be tracked
+!crates/ts/dist/**
 
 # Video/Image render outputs in root/benchmarks
 *.mp4
