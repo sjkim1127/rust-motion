@@ -89,7 +89,7 @@ def main():
     parser = argparse.ArgumentParser(description="Compare visual snapshots against golden references")
     parser.add_argument("--actual-dir", type=Path, default=Path("snapshots"), help="Directory with actual rendered PNGs")
     parser.add_argument("--golden-dir", type=Path, default=Path("tests/visual_golden"), help="Directory with golden reference PNGs")
-    parser.add_argument("--max-mae", type=float, default=0.005, help="Maximum allowed Mean Absolute Error (default 0.005 = 0.5%)")
+    parser.add_argument("--max-mae", type=float, default=0.005, help="Maximum allowed Mean Absolute Error (default 0.005 = 0.5%%)")
     parser.add_argument("--min-ssim", type=float, default=0.99, help="Minimum allowed SSIM index (default 0.99)")
     args = parser.parse_args()
 
