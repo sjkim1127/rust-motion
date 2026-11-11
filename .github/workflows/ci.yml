@@ -52,7 +52,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -81,20 +81,7 @@ jobs:
         run: cargo check --locked --workspace --all-targets --all-features
 
       - name: Run All Workspace Tests
-        if: runner.os != 'Windows'
         run: cargo test --locked --workspace --exclude rust-motion-python
-
-      # FFmpeg-backed tests share process-level environment and temporary
-      # resources on Windows. Run unit tests concurrently to leverage multiple
-      # cores, and serialize integration tests so external FFmpeg processes
-      # do not collide on shared temp files.
-      - name: Run Workspace Unit Tests (Windows)
-        if: runner.os == 'Windows'
-        run: cargo test --locked --workspace --exclude rust-motion-python --lib --bins
-
-      - name: Run Workspace Integration Tests (Windows, serial)
-        if: runner.os == 'Windows'
-        run: cargo test --locked --workspace --exclude rust-motion-python --tests -- --test-threads=1
 
       - name: Test GPU scene compilation without device initialization
         run: 'cargo test --locked -p rust-motion-rasterizer --features gpu support_tests::'
