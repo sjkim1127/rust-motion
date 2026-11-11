@@ -77,9 +77,6 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install ffmpeg -y
 
-      - name: Prepare TypeScript build directory
-        run: mkdir -p crates/ts/dist
-
       - name: Cargo Check Workspace
         run: cargo check --locked --workspace --all-targets --all-features
 
