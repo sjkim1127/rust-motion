@@ -132,9 +132,7 @@ async fn main() -> anyhow::Result<()> {
             output,
             experimental: _,
         } => {
-            eprintln!(
-                "⚠️  [EXPERIMENTAL] rust-motion migrate generates a starting scaffold template."
-            );
+            eprintln!("[EXPERIMENTAL] rust-motion migrate generates a starting scaffold template.");
             eprintln!(
                 "    Complex TypeScript logic and full CSS layouts require manual adaptation.\n"
             );
@@ -150,13 +148,13 @@ async fn main() -> anyhow::Result<()> {
             if let Some(out_path) = output {
                 std::fs::write(out_path, &code)
                     .map_err(|e| anyhow::anyhow!("Failed to write to '{out_path:?}': {e}"))?;
-                println!("✨ Successfully migrated {input:?} -> {out_path:?}");
+                println!("Successfully migrated {input:?} -> {out_path:?}");
             } else {
                 println!("{code}");
             }
 
             eprintln!(
-                "📊 Migration summary: {} hooks, {} interpolations, {} springs, {} sequences, {} loops converted",
+                "Migration summary: {} hooks, {} interpolations, {} springs, {} sequences, {} loops converted",
                 stats.hooks_converted,
                 stats.interpolations_converted,
                 stats.springs_converted,

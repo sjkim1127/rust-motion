@@ -93,7 +93,7 @@ pub async fn run_studio(port: u16, open: bool, project: Option<&Path>) -> anyhow
     let local_url = format!("http://localhost:{port}");
 
     println!("\n=======================================================");
-    println!("  🎬 Rust Motion Studio (Hybrid Native + Chromium)");
+    println!("  Rust Motion Studio (Hybrid Native + Chromium)");
     println!("=======================================================");
     println!("  • Web Studio:  {local_url}");
     println!("  • WebSocket:   ws://localhost:{port}/ws");

@@ -18,18 +18,18 @@ Rust Motion provides a multi-backend rendering architecture designed around dete
 
 | Feature / Primitive | `native` (CPU) | `gpu` (WGPU) | `browser` (Node/Chromium) | Notes |
 | :--- | :---: | :---: | :---: | :--- |
-| **Rectangles & Rounded Borders** | ✅ Supported | ✅ Supported | ✅ Supported | Native uses tiny-skia; GPU uses WGSL shaders |
-| **Circles, Ellipses & Polygons** | ✅ Supported | ✅ Supported | ✅ Supported | Vector rasterization |
-| **SVG Paths & Bezier Curves** | ✅ Supported | ✅ Supported | ✅ Supported | Native path flattening |
-| **Linear & Radial Gradients** | ✅ Supported | ✅ Supported | ✅ Supported | Normalized UV space |
-| **Text Layout & Shaping** | ✅ Supported | ⚠️ Via Glyph Atlas | ✅ Supported | Native uses Cosmyic/Fontdue; GPU uses texture atlas |
-| **Image Decoding (PNG, JPG, WebP)**| ✅ Supported | ✅ Supported | ✅ Supported | Native image cache; GPU texture cache |
-| **Video Decoding (MP4, WebM)** | ✅ Supported | ✅ Supported | ✅ Supported | Demuxed via FFmpeg pipe |
-| **Lottie Vector Animations** | ✅ Supported | ⚠️ CPU Pre-raster | ✅ Supported | Headless vector rasterizer |
-| **GIF Animations** | ✅ Supported | ✅ Supported | ✅ Supported | Frame-indexed playback |
-| **Audio Keyframes & Mixing** | ✅ Supported | N/A (Audio passed to FFmpeg) | ✅ Supported | Audio timeline inference |
-| **Filter Effects (Blur, Opacity)** | ✅ Supported | ✅ Supported | ✅ Supported | Native gaussian kernel; GPU post-pass |
-| **Transforms (Rotate, Scale, 3D)** | ✅ Supported | ✅ Supported | ✅ Supported | 4x4 affine transform matrix |
+| **Rectangles & Rounded Borders** | Supported | Supported | Supported | Native uses tiny-skia; GPU uses WGSL shaders |
+| **Circles, Ellipses & Polygons** | Supported | Supported | Supported | Vector rasterization |
+| **SVG Paths & Bezier Curves** | Supported | Supported | Supported | Native path flattening |
+| **Linear & Radial Gradients** | Supported | Supported | Supported | Normalized UV space |
+| **Text Layout & Shaping** | Supported | Via Glyph Atlas | Supported | Native uses Cosmyic/Fontdue; GPU uses texture atlas |
+| **Image Decoding (PNG, JPG, WebP)**| Supported | Supported | Supported | Native image cache; GPU texture cache |
+| **Video Decoding (MP4, WebM)** | Supported | Supported | Supported | Demuxed via FFmpeg pipe |
+| **Lottie Vector Animations** | Supported | CPU Pre-raster | Supported | Headless vector rasterizer |
+| **GIF Animations** | Supported | Supported | Supported | Frame-indexed playback |
+| **Audio Keyframes & Mixing** | Supported | N/A (Audio passed to FFmpeg) | Supported | Audio timeline inference |
+| **Filter Effects (Blur, Opacity)** | Supported | Supported | Supported | Native gaussian kernel; GPU post-pass |
+| **Transforms (Rotate, Scale, 3D)** | Supported | Supported | Supported | 4x4 affine transform matrix |
 
 ---
 

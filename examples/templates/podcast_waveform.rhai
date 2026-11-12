@@ -46,7 +46,7 @@ fn render(ctx, props) {
     let pulse_delta = (t * 25.0).sin().abs() * 12.0;
     output.circle_stroke(avatar_cx, avatar_cy, avatar_r + pulse_delta + 10.0, "#00000000", "#00f0ff44", 2.0);
     output.circle_stroke(avatar_cx, avatar_cy, avatar_r, "#1e293b", accent, 3.0);
-    output.text(avatar_cx - 16.0, avatar_cy + 10.0, "🎙", avatar_r * 0.65, "#ffffff");
+    output.text(avatar_cx - 16.0, avatar_cy + 10.0, "MIC", avatar_r * 0.65, "#ffffff");
 
     // 5. Episode Title & Host Metadata
     let title_y = height * 0.56;

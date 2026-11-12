@@ -1,4 +1,4 @@
-# 🌐 Rust Motion WebAssembly Engine (`rust-motion-wasm`)
+# Rust Motion WebAssembly Engine (`rust-motion-wasm`)
 
 > **Sub-16ms Real-Time In-Browser Timeline Scrubber, Player & TouchDesigner-Inspired Procedural Visuals via WebAssembly**
 
@@ -6,7 +6,7 @@
 
 ---
 
-## ⚡ Why WebAssembly?
+## Why WebAssembly?
 
 | Feature | Legacy Preview (HTTP/WebSocket) | Remotion React Player | **Rust Motion WASM (`rust-motion-wasm`)** |
 | :--- | :--- | :--- | :--- |
@@ -18,7 +18,7 @@
 
 ---
 
-## 🚀 Quickstart
+## Quickstart
 
 ### 1. Build the WASM Package
 ```bash
@@ -62,7 +62,7 @@ wasm-pack build crates/wasm --target web --out-dir pkg
 
 ---
 
-## 📦 API Reference
+## API Reference
 
 ### `WasmPlayer`
 The core timeline player bound to an HTML5 `<canvas>`.
@@ -105,7 +105,7 @@ Real-time texture operator (TOP) synthesis in WebAssembly.
 
 ---
 
-## 🎮 Running the Interactive Demo
+## Running the Interactive Demo
 
 Launch a local static web server from the repository root:
 ```bash

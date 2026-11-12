@@ -996,7 +996,7 @@ impl NativeComposition for PodcastWaveformComposition {
         scene.push(SceneNode::Text {
             x: avatar_cx - 16.0,
             y: avatar_cy + 10.0,
-            content: "🎙".to_string(),
+            content: "MIC".to_string(),
             font_size: avatar_r * 0.7,
             color: Color::WHITE,
             font_weight: 400,

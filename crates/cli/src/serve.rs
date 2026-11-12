@@ -666,7 +666,7 @@ fn player_html(port: u16, default_frame: u32, width: u32, height: u32) -> String
 </head>
 <body>
   <header>
-    <h1>🎬 Rust Motion Studio</h1>
+    <h1>Rust Motion Studio</h1>
     <span class="badge">Live Preview</span>
     <span id="status" class="disconnected">⬤ Disconnected</span>
   </header>

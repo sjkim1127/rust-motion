@@ -16,7 +16,7 @@
 
 ---
 
-## ⚡ Highlights
+## Highlights
 
 - **Pure Headless Engine**: Zero Chromium, zero Puppeteer, zero WebKit, zero Electron. Boots in milliseconds with ~50MB RSS instead of 2GB+ memory overhead.
 - **Remotion 1:1 Parity**: Full TypeScript SDK (`@rust-motion/remotion`) providing drop-in compatibility with `interpolate`, `interpolateColors`, `spring`, `useCurrentFrame`, `useVideoConfig`, `Composition`, `Sequence`, `Series`, and renderer APIs.
@@ -28,7 +28,7 @@
 
 ---
 
-### 📚 Documentation
+### Documentation
 
 - [Quickstart Guide](docs/quickstart.md) — Get up and running in under 5 minutes.
 - [Hello World Tutorial](docs/hello-world.md) — Step-by-step composition tutorial.
@@ -43,30 +43,30 @@
 
 ---
 
-## 🚀 Installation
+## Installation
 
-### 🤖 For AI Coding Agents & Automated CI (Recommended)
+### For AI Coding Agents & Automated CI (Recommended)
 Installs the pre-compiled standalone binary in 1–2 seconds with zero toolchain dependencies:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sjkim1127/rust-motion/main/scripts/install.sh | bash
 ```
 > Installs to `~/.local/bin/rust-motion` by default. Set `RUST_MOTION_INSTALL_DIR` to customize destination.
 
-### 📦 TypeScript / Remotion Ecosystem (`npm`)
+### TypeScript / Remotion Ecosystem (`npm`)
 ```bash
 npm install @rust-motion/remotion
 # or
 pnpm add @rust-motion/remotion
 ```
 
-### 🐍 Python Package (`PyPI`)
+### Python Package (`PyPI`)
 ```bash
 pip install rust-motion
 # or using uv:
 uv tool install rust-motion
 ```
 
-### 🦀 Cargo (Rust Developers)
+### Cargo (Rust Developers)
 ```bash
 # Fast binary install via cargo-binstall:
 cargo binstall rust-motion-cli
@@ -75,7 +75,7 @@ cargo binstall rust-motion-cli
 cargo install rust-motion-cli --features rhai
 ```
 
-### 🍺 Homebrew (macOS)
+### Homebrew (macOS)
 ```bash
 brew tap sjkim1127/tap
 brew install rust-motion
@@ -83,7 +83,7 @@ brew install rust-motion
 
 ---
 
-## 🛠️ Usage Across 5 Ecosystems
+## Usage Across 5 Ecosystems
 
 ### 1. TypeScript & Remotion (`@rust-motion/remotion`)
 
@@ -273,7 +273,7 @@ Compile the entire video engine, Remotion physics, and TouchDesigner-inspired pr
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```text
  ┌────────────────────────────────────────────────────────────────────────┐
@@ -310,7 +310,7 @@ Compile the entire video engine, Remotion physics, and TouchDesigner-inspired pr
 
 ---
 
-## 📦 Workspace Crates
+## Workspace Crates
 
 | Package | Purpose |
 |---|---|
@@ -335,7 +335,7 @@ Compile the entire video engine, Remotion physics, and TouchDesigner-inspired pr
 
 ---
 
-## 💻 CLI Commands & Remotion Migration
+## CLI Commands & Remotion Migration
 
 ### Render Composition
 ```bash
@@ -364,7 +364,7 @@ rust-motion doctor
 
 ---
 
-## 📊 Benchmarks: Remotion vs. Rust Motion
+## Benchmarks: Remotion vs. Rust Motion
 
 Tested on Apple M-series (1080p @ 60 FPS, 300 frames):
 
@@ -378,7 +378,7 @@ Tested on Apple M-series (1080p @ 60 FPS, 300 frames):
 
 ---
 
-## 🧪 Testing & Verification
+## Testing & Verification
 
 ```bash
 # Run TypeScript SDK tests
@@ -393,7 +393,7 @@ cargo test --workspace --exclude rust-motion-python
 
 ---
 
-## 📄 License
+## License
 
 Licensed under either of:
 

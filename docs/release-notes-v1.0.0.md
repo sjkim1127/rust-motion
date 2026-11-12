@@ -1,6 +1,6 @@
 # Rust Motion 1.0.0 — Stable, Browser-Free Programmatic Video Rendering Platform
 
-We are thrilled to announce the official **v1.0.0** major release of **Rust Motion**! 🚀
+We are thrilled to announce the official **v1.0.0** major release of **Rust Motion**!
 
 > **Rust Motion 1.0 is a stable, deterministic, browser-free programmatic video rendering platform for Rust, Python, and autonomous coding agents, with optional browser and GPU backends for explicitly documented capabilities.**
 
@@ -8,14 +8,14 @@ Rust Motion delivers a high-performance, lightweight alternative to browser-base
 
 ---
 
-## 🌟 Key Highlights
+## Key Highlights
 
-### 1. ⚡️ Browser-Free Native Core & Bounded Streaming
+### 1. Browser-Free Native Core & Bounded Streaming
 * **Authoritative Reference Engine**: Native CPU rasterization powered by `tiny-skia` with hardware-accelerated GPU execution via `wgpu`.
 * **Bounded-Memory Pipeline**: Renders frames concurrently into an ordered ring-buffer and streams directly to FFmpeg pipes, allowing 4K rendering on constrained instances without out-of-memory crashes.
 * **Full Media Codec Suite**: Built-in export support for H.264, H.265 (HEVC), ProRes, VP9, AV1, animated GIF, and PNG/JPEG/WebP stills with multi-track audio mixing.
 
-### 2. 🤖 First-Class AI Coding Agent & Automation Surface
+### 2. First-Class AI Coding Agent & Automation Surface
 Rust Motion is designed from the ground up for autonomous AI coding agents (Devin, Claude Code, Cursor, Copilot Workspace) and automated CI/CD runners:
 * **Predictable Exit Code Contract**:
   - `0`: `EXIT_SUCCESS`
@@ -35,7 +35,7 @@ Rust Motion is designed from the ground up for autonomous AI coding agents (Devi
   ```
   Zero-dependency, non-interactive installation to `~/.local/bin` in 1–2 seconds.
 
-### 3. 📐 Mathematical Parity & Conformance Guarantees
+### 3. Mathematical Parity & Conformance Guarantees
 * **Renderer Conformance Suite**: Verified bit-exact evaluation invariance regardless of access pattern (sequential forward, sequential reverse, sparse seek, repeated frames, and concurrent threads).
 * **Remotion Mathematical Parity**:
   - `spring()`: Full damped harmonic oscillator physics engine matching Remotion reference values to `< 1e-4` precision.
@@ -43,12 +43,12 @@ Rust Motion is designed from the ground up for autonomous AI coding agents (Devi
   - `paths`: Path length computation, `interpolatePath` morphing, and `evolvePath` stroke animations.
   - `noise`: Deterministic seeded Simplex, Perlin, and Fractal Brownian Motion (FBM) generators.
 
-### 4. 📁 Versioned Project Schema (`.rust_motion.json` v1)
+### 4. Versioned Project Schema (`.rust_motion.json` v1)
 * **Declarative Project Format**: Language-neutral JSON representation for compositions, multi-track timelines, transition series, asset references, and temporal markers.
 * **SemVer 1.x Guarantee**: Projects adhering to `.rust_motion.json` schema v1 are guaranteed to remain compatible throughout the entire 1.x lifecycle.
 * **Asset Security & Verification**: Remote assets support SHA-256 integrity verification, SSRF destination protection, and bounded size limits.
 
-### 5. 🐍 Native Python Package (`rust-motion`)
+### 5. Native Python Package (`rust-motion`)
 * Available immediately via PyPI:
   ```bash
   pip install rust-motion==1.0.0
@@ -59,17 +59,17 @@ Rust Motion is designed from the ground up for autonomous AI coding agents (Devi
   - macOS Apple Silicon (`arm64`) & Intel (`x86_64`)
   - Windows `x86_64`
 
-### 6. 🎙️ Kinetic Captions & Subtitles
+### 6. Kinetic Captions & Subtitles
 * `rust-motion-captions`: Native word-level subtitle highlight animations for TikTok / Shorts / Reels.
 * Built-in support for Whisper JSON, SubRip (`.srt`), and WebVTT (`.vtt`) formats.
 
-### 7. 🖥️ Studio GUI Editor & Multitrack Timeline
+### 7. Studio GUI Editor & Multitrack Timeline
 * Powered by **Tauri v2** with high-performance WebCodecs and Three.js 3D layer preview integration.
 * Interactive multitrack timeline editor with real-time scrub, seek, audio retiming against named events, and live preview.
 
 ---
 
-## 🚀 Installation & Quickstart
+## Installation & Quickstart
 
 ### AI Agents & Standalone Installer (Recommended)
 ```bash
@@ -100,7 +100,7 @@ cargo install rust-motion-cli --features rhai
 
 ---
 
-## 🔄 Upgrading from 0.x (Breaking Changes)
+## Upgrading from 0.x (Breaking Changes)
 
 1. **Rebranding (`dioxuscut` -> `rust-motion`)**:
    - CLI executable renamed from `dioxuscut` to `rust-motion`.
@@ -119,7 +119,7 @@ For full upgrade instructions, see the [1.0 Migration Guide](https://github.com/
 
 ---
 
-## 📦 Release Assets & Checksums
+## Release Assets & Checksums
 
 | Asset | Platform / Architecture | Description |
 | :--- | :--- | :--- |
@@ -139,7 +139,7 @@ c5d730ccef673fb2b39666ef96621ce33e46123497b7952a6a0b9a69ef490407  rust-motion-cl
 
 ---
 
-## 📖 Documentation
+## Documentation
 - [Quickstart Guide](https://github.com/sjkim1127/rust-motion/blob/main/docs/quickstart.md)
 - [CLI & Agent Reference](https://github.com/sjkim1127/rust-motion/blob/main/docs/cli.md)
 - [Python SDK Guide](https://github.com/sjkim1127/rust-motion/blob/main/docs/python.md)

@@ -76,9 +76,9 @@ comp.render_still(frame=0, output="cover.png")
 |:---|:---:|:---:|:---:|
 | **Runtime Dependencies** | Node.js, Chromium, X11, Mesa | **Pure Rust Binary + FFmpeg** | Zero Browser Overhead |
 | **Memory Footprint (RSS)** | 1,800 ~ 2,500 MB | **400 ~ 900 MB** | **4x ~ 6x Less RAM** |
-| **720p Render Time** | 11.04 s | **0.35 s** | **🔥 31x Faster** |
-| **1080p Shorts Render Time** | ~12.0 s | **0.39 s (230 FPS)** | **🔥 30x Faster** |
-| **AWS Lambda 10k Cost** | $4.60 | **$0.15** | **🔥 96.8% Cost Savings** |
+| **720p Render Time** | 11.04 s | **0.35 s** | **31x Faster** |
+| **1080p Shorts Render Time** | ~12.0 s | **0.39 s (230 FPS)** | **30x Faster** |
+| **AWS Lambda 10k Cost** | $4.60 | **$0.15** | **96.8% Cost Savings** |
 
 ## License
 

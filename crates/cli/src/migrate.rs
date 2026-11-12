@@ -90,9 +90,7 @@ fn transpile_to_rust(
     stats: &mut MigrationStats,
 ) -> Result<(String, MigrationStats), String> {
     let mut out = String::new();
-    out.push_str(
-        "//! ⚠️ EXPERIMENTAL SCAFFOLD: Automatically generated from Remotion component.\n",
-    );
+    out.push_str("//! [EXPERIMENTAL SCAFFOLD]: Automatically generated from Remotion component.\n");
     out.push_str("//! Pure Rust SceneEmitter for high-performance headless rendering.\n\n");
     out.push_str("use rust_motion_animation::interpolate::{interpolate, ExtrapolateType, InterpolateOptions};\n");
     out.push_str("use rust_motion_animation::spring::{spring, SpringConfig};\n");
@@ -183,7 +181,7 @@ fn transpile_to_rhai(
     stats: &mut MigrationStats,
 ) -> Result<(String, MigrationStats), String> {
     let mut out = String::new();
-    out.push_str("//! ⚠️ EXPERIMENTAL SCAFFOLD: Remotion -> Rust Motion Rhai script\n");
+    out.push_str("//! [EXPERIMENTAL SCAFFOLD]: Remotion -> Rust Motion Rhai script\n");
     out.push_str("//! Review and adapt properties and scene nodes for production use.\n\n");
     out.push_str("fn render(ctx, props) {\n");
     out.push_str("    let frame = ctx.frame.to_float();\n");
@@ -220,7 +218,7 @@ fn transpile_to_python(
     stats: &mut MigrationStats,
 ) -> Result<(String, MigrationStats), String> {
     let mut out = String::new();
-    out.push_str("\"\"\"⚠️ EXPERIMENTAL SCAFFOLD: Remotion -> Rust Motion Python SDK.\n");
+    out.push_str("\"\"\"[EXPERIMENTAL SCAFFOLD]: Remotion -> Rust Motion Python SDK.\n");
     out.push_str(
         "Review animation keyframes and layout definitions before production use.\n\"\"\"\n\n",
     );

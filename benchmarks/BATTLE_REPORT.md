@@ -1,11 +1,11 @@
-# ⚔️ Remotion vs Rust Motion: 3-Axis Benchmark Battle Report
+# Remotion vs Rust Motion: 3-Axis Benchmark Battle Report
 
 **Generated**: 2026-09-13 09:59:46
 **Platform**: macOS (Apple Silicon)
 
 ---
 
-## 🥊 Round 1: Memory Footprint (Peak RSS) & Server Concurrency
+## Round 1: Memory Footprint (Peak RSS) & Server Concurrency
 
 Remotion requires Node.js and Chromium renderer/GPU child processes, while Rust Motion operates as a single multithreaded native binary with zero browser overhead.
 
@@ -16,7 +16,7 @@ Remotion requires Node.js and Chromium renderer/GPU child processes, while Rust 
 | **720p Spring Scene Render Duration** | 10.125 s | **1.347 s** | **18.66x paired speedup when measured** |
 | **1080p VFX Render Duration** | not measured by this harness | **9.683 s** | **no speedup claim** |
 
-### 🖥️ Concurrency Capacity on Common Cloud Servers (Available RAM)
+### Concurrency Capacity on Common Cloud Servers (Available RAM)
 
 How many video renders can run concurrently on a single standard server before crashing out of memory (OOM)?
 
@@ -28,7 +28,7 @@ How many video renders can run concurrently on a single standard server before c
 
 ---
 
-## 🎨 Round 2: Text Auto-Fitting & Complex VFX (1080p Cyberpunk Title)
+## Round 2: Text Auto-Fitting & Complex VFX (1080p Cyberpunk Title)
 
 Features exercised:
 - Multi-line text box layout with binary-search font size auto-fitting (`fit_text_on_n_lines` / `layout_text_box`)
@@ -44,7 +44,7 @@ Features exercised:
 
 ---
 
-## 💰 Round 3: Serverless / Cloud Cost Model (Assumption-Based)
+## Round 3: Serverless / Cloud Cost Model (Assumption-Based)
 
 Calculated using official AWS Lambda pricing ($0.0000133334/GB-s on ARM64 Graviton) across batch production runs:
 
@@ -58,7 +58,7 @@ Calculated using official AWS Lambda pricing ($0.0000133334/GB-s on ARM64 Gravit
 
 ---
 
-## 🏆 Final Verdict
+## Final Verdict
 
 1. **Efficiency**: Rust Motion's native RSS is measured here; Remotion RSS requires a matching profile before a memory multiplier can be claimed.
 2. **Speed**: only paired workloads with recorded timings receive a speedup claim; the 1080p VFX result is reported without an unsupported Remotion comparison.

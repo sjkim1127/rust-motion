@@ -4,7 +4,7 @@ Rust Motion incorporates a **Hybrid Rendering Pipeline** that bridges the gap be
 
 ---
 
-## 🚀 The Hybrid Philosophy
+## The Hybrid Philosophy
 
 Traditional programmatic video rendering forces a compromise:
 - **Web-based engines (Remotion)** offer full HTML/CSS/WebGL capabilities, but suffer from heavy browser overhead and slower rasterization (3–10 fps).
@@ -27,7 +27,7 @@ flowchart TD
 
 ---
 
-## ⚡ Tier 1: Pure Rust Native Engine (10x Faster)
+## Tier 1: Pure Rust Native Engine (10x Faster)
 
 For standard video editing, kinetic typography, subtitles, animated shapes, and complex transitions:
 - **Rasterizer**: Pure Rust `tiny-skia` (CPU) or `wgpu` (GPU hardware accelerated).
@@ -43,7 +43,7 @@ rust-motion render --composition KaraokeCaptions --backend native -o captions.mp
 
 ---
 
-## 🌐 Tier 2: Headless Chromium Browser Worker (Remotion & Three.js Parity)
+## Tier 2: Headless Chromium Browser Worker (Remotion & Three.js Parity)
 
 For 3D graphics, Three.js scenes, Canvas animations, or migrated Remotion components:
 - **Worker**: Persistent headless Chromium worker (`scripts/three-render-worker.mjs`).
@@ -58,7 +58,7 @@ rust-motion render --composition three_lifecycle_preview --backend browser -o 3d
 
 ---
 
-## 🧠 Smart Hybrid Dispatch (`--backend auto`)
+## Smart Hybrid Dispatch (`--backend auto`)
 
 Rust Motion automatically inspects compositions and projects to pick the optimal engine:
 - If a composition name starts with `three_`, `web_`, `browser_`, `dom_`, or is a `.tsx`/`.html` module: **Chromium Browser** is automatically selected.
@@ -73,7 +73,7 @@ rust-motion render --composition KaraokeCaptions --backend auto -o out.mp4      
 
 ---
 
-## 🎬 Rust Motion Studio (`rust-motion studio`)
+## Rust Motion Studio (`rust-motion studio`)
 
 Instead of relying on heavy desktop WebView wrappers (Tauri / Electron) that require multi-gigabyte GTK/WebKit dependencies on Linux, Rust Motion provides a **zero-dependency lightweight Web Studio**:
 
