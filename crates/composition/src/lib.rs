@@ -3,6 +3,7 @@
 pub mod layout;
 pub mod mesh3d;
 pub mod safe_area;
+pub mod scene3d;
 mod scene_emitter;
 pub mod time;
 mod time_events;
@@ -12,6 +13,7 @@ pub use mesh3d::{Mesh3DPrimitive, SceneMesh3D};
 pub use safe_area::{
     fit_text, get_safe_area_insets, measure_text_approx, Platform, SafeAreaInsets,
 };
+pub use scene3d::Scene3DEmitter;
 pub use scene_emitter::{
     FlipDirection, LinearWipeDirection, SceneAction, SceneAuthoring, SceneAuthoringBuilder,
     SceneEmitter, SceneEmitterComposition, SceneFrameContext, SceneFreeze, SceneGroup, SceneLayer,

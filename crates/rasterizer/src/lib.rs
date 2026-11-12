@@ -57,6 +57,7 @@ pub mod procedural_scenes;
 pub mod psd;
 pub mod render;
 pub mod scene;
+pub mod scene3d;
 pub mod security;
 pub mod shader;
 pub mod slideshow;
@@ -97,6 +98,10 @@ pub use emoji::{is_emoji_char, is_emoji_grapheme, render_emoji, split_text_and_e
 pub use gltf::{parse_glb, parse_gltf, GltfModel};
 pub use mesh3d::{Mat4, Mesh3D, Quat, SkinnedVertex, Vec3};
 pub use particles::{ConfettiEmitter, ConfettiShape, EmitterGeometry, Particle, ParticleEmitter};
+pub use scene3d::{
+    Geometry3D, InstanceTransform, InstancingBuffer, Material3D as Scene3DMaterial, Node3D,
+    PbrMaterial, Scene3D, Scene3DBackground, Scene3DCamera, Scene3DLight, Transform3D,
+};
 #[cfg(feature = "gpu")]
 pub use shader::WgpuShaderRunner;
 pub use shader::{render_shader_cpu, wrap_wgsl_shader, ShaderUniforms};

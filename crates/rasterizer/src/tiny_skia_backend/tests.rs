@@ -743,3 +743,45 @@ fn video_frame_is_decoded_and_cached() {
     assert_eq!(backend.videos.decoder_count(), 0);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn test_scene3d_rendering_via_backend() {
+    let mut scene3d = crate::scene3d::Scene3D::new()
+        .with_camera(crate::scene3d::Scene3DCamera::perspective(
+            crate::mesh3d::Vec3::new(0.0, 0.0, 150.0),
+            crate::mesh3d::Vec3::new(0.0, 0.0, 0.0),
+            60.0,
+        ))
+        .with_background(crate::scene3d::Scene3DBackground::Solid {
+            color: Color::rgb(10, 20, 30),
+        });
+
+    scene3d.add_light(crate::scene3d::Scene3DLight::ambient(Color::WHITE, 0.4));
+    scene3d.add_light(crate::scene3d::Scene3DLight::directional(
+        crate::mesh3d::Vec3::new(1.0, 1.0, -1.0),
+        Color::WHITE,
+        0.8,
+    ));
+
+    scene3d.add_node(crate::scene3d::Node3D::new(
+        crate::scene3d::Geometry3D::Cube { size: 50.0 },
+        crate::scene3d::Material3D::pbr(Color::rgb(0, 220, 100), 0.5, 0.5),
+    ));
+
+    let mut scene = Scene::new();
+    scene.push(SceneNode::Scene3D {
+        x: 0.0,
+        y: 0.0,
+        w: 200.0,
+        h: 200.0,
+        scene: Box::new(scene3d),
+        opacity: 1.0,
+    });
+
+    let img = render(&scene, 200, 200);
+    let center_px = img.get_pixel(100, 100);
+    assert!(
+        center_px[1] > 50,
+        "Green channel should be rendered from the 3D cube"
+    );
+}

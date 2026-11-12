@@ -122,8 +122,46 @@ impl Quat {
         Self { x, y, z, w }
     }
 
+    /// Construct a quaternion from an axis and rotation angle in radians.
+    pub fn from_axis_angle(axis: Vec3, angle_rad: f32) -> Self {
+        let half = angle_rad * 0.5;
+        let s = half.sin();
+        let norm_axis = axis.normalize();
+        Self {
+            x: norm_axis.x * s,
+            y: norm_axis.y * s,
+            z: norm_axis.z * s,
+            w: half.cos(),
+        }
+    }
+
+    /// Construct a quaternion from Euler angles (pitch = X, yaw = Y, roll = Z) in radians.
+    pub fn from_euler(pitch_rad: f32, yaw_rad: f32, roll_rad: f32) -> Self {
+        let (hp, hy, hr) = (pitch_rad * 0.5, yaw_rad * 0.5, roll_rad * 0.5);
+        let (cp, sp) = (hp.cos(), hp.sin());
+        let (cy, sy) = (hy.cos(), hy.sin());
+        let (cr, sr) = (hr.cos(), hr.sin());
+
+        Self {
+            x: sp * cy * cr - cp * sy * sr,
+            y: cp * sy * cr + sp * cy * sr,
+            z: cp * cy * sr - sp * sy * cr,
+            w: cp * cy * cr + sp * sy * sr,
+        }
+    }
+
     pub fn dot(self, other: Self) -> f32 {
         self.x * other.x + self.y * other.y + self.z * other.z + self.w * other.w
+    }
+
+    /// Quaternion Hamilton product (`self * other`).
+    pub fn multiply(self, rhs: Self) -> Self {
+        Self {
+            x: self.w * rhs.x + self.x * rhs.w + self.y * rhs.z - self.z * rhs.y,
+            y: self.w * rhs.y - self.x * rhs.z + self.y * rhs.w + self.z * rhs.x,
+            z: self.w * rhs.z + self.x * rhs.y - self.y * rhs.x + self.z * rhs.w,
+            w: self.w * rhs.w - self.x * rhs.x - self.y * rhs.y - self.z * rhs.z,
+        }
     }
 
     pub fn length(self) -> f32 {
@@ -200,6 +238,34 @@ impl Quat {
     }
 }
 
+impl std::ops::Mul for Quat {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        self.multiply(rhs)
+    }
+}
+
+impl std::ops::Mul<&Quat> for Quat {
+    type Output = Self;
+    fn mul(self, rhs: &Quat) -> Self::Output {
+        self.multiply(*rhs)
+    }
+}
+
+impl std::ops::Mul<Quat> for &Quat {
+    type Output = Quat;
+    fn mul(self, rhs: Quat) -> Self::Output {
+        self.multiply(rhs)
+    }
+}
+
+impl std::ops::Mul<&Quat> for &Quat {
+    type Output = Quat;
+    fn mul(self, rhs: &Quat) -> Self::Output {
+        self.multiply(*rhs)
+    }
+}
+
 /// A 4x4 column-major matrix for 3D affine transforms.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Mat4(pub [f32; 16]);
@@ -260,7 +326,7 @@ impl Mat4 {
         ])
     }
 
-    pub fn mul(&self, rhs: &Self) -> Self {
+    pub fn multiply(&self, rhs: &Self) -> Self {
         let mut out = [0.0f32; 16];
         for col in 0..4 {
             for row in 0..4 {
@@ -272,6 +338,10 @@ impl Mat4 {
             }
         }
         Self(out)
+    }
+
+    pub fn mul(&self, rhs: &Self) -> Self {
+        self.multiply(rhs)
     }
 
     pub fn transform_point(&self, p: Vec3) -> Vec3 {
@@ -298,6 +368,41 @@ impl Mat4 {
     }
 }
 
+impl std::ops::Mul for Mat4 {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        self.multiply(&rhs)
+    }
+}
+
+impl std::ops::Mul<&Mat4> for Mat4 {
+    type Output = Self;
+    fn mul(self, rhs: &Mat4) -> Self::Output {
+        self.multiply(rhs)
+    }
+}
+
+impl std::ops::Mul<Mat4> for &Mat4 {
+    type Output = Mat4;
+    fn mul(self, rhs: Mat4) -> Self::Output {
+        self.multiply(&rhs)
+    }
+}
+
+impl std::ops::Mul<&Mat4> for &Mat4 {
+    type Output = Mat4;
+    fn mul(self, rhs: &Mat4) -> Self::Output {
+        self.multiply(rhs)
+    }
+}
+
+impl std::ops::Mul<Vec3> for Mat4 {
+    type Output = Vec3;
+    fn mul(self, rhs: Vec3) -> Self::Output {
+        self.transform_point(rhs)
+    }
+}
+
 /// Vertex with skeletal bone joint influences for GPU/CPU vertex skinning.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct SkinnedVertex {
@@ -308,7 +413,7 @@ pub struct SkinnedVertex {
 }
 
 /// A 3D procedural mesh (SOP - Surface Operator).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Mesh3D {
     pub vertices: Vec<Vec3>,
     pub faces: Vec<Vec<usize>>,

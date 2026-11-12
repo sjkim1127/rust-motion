@@ -1101,6 +1101,29 @@ pub(crate) fn render_node(
                 }
             }
         }
+
+        SceneNode::Scene3D {
+            x,
+            y,
+            w,
+            h,
+            scene,
+            opacity: node_opacity,
+        } => {
+            let eff_opacity = opacity * node_opacity;
+            if eff_opacity > 0.0 {
+                crate::scene3d::render_scene3d_software(
+                    scene,
+                    *x,
+                    *y,
+                    *w,
+                    *h,
+                    eff_opacity,
+                    pixmap,
+                    transform,
+                );
+            }
+        }
     }
     Ok(())
 }

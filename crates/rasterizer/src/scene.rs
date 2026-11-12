@@ -1058,6 +1058,17 @@ pub enum SceneNode {
         #[serde(default = "default_opacity")]
         opacity: f32,
     },
+
+    /// Native 3D motion graphics sub-scene with PBR materials, lights, and GPU instancing.
+    Scene3D {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        scene: Box<crate::scene3d::Scene3D>,
+        #[serde(default = "default_opacity")]
+        opacity: f32,
+    },
 }
 
 const fn default_one() -> f32 {
