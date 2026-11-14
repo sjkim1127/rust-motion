@@ -32,3 +32,6 @@ rust-motion-shapes = { workspace = true }
 [features]
 default = ["extension-module"]
 extension-module = ["pyo3/extension-module"]
+
+[lints]
+workspace = true

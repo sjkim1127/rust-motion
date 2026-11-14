@@ -17,3 +17,6 @@ serde_json          = { workspace = true }
 
 [dev-dependencies]
 rust-motion-paths     = { workspace = true }
+
+[lints]
+workspace = true

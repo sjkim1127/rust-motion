@@ -21,3 +21,6 @@ rayon = { workspace = true }
 
 [dev-dependencies]
 wat = "1.228"
+
+[lints]
+workspace = true

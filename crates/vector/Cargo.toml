@@ -12,3 +12,6 @@ rust-motion-color = { workspace = true }
 rust-motion-raster = { workspace = true }
 rust-motion-doc = { workspace = true }
 rayon = { workspace = true }
+
+[lints]
+workspace = true

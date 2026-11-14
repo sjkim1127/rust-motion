@@ -12,3 +12,6 @@ moxcms = []
 
 [dependencies]
 rayon = { workspace = true, optional = true }
+
+[lints]
+workspace = true

@@ -13,3 +13,6 @@ threads = ["dep:rayon"]
 rust-motion-bitstream = { workspace = true }
 thiserror = { workspace = true }
 rayon = { workspace = true, optional = true }
+
+[lints]
+workspace = true

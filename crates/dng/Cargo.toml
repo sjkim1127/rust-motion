@@ -17,3 +17,6 @@ thiserror.workspace = true
 
 [dev-dependencies]
 rust-motion-dng = { path = ".", features = ["writer"] }
+
+[lints]
+workspace = true

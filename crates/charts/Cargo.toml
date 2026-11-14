@@ -19,3 +19,6 @@ thiserror             = { workspace = true }
 tracing               = { workspace = true }
 quick-xml             = "0.42"
 
+
+[lints]
+workspace = true

@@ -26,3 +26,6 @@ objc2-core-graphics = { version = "=0.3.2", default-features = false, features =
 [[test]]
 name = "monitor_macos"
 harness = false
+
+[lints]
+workspace = true
