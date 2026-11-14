@@ -12,3 +12,6 @@ rust-motion-color = { workspace = true }
 rust-motion-raster = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+[lints]
+workspace = true

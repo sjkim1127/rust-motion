@@ -27,3 +27,6 @@ image              = { workspace = true }
 [dev-dependencies]
 image              = "0.25"
 
+
+[lints]
+workspace = true

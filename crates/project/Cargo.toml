@@ -18,3 +18,6 @@ rust-motion-cfb = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 reqwest = { workspace = true }
+
+[lints]
+workspace = true

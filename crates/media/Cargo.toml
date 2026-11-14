@@ -19,3 +19,6 @@ hound              = { workspace = true }
 image              = { workspace = true }
 symphonia          = { workspace = true }
 thiserror          = { workspace = true }
+
+[lints]
+workspace = true

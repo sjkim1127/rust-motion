@@ -13,3 +13,6 @@ rust-motion-animation = { workspace = true }
 rust-motion-composition = { workspace = true }
 rust-motion-rasterizer  = { workspace = true }
 serde_json            = { workspace = true }
+
+[lints]
+workspace = true
