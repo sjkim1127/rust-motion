@@ -103,8 +103,23 @@ pub fn build_ffmpeg_args(config: &EncodeConfig) -> Vec<String> {
         args.push(format!("{w}x{h}"));
     }
 
+    // FFmpeg converts RGB PNGs with BT.601 by default. Convert with BT.709 / limited range
+    // instead and tag the stream accordingly, matching the pure-Rust fallback encoder. Only
+    // applies to limited-range YUV outputs (`yuvj*` is full range, RGB has no matrix).
+    let bt709_yuv =
+        config.pixel_format.starts_with("yuv") && !config.pixel_format.starts_with("yuvj");
     args.push("-vf".to_string());
-    args.push("scale=trunc(iw/2)*2:trunc(ih/2)*2".to_string());
+    if bt709_yuv {
+        // `setparams` is needed for the tags to reach the encoder; the `-color_*` output
+        // flags alone leave primaries/transfer unset.
+        args.push(
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2:out_color_matrix=bt709:out_range=tv,\
+             setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv"
+                .to_string(),
+        );
+    } else {
+        args.push("scale=trunc(iw/2)*2:trunc(ih/2)*2".to_string());
+    }
 
     if !config.movflags.is_empty() {
         args.push("-movflags".to_string());
@@ -143,7 +158,7 @@ pub async fn encode_mp4(config: &EncodeConfig) -> Result<(), RenderError> {
         Ok(out) => out,
         Err(e) => {
             tracing::warn!("FFmpeg not available ({e}), falling back to pure-Rust H.264 encoder");
-            return encode_h264_pure_rust(config);
+            return fallback_encode(config, &format!("FFmpeg not available: {e}"));
         }
     };
 
@@ -155,7 +170,7 @@ pub async fn encode_mp4(config: &EncodeConfig) -> Result<(), RenderError> {
             output.status,
             stderr_text
         );
-        return encode_h264_pure_rust(config);
+        return fallback_encode(config, &format!("FFmpeg failed ({})", output.status));
     }
 
     if !stderr_text.is_empty() {
@@ -170,12 +185,134 @@ pub async fn encode_mp4(config: &EncodeConfig) -> Result<(), RenderError> {
     Ok(())
 }
 
+/// Codec names the pure-Rust fallback can honor (it only produces H.264).
+fn fallback_supports_codec(codec: &str) -> bool {
+    matches!(
+        codec.to_ascii_lowercase().as_str(),
+        "libx264" | "h264" | "pure-rust" | "h264enc"
+    )
+}
+
+/// Run the pure-Rust encoder after FFmpeg was unavailable or failed, refusing to silently
+/// produce a different codec than the one requested.
+fn fallback_encode(config: &EncodeConfig, reason: &str) -> Result<(), RenderError> {
+    if !fallback_supports_codec(&config.codec) {
+        return Err(RenderError::Encode(format!(
+            "{reason}; the pure-Rust fallback only supports H.264 but codec '{}' was requested",
+            config.codec
+        )));
+    }
+    encode_h264_pure_rust(config)
+}
+
+/// Convert a frame rate to an exact `num/den` pair (e.g. 29.97 -> 30000/1001).
+pub(crate) fn fps_to_ratio(fps: f64) -> (u32, u32) {
+    fn gcd(a: u32, b: u32) -> u32 {
+        if b == 0 {
+            a
+        } else {
+            gcd(b, a % b)
+        }
+    }
+    if !fps.is_finite() || fps <= 0.0 {
+        return (30, 1);
+    }
+    let rounded = fps.round().max(1.0);
+    if (fps - rounded).abs() < 1e-3 {
+        return (rounded as u32, 1);
+    }
+    // NTSC-style rates: N * 1000 / 1001.
+    let ntsc = (fps * 1.001).round();
+    if ntsc >= 1.0 && (fps - ntsc * 1000.0 / 1001.0).abs() < 1e-3 {
+        return (ntsc as u32 * 1000, 1001);
+    }
+    let num = (fps * 1000.0).round().clamp(1.0, u32::MAX as f64) as u32;
+    let g = gcd(num, 1000);
+    (num / g, 1000 / g)
+}
+
+fn map_preset(preset: &str) -> rust_motion_h264enc::Preset {
+    use rust_motion_h264enc::Preset;
+    match preset.to_ascii_lowercase().as_str() {
+        "ultrafast" | "superfast" | "veryfast" | "faster" | "fast" => Preset::Speed,
+        "slow" | "slower" | "veryslow" | "placebo" => Preset::Quality,
+        _ => Preset::Balanced,
+    }
+}
+
+/// Convert an RGBA image (composited over black) to planar BT.709 limited-range YUV 4:2:0,
+/// matching the colour description the encoder writes to the VUI. Chroma is the average of
+/// each 2x2 block. `width` and `height` must be even and equal the image size.
+fn rgba_to_yuv420(
+    img: &image::RgbaImage,
+    y_plane: &mut [u8],
+    u_plane: &mut [u8],
+    v_plane: &mut [u8],
+) {
+    let width = img.width() as usize;
+    let height = img.height() as usize;
+    let uv_stride = width / 2;
+    let raw = img.as_raw();
+
+    let rgb = |x: usize, y: usize| -> (f32, f32, f32) {
+        let i = (y * width + x) * 4;
+        let a = raw[i + 3] as f32 / 255.0;
+        (
+            raw[i] as f32 * a,
+            raw[i + 1] as f32 * a,
+            raw[i + 2] as f32 * a,
+        )
+    };
+
+    for y in 0..height {
+        for x in 0..width {
+            let (r, g, b) = rgb(x, y);
+            let luma = 16.0 + (0.2126 * r + 0.7152 * g + 0.0722 * b) * (219.0 / 255.0);
+            y_plane[y * width + x] = luma.round().clamp(16.0, 235.0) as u8;
+        }
+    }
+    for cy in 0..height / 2 {
+        for cx in 0..uv_stride {
+            let mut sum = (0.0f32, 0.0f32, 0.0f32);
+            for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                let (r, g, b) = rgb(cx * 2 + dx, cy * 2 + dy);
+                sum.0 += r;
+                sum.1 += g;
+                sum.2 += b;
+            }
+            let (r, g, b) = (sum.0 / 4.0, sum.1 / 4.0, sum.2 / 4.0);
+            let k = 224.0 / 255.0;
+            let cb = 128.0 + (-0.1146 * r - 0.3854 * g + 0.5 * b) * k;
+            let cr = 128.0 + (0.5 * r - 0.4542 * g - 0.0458 * b) * k;
+            u_plane[cy * uv_stride + cx] = cb.round().clamp(16.0, 240.0) as u8;
+            v_plane[cy * uv_stride + cx] = cr.round().clamp(16.0, 240.0) as u8;
+        }
+    }
+}
+
 /// Pure-Rust standalone H.264 encoder implementation (zero external FFmpeg dependencies).
-/// Converts rendered PNG frames to YUV420p and encodes them via `rust_motion_h264enc`.
+/// Converts rendered PNG frames to BT.709 limited-range YUV 4:2:0 and encodes them via
+/// `rust_motion_h264enc`.
+///
+/// The output container follows the file extension: `.h264` / `.264` get a raw Annex-B
+/// elementary stream, everything else (e.g. `.mp4`, `.mov`) a real MP4 container. The
+/// requested preset and CRF are honored and fractional frame rates are kept exact. Only
+/// H.264 / yuv420p can be produced; other pixel formats are ignored with a warning.
 pub fn encode_h264_pure_rust(config: &EncodeConfig) -> Result<(), RenderError> {
-    use rust_motion_h264enc::{Encoder, EncoderConfig, RateControl, YuvFrame};
-    use std::fs::File;
-    use std::io::Write;
+    use rust_motion_h264enc::{Encoder, EncoderConfig, PacketFormat, RateControl, YuvFrame};
+
+    if !fallback_supports_codec(&config.codec) {
+        return Err(RenderError::Encode(format!(
+            "pure-Rust encoder only supports H.264 but codec '{}' was requested",
+            config.codec
+        )));
+    }
+    if !config.pixel_format.eq_ignore_ascii_case("yuv420p") {
+        tracing::warn!(
+            "pure-Rust encoder only supports yuv420p; ignoring pixel format '{}'",
+            config.pixel_format
+        );
+    }
 
     let mut frame_paths = Vec::new();
     let entries = std::fs::read_dir(&config.frames_dir)
@@ -205,15 +342,26 @@ pub fn encode_h264_pure_rust(config: &EncodeConfig) -> Result<(), RenderError> {
     let width = (width / 2) * 2;
     let height = (height / 2) * 2;
 
-    let fps_round = config.fps.round().max(1.0) as u32;
-    let mut enc_cfg = EncoderConfig::new(width, height, fps_round, 1);
+    let raw_stream = config
+        .output
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "h264" | "264"));
+
+    let (fps_num, fps_den) = fps_to_ratio(config.fps);
+    let mut enc_cfg = EncoderConfig::new(width, height, fps_num, fps_den);
     enc_cfg.rate = RateControl::Crf(config.crf as f32);
+    enc_cfg.preset = map_preset(&config.preset);
+    // No B-frame reordering: keeps dts == pts so the MP4 needs no composition offsets.
+    enc_cfg.bframes = 0;
+    enc_cfg.format = if raw_stream {
+        PacketFormat::AnnexB
+    } else {
+        PacketFormat::LengthPrefixed
+    };
 
     let mut encoder = Encoder::new(enc_cfg)
         .map_err(|e| RenderError::Encode(format!("Failed to initialize H.264 encoder: {e}")))?;
-
-    let mut out_file = File::create(&config.output)
-        .map_err(|e| RenderError::Encode(format!("Failed to create output file: {e}")))?;
 
     let y_stride = width as usize;
     let uv_stride = (width as usize) / 2;
@@ -224,6 +372,7 @@ pub fn encode_h264_pure_rust(config: &EncodeConfig) -> Result<(), RenderError> {
     let mut u_plane = vec![0u8; uv_len];
     let mut v_plane = vec![0u8; uv_len];
 
+    let mut packets = Vec::new();
     for (f_idx, path) in frame_paths.iter().enumerate() {
         let raw_img = image::open(path)
             .map_err(|e| RenderError::Encode(format!("Failed to open frame {:?}: {e}", path)))?
@@ -240,22 +389,7 @@ pub fn encode_h264_pure_rust(config: &EncodeConfig) -> Result<(), RenderError> {
             raw_img
         };
 
-        for r in 0..height as usize {
-            for c in 0..width as usize {
-                let p = img.get_pixel(c as u32, r as u32);
-                let (r_val, g_val, b_val) = (p[0] as f32, p[1] as f32, p[2] as f32);
-                let y_val = 0.299 * r_val + 0.587 * g_val + 0.114 * b_val;
-                y_plane[r * y_stride + c] = y_val.clamp(0.0, 255.0) as u8;
-
-                if r % 2 == 0 && c % 2 == 0 {
-                    let u_val = -0.169 * r_val - 0.331 * g_val + 0.500 * b_val + 128.0;
-                    let v_val = 0.500 * r_val - 0.419 * g_val - 0.081 * b_val + 128.0;
-                    let uv_idx = (r / 2) * uv_stride + (c / 2);
-                    u_plane[uv_idx] = u_val.clamp(0.0, 255.0) as u8;
-                    v_plane[uv_idx] = v_val.clamp(0.0, 255.0) as u8;
-                }
-            }
-        }
+        rgba_to_yuv420(&img, &mut y_plane, &mut u_plane, &mut v_plane);
 
         let yuv = YuvFrame {
             y: &y_plane,
@@ -265,25 +399,45 @@ pub fn encode_h264_pure_rust(config: &EncodeConfig) -> Result<(), RenderError> {
             uv_stride,
         };
 
-        let packets = encoder
-            .encode(&yuv, f_idx as i64)
-            .map_err(|e| RenderError::Encode(format!("H.264 encode error: {e}")))?;
-        for pkt in packets {
-            out_file
-                .write_all(&pkt.data)
-                .map_err(|e| RenderError::Encode(e.to_string()))?;
-        }
+        packets.extend(
+            encoder
+                .encode(&yuv, f_idx as i64)
+                .map_err(|e| RenderError::Encode(format!("H.264 encode error: {e}")))?,
+        );
     }
+    packets.extend(encoder.flush());
 
-    let flushed = encoder.flush();
-    for pkt in flushed {
-        out_file
-            .write_all(&pkt.data)
-            .map_err(|e| RenderError::Encode(e.to_string()))?;
+    if raw_stream {
+        let mut bytes = Vec::new();
+        for pkt in &packets {
+            bytes.extend_from_slice(&pkt.data);
+        }
+        std::fs::write(&config.output, bytes)
+            .map_err(|e| RenderError::Encode(format!("Failed to write output file: {e}")))?;
+    } else {
+        let avcc = encoder.avcc();
+        let samples: Vec<crate::mp4::Sample> = packets
+            .into_iter()
+            .map(|p| crate::mp4::Sample {
+                data: p.data,
+                keyframe: p.keyframe,
+            })
+            .collect();
+        let file = crate::mp4::mux(
+            &crate::mp4::Mp4Params {
+                width,
+                height,
+                fps_num,
+                fps_den,
+                avcc: &avcc,
+                faststart: config.movflags.contains("faststart"),
+            },
+            &samples,
+        )
+        .map_err(|e| RenderError::Encode(format!("MP4 mux error: {e}")))?;
+        std::fs::write(&config.output, file)
+            .map_err(|e| RenderError::Encode(format!("Failed to write output file: {e}")))?;
     }
-    out_file
-        .flush()
-        .map_err(|e| RenderError::Encode(e.to_string()))?;
 
     if config.cleanup_after_encode {
         cleanup_frames(&config.frames_dir)?;
@@ -350,7 +504,7 @@ mod tests {
                 "-pix_fmt",
                 "yuv420p",
                 "-vf",
-                "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                "scale=trunc(iw/2)*2:trunc(ih/2)*2:out_color_matrix=bt709:out_range=tv,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv",
                 "-movflags",
                 "+faststart",
                 "/tmp/output.mp4"
@@ -388,7 +542,7 @@ mod tests {
                 "-s",
                 "1920x1080",
                 "-vf",
-                "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                "scale=trunc(iw/2)*2:trunc(ih/2)*2:out_color_matrix=bt709:out_range=tv,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv",
                 "-movflags",
                 "+faststart",
                 "/tmp/output.mp4"
@@ -484,5 +638,118 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    fn synthetic_frames(prefix: &str, count: usize) -> (PathBuf, PathBuf) {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "rust_motion_test_{prefix}_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let frames_dir = temp_dir.join("frames");
+        fs::create_dir_all(&frames_dir).unwrap();
+        for idx in 0..count {
+            fs::write(frames_dir.join(format!("frame_{idx:06}.png")), MINIMAL_PNG).unwrap();
+        }
+        (temp_dir, frames_dir)
+    }
+
+    #[test]
+    fn pure_rust_fallback_writes_a_real_mp4_container() {
+        let (temp_dir, frames_dir) = synthetic_frames("fallback_mp4", 6);
+        let output = temp_dir.join("out.mp4");
+        let config = EncodeConfig::h264(&frames_dir, &output, 29.97).with_resolution(64, 64);
+
+        encode_h264_pure_rust(&config).expect("fallback encode failed");
+
+        let bytes = fs::read(&output).unwrap();
+        assert_eq!(&bytes[4..8], b"ftyp", "fallback output is not an MP4");
+        assert!(bytes.windows(4).any(|w| w == b"moov"));
+        assert!(bytes.windows(4).any(|w| w == b"mdat"));
+        assert!(bytes.windows(4).any(|w| w == b"avcC"));
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn pure_rust_fallback_keeps_raw_stream_for_h264_extension() {
+        let (temp_dir, frames_dir) = synthetic_frames("fallback_raw", 3);
+        let output = temp_dir.join("out.h264");
+        let config = EncodeConfig::h264(&frames_dir, &output, 30.0).with_resolution(64, 64);
+
+        encode_h264_pure_rust(&config).unwrap();
+
+        let bytes = fs::read(&output).unwrap();
+        assert!(
+            bytes.starts_with(&[0, 0, 0, 1]) || bytes.starts_with(&[0, 0, 1]),
+            "expected Annex-B start code"
+        );
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn pure_rust_fallback_rejects_non_h264_codec() {
+        let (temp_dir, frames_dir) = synthetic_frames("fallback_codec", 2);
+        let output = temp_dir.join("out.mp4");
+        let mut config = EncodeConfig::h264(&frames_dir, &output, 30.0).with_resolution(64, 64);
+        config.codec = "libx265".to_string();
+
+        assert!(fallback_encode(&config, "ffmpeg missing").is_err());
+        assert!(encode_h264_pure_rust(&config).is_err());
+        assert!(!output.exists());
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn fps_ratio_is_exact() {
+        assert_eq!(fps_to_ratio(30.0), (30, 1));
+        assert_eq!(fps_to_ratio(60.0), (60, 1));
+        assert_eq!(fps_to_ratio(29.97), (30000, 1001));
+        assert_eq!(fps_to_ratio(23.976), (24000, 1001));
+        assert_eq!(fps_to_ratio(59.94), (60000, 1001));
+        assert_eq!(fps_to_ratio(12.5), (25, 2));
+        assert_eq!(fps_to_ratio(0.0), (30, 1));
+        assert_eq!(fps_to_ratio(f64::NAN), (30, 1));
+    }
+
+    #[test]
+    fn yuv_conversion_is_bt709_limited_range_with_chroma_average() {
+        let mut img = image::RgbaImage::new(2, 2);
+        // Black, white, transparent (-> black), white: luma per pixel, averaged chroma.
+        img.put_pixel(0, 0, image::Rgba([0, 0, 0, 255]));
+        img.put_pixel(1, 0, image::Rgba([255, 255, 255, 255]));
+        img.put_pixel(0, 1, image::Rgba([255, 0, 0, 0]));
+        img.put_pixel(1, 1, image::Rgba([255, 255, 255, 255]));
+        let (mut y, mut u, mut v) = (vec![0u8; 4], vec![0u8; 1], vec![0u8; 1]);
+        rgba_to_yuv420(&img, &mut y, &mut u, &mut v);
+        assert_eq!(y, vec![16, 235, 16, 235]);
+        // Grey average (127.5 each) has no chroma.
+        assert_eq!((u[0], v[0]), (128, 128));
+
+        let mut red = image::RgbaImage::new(2, 2);
+        for p in red.pixels_mut() {
+            *p = image::Rgba([255, 0, 0, 255]);
+        }
+        rgba_to_yuv420(&red, &mut y, &mut u, &mut v);
+        assert_eq!(y[0], 63); // 16 + 219 * 0.2126
+        assert!(v[0] > 200 && u[0] < 128);
+    }
+
+    #[test]
+    fn test_build_ffmpeg_args_color_tagging_only_for_limited_range_yuv() {
+        let mk = |fmt: &str| {
+            let mut c = EncodeConfig::h264("/tmp/frames", "/tmp/o.mp4", 30.0);
+            c.pixel_format = fmt.to_string();
+            build_ffmpeg_args(&c)
+        };
+        let tagged = |args: &Vec<String>| args.iter().any(|a| a.contains("setparams="));
+        assert!(tagged(&mk("yuv420p")));
+        assert!(tagged(&mk("yuv444p")));
+        for fmt in ["yuvj420p", "rgb24", "gbrp"] {
+            let args = mk(fmt);
+            assert!(!args.iter().any(|a| a.contains("setparams=")), "{fmt}");
+            assert!(args.contains(&"scale=trunc(iw/2)*2:trunc(ih/2)*2".to_string()));
+        }
     }
 }

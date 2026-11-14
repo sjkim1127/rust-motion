@@ -11,6 +11,7 @@
 //! 3. [`spawn_server`] — embedded web server for web assets and compositions
 
 pub mod encode;
+pub mod mp4;
 pub mod render_frames;
 pub mod server;
 
