@@ -19,3 +19,6 @@ serde = { workspace = true, optional = true }
 [dev-dependencies]
 proptest = { workspace = true }
 rust_motion_psd = { path = ".", package = "rust-motion-psd", features = ["testgen"] }
+
+[lints]
+workspace = true

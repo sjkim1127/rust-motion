@@ -15,3 +15,6 @@ threads = ["dep:rayon"]
 [dependencies]
 thiserror = { workspace = true }
 rayon = { workspace = true, optional = true }
+
+[lints]
+workspace = true
