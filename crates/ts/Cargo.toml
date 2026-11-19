@@ -1,6 +1,6 @@
 [package]
 name = "rust-motion-ts"
-description = "Native TypeScript/Node.js bindings and 1:1 Remotion API compatibility bridge for Rust Motion"
+description = "Native TypeScript/Node.js bindings and Remotion-style API bridge for Rust Motion"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
