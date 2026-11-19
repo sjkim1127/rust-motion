@@ -1,4 +1,4 @@
-//! Native TypeScript/Node.js bindings and 1:1 Remotion API compatibility bridge for Rust Motion.
+//! Native TypeScript/Node.js bindings and Remotion-style API bridge for Rust Motion.
 
 pub mod animation;
 pub mod bridge;

@@ -1,7 +1,7 @@
 {
   "name": "@rust-motion/remotion",
   "version": "1.0.0",
-  "description": "High-performance pure Rust video engine with 1:1 Remotion TypeScript API compatibility",
+  "description": "Remotion-style animation helpers and a Node bridge to the native Rust Motion renderer",
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

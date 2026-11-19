@@ -198,46 +198,40 @@ impl SceneEmitter for IntroCard {
 
 Compose emitters in time with `SceneSequence`, `SceneSeries`, `SceneLoop`, and `SceneTransitionSeries`, and lay out children with the Taffy-based `LayoutBox` (Flexbox and Grid).
 
-### TypeScript — Remotion-style API
+### TypeScript — Remotion-style helpers and a render bridge
 
-`@rust-motion/remotion` mirrors the Remotion API surface for `interpolate`, `spring`, `Easing`, `Composition`, `Sequence`, `Series`, `Loop`, `Freeze`, `AbsoluteFill`, `useCurrentFrame`, and `useVideoConfig`, and renders through the native engine. Components return plain style objects; **there is no React or JSX runtime**, so existing Remotion components with arbitrary DOM/CSS will not run unchanged.
+`@rust-motion/remotion` provides Remotion-style helpers (`interpolate`, `interpolateColors`, `spring`, `Easing`, `Sequence`, `Series`, `Loop`, `Freeze`, `useCurrentFrame`, `useVideoConfig`) plus a Node bridge (`renderMedia`, `renderStill`) that drives the native `rust-motion` CLI.
+
+**Limitations to know up front:**
+- The bridge renders compositions that exist in the **native (Rust) registry** (see `rust-motion list-compositions`). TypeScript component functions registered with `Composition({ component })` are *not* evaluated by the native renderer, and rendering one fails with an explicit error.
+- There is no React or JSX runtime, so existing Remotion components with arbitrary DOM/CSS will not run unchanged.
+- Many Remotion APIs are not implemented yet (for example `staticFile`, `delayRender`, `registerRoot`, `Still`); see the [compatibility matrix](docs/compatibility_matrix.md).
+- `renderMedia` / `renderStill` reject if the binary is missing (install it or set `RUST_MOTION_BIN`), the composition is unknown, or the CLI fails.
 
 ```typescript
-import {
-  Composition,
-  AbsoluteFill,
-  interpolate,
-  spring,
-  useCurrentFrame,
-  useVideoConfig,
-} from '@rust-motion/remotion';
-import { renderMedia } from '@rust-motion/remotion/renderer';
+import { renderMedia, renderStill, getCompositions } from '@rust-motion/remotion/renderer';
 
-const MyVideo = () => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-
-  const opacity = interpolate(frame, [0, 30], [0, 1], { extrapolateRight: 'clamp' });
-  const scale = spring({ frame, fps, config: { damping: 12, mass: 0.5, stiffness: 120 } });
-
-  return { style: { ...AbsoluteFill, opacity, transform: `scale(${scale})` } };
-};
-
-Composition({
-  id: 'IntroVideo',
-  component: MyVideo,
-  durationInFrames: 180,
-  fps: 30,
-  width: 1920,
-  height: 1080,
-});
+console.log(await getCompositions()); // native compositions, e.g. HelloWorld, CyberpunkGrid
 
 await renderMedia({
-  composition: 'IntroVideo',
+  composition: 'HelloWorld',          // a native composition
   outputLocation: 'out/video.mp4',
   codec: 'h264',
   hwAccel: 'auto',
+  inputProps: { title: 'Hello from Node' },
+  onProgress: ({ renderedFrames, totalFrames }) => console.log(`${renderedFrames}/${totalFrames}`),
 });
+
+await renderStill({ composition: 'HelloWorld', output: 'out/thumb.png', frame: 30 });
+```
+
+The animation helpers also work standalone, for example to compute values in a Node script:
+
+```typescript
+import { interpolate, spring } from '@rust-motion/remotion';
+
+const opacity = interpolate(12, [0, 30], [0, 1], { extrapolateRight: 'clamp' });
+const scale = spring({ frame: 12, fps: 30, config: { damping: 12, mass: 0.5, stiffness: 120 } });
 ```
 
 More in [`crates/ts/README.md`](crates/ts/README.md). To scaffold a native port from an existing Remotion component (experimental):

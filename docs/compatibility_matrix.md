@@ -23,7 +23,20 @@ This document records the source-backed compatibility and capability inventory o
 | `@remotion/mcp` (Model Context Protocol Server) | **Supported** | `crates/mcp` (`rust-motion-mcp`) | `crates/mcp/src/lib.rs` (9 tools + PNG frame inspection) |
 | `@remotion/motion-blur` (Subframe Shutter-Angle Motion Blur) | **Supported** | `crates/rasterizer/src/motion_blur.rs` | `crates/rasterizer/tests/visual_effects_tests.rs` |
 | `@remotion/video-matting` (Green-screen-less AI Video Matting) | **Supported** | `crates/rasterizer/src/ai_vision.rs` | `crates/rasterizer/tests/ai_vision_matting_tests.rs` |
-| `@remotion/lambda` (Distributed Worker Cluster Partitioning) | **Supported** | `crates/rasterizer/src/genai_orchestrator.rs` (`DistributedWorkerCluster`) | `crates/rasterizer/tests/genai_math_schedule_media_tests.rs` |
+| `@remotion/lambda` (serverless rendering) | **Not supported** | Only a scheduling primitive exists: `DistributedWorkerCluster` in `crates/rasterizer/src/genai_orchestrator.rs` selects a worker and partitions frame ranges. There is no remote transport, deployment, or job execution. | `crates/rasterizer/tests/genai_math_schedule_media_tests.rs` (scheduler logic only) |
+
+**Scope of the Status column.** "Supported" refers to the native Rust crates (and Rhai/Python bindings where noted). It does **not** mean the API is exposed through the TypeScript SDK or that existing Remotion React code runs unchanged.
+
+### 1.1 TypeScript SDK (`@rust-motion/remotion`) gaps
+
+| Remotion API | Status in the TS SDK |
+| :--- | :---: |
+| `interpolate`, `interpolateColors`, `spring`, `Easing`, `random`, `measureSpring` | Available |
+| `Composition`, `Sequence`, `Series`, `Loop`, `Freeze`, `AbsoluteFill`, `useCurrentFrame`, `useVideoConfig`, `getInputProps` | Available (context helpers; no React/JSX runtime) |
+| `renderMedia`, `renderStill`, `getCompositions`, `selectComposition` | Available as a bridge to the native CLI: only **native (Rust-registered) compositions** render; TypeScript components are not evaluated |
+| `registerRoot`, `staticFile`, `delayRender` / `continueRender` / `cancelRender`, `prefetch`, `calculateMetadata`, `Still`, `Html5Video` / `Html5Audio`, `useCurrentScale`, `Artifact`, `Config` | Missing |
+| `@remotion/transitions`, `shapes`, `paths`, `noise`, `captions`, `gif`, `lottie`, `three`, `media-utils`, `layout-utils`, `fonts` | Not exposed to TypeScript (Rust/Rhai/Python only) |
+| `Player` / `Thumbnail` | Minimal stubs |
 
 ---
 
