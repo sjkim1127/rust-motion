@@ -14,7 +14,11 @@
 </p>
 
 <p align="center">
-  <img src="./assets/showcase.gif" alt="Rust Motion showcase" width="720" />
+  <img src="./assets/showcase.gif" alt="Rust Motion showcase: the built-in HelloWorld composition" width="720" />
+  <br />
+  <sub>The built-in <code>HelloWorld</code> composition, rendered natively in a few seconds.
+  <a href="./assets/showcase.mp4">1080p60 MP4</a> ·
+  <a href="./scripts/make-showcase.sh">how it is generated</a></sub>
 </p>
 
 ---

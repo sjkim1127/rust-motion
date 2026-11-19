@@ -303,6 +303,21 @@ fn apply_synthetic_bold(pixels: &mut [u8], width: u32, height: u32, weight: u16)
 }
 
 impl LoadedFont {
+    /// Pixel scale at which one em equals `font_size` pixels.
+    ///
+    /// `ab_glyph::PxScale` is the *line height* (ascent - descent) in pixels, not the em
+    /// size, so `PxScale::from(font_size)` draws glyphs smaller than `font_size` while the
+    /// shaper advances (`font_size / units_per_em`) stay em-based, which spreads letters.
+    pub(crate) fn em_scale(&self, font_size: f32) -> PxScale {
+        // Not `Font::pt_to_px_scale`: that also applies a 96/72 dpi factor.
+        match self.raster.units_per_em() {
+            Some(units_per_em) if units_per_em > 0.0 => {
+                PxScale::from(font_size * self.raster.height_unscaled() / units_per_em)
+            }
+            _ => PxScale::from(font_size),
+        }
+    }
+
     fn from_bytes(bytes: Vec<u8>) -> Result<Self, ab_glyph::InvalidFont> {
         let raster = FontVec::try_from_vec(bytes.clone())?;
         Ok(Self {
@@ -558,15 +573,14 @@ impl FontCache {
         if fonts.is_empty() {
             return Ok(None);
         }
-        let scale = PxScale::from(font_size);
         let metric_ascent = fonts
             .iter()
-            .map(|font| font.raster.as_scaled(scale).ascent())
+            .map(|font| font.raster.as_scaled(font.em_scale(font_size)).ascent())
             .fold(0.0_f32, f32::max)
             .ceil();
         let metric_descent = fonts
             .iter()
-            .map(|font| -font.raster.as_scaled(scale).descent())
+            .map(|font| -font.raster.as_scaled(font.em_scale(font_size)).descent())
             .fold(0.0_f32, f32::max)
             .ceil();
         let (mut glyphs, advance) = shape_runs(text, font_size, &fonts)?;
@@ -783,7 +797,7 @@ pub fn layout_text_box(request: &TextBox) -> Result<TextBoxLayout, RasterError> 
     };
     let ascent = fonts
         .iter()
-        .map(|font| font.raster.as_scaled(PxScale::from(font_size)).ascent())
+        .map(|font| font.raster.as_scaled(font.em_scale(font_size)).ascent())
         .fold(0.0_f32, f32::max);
     let mut positioned = Vec::with_capacity(lines.len());
     for (index, line) in lines.into_iter().enumerate() {
@@ -1551,7 +1565,7 @@ fn shape_runs(
             output.push(ShapedGlyph {
                 font: font.clone(),
                 glyph: ab_glyph::GlyphId(g.glyph_id)
-                    .with_scale_and_position(PxScale::from(font_size), ab_glyph::point(x, y)),
+                    .with_scale_and_position(font.em_scale(font_size), ab_glyph::point(x, y)),
             });
             cursor_x += g.x_advance;
         }
@@ -1760,6 +1774,39 @@ mod tests {
         assert_eq!(atlas.width, 2048);
         assert_eq!(atlas.height, 2048);
         assert!(atlas.pixels.iter().any(|&coverage| coverage > 0));
+    }
+
+    #[test]
+    fn glyphs_are_drawn_at_em_size_matching_shaper_advances() {
+        let cache = FontCache::bundled();
+        let size = 200.0_f32;
+        let rendered = cache.rasterize("H", size, &[]).unwrap().unwrap();
+
+        // Rows and columns that contain ink.
+        let w = rendered.width as usize;
+        let inked_rows = rendered
+            .pixels
+            .chunks(w)
+            .filter(|row| row.iter().any(|&p| p > 127))
+            .count() as f32;
+        let inked_cols = (0..w)
+            .filter(|&x| rendered.pixels.iter().skip(x).step_by(w).any(|&p| p > 127))
+            .count() as f32;
+
+        // Noto Sans: cap height 0.714 em, "H" ink width ~0.6 em. With the old line-height
+        // scale the cap height came out near 0.52 em while advances stayed em-based.
+        let cap_ratio = inked_rows / size;
+        assert!(
+            (0.68..=0.75).contains(&cap_ratio),
+            "cap height should be ~0.714 em, got {cap_ratio}"
+        );
+
+        // "H" ink is ~0.74 of its advance (side bearings); with the old scale it was ~0.54.
+        let advance = measure_text_width("H", size, &[]).unwrap();
+        assert!(
+            inked_cols / advance > 0.65,
+            "ink width {inked_cols} too small for advance {advance}"
+        );
     }
 
     #[test]
