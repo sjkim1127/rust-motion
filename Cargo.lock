@@ -3599,6 +3599,7 @@ dependencies = [
  "rustybuzz",
  "serde",
  "serde_json",
+ "svgtypes",
  "symphonia",
  "tempfile",
  "thiserror 1.0.69",
