@@ -785,3 +785,155 @@ fn test_scene3d_rendering_via_backend() {
         "Green channel should be rendered from the 3D cube"
     );
 }
+
+fn text_node(x: f32, y: f32, content: &str, font_size: f32) -> SceneNode {
+    SceneNode::Text {
+        x,
+        y,
+        content: content.into(),
+        font_size,
+        color: Color::WHITE,
+        font_weight: 400,
+        font_sources: vec![],
+    }
+}
+
+fn group_node(transform: Transform2D, children: Vec<SceneNode>) -> SceneNode {
+    SceneNode::Group {
+        transform,
+        opacity: 1.0,
+        children,
+    }
+}
+
+/// Bounding box (min_x, min_y, max_x, max_y) of pixels with visible alpha.
+fn ink_bounds(img: &RgbaImage) -> Option<(u32, u32, u32, u32)> {
+    let mut bounds: Option<(u32, u32, u32, u32)> = None;
+    for (x, y, px) in img.enumerate_pixels() {
+        if px[3] > 64 {
+            bounds = Some(match bounds {
+                None => (x, y, x, y),
+                Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
+            });
+        }
+    }
+    bounds
+}
+
+#[test]
+fn text_in_translated_group_follows_translation() {
+    let grouped = Scene {
+        nodes: vec![group_node(
+            Transform2D {
+                tx: 100.0,
+                ty: 60.0,
+                ..Default::default()
+            },
+            vec![text_node(0.0, 20.0, "Moved", 20.0)],
+        )],
+    };
+    let direct = Scene {
+        nodes: vec![text_node(100.0, 80.0, "Moved", 20.0)],
+    };
+    let grouped_img = render(&grouped, 240, 140);
+    let direct_img = render(&direct, 240, 140);
+    let bounds = ink_bounds(&grouped_img).expect("grouped text should draw ink");
+    assert!(
+        bounds.0 >= 100 && bounds.1 >= 60,
+        "text stayed near origin: {bounds:?}"
+    );
+    assert_eq!(
+        grouped_img.as_raw(),
+        direct_img.as_raw(),
+        "translated group must match text drawn at the translated position"
+    );
+}
+
+#[test]
+fn text_in_scaled_group_is_rasterized_at_scaled_size() {
+    let grouped = Scene {
+        nodes: vec![group_node(
+            Transform2D {
+                tx: 10.0,
+                ty: 20.0,
+                scale_x: 2.0,
+                scale_y: 2.0,
+                ..Default::default()
+            },
+            vec![text_node(0.0, 10.0, "Scaled", 16.0)],
+        )],
+    };
+    // world = scale * (local + translation) => origin (20, 60), size 32.
+    let direct = Scene {
+        nodes: vec![text_node(20.0, 60.0, "Scaled", 32.0)],
+    };
+    let unscaled = Scene {
+        nodes: vec![text_node(20.0, 60.0, "Scaled", 16.0)],
+    };
+    let grouped_img = render(&grouped, 240, 120);
+    let direct_img = render(&direct, 240, 120);
+    assert_eq!(
+        grouped_img.as_raw(),
+        direct_img.as_raw(),
+        "uniformly scaled group must match text rasterized at the scaled size"
+    );
+    let (gx0, gy0, gx1, gy1) = ink_bounds(&grouped_img).expect("grouped text ink");
+    let (ux0, uy0, ux1, uy1) = ink_bounds(&render(&unscaled, 240, 120)).expect("unscaled ink");
+    assert!(
+        (gx1 - gx0) > (ux1 - ux0) * 3 / 2 && (gy1 - gy0) > (uy1 - uy0) * 3 / 2,
+        "scaled text should be about twice as large"
+    );
+}
+
+#[test]
+fn text_in_rotated_group_is_rotated() {
+    let content = "Rotate";
+    let upright = Scene {
+        nodes: vec![text_node(40.0, 60.0, content, 24.0)],
+    };
+    // world = rotate(90°) * (local + translation): (x, y - 160) -> (160 - y, x),
+    // which keeps the rotated text inside the canvas.
+    let rotated = Scene {
+        nodes: vec![group_node(
+            Transform2D {
+                ty: -160.0,
+                rotate_deg: 90.0,
+                ..Default::default()
+            },
+            vec![text_node(40.0, 60.0, content, 24.0)],
+        )],
+    };
+    let (ux0, uy0, ux1, uy1) = ink_bounds(&render(&upright, 200, 200)).expect("upright ink");
+    let (rx0, ry0, rx1, ry1) = ink_bounds(&render(&rotated, 200, 200)).expect("rotated ink");
+    let (uw, uh) = (ux1 - ux0, uy1 - uy0);
+    let (rw, rh) = (rx1 - rx0, ry1 - ry0);
+    assert!(uw > uh, "upright text should be wider than tall");
+    assert!(
+        rh > rw,
+        "rotated text should be taller than wide: {rw}x{rh}"
+    );
+    assert!(
+        rw.abs_diff(uh) <= 2 && rh.abs_diff(uw) <= 2,
+        "rotation should swap extents: upright {uw}x{uh}, rotated {rw}x{rh}"
+    );
+}
+
+#[test]
+fn text_with_emoji_in_translated_group_follows_translation() {
+    let grouped = Scene {
+        nodes: vec![group_node(
+            Transform2D {
+                tx: 50.0,
+                ty: 30.0,
+                ..Default::default()
+            },
+            vec![text_node(0.0, 24.0, "Hi 😀 there", 20.0)],
+        )],
+    };
+    let direct = Scene {
+        nodes: vec![text_node(50.0, 54.0, "Hi 😀 there", 20.0)],
+    };
+    let grouped_img = render(&grouped, 240, 100);
+    assert!(ink_bounds(&grouped_img).is_some_and(|b| b.0 >= 50 && b.1 >= 30));
+    assert_eq!(grouped_img.as_raw(), render(&direct, 240, 100).as_raw());
+}
