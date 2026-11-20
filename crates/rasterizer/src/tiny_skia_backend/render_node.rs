@@ -690,70 +690,64 @@ pub(crate) fn render_node(
             }
 
             let text_color = apply_opacity(*color, opacity);
+            if !transform.is_finite() {
+                return Ok(());
+            }
+
+            // Glyphs are rasterized in device pixels, so the enclosing
+            // transform decides both the raster size and the placement.
+            // Axis-aligned uniform scale (including the identity and pure
+            // translation) keeps the crisp integer-aligned blit; anything else
+            // (rotation, skew, non-uniform or mirrored scale) goes through a
+            // coverage pixmap drawn with the full transform.
+            let axis_aligned_uniform = transform.kx == 0.0
+                && transform.ky == 0.0
+                && transform.sx > 0.0
+                && (transform.sx - transform.sy).abs() <= transform.sx * 1e-6;
+            let raster_scale = if axis_aligned_uniform {
+                transform.sx
+            } else {
+                quantized_text_raster_scale(&transform)
+            };
+            if raster_scale <= 0.0 {
+                return Ok(());
+            }
 
             if let Some(rendered) = resources
                 .font
-                .rasterize_with_weight(content, *font_size, *font_weight, font_sources)
+                .rasterize_with_weight(
+                    content,
+                    *font_size * raster_scale,
+                    *font_weight,
+                    font_sources,
+                )
                 .map_err(|error| RasterError::FontAsset {
                     path: error.path,
                     reason: error.reason,
                 })?
             {
-                // Blit the glyph coverage map onto the pixmap at (x, y - baseline)
-                let origin_x = x.floor() as i32;
-                let origin_y = (*y - rendered.baseline as f32).floor() as i32;
-
-                let pw = pixmap.width() as i32;
-                let ph = pixmap.height() as i32;
-                let pixmap_width = pixmap.width(); // cache before mutable borrow
-
-                let pixels_rgba = pixmap.pixels_mut();
-
-                for gy in 0..rendered.height {
-                    for gx in 0..rendered.width {
-                        let coverage = rendered.pixels[(gy * rendered.width + gx) as usize];
-                        if coverage == 0 {
-                            continue;
-                        }
-
-                        let px = origin_x + gx as i32;
-                        let py = origin_y + gy as i32;
-                        if px < 0 || py < 0 || px >= pw || py >= ph {
-                            continue;
-                        }
-
-                        let idx = (py as u32 * pixmap_width + px as u32) as usize;
-                        let glyph_coverage = coverage as f32 / 255.0;
-                        let src_alpha = glyph_coverage * text_color.alpha();
-                        if src_alpha <= 0.0 {
-                            continue;
-                        }
-                        let inv_src_alpha = 1.0 - src_alpha;
-
-                        // Premultiplied source channels in 0..=255
-                        let src_r = text_color.red() * 255.0 * src_alpha;
-                        let src_g = text_color.green() * 255.0 * src_alpha;
-                        let src_b = text_color.blue() * 255.0 * src_alpha;
-                        let src_a = 255.0 * src_alpha;
-
-                        let dst = pixels_rgba[idx];
-                        let out_r = (src_r + dst.red() as f32 * inv_src_alpha)
-                            .round()
-                            .min(255.0) as u8;
-                        let out_g = (src_g + dst.green() as f32 * inv_src_alpha)
-                            .round()
-                            .min(255.0) as u8;
-                        let out_b = (src_b + dst.blue() as f32 * inv_src_alpha)
-                            .round()
-                            .min(255.0) as u8;
-                        let out_a = (src_a + dst.alpha() as f32 * inv_src_alpha)
-                            .round()
-                            .min(255.0) as u8;
-
-                        pixels_rgba[idx] =
-                            tiny_skia::PremultipliedColorU8::from_rgba(out_r, out_g, out_b, out_a)
-                                .unwrap_or(pixels_rgba[idx]);
-                    }
+                if axis_aligned_uniform {
+                    // Map the text origin through the transform and blit the
+                    // coverage map at (origin.x, origin.y - baseline).
+                    let origin_x = transform.sx * *x + transform.tx;
+                    let origin_y = transform.sy * *y + transform.ty;
+                    blit_text_coverage(
+                        pixmap,
+                        &rendered,
+                        origin_x.floor() as i32,
+                        (origin_y - rendered.baseline as f32).floor() as i32,
+                        text_color,
+                    );
+                } else {
+                    draw_transformed_text_coverage(
+                        pixmap,
+                        &rendered,
+                        *x,
+                        *y,
+                        raster_scale,
+                        text_color,
+                        transform,
+                    );
                 }
             } else {
                 // Fallback: draw a solid colour block per character (no font loaded)
@@ -1223,4 +1217,131 @@ pub(crate) fn render_clip_mask(
     paint.anti_alias = true;
     clip_pixmap.fill_path(&path, &paint, FillRule::Winding, transform, None);
     Ok(Mask::from_pixmap(clip_pixmap.as_ref(), MaskType::Alpha))
+}
+
+/// Raster scale for text drawn under a rotating, skewing, mirroring or
+/// non-uniformly scaling transform: the geometric-mean scale factor, quantized
+/// to 1/32 steps so animated transforms reuse cached glyph rasters. The
+/// quantization does not change the drawn size, because the coverage pixmap is
+/// scaled back by the same factor before the transform is applied. Returns 0
+/// for degenerate (collapsed) transforms.
+fn quantized_text_raster_scale(transform: &Transform) -> f32 {
+    let det = transform.sx * transform.sy - transform.kx * transform.ky;
+    let scale = det.abs().sqrt();
+    if !scale.is_finite() || scale < 1e-4 {
+        return 0.0;
+    }
+    (scale * 32.0).round().max(1.0) / 32.0
+}
+
+/// Source-over blit of a glyph coverage map in device space, with its top-left
+/// pixel at (`origin_x`, `origin_y`).
+fn blit_text_coverage(
+    pixmap: &mut Pixmap,
+    rendered: &crate::font::RenderedText,
+    origin_x: i32,
+    origin_y: i32,
+    text_color: tiny_skia::Color,
+) {
+    let pw = pixmap.width() as i32;
+    let ph = pixmap.height() as i32;
+    let pixmap_width = pixmap.width(); // cache before mutable borrow
+
+    let pixels_rgba = pixmap.pixels_mut();
+
+    for gy in 0..rendered.height {
+        for gx in 0..rendered.width {
+            let coverage = rendered.pixels[(gy * rendered.width + gx) as usize];
+            if coverage == 0 {
+                continue;
+            }
+
+            let px = origin_x + gx as i32;
+            let py = origin_y + gy as i32;
+            if px < 0 || py < 0 || px >= pw || py >= ph {
+                continue;
+            }
+
+            let idx = (py as u32 * pixmap_width + px as u32) as usize;
+            let glyph_coverage = coverage as f32 / 255.0;
+            let src_alpha = glyph_coverage * text_color.alpha();
+            if src_alpha <= 0.0 {
+                continue;
+            }
+            let inv_src_alpha = 1.0 - src_alpha;
+
+            // Premultiplied source channels in 0..=255
+            let src_r = text_color.red() * 255.0 * src_alpha;
+            let src_g = text_color.green() * 255.0 * src_alpha;
+            let src_b = text_color.blue() * 255.0 * src_alpha;
+            let src_a = 255.0 * src_alpha;
+
+            let dst = pixels_rgba[idx];
+            let out_r = (src_r + dst.red() as f32 * inv_src_alpha)
+                .round()
+                .min(255.0) as u8;
+            let out_g = (src_g + dst.green() as f32 * inv_src_alpha)
+                .round()
+                .min(255.0) as u8;
+            let out_b = (src_b + dst.blue() as f32 * inv_src_alpha)
+                .round()
+                .min(255.0) as u8;
+            let out_a = (src_a + dst.alpha() as f32 * inv_src_alpha)
+                .round()
+                .min(255.0) as u8;
+
+            pixels_rgba[idx] = PremultipliedColorU8::from_rgba(out_r, out_g, out_b, out_a)
+                .unwrap_or(pixels_rgba[idx]);
+        }
+    }
+}
+
+/// Draw a glyph coverage map rasterized at `raster_scale` x the local font
+/// size under an arbitrary `transform`. The coverage is tinted into a
+/// premultiplied pixmap, scaled back to local units, positioned so its
+/// baseline row sits on the local text origin (`x`, `y`), and then drawn with
+/// the transform using bilinear sampling.
+fn draw_transformed_text_coverage(
+    pixmap: &mut Pixmap,
+    rendered: &crate::font::RenderedText,
+    x: f32,
+    y: f32,
+    raster_scale: f32,
+    text_color: tiny_skia::Color,
+    transform: Transform,
+) {
+    let Some(mut glyphs) = Pixmap::new(rendered.width, rendered.height) else {
+        return;
+    };
+    let tint = text_color.premultiply().to_color_u8();
+    for (dst, &coverage) in glyphs.pixels_mut().iter_mut().zip(&rendered.pixels) {
+        if coverage == 0 {
+            continue;
+        }
+        let cov = coverage as u32;
+        let scale = |channel: u8| ((channel as u32 * cov + 127) / 255) as u8;
+        if let Some(px) = PremultipliedColorU8::from_rgba(
+            scale(tint.red()),
+            scale(tint.green()),
+            scale(tint.blue()),
+            scale(tint.alpha()),
+        ) {
+            *dst = px;
+        }
+    }
+    let inv = 1.0 / raster_scale;
+    let draw_transform = transform.pre_translate(x, y).pre_scale(inv, inv);
+    let paint = PixmapPaint {
+        opacity: 1.0,
+        blend_mode: tiny_skia::BlendMode::SourceOver,
+        quality: tiny_skia::FilterQuality::Bilinear,
+    };
+    pixmap.draw_pixmap(
+        0,
+        -(rendered.baseline as i32),
+        glyphs.as_ref(),
+        &paint,
+        draw_transform,
+        None,
+    );
 }
