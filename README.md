@@ -14,10 +14,11 @@
 </p>
 
 <p align="center">
-  <img src="./assets/showcase.gif" alt="Rust Motion showcase: the built-in HelloWorld composition" width="720" />
+  <img src="./assets/showcase.gif" alt="Rust Motion showcase: the logo and title spring in, a code card plots spring(frame, fps) while a square follows the value, and a timeline playhead runs underneath" width="720" />
   <br />
-  <sub>The built-in <code>HelloWorld</code> composition, rendered natively in a few seconds.
-  <a href="./assets/showcase.mp4">1080p60 MP4</a> ·
+  <sub>This banner is a single Rhai script, <a href="./examples/showcase.rhai"><code>examples/showcase.rhai</code></a>,
+  rendered natively at 1080p60 (300 frames).
+  <a href="./assets/showcase.mp4">MP4</a> ·
   <a href="./scripts/make-showcase.sh">how it is generated</a></sub>
 </p>
 
