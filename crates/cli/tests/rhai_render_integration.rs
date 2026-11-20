@@ -59,6 +59,55 @@ async fn rhai_example_renders_a_real_mp4() {
     let _ = fs::remove_dir_all(temp_dir);
 }
 
+/// The README banner is rendered from `examples/showcase.rhai`; keep it renderable.
+/// Frames are picked to hit every phase: intro, spring overshoot, chip highlight, fade-out.
+#[tokio::test]
+async fn showcase_example_renders_every_phase() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let temp_dir = std::env::temp_dir().join(format!(
+        "rust_motion_showcase_render_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    for frame in [0_u32, 90, 214, 299] {
+        let output = temp_dir.join(format!("showcase_{frame}.png"));
+        let request = RenderRequest {
+            composition: None,
+            script: Some(workspace.join("examples/showcase.rhai")),
+            props: None,
+            output: output.clone(),
+            audio: Vec::new(),
+            width: 192,
+            height: 108,
+            scale: 1.0,
+            fps: 60.0,
+            duration: 300,
+            backend: RenderBackend::Native,
+            codec: rust_motion_cli::RenderCodec::Png,
+            frame_start: frame,
+            frame_end: Some(frame),
+            frame_step: 1,
+            concurrency: None,
+            timeout_seconds: None,
+            crf: 18,
+            preset: "fast".into(),
+            hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
+            sandbox_roots: Vec::new(),
+            permissive: false,
+        };
+        execute_render_command(&request)
+            .await
+            .unwrap_or_else(|error| panic!("showcase frame {frame} failed: {error}"));
+        let bytes = fs::read(&output).unwrap();
+        assert!(bytes.starts_with(b"\x89PNG"), "frame {frame} is not a PNG");
+    }
+    let _ = fs::remove_dir_all(temp_dir);
+}
+
 #[test]
 fn test_untrusted_script_defaults_to_script_dir_without_cwd() {
     use rust_motion_rasterizer::MediaSecurityPolicy;
