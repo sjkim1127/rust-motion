@@ -4,6 +4,7 @@ description = "Bounded reader for native Serif Affinity documents (.af, .afdesig
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 
 [features]

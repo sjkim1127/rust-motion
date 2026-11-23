@@ -4,6 +4,7 @@ description = "Depth-agnostic, tile-aware CPU image filters (blur, sharpen, nois
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 
 [dependencies]

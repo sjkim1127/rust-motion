@@ -1,5 +1,6 @@
 [package]
 name = "rust-motion-wasm"
+publish = false
 description = "WebAssembly engine and real-time browser canvas player for Rust Motion"
 version.workspace = true
 edition.workspace = true

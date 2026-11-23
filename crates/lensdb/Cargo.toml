@@ -4,6 +4,7 @@ description = "Lens correction profiles: distortion, TCA and vignetting models, 
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 
 [dependencies]

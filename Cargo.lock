@@ -3236,7 +3236,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-affinity"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "crc32fast",
  "flate2",
@@ -3246,7 +3246,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-algo"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rayon",
  "rust-motion-color",
@@ -3259,7 +3259,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-animation"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "approx",
  "num-traits",
@@ -3269,7 +3269,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-apv"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rayon",
  "thiserror 1.0.69",
@@ -3277,18 +3277,18 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-audio-dsp"
-version = "1.0.0"
+version = "1.1.0"
 
 [[package]]
 name = "rust-motion-bitstream"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "rust-motion-captions"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rust-motion-composition",
  "rust-motion-rasterizer",
@@ -3299,11 +3299,11 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-cfb"
-version = "1.0.0"
+version = "1.1.0"
 
 [[package]]
 name = "rust-motion-charts"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "quick-xml",
  "rquickjs",
@@ -3318,7 +3318,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-cli"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3353,14 +3353,14 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-cms"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "rust-motion-color"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rust-motion-cms",
  "serde",
@@ -3368,7 +3368,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-composition"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rust-motion-animation",
  "rust-motion-project",
@@ -3381,7 +3381,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-dng"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rayon",
  "rust-motion-dng",
@@ -3390,7 +3390,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-doc"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rust-motion-color",
  "rust-motion-geom",
@@ -3401,14 +3401,14 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-geom"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "rust-motion-h264enc"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rayon",
  "thiserror 1.0.69",
@@ -3416,7 +3416,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-hevc"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rayon",
  "rust-motion-bitstream",
@@ -3425,7 +3425,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-inpaint"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rayon",
  "serde",
@@ -3433,7 +3433,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-lensdb"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "quick-xml",
  "serde",
@@ -3441,7 +3441,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-mcp"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64",
  "image",
@@ -3456,7 +3456,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-media"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "hound",
  "image",
@@ -3472,18 +3472,18 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-mxf"
-version = "1.0.0"
+version = "1.1.0"
 
 [[package]]
 name = "rust-motion-noise"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "rust-motion-paint"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rust-motion-color",
  "rust-motion-geom",
@@ -3494,7 +3494,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-paths"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "serde",
  "thiserror 1.0.69",
@@ -3502,7 +3502,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-plugins"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rayon",
  "rust-motion-color",
@@ -3517,7 +3517,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-project"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "reqwest",
  "rust-motion-cfb",
@@ -3530,7 +3530,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-psd"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "flate2",
  "proptest",
@@ -3542,7 +3542,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-python"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "pyo3",
@@ -3561,7 +3561,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-raster"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "proptest",
  "rust-motion-color",
@@ -3571,7 +3571,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-rasterizer"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "ab_glyph",
  "base64",
@@ -3614,7 +3614,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-renderer"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3634,7 +3634,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-shapes"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rust-motion-animation",
  "rust-motion-composition",
@@ -3646,7 +3646,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-tablet"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "block2",
  "objc2",
@@ -3660,7 +3660,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-transitions"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rust-motion-animation",
  "rust-motion-composition",
@@ -3670,7 +3670,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-ts"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64",
  "rust-motion-animation",
@@ -3690,7 +3690,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-vector"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "rayon",
  "rust-motion-color",
@@ -3701,7 +3701,7 @@ dependencies = [
 
 [[package]]
 name = "rust-motion-wasm"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",

@@ -4,6 +4,7 @@ description = "Pen tablet pressure, tilt, rotation and eraser end on macOS and L
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 
 [dependencies]

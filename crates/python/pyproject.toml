@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "rust-motion"
-version = "1.0.0"
+version = "1.1.0"
 description = "High-performance browser-free programmatic video rendering engine for Python"
 readme = "README.md"
 authors = [{ name = "Rust Motion Contributors" }]

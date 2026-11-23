@@ -4,6 +4,7 @@ description = "Sparse, copy-on-write tiled raster surfaces"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 
 [dependencies]

@@ -119,7 +119,7 @@ async fn api_status_handler(State(state): State<StudioState>) -> impl IntoRespon
     Json(serde_json::json!({
         "ok": true,
         "engine": "rust-motion",
-        "version": "1.0.0",
+        "version": env!("CARGO_PKG_VERSION"),
         "mode": "hybrid",
         "port": state.port,
         "project": state.project_path.as_ref().map(|p| p.display().to_string()),

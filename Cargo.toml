@@ -49,7 +49,7 @@ needless_range_loop = "allow"
 type_complexity = "allow"
 
 [workspace.package]
-version      = "1.0.0"
+version      = "1.1.0"
 edition      = "2021"
 
 authors      = ["Rust Motion Contributors"]
@@ -111,44 +111,44 @@ tower-http        = { version = "0.5", features = ["fs", "trace", "cors"] }
 reqwest           = { version = "0.12", features = ["json", "blocking"] }
 
 # Internal crates
-rust-motion-animation   = { version = "1.0.0", path = "crates/animation" }
-rust-motion-apv         = { version = "1.0.0", path = "crates/apv" }
-rust-motion-audio-dsp   = { version = "1.0.0", path = "crates/audio-dsp" }
-rust-motion-cli         = { version = "1.0.0", path = "crates/cli" }
-rust-motion-composition = { version = "1.0.0", path = "crates/composition" }
-rust-motion-media       = { version = "1.0.0", path = "crates/media" }
-rust-motion-renderer    = { version = "1.0.0", path = "crates/renderer" }
-rust-motion-transitions = { version = "1.0.0", path = "crates/transitions" }
-rust-motion-shapes      = { version = "1.0.0", path = "crates/shapes" }
-rust-motion-paths       = { version = "1.0.0", path = "crates/paths" }
-rust-motion-captions    = { version = "1.0.0", path = "crates/captions" }
-rust-motion-noise       = { version = "1.0.0", path = "crates/noise" }
-rust-motion-rasterizer  = { version = "1.0.0", path = "crates/rasterizer" }
-rust-motion-charts      = { version = "1.0.0", path = "crates/charts" }
-rust-motion-h264enc     = { version = "1.0.0", path = "crates/h264enc" }
-rust-motion-mxf         = { version = "1.0.0", path = "crates/mxf" }
-rust-motion-project     = { version = "1.0.0", path = "crates/project" }
-rust-motion-bitstream   = { version = "1.0.0", path = "crates/bitstream" }
-rust-motion-hevc        = { version = "1.0.0", path = "crates/hevc" }
-rust-motion-dng         = { version = "1.0.0", path = "crates/dng" }
-rust-motion-cfb         = { version = "1.0.0", path = "crates/cfb" }
-rust-motion-cms         = { version = "1.0.0", path = "crates/cms" }
-rust-motion-color       = { version = "1.0.0", path = "crates/color" }
-rust-motion-psd         = { version = "1.0.0", path = "crates/psd" }
-rust-motion-geom        = { version = "1.0.0", path = "crates/geom" }
-rust-motion-raster      = { version = "1.0.0", path = "crates/raster" }
-rust-motion-paint       = { version = "1.0.0", path = "crates/paint" }
-rust-motion-tablet      = { version = "1.0.0", path = "crates/tablet" }
-rust-motion-doc         = { version = "1.0.0", path = "crates/doc" }
-rust-motion-vector      = { version = "1.0.0", path = "crates/vector" }
-rust-motion-affinity    = { version = "1.0.0", path = "crates/affinity" }
-rust-motion-algo        = { version = "1.0.0", path = "crates/algo" }
-rust-motion-plugins     = { version = "1.0.0", path = "crates/plugins" }
-rust-motion-lensdb      = { version = "1.0.0", path = "crates/lensdb" }
-rust-motion-inpaint     = { version = "1.0.0", path = "crates/inpaint" }
-rust-motion-mcp         = { version = "1.0.0", path = "crates/mcp" }
-rust-motion-ts          = { version = "1.0.0", path = "crates/ts" }
-rust-motion-wasm        = { version = "1.0.0", path = "crates/wasm" }
+rust-motion-animation   = { version = "1.1.0", path = "crates/animation" }
+rust-motion-apv         = { version = "1.1.0", path = "crates/apv" }
+rust-motion-audio-dsp   = { version = "1.1.0", path = "crates/audio-dsp" }
+rust-motion-cli         = { version = "1.1.0", path = "crates/cli" }
+rust-motion-composition = { version = "1.1.0", path = "crates/composition" }
+rust-motion-media       = { version = "1.1.0", path = "crates/media" }
+rust-motion-renderer    = { version = "1.1.0", path = "crates/renderer" }
+rust-motion-transitions = { version = "1.1.0", path = "crates/transitions" }
+rust-motion-shapes      = { version = "1.1.0", path = "crates/shapes" }
+rust-motion-paths       = { version = "1.1.0", path = "crates/paths" }
+rust-motion-captions    = { version = "1.1.0", path = "crates/captions" }
+rust-motion-noise       = { version = "1.1.0", path = "crates/noise" }
+rust-motion-rasterizer  = { version = "1.1.0", path = "crates/rasterizer" }
+rust-motion-charts      = { version = "1.1.0", path = "crates/charts" }
+rust-motion-h264enc     = { version = "1.1.0", path = "crates/h264enc" }
+rust-motion-mxf         = { version = "1.1.0", path = "crates/mxf" }
+rust-motion-project     = { version = "1.1.0", path = "crates/project" }
+rust-motion-bitstream   = { version = "1.1.0", path = "crates/bitstream" }
+rust-motion-hevc        = { version = "1.1.0", path = "crates/hevc" }
+rust-motion-dng         = { version = "1.1.0", path = "crates/dng" }
+rust-motion-cfb         = { version = "1.1.0", path = "crates/cfb" }
+rust-motion-cms         = { version = "1.1.0", path = "crates/cms" }
+rust-motion-color       = { version = "1.1.0", path = "crates/color" }
+rust-motion-psd         = { version = "1.1.0", path = "crates/psd" }
+rust-motion-geom        = { version = "1.1.0", path = "crates/geom" }
+rust-motion-raster      = { version = "1.1.0", path = "crates/raster" }
+rust-motion-paint       = { version = "1.1.0", path = "crates/paint" }
+rust-motion-tablet      = { version = "1.1.0", path = "crates/tablet" }
+rust-motion-doc         = { version = "1.1.0", path = "crates/doc" }
+rust-motion-vector      = { version = "1.1.0", path = "crates/vector" }
+rust-motion-affinity    = { version = "1.1.0", path = "crates/affinity" }
+rust-motion-algo        = { version = "1.1.0", path = "crates/algo" }
+rust-motion-plugins     = { version = "1.1.0", path = "crates/plugins" }
+rust-motion-lensdb      = { version = "1.1.0", path = "crates/lensdb" }
+rust-motion-inpaint     = { version = "1.1.0", path = "crates/inpaint" }
+rust-motion-mcp         = { version = "1.1.0", path = "crates/mcp" }
+rust-motion-ts          = { version = "1.1.0", path = "crates/ts" }
+rust-motion-wasm        = { version = "1.1.0", path = "crates/wasm" }
 
 # WebAssembly
 wasm-bindgen            = "0.2"
