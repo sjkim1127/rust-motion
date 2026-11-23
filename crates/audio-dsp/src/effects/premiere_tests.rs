@@ -782,6 +782,9 @@ fn loudness_meter_passes_through_and_measures() {
 }
 
 #[test]
+// Wall-clock throughput check: unoptimised debug builds under parallel test load can fall
+// below realtime, so only run it in optimised builds (`cargo test --release`).
+#[cfg_attr(debug_assertions, ignore = "throughput check; run with --release")]
 fn realtime_factor_sanity() {
     let secs = 2.0;
     let n = (SR * secs) as usize;

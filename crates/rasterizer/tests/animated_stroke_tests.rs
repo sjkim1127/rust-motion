@@ -12,9 +12,11 @@ fn test_animated_stroke_monotonic_write_on_progress() {
     let config = FrameConfig::new(width, height, 0, 30.0);
 
     // Construct a brush and a 4-point horizontal stroke
-    let mut brush = BrushSettings::default();
-    brush.size = 10.0;
-    brush.color = [1.0, 0.0, 0.0, 1.0]; // Red
+    let brush = BrushSettings {
+        size: 10.0,
+        color: [1.0, 0.0, 0.0, 1.0], // Red
+        ..BrushSettings::default()
+    };
 
     let points = vec![
         StrokePoint::new(20.0, 100.0, 0.2),
@@ -78,8 +80,10 @@ fn test_tablet_recorder_to_animated_stroke_rendering() {
     }
 
     assert_eq!(recorder.point_count(), 10);
-    let mut brush = BrushSettings::default();
-    brush.size = 12.0;
+    let brush = BrushSettings {
+        size: 12.0,
+        ..BrushSettings::default()
+    };
 
     let stroke = recorder.finish(brush);
     assert_eq!(stroke.points.len(), 10);
@@ -107,8 +111,10 @@ fn test_tablet_recorder_to_animated_stroke_rendering() {
 
 #[test]
 fn test_animated_stroke_serde_roundtrip() {
-    let mut brush = BrushSettings::default();
-    brush.size = 8.0;
+    let brush = BrushSettings {
+        size: 8.0,
+        ..BrushSettings::default()
+    };
     let stroke = Stroke {
         brush,
         points: vec![

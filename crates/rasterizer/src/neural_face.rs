@@ -195,7 +195,7 @@ pub fn parse_onnx_model_checked(bytes: &[u8]) -> Result<OnnxModelSummary, String
             2 => {
                 let len = read_varint(bytes, &mut pos).ok_or("Truncated length-delimited field")?
                     as usize;
-                if pos.checked_add(len).map_or(true, |end| end > bytes.len()) {
+                if !matches!(pos.checked_add(len), Some(end) if end <= bytes.len()) {
                     return Err("Length-delimited field exceeds buffer bounds".into());
                 }
                 let payload = &bytes[pos..pos + len];
@@ -220,10 +220,8 @@ pub fn parse_onnx_model_checked(bytes: &[u8]) -> Result<OnnxModelSummary, String
                                         continue;
                                     }
                                 }
-                            } else if gw == 0 {
-                                if read_varint(payload, &mut gpos).is_some() {
-                                    continue;
-                                }
+                            } else if gw == 0 && read_varint(payload, &mut gpos).is_some() {
+                                continue;
                             }
                         }
                         break;
@@ -517,14 +515,15 @@ pub fn apply_privacy_face_mask(
                                 cnt += 1;
                             }
                         }
-                        if cnt > 0 {
-                            let avg = PremultipliedColorU8::from_rgba(
-                                (sr / cnt) as u8,
-                                (sg / cnt) as u8,
-                                (sb / cnt) as u8,
-                                (sa / cnt) as u8,
-                            )
-                            .unwrap_or(PremultipliedColorU8::TRANSPARENT);
+                        if let (Some(r), Some(g), Some(b), Some(a)) = (
+                            sr.checked_div(cnt),
+                            sg.checked_div(cnt),
+                            sb.checked_div(cnt),
+                            sa.checked_div(cnt),
+                        ) {
+                            let avg =
+                                PremultipliedColorU8::from_rgba(r as u8, g as u8, b as u8, a as u8)
+                                    .unwrap_or(PremultipliedColorU8::TRANSPARENT);
                             for py in by..bh_end {
                                 for px in bx..bw_end {
                                     pixmap.pixels_mut()[(py * w + px) as usize] = avg;

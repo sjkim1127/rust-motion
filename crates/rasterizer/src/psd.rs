@@ -155,13 +155,13 @@ mod tests {
         let mut builder = PsdBuilder::new(100, 100);
 
         // Backdrop: solid red
-        let red_pixels = vec![255, 0, 0, 255].repeat(100 * 100);
+        let red_pixels = [255, 0, 0, 255].repeat(100 * 100);
         let mut l1 = LayerSpec::new("Background", 0, 0, 100, 100, PixelData::Rgba8(red_pixels));
         l1.blend_mode = PsdBlendMode::Normal;
         builder.push_layer(l1);
 
         // Top layer: solid green with Multiply
-        let green_pixels = vec![0, 255, 0, 255].repeat(100 * 100);
+        let green_pixels = [0, 255, 0, 255].repeat(100 * 100);
         let mut l2 = LayerSpec::new(
             "Multiply Layer",
             0,

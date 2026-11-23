@@ -140,7 +140,7 @@ fn apply_halation(pixmap: &mut Pixmap, intensity: f32, threshold: f32, radius: f
                 sum += highlight[row_start + x + r_int];
                 count += 1;
             }
-            if x >= r_int + 1 {
+            if x > r_int {
                 sum -= highlight[row_start + x - r_int - 1];
                 count -= 1;
             }
@@ -161,7 +161,7 @@ fn apply_halation(pixmap: &mut Pixmap, intensity: f32, threshold: f32, radius: f
                 sum += blurred[(y + r_int) * width + x];
                 count += 1;
             }
-            if y >= r_int + 1 {
+            if y > r_int {
                 sum -= blurred[(y - r_int - 1) * width + x];
                 count -= 1;
             }

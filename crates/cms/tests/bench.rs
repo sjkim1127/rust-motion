@@ -1,6 +1,5 @@
 //! Throughput check: `cargo test -p rust-motion-cms --release --test bench -- --ignored --nocapture`.
 
-use rust_motion_cms;
 use rust_motion_cms::{Builtin, Intent, Transform};
 
 #[test]

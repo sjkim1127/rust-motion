@@ -2,7 +2,6 @@
 //! behaviour, intents, BPC, interpolation accuracy, real-world profiles and an independent
 //! oracle (moxcms, dev-dependency only).
 
-use rust_motion_cms;
 use rust_motion_cms::math::{self, delta_e76};
 use rust_motion_cms::{
     Builtin, Clut, ColorSpace, Intent, Lut3d, Profile, Transform, TransformOptions,

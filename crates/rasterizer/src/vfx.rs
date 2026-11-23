@@ -653,6 +653,20 @@ fn perlin_3d(x: f32, y: f32, z: f32) -> f32 {
     (y0 * (1.0 - w) + y1 * w).clamp(-1.0, 1.0)
 }
 
+/// Perlin's improved-noise gradient: `h` in `0..12` selects one of the 12 cube-edge
+/// directions (+-x+-y, +-x+-z, +-y+-z) and returns its dot product with `(x, y, z)`.
+fn grad3(h: i32, x: f32, y: f32, z: f32) -> f32 {
+    let u = if h < 8 { x } else { y };
+    let v = if h < 4 {
+        y
+    } else if h == 12 || h == 14 {
+        x
+    } else {
+        z
+    };
+    (if (h & 1) == 0 { u } else { -u }) + (if (h & 2) == 0 { v } else { -v })
+}
+
 fn simplex_3d(x: f32, y: f32, z: f32) -> f32 {
     let s = (x + y + z) * (1.0 / 3.0);
     let i = (x + s).floor() as i32;
@@ -699,22 +713,7 @@ fn simplex_3d(x: f32, y: f32, z: f32) -> f32 {
         } else {
             let t2 = t * t;
             let h = (hash_vec3(ix, iy, iz) * 12.0) as i32;
-            let u = if h < 4 {
-                px
-            } else if h == 12 || h == 13 {
-                px
-            } else {
-                py
-            };
-            let v = if h < 2 {
-                py
-            } else if h == 12 || h == 13 {
-                pz
-            } else {
-                pz
-            };
-            let grad = (if (h & 1) == 0 { u } else { -u }) + (if (h & 2) == 0 { v } else { -v });
-            t2 * t2 * grad
+            t2 * t2 * grad3(h, px, py, pz)
         }
     };
 
@@ -793,6 +792,28 @@ mod tests {
             255,
             "pixel at x=25 should have shifted from x=35"
         );
+    }
+
+    #[test]
+    fn simplex_gradients_are_the_twelve_cube_edges() {
+        // An earlier copy-paste bug picked (y, z) gradients for 8 of the 12 hashes, so most
+        // lattice points ignored x and the noise was anisotropic.
+        let mut seen = std::collections::BTreeSet::new();
+        for h in 0..12 {
+            let g = [
+                grad3(h, 1.0, 0.0, 0.0),
+                grad3(h, 0.0, 1.0, 0.0),
+                grad3(h, 0.0, 0.0, 1.0),
+            ];
+            let nonzero = g.iter().filter(|c| **c != 0.0).count();
+            assert_eq!(nonzero, 2, "h={h}: gradient {g:?} is not a cube edge");
+            assert!(
+                g.iter().all(|c| [-1.0, 0.0, 1.0].contains(c)),
+                "h={h}: {g:?}"
+            );
+            seen.insert(g.map(|c| c as i32));
+        }
+        assert_eq!(seen.len(), 12, "gradients repeat: {seen:?}");
     }
 
     #[test]
