@@ -1,5 +1,6 @@
 [package]
 name = "rust-motion-mcp"
+publish = false
 description = "Model Context Protocol (MCP) server for autonomous AI video/audio editing"
 version.workspace = true
 edition.workspace = true

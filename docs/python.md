@@ -87,4 +87,4 @@ print(f"Frame shape: {frame_array.shape}")
 
 ## 5. Version Synchronization
 
-The Python package versions remain strictly synchronized with the Rust workspace releases. Rust Motion 1.0.0 corresponds directly to `rust-motion == 1.0.0` on PyPI.
+The Python package versions remain strictly synchronized with the Rust workspace releases. For example, Rust Motion 1.1.0 corresponds directly to `rust-motion == 1.1.0` on PyPI.

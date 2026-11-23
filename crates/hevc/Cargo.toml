@@ -1,5 +1,6 @@
 [package]
 name = "rust-motion-hevc"
+publish = false
 description = "Clean-room pure-Rust H.265/HEVC decoder (ITU-T H.265)"
 version.workspace = true
 edition.workspace = true

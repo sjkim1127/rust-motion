@@ -6,7 +6,7 @@
 class RustMotion < Formula
   desc "Deterministic, browser-free programmatic video rendering platform"
   homepage "https://github.com/sjkim1127/rust-motion"
-  version "1.0.0"
+  version "1.1.0"
   license any_of: ["MIT", "Apache-2.0"]
 
   depends_on "ffmpeg"

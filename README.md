@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/sjkim1127/rust-motion/actions/workflows/ci.yml"><img src="https://github.com/sjkim1127/rust-motion/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-4ec9b0?style=flat-square" alt="License" /></a>
-  <img src="https://img.shields.io/badge/version-1.0.0-6c63ff?style=flat-square" alt="Version 1.0.0" />
+  <img src="https://img.shields.io/badge/version-1.1.0-6c63ff?style=flat-square" alt="Version 1.1.0" />
   <a href="docs/stability.md"><img src="https://img.shields.io/badge/API-SemVer%201.x-22c55e?style=flat-square" alt="SemVer 1.x" /></a>
 </p>
 

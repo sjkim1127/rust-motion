@@ -1,6 +1,6 @@
 {
   "name": "@rust-motion/remotion",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Remotion-style animation helpers and a Node bridge to the native Rust Motion renderer",
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",

@@ -79,7 +79,7 @@ impl McpServer {
                     },
                     "serverInfo": {
                         "name": "Rust Motion & LightCraft MCP Server",
-                        "version": "1.0.0"
+                        "version": env!("CARGO_PKG_VERSION")
                     },
                     "instructions": "Autonomous video/audio production server: create projects, manipulate timeline tracks/clips, apply color grading, generate subtitles, and render visual preview screenshots."
                 })
