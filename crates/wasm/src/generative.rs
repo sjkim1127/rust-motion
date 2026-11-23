@@ -132,7 +132,7 @@ impl GenerativeCanvas {
         let h = self.height;
 
         // Clear to dark backdrop
-        for pixel in self.pixel_buffer.chunks_exact_mut(4) {
+        for pixel in self.pixel_buffer.as_chunks_mut::<4>().0 {
             pixel[0] = 10;
             pixel[1] = 12;
             pixel[2] = 20;

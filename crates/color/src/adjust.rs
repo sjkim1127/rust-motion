@@ -83,7 +83,7 @@ pub fn apply_to_pixel(adj: &Adjustment, rgb: [f32; 3]) -> [f32; 3] {
 }
 
 pub fn apply_to_rgba8(adj: &Adjustment, rgba: &mut [u8]) {
-    for chunk in rgba.chunks_exact_mut(4) {
+    for chunk in rgba.as_chunks_mut::<4>().0 {
         let r = chunk[0] as f32 / 255.0;
         let g = chunk[1] as f32 / 255.0;
         let b = chunk[2] as f32 / 255.0;

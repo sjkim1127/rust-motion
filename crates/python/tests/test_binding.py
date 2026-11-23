@@ -17,10 +17,21 @@ TARGET_DIR.mkdir(parents=True, exist_ok=True)
 import rust_motion
 
 
+def _expected_version():
+    """Version declared in crates/python/pyproject.toml, which the wheel is built from."""
+    pyproject = ROOT / "crates/python/pyproject.toml"
+    for line in pyproject.read_text(encoding="utf-8").splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key.strip() == "version":
+            return value.strip().strip('"')
+    raise AssertionError(f"no version found in {pyproject}")
+
+
 def test_metadata():
     print("[*] Testing metadata and version...")
     version = rust_motion.__version__
-    assert version.startswith("1.0.") or version.startswith("0.2.") or version.startswith("0.1."), f"Unexpected version: {version}"
+    expected = _expected_version()
+    assert version == expected, f"Unexpected version: {version} (pyproject.toml says {expected})"
     compositions = rust_motion.list_compositions()
     print(f"[+] Version: {version}")
     print(f"[+] Registered compositions: {compositions}")

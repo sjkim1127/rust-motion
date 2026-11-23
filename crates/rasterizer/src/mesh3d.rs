@@ -536,8 +536,6 @@ impl Mesh3D {
         }
     }
 
-    /// Render this 3D mesh into a [`Scene`] with perspective projection and Lambertian diffuse shading.
-    #[allow(clippy::too_many_arguments)]
     /// Render with a per-frame rotation without cloning the mesh topology.
     /// The source vertices remain shared and only the projected coordinates
     /// are materialized for this frame.

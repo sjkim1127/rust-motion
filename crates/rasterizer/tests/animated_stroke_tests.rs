@@ -39,7 +39,9 @@ fn test_animated_stroke_monotonic_write_on_progress() {
             .render_frame(&scene, &config)
             .expect("render frame failed");
         frame
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter(|px| px[3] > 0) // check alpha
             .count()
     };
@@ -104,7 +106,9 @@ fn test_tablet_recorder_to_animated_stroke_rendering() {
         .render_frame(&scene, &config)
         .expect("render failed");
     let has_cyan = frame
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .any(|px| px[0] == 0 && px[1] > 100 && px[2] > 150 && px[3] > 0);
     assert!(has_cyan, "Rendered frame must contain cyan painted stroke");
 }

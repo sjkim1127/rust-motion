@@ -41,7 +41,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run Clippy Lints
-        run: cargo clippy --locked --workspace --all-targets --all-features
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
   # ── 2. Cross-Platform Unit & Integration Tests ──────────────────────────────
   test:

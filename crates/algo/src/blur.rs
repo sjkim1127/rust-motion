@@ -710,7 +710,7 @@ impl RankSums {
             node[0] += sign;
             node[1] += sign * v;
             node[2] += sign * v * v;
-            i += i & i.wrapping_neg();
+            i += i.isolate_lowest_one();
         }
     }
 
@@ -724,7 +724,7 @@ impl RankSums {
                 acc[1] += node[1];
                 acc[2] += node[2];
             }
-            i -= i & i.wrapping_neg();
+            i -= i.isolate_lowest_one();
         }
         acc
     }
