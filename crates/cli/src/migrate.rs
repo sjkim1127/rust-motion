@@ -103,7 +103,7 @@ fn transpile_to_rust(
     writeln!(out, "/// Scaffolded from Remotion component `{comp_name}`.").unwrap();
     writeln!(out, "#[derive(Default)]").unwrap();
     writeln!(out, "pub struct {comp_name};").unwrap();
-    out.push_str("\n");
+    out.push('\n');
     writeln!(out, "impl SceneEmitter for {comp_name} {{").unwrap();
     out.push_str("    fn emit(\n");
     out.push_str("        &self,\n");

@@ -104,5 +104,5 @@ fn test_json_rpc_dispatcher() {
     let list_res_str = process_json_command(&list_req);
     let list_res: serde_json::Value = serde_json::from_str(&list_res_str).unwrap();
     assert_eq!(list_res["success"], true);
-    assert!(list_res["data"].as_array().unwrap().len() > 0);
+    assert!(!list_res["data"].as_array().unwrap().is_empty());
 }

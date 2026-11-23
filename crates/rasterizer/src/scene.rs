@@ -760,6 +760,8 @@ impl Default for VisualizerStyle {
 }
 
 /// A node in the scene graph.
+// Boxing the large variants would change this stable public type, so keep the layout.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SceneNode {
     /// Solid-coloured rectangle with optional corner radius.

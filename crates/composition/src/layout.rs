@@ -26,6 +26,8 @@ pub mod prelude {
 }
 
 /// Child item contained in a [`LayoutBox`].
+// `Node` carries a whole `SceneNode`; boxing it would change this public type.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum LayoutChild {
     /// A single scene node with optional explicit layout style.

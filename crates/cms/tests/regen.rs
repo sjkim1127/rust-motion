@@ -7,7 +7,6 @@
 //! Without the variable the test only checks that the generator's model still matches the
 //! shipped AToB table (cheap), so model edits are not forgotten.
 
-use rust_motion_cms;
 use rust_motion_cms::synth::{CmykModel, CmykParams};
 use rust_motion_cms::{Builtin, Intent, Profile, Transform};
 

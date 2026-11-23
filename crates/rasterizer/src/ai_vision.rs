@@ -189,7 +189,7 @@ impl FaceDetector {
             let mut best_match: Option<(usize, f32)> = None;
             for (i, det) in unmatched_dets.iter().enumerate() {
                 let score = tracked.iou(det);
-                if score >= 0.3 && best_match.map_or(true, |(_, s)| score > s) {
+                if score >= 0.3 && !matches!(best_match, Some((_, s)) if score <= s) {
                     best_match = Some((i, score));
                 }
             }
@@ -378,7 +378,7 @@ impl Inpainter {
         if let Some(filled) = complete(w, h, 3, &float_buf, hole_mask, &params) {
             for (i, px) in pixmap.pixels_mut().iter_mut().enumerate() {
                 if hole_mask[i] {
-                    let r = (filled[i * 3 + 0].clamp(0.0, 1.0) * 255.0).round() as u8;
+                    let r = (filled[i * 3].clamp(0.0, 1.0) * 255.0).round() as u8;
                     let g = (filled[i * 3 + 1].clamp(0.0, 1.0) * 255.0).round() as u8;
                     let b = (filled[i * 3 + 2].clamp(0.0, 1.0) * 255.0).round() as u8;
                     if let Some(c) = PremultipliedColorU8::from_rgba(r, g, b, 255) {
