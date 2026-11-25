@@ -137,9 +137,9 @@ jobs:
                 test -f "$TARGET_DIR/lib/libssl.a"
               )
             fi
-      - name: Install FFmpeg (Linux)
+      - name: Install FFmpeg
         if: matrix.platform.target == 'x86_64-unknown-linux-gnu'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        uses: ./.github/actions/install-ffmpeg
       - name: Checkout Python smoke test harness
         if: matrix.platform.target == 'x86_64-unknown-linux-gnu'
         uses: actions/checkout@v4
@@ -241,8 +241,8 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --manifest-path crates/python/Cargo.toml
           sccache: 'true'
-      - name: Install FFmpeg (Windows)
-        run: choco install ffmpeg -y
+      - name: Install FFmpeg
+        uses: ./.github/actions/install-ffmpeg
       - name: Checkout Python smoke test harness
         uses: actions/checkout@v4
         with:
