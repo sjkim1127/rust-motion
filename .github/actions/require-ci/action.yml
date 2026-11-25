@@ -1,0 +1,74 @@
+name: Require green CI
+description: >
+  Wait until the required CI checks have finished on a commit and fail unless they all
+  succeeded. Used to gate releases on the CI run of the tagged commit instead of re-running
+  the same fmt, clippy and test jobs.
+
+inputs:
+  sha:
+    description: Commit whose check runs are inspected.
+    required: true
+  token:
+    description: "Token with the checks:read permission."
+    required: true
+  checks:
+    description: Newline-separated names of the check runs that must succeed.
+    default: |
+      Code Quality (Fmt & Clippy)
+      Test (ubuntu-latest)
+      Test (macos-latest)
+      Test (windows-latest)
+      TypeScript SDK & Remotion Bridge
+      WebAssembly (WASM Engine & Browser Canvas)
+  timeout-minutes:
+    description: How long to wait for unfinished checks before failing.
+    default: "90"
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for required checks
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        SHA: ${{ inputs.sha }}
+        REQUIRED: ${{ inputs.checks }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+      run: |
+        set -euo pipefail
+        deadline=$(( $(date +%s) + TIMEOUT_MINUTES * 60 ))
+
+        while true; do
+          # Latest run per check name, so a re-run replaces the failed attempt.
+          runs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100" \
+            --jq '.check_runs[] | {name, status, conclusion, started_at}' \
+            | jq -s 'group_by(.name) | map(max_by(.started_at))')
+
+          pending=()
+          failed=()
+          while IFS= read -r name; do
+            [[ -z "$name" ]] && continue
+            status=$(jq -r --arg n "$name" '.[] | select(.name == $n) | .status' <<<"$runs")
+            conclusion=$(jq -r --arg n "$name" '.[] | select(.name == $n) | .conclusion // ""' <<<"$runs")
+            if [[ "$status" != "completed" ]]; then
+              pending+=("$name (${status:-not started})")
+            elif [[ "$conclusion" != "success" && "$conclusion" != "skipped" && "$conclusion" != "neutral" ]]; then
+              failed+=("$name ($conclusion)")
+            fi
+          done <<<"$REQUIRED"
+
+          if (( ${#failed[@]} > 0 )); then
+            printf '::error::CI did not pass on %s: %s\n' "$SHA" "$(IFS=';'; echo "${failed[*]}")"
+            exit 1
+          fi
+          if (( ${#pending[@]} == 0 )); then
+            echo "All required CI checks passed on ${SHA}."
+            exit 0
+          fi
+          if (( $(date +%s) >= deadline )); then
+            printf '::error::Timed out waiting for CI on %s: %s\n' "$SHA" "$(IFS=';'; echo "${pending[*]}")"
+            exit 1
+          fi
+          echo "Waiting for: ${pending[*]}"
+          sleep 30
+        done
