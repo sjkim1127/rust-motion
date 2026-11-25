@@ -47,62 +47,40 @@ jobs:
       - name: Create snapshots directory
         run: mkdir -p snapshots
 
-      # Render multi-scene golden gallery (9 frames across 4 compositions)
+      # Render multi-scene golden gallery (9 frames across 4 compositions).
+      # Every snapshot is attempted and its exit code recorded as Sentry defect
+      # evidence (docs/sentry.md); the step fails afterwards if any render did.
       - name: Render snapshots
+        shell: bash
         run: |
-          ./target/release/rust-motion render \
-            --composition HelloWorld \
-            --frame-start 0 --frame-end 0 \
-            --output snapshots/hello_world_0000.png \
-            --codec png --width 960 --height 540
-
-          ./target/release/rust-motion render \
-            --composition HelloWorld \
-            --frame-start 30 --frame-end 30 \
-            --output snapshots/hello_world_0030.png \
-            --codec png --width 960 --height 540
-
-          ./target/release/rust-motion render \
-            --composition HelloWorld \
-            --frame-start 90 --frame-end 90 \
-            --output snapshots/hello_world_0090.png \
-            --codec png --width 960 --height 540
-
-          ./target/release/rust-motion render \
-            --composition ShapesAndFilters \
-            --frame-start 0 --frame-end 0 \
-            --output snapshots/shapes_filters_0000.png \
-            --codec png --width 960 --height 540
-
-          ./target/release/rust-motion render \
-            --composition ShapesAndFilters \
-            --frame-start 30 --frame-end 30 \
-            --output snapshots/shapes_filters_0030.png \
-            --codec png --width 960 --height 540
-
-          ./target/release/rust-motion render \
-            --composition CyberpunkGrid \
-            --frame-start 0 --frame-end 0 \
-            --output snapshots/cyberpunk_grid_0000.png \
-            --codec png --width 960 --height 540
-
-          ./target/release/rust-motion render \
-            --composition CyberpunkGrid \
-            --frame-start 30 --frame-end 30 \
-            --output snapshots/cyberpunk_grid_0030.png \
-            --codec png --width 960 --height 540
-
-          ./target/release/rust-motion render \
-            --composition ComplexGradients \
-            --frame-start 0 --frame-end 0 \
-            --output snapshots/complex_gradients_0000.png \
-            --codec png --width 960 --height 540
-
-          ./target/release/rust-motion render \
-            --composition ComplexGradients \
-            --frame-start 30 --frame-end 30 \
-            --output snapshots/complex_gradients_0030.png \
-            --codec png --width 960 --height 540
+          mkdir -p ci-evidence
+          failed=0
+          entries=()
+          while read -r composition frame name; do
+            code=0
+            ./target/release/rust-motion render \
+              --composition "$composition" \
+              --frame-start "$frame" --frame-end "$frame" \
+              --output "snapshots/${name}.png" \
+              --codec png --width 960 --height 540 </dev/null || code=$?
+            entries+=("{\"snapshot\": \"${name}.png\", \"exit_code\": ${code}}")
+            if [[ "$code" -ne 0 ]]; then
+              echo "::error::render of ${name} exited with ${code}"
+              failed=1
+            fi
+          done <<'RENDERS'
+          HelloWorld 0 hello_world_0000
+          HelloWorld 30 hello_world_0030
+          HelloWorld 90 hello_world_0090
+          ShapesAndFilters 0 shapes_filters_0000
+          ShapesAndFilters 30 shapes_filters_0030
+          CyberpunkGrid 0 cyberpunk_grid_0000
+          CyberpunkGrid 30 cyberpunk_grid_0030
+          ComplexGradients 0 complex_gradients_0000
+          ComplexGradients 30 complex_gradients_0030
+          RENDERS
+          (IFS=,; printf '{"version": 1, "renders": [%s]}\n' "${entries[*]}") > ci-evidence/render-status.json
+          exit "$failed"
 
       - name: Verify snapshots were created
         run: |
@@ -118,7 +96,8 @@ jobs:
       - name: Verify visual regression against golden frames
         run: |
           python3 -m pip install --upgrade pillow numpy
-          python3 tests/compare_visual_golden.py --actual-dir snapshots --golden-dir tests/visual_golden
+          python3 tests/compare_visual_golden.py --actual-dir snapshots --golden-dir tests/visual_golden \
+            --report-json ci-evidence/visual-report.json
 
       - name: Upload snapshots artifact
         id: artifact_upload
@@ -215,3 +194,25 @@ jobs:
             snapshots/
             /tmp/rust-motion-render-*.log
           retention-days: 7
+
+      - name: Upload defect evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sentry-evidence-visual-linux
+          path: ci-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ── Sentry defect events (docs/sentry.md) ─────────────────────────────────
+  # Report-only: never on pull requests, forks or tags, and never changes the
+  # run's result. SENTRY_DSN reaches only the reporter job.
+  sentry_defects:
+    name: Sentry defects
+    needs: [render_snapshots]
+    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'sjkim1127/rust-motion'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sentry-defects.yml
+    secrets:
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}

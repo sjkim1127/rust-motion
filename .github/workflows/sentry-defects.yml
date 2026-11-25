@@ -1,0 +1,52 @@
+name: Sentry defect reporter
+
+# Turns the defect evidence a run uploaded (sentry-evidence-<stage>-<os>
+# artifacts: cargo test output, the visual report, render exit codes) into
+# Sentry events under the contract in docs/sentry.md. Report-only: the job
+# never changes a run's result, and nothing gates on it.
+#
+# A separate job rather than a step in each test job: SENTRY_DSN reaches only
+# this job, which runs no build or test code, and one reporter per run is what
+# makes the 50-event cap a run cap. Callers run it only for pushes to main of
+# this repository; the script refuses everything else again and then only
+# writes the job summary.
+
+on:
+  workflow_call:
+    secrets:
+      SENTRY_DSN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    name: Sentry defect events
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Belt and braces: the script exits 0 once its arguments parse.
+    continue-on-error: true
+    steps:
+      # The reporter's closed sets come from the checkout: package names from
+      # crates/*/Cargo.toml, golden frame names from tests/visual_golden.
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/ci
+            crates
+            tests/visual_golden
+          sparse-checkout-cone-mode: true
+      # No match is a normal outcome: the failure left no evidence.
+      - name: Download evidence
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: sentry-evidence-*
+          path: ${{ runner.temp }}/defect-evidence
+      - name: Report defects
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          EVIDENCE: ${{ runner.temp }}/defect-evidence
+        run: python3 scripts/ci/sentry_defects.py --scan "$EVIDENCE"

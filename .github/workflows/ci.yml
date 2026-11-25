@@ -80,11 +80,27 @@ jobs:
       - name: Cargo Check Workspace
         run: cargo check --locked --workspace --all-targets --all-features
 
+      # Test output is also the Sentry defect evidence (docs/sentry.md);
+      # bash runs with pipefail, so cargo's exit code still decides the step.
       - name: Run All Workspace Tests
-        run: cargo test --locked --workspace --exclude rust-motion-python
+        shell: bash
+        run: |
+          mkdir -p ci-evidence
+          cargo test --locked --workspace --exclude rust-motion-python 2>&1 | tee -a ci-evidence/cargo-test.log
 
       - name: Test GPU scene compilation without device initialization
-        run: 'cargo test --locked -p rust-motion-rasterizer --features gpu support_tests::'
+        shell: bash
+        run: |
+          cargo test --locked -p rust-motion-rasterizer --features gpu support_tests:: 2>&1 | tee -a ci-evidence/cargo-test.log
+
+      - name: Upload defect evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sentry-evidence-test-${{ runner.os == 'Linux' && 'linux' || runner.os == 'macOS' && 'macos' || 'windows' }}
+          path: ci-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
 
   # ── 2b. CI scripts (Sentry defect reporter; docs/sentry.md) ───────────────
   ci_scripts:
@@ -147,3 +163,16 @@ jobs:
 
       - name: Run WASM crate native unit tests
         run: cargo test --locked -p rust-motion-wasm
+
+  # ── Sentry defect events (docs/sentry.md) ─────────────────────────────────
+  # Report-only: never on pull requests, forks or tags, and never changes the
+  # run's result. SENTRY_DSN reaches only the reporter job.
+  sentry_defects:
+    name: Sentry defects
+    needs: [test]
+    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'sjkim1127/rust-motion'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sentry-defects.yml
+    secrets:
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}

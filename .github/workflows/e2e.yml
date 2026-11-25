@@ -44,11 +44,14 @@ jobs:
         run: cargo build -p rust-motion-cli --locked
 
       # ── 5. E2E tests ───────────────────────────────────────────────────────
+      # ci-evidence/cargo-test.log is the Sentry defect evidence (docs/sentry.md).
       - name: Run E2E CLI subprocess tests
+        shell: bash
         run: |
+          mkdir -p ci-evidence
           cargo test -p rust-motion-cli --locked --test e2e_cli_subprocess -- \
             --nocapture \
-            2>&1 | tee /tmp/e2e_output.log
+            2>&1 | tee /tmp/e2e_output.log ci-evidence/cargo-test.log
 
       # ── 6. Verify positive outputs ────────────────────────────────────────
       - name: Verify rendered MP4 with ffprobe
@@ -84,3 +87,25 @@ jobs:
           name: e2e-failure-logs
           path: /tmp/e2e_output.log
           retention-days: 7
+
+      - name: Upload defect evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sentry-evidence-e2e-linux
+          path: ci-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ── Sentry defect events (docs/sentry.md) ─────────────────────────────────
+  # Report-only: never on pull requests, forks or tags, and never changes the
+  # run's result. SENTRY_DSN reaches only the reporter job.
+  sentry_defects:
+    name: Sentry defects
+    needs: [e2e]
+    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'sjkim1127/rust-motion'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sentry-defects.yml
+    secrets:
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}

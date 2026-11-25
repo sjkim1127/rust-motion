@@ -72,6 +72,15 @@ directory and reads:
 | `visual-report.json` | `tests/compare_visual_golden.py --report-json` | `{"version": 1, "results": [{"snapshot", "status"}]}` |
 | `render-status.json` | the visual workflow's render loop | `{"version": 1, "renders": [{"snapshot", "exit_code"}]}` |
 
+The test job of `ci.yml` (all three OSes), `e2e.yml` and `visual.yml` upload
+their evidence only when they fail. Each workflow then calls the reusable
+[`sentry-defects.yml`](../.github/workflows/sentry-defects.yml) job, only on
+a push to `main` of this repository. That job is the only one that receives
+`SENTRY_DSN`, runs no build or test code, and is `continue-on-error`.
+
+The visual workflow attempts every snapshot render before failing, so one
+crashed render does not hide the others.
+
 ## Running it locally
 
 ```bash

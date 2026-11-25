@@ -3,9 +3,15 @@
 Compares rendered test snapshots against committed golden reference frames.
 Calculates both MAE (Mean Absolute Error) and SSIM (Structural Similarity Index).
 Exits with code 0 if all frames are within tolerance (MAE <= 0.5% AND SSIM >= 0.99), or code 1 on regression.
+
+With --report-json, also writes one closed-set status per golden frame
+(pass, mismatch, dimension_mismatch, missing_actual, missing_golden) for the
+CI defect reporter (scripts/ci/sentry_defects.py, docs/sentry.md). The report
+holds only golden file names and statuses: no pixels, scores or paths.
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -61,15 +67,17 @@ def compare_images(
     golden_path: Path,
     max_mae: float = 0.005,
     min_ssim: float = 0.99,
-) -> tuple[bool, float, float, str]:
+) -> tuple[bool, float, float, str, str]:
+    """(passed, mae, ssim, details, status); status is one of the --report-json statuses."""
     if not actual_path.is_file():
-        return False, 1.0, 0.0, f"Actual snapshot missing: {actual_path}"
+        return False, 1.0, 0.0, f"Actual snapshot missing: {actual_path}", "missing_actual"
     if not golden_path.is_file():
-        return False, 1.0, 0.0, f"Golden reference missing: {golden_path}"
+        return False, 1.0, 0.0, f"Golden reference missing: {golden_path}", "missing_golden"
 
     with Image.open(actual_path) as img_a, Image.open(golden_path) as img_g:
         if img_a.size != img_g.size:
-            return False, 1.0, 0.0, f"Dimension mismatch: actual {img_a.size} vs golden {img_g.size}"
+            return (False, 1.0, 0.0, f"Dimension mismatch: actual {img_a.size} vs golden {img_g.size}",
+                    "dimension_mismatch")
 
         arr_a = np.asarray(img_a.convert("RGBA"), dtype=np.float32)
         arr_g = np.asarray(img_g.convert("RGBA"), dtype=np.float32)
@@ -82,7 +90,7 @@ def compare_images(
 
         passed = (mae <= max_mae) and (ssim >= min_ssim)
         details = f"MAE: {mae * 100.0:.4f}% | SSIM: {ssim:.4f}"
-        return passed, mae, ssim, details
+        return passed, mae, ssim, details, "pass" if passed else "mismatch"
 
 
 def main():
@@ -91,6 +99,7 @@ def main():
     parser.add_argument("--golden-dir", type=Path, default=Path("tests/visual_golden"), help="Directory with golden reference PNGs")
     parser.add_argument("--max-mae", type=float, default=0.005, help="Maximum allowed Mean Absolute Error (default 0.005 = 0.5%%)")
     parser.add_argument("--min-ssim", type=float, default=0.99, help="Minimum allowed SSIM index (default 0.99)")
+    parser.add_argument("--report-json", type=Path, help="Write a per-frame status report here (docs/sentry.md)")
     args = parser.parse_args()
 
     golden_files = sorted(args.golden_dir.glob("*.png"))
@@ -101,11 +110,13 @@ def main():
     print(f"🎬 Comparing {len(golden_files)} snapshots against golden references...")
     all_passed = True
     results = []
+    report = []
 
     for golden_path in golden_files:
         filename = golden_path.name
         actual_path = args.actual_dir / filename
-        passed, mae, ssim, details = compare_images(actual_path, golden_path, args.max_mae, args.min_ssim)
+        passed, mae, ssim, details, status = compare_images(actual_path, golden_path, args.max_mae, args.min_ssim)
+        report.append({"snapshot": filename, "status": status})
 
         status_icon = "✅" if passed else "❌"
         results.append((status_icon, filename, f"{mae * 100.0:.4f}%", f"{ssim:.4f}", "PASS" if passed else "FAIL"))
@@ -116,6 +127,10 @@ def main():
     print("|:------:|:---------------|:----|:-----|:------:|")
     for status, name, mae_str, ssim_str, res in results:
         print(f"| {status} | `{name}` | {mae_str} | {ssim_str} | **{res}** |")
+
+    if args.report_json:
+        args.report_json.parent.mkdir(parents=True, exist_ok=True)
+        args.report_json.write_text(json.dumps({"version": 1, "results": report}, indent=2) + "\n", encoding="utf-8")
 
     if all_passed:
         print("\n🎉 All visual regression tests passed within tolerance!")
