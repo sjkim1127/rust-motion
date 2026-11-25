@@ -135,6 +135,31 @@ git push origin main --tags
 
 Create a GitHub Release on `sjkim1127/rust-motion` matching tag `vX.Y.Z` with notes from `CHANGELOG.md`.
 
+### Sentry release
+
+After the GitHub Release job, `release.yml` creates the Sentry release
+`rust-motion@X.Y.Z` (org `fission-systems`, project `rust-motion`), associates
+the commits since the previous release, and finalizes it. It needs two
+repository secrets:
+
+- `SENTRY_AUTH_TOKEN`: a Sentry organization auth token, which has release scope.
+- `SENTRY_DSN`: the `rust-motion` project's DSN. CI defect events also use it.
+
+If either secret is missing, the job logs a notice and skips. It is
+`continue-on-error`, so a Sentry outage never fails a release. Associating
+commits needs the Sentry GitHub App to have access to `sjkim1127/rust-motion`.
+Without it, the commit step fails: the job shows an error, the release stays
+unfinalized, and the workflow still succeeds. Repair it with the commands below.
+The action's own telemetry is disabled.
+
+To create or repair one by hand:
+
+```bash
+sentry-cli releases --org fission-systems --project rust-motion new rust-motion@X.Y.Z
+sentry-cli releases --org fission-systems set-commits rust-motion@X.Y.Z --auto --ignore-missing
+sentry-cli releases --org fission-systems finalize rust-motion@X.Y.Z
+```
+
 ---
 
 ## 7. Recovery & Interruption Handling

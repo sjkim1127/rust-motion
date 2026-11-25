@@ -271,3 +271,61 @@ jobs:
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Sentry release tracking (docs/sentry.md): creates rust-motion@<version>
+  # with its commits once the GitHub release exists. Bookkeeping only: it never
+  # fails a published release, and it is skipped when the Sentry secrets are
+  # absent (forks, or before they are configured).
+  sentry_release:
+    name: Create Sentry release
+    needs: github_release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Check Sentry configuration
+        id: config
+        shell: bash
+        env:
+          HAS_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
+          HAS_DSN: ${{ secrets.SENTRY_DSN != '' }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tag $RELEASE_TAG is not v<semver>"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$HAS_AUTH_TOKEN" == "true" && "$HAS_DSN" == "true" && "$GITHUB_REPOSITORY" == "sjkim1127/rust-motion" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::SENTRY_AUTH_TOKEN or SENTRY_DSN is not configured; skipping the Sentry release."
+          fi
+
+      # Full history so sentry-cli can associate the commits since the last release.
+      - name: Checkout repository
+        if: steps.config.outputs.enabled == 'true'
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Create Sentry release
+        if: steps.config.outputs.enabled == 'true'
+        uses: getsentry/action-release@e6703d0b00208e0b3687ba660d18ab5af7892821 # v3.7.2
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: fission-systems
+          SENTRY_PROJECT: rust-motion
+        with:
+          release: rust-motion@${{ steps.config.outputs.version }}
+          set_commits: auto
+          # The first release has no previous one to diff against.
+          ignore_missing: true
+          finalize: true
+          disable_telemetry: true
