@@ -35,6 +35,10 @@ jobs:
       - name: Check Formatting
         run: cargo fmt --all -- --check
 
+      # Fails if a version-bearing file changes shape and the release script no longer matches it.
+      - name: Release script matches the repository
+        run: python3 scripts/release/prepare.py 99.0.0 --dry-run > /dev/null
+
       - name: Run Clippy Lints
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
