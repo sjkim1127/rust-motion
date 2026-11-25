@@ -47,7 +47,6 @@ jobs:
     # `label` keeps the check names stable ("Test (ubuntu-latest)", ...) because branch
     # protection requires them, while `os` pins the actual runner image.
     name: Test (${{ matrix.label }})
-    needs: fmt_clippy
     strategy:
       fail-fast: false
       matrix:
@@ -73,8 +72,21 @@ jobs:
       - name: Cargo Check Workspace
         run: cargo check --locked --workspace --all-targets --all-features
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      # nextest runs test binaries in parallel instead of one after another. It cannot list
+      # `harness = false` targets, and it does not run doctests, so both are run separately below.
       - name: Run All Workspace Tests
-        run: cargo test --locked --workspace --exclude rust-motion-python
+        run: cargo nextest run --locked --workspace --exclude rust-motion-python --no-fail-fast -E 'not binary(monitor_macos)'
+
+      - name: Run tests with a custom harness
+        run: cargo test --locked -p rust-motion-tablet --test monitor_macos
+
+      - name: Run doc tests
+        run: cargo test --locked --workspace --exclude rust-motion-python --doc
 
       - name: Test GPU scene compilation without device initialization
         run: 'cargo test --locked -p rust-motion-rasterizer --features gpu support_tests::'
@@ -83,7 +95,6 @@ jobs:
   typescript_sdk:
     name: TypeScript SDK & Remotion Bridge
     runs-on: ubuntu-latest
-    needs: [fmt_clippy]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -106,7 +117,6 @@ jobs:
   wasm:
     name: WebAssembly (WASM Engine & Browser Canvas)
     runs-on: ubuntu-latest
-    needs: [fmt_clippy]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
