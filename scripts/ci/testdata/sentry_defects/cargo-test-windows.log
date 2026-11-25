@@ -1,0 +1,26 @@
+     Running unittests src\lib.rs (target\debug\deps\rust_motion_rasterizer-5d1c0e2a9b8f7a61.exe)
+
+running 2 tests
+test font::tests::fit_text_shrinks_to_box ... ok
+test render::tests::cpu_backend_matches_golden_bytes ... FAILED
+
+failures:
+
+---- render::tests::cpu_backend_matches_golden_bytes stdout ----
+thread 'render::tests::cpu_backend_matches_golden_bytes' panicked at crates\rasterizer\src\render\tests.rs:88:9:
+pixel 12,40 differs for C:\Users\someone\Videos\private-clip.mp4
+
+failures:
+    render::tests::cpu_backend_matches_golden_bytes
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+error: test failed, to rerun pass `-p rust-motion-rasterizer --lib`
+     Running tests\e2e_cli_subprocess.rs (target\debug\deps\e2e_cli_subprocess-0a1b2c3d4e5f6071.exe)
+
+running 2 tests
+test render_png_frame ... ok
+error: test failed, to rerun pass `-p rust-motion-cli --test e2e_cli_subprocess`
+
+Caused by:
+  process didn't exit successfully: `D:\a\rust-motion\rust-motion\target\debug\deps\e2e_cli_subprocess-0a1b2c3d4e5f6071.exe` (exit code: 0xc0000005, STATUS_ACCESS_VIOLATION)

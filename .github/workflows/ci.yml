@@ -86,6 +86,22 @@ jobs:
       - name: Test GPU scene compilation without device initialization
         run: 'cargo test --locked -p rust-motion-rasterizer --features gpu support_tests::'
 
+  # ── 2b. CI scripts (Sentry defect reporter; docs/sentry.md) ───────────────
+  ci_scripts:
+    name: CI Scripts (Sentry defect reporter)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run CI script tests
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
+
   # ── 3. TypeScript SDK and Remotion Bridge tests ───────────────────────────
   typescript_sdk:
     name: TypeScript SDK & Remotion Bridge

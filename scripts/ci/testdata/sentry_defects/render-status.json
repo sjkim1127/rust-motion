@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "renders": [
+    {"snapshot": "hello_world_0000.png", "exit_code": 0},
+    {"snapshot": "shapes_filters_0030.png", "exit_code": 101},
+    {"snapshot": "cyberpunk_grid_0000.png", "exit_code": 1}
+  ]
+}
