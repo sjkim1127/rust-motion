@@ -56,9 +56,12 @@ jobs:
       - name: Build the native renderer
         run: cargo build --release --locked -p rust-motion-composition --example render_bench
 
+      # `npm ci` rejects this lockfile on Linux: Remotion's optional @rspack/binding-wasm32-wasi
+      # needs @emnapi/*, which npm does not record when the lockfile is generated on macOS.
+      # `npm install` follows the same lockfile and fills in only what is missing.
       - name: Install Remotion
         working-directory: benchmarks/remotion
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
 
       - name: Run the benchmark
         env:
