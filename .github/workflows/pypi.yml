@@ -35,7 +35,7 @@ jobs:
       contents: read
       checks: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.BUILD_REF }}
       - name: Validate release tag
@@ -77,7 +77,7 @@ jobs:
             target: aarch64-unknown-linux-gnu
             manylinux: manylinux_2_28
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.BUILD_REF }}
       - name: Setup Rust toolchain
@@ -86,7 +86,7 @@ jobs:
         with:
           install: "false"
           cache: "false"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Build wheels
@@ -142,7 +142,7 @@ jobs:
         uses: ./.github/actions/install-ffmpeg
       - name: Checkout Python smoke test harness
         if: matrix.platform.target == 'x86_64-unknown-linux-gnu'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.ref }}
           path: smoke-tests
@@ -154,7 +154,7 @@ jobs:
           pip install dist/*.whl
           python3 smoke-tests/crates/python/tests/test_binding.py
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-linux-${{ matrix.platform.target }}
           path: dist
@@ -171,7 +171,7 @@ jobs:
           - runner: macos-15
             target: aarch64-apple-darwin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.BUILD_REF }}
       - name: Setup Rust toolchain
@@ -180,7 +180,7 @@ jobs:
         with:
           install: "true"
           cache: "false"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Build wheels
@@ -195,7 +195,7 @@ jobs:
         run: brew install ffmpeg
       - name: Checkout Python smoke test harness
         if: matrix.platform.target == 'aarch64-apple-darwin'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.ref }}
           path: smoke-tests
@@ -207,7 +207,7 @@ jobs:
           pip install dist/*.whl
           python3 smoke-tests/crates/python/tests/test_binding.py
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-macos-${{ matrix.platform.target }}
           path: dist
@@ -221,7 +221,7 @@ jobs:
         platform:
           - target: x86_64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.BUILD_REF }}
       - name: Setup Rust toolchain
@@ -230,7 +230,7 @@ jobs:
         with:
           install: "true"
           cache: "false"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           architecture: x64
@@ -244,7 +244,7 @@ jobs:
       - name: Install FFmpeg
         uses: ./.github/actions/install-ffmpeg
       - name: Checkout Python smoke test harness
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.ref }}
           path: smoke-tests
@@ -257,7 +257,7 @@ jobs:
           pip install dist/*.whl
           python smoke-tests/crates/python/tests/test_binding.py
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-windows-${{ matrix.platform.target }}
           path: dist
@@ -266,7 +266,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [validate_tag]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.BUILD_REF }}
       - name: Setup Rust toolchain
@@ -282,7 +282,7 @@ jobs:
           command: sdist
           args: --out dist --manifest-path crates/python/Cargo.toml
       - name: Upload sdist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: dist
@@ -296,7 +296,7 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           merge-multiple: true

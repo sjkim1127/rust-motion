@@ -24,7 +24,7 @@ jobs:
     steps:
       # ── 1. Source ──────────────────────────────────────────────────────────
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # ── 2. Rust toolchain ──────────────────────────────────────────────────
       - name: Setup Rust toolchain
@@ -76,7 +76,7 @@ jobs:
       # ── 7. Upload artifacts on failure ────────────────────────────────────
       - name: Upload E2E logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-failure-logs
           path: /tmp/e2e_output.log
