@@ -29,3 +29,6 @@ jobs:
 
       - name: Recompute the quoted ratios
         run: python3 benchmarks/check_claims.py
+
+      - name: Remotion and React packages share one version
+        run: python3 benchmarks/check_package_versions.py
