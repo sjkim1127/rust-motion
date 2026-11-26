@@ -261,5 +261,146 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(fmd.proc_macro_dirs(root), ())
 
 
+class ReviewModelTests(unittest.TestCase):
+    def test_the_drafting_model_does_not_review_its_own_patch(self):
+        listing = "opencode/hy4-flash-free\nopencode/beam-free\n"
+        self.assertEqual(fmd.order_models(listing, 0, exclude="opencode/hy4-flash-free"), ["opencode/beam-free"])
+
+    def test_no_other_model_is_an_error(self):
+        with self.assertRaises(SystemExit):
+            fmd.order_models("opencode/beam-free\n", 0, exclude="opencode/beam-free")
+
+
+class ProposalTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.repo = Path(directory.name)
+        (self.repo / "docs").mkdir()
+        (self.repo / "docs/cli.md").write_text("Run `rust-motion rendr` to render.\n", encoding="utf-8")
+
+    def proposal(self, **changes):
+        return {"title": "docs: fix the render command", "path": "docs/cli.md",
+                "quote": "rust-motion rendr", "problem": "The subcommand is misspelled in the guide.",
+                "expected": "It should say rust-motion render.", **changes}
+
+    def problems(self, proposal, issues=()):
+        return fmd.proposal_problems(proposal, self.repo, list(issues))
+
+    def test_a_quoted_defect_is_accepted(self):
+        self.assertEqual(self.problems(self.proposal()), [])
+
+    def test_an_invented_quote_is_refused(self):
+        self.assertIn("quote", " ".join(self.problems(self.proposal(quote="rust-motion paint"))))
+
+    def test_nothing_found_and_malformed_answers_are_refused(self):
+        for answer in ({}, [], "text", self.proposal(extra="x"), self.proposal(title=3),
+                       self.proposal(problem="short"), self.proposal(quote="```\nrust-motion rendr")):
+            self.assertTrue(self.problems(answer), answer)
+
+    def test_paths_outside_the_editable_files_are_refused(self):
+        (self.repo / "scripts").mkdir()
+        (self.repo / "scripts/a.md").write_text("rust-motion rendr\n", encoding="utf-8")
+        for path in ("scripts/a.md", "docs/missing.md", "docs/../scripts/a.md", "/etc/hosts"):
+            self.assertTrue(self.problems(self.proposal(path=path)), path)
+
+    def test_a_known_title_or_an_open_file_is_not_filed_again(self):
+        same = {"number": 3, "title": "Docs: fix the render command!", "state": "CLOSED"}
+        self.assertTrue(self.problems(self.proposal(), [same]))
+        open_issue = {"number": 4, "title": "other", "state": "OPEN", "labels": [{"name": "agent:auto"}],
+                      "body": "File: `docs/cli.md`\n"}
+        self.assertTrue(self.problems(self.proposal(), [open_issue]))
+        self.assertEqual(self.problems(self.proposal(), [{**open_issue, "state": "CLOSED"}]), [])
+
+    def test_the_filed_issue_notifies_nobody_and_can_be_drafted(self):
+        title, body = fmd.issue_text(self.proposal(problem="Ask @someone why it is misspelled."), "opencode/m")
+        self.assertNotIn("@someone", title + body)
+        self.assertEqual(fmd.issue_problems(issue(body=body)), [])
+
+
+def patch(path, removed=(), added=()):
+    lines = [f"diff --git a/{path} b/{path}", f"--- a/{path}", f"+++ b/{path}", "@@ -1 +1 @@"]
+    return "\n".join(lines + ["-" + line for line in removed] + ["+" + line for line in added]) + "\n"
+
+
+class MergeTests(unittest.TestCase):
+    def problems(self, *args, summary="", **kwargs):
+        return fmd.merge_problems(patch(*args, **kwargs), summary)
+
+    def test_documentation_and_plain_code_may_merge(self):
+        self.assertEqual(self.problems("docs/a.md", ["rendr"], ["render"]), [])
+        self.assertEqual(self.problems("crates/a/src/lib.rs", ["let n = len;"], ["let n = len.max(1);"]), [])
+
+    def test_new_tests_may_merge(self):
+        self.assertEqual(self.problems("crates/a/tests/new.rs", [], ["#[test]", "fn t() { assert!(true); }"]), [])
+
+    def test_changed_tests_and_assertions_need_a_person(self):
+        self.assertTrue(self.problems("crates/a/tests/old.rs", ["let x = 1;"], ["let x = 2;"]))
+        self.assertTrue(self.problems("crates/a/src/render/tests/mod.rs", ["// x"], []))
+        for line in ("#[test]", "#[tokio::test]", "assert_eq!(a, b);", "debug_assert!(ok);", "prop_assert!(ok);"):
+            self.assertTrue(self.problems("crates/a/src/lib.rs", [line], []), line)
+
+    def test_risky_code_needs_a_person(self):
+        for line in ("#[ignore]", "#[cfg(any())]", "#![allow(dead_code)]", "unsafe { x() }",
+                     "use std::{process, io};", "Command::new(\"sh\")", "std::env::var(\"TOKEN\")",
+                     "include_str!(\"/etc/passwd\")", "std::net::TcpStream::connect(a)",
+                     "std::fs::remove_dir_all(p)", "extern \"C\" {}"):
+            self.assertTrue(self.problems("crates/a/src/lib.rs", [], [line]), line)
+
+    def test_a_deleted_file_needs_a_person(self):
+        self.assertTrue(self.problems("docs/a.md", ["x"], summary=" delete mode 100644 docs/a.md\n"))
+
+    def test_a_new_link_needs_a_person_but_an_existing_one_does_not(self):
+        self.assertTrue(self.problems("docs/a.md", ["x"], ["see https://example.invalid/x"]))
+        self.assertEqual(self.problems("docs/a.md", ["see https://a.invalid/ now"],
+                                       ["see https://a.invalid/ today"]), [])
+
+    def test_an_oversized_patch_needs_a_person(self):
+        self.assertTrue(self.problems("docs/a.md", [], ["x" * fmd.MAX_PATCH]))
+
+    def test_content_lines_that_look_like_headers_are_counted(self):
+        files = fmd.patch_lines(patch("docs/a.md", ["-- old"], ["++ new"]))
+        self.assertEqual(files, {"docs/a.md": (["++ new"], ["-- old"])})
+
+    def test_agent_instruction_files_are_refused(self):
+        for path in ("AGENTS.md", "CLAUDE.md", "crates/cli/Agents.md"):
+            self.assertFalse(fmd.path_allowed(path), path)
+
+
+class VerdictTests(unittest.TestCase):
+    def test_only_an_exact_verdict_counts(self):
+        self.assertEqual(fmd.parse_verdict('{"verdict": "approve", "reason": "ok"}'), ("approve", "ok"))
+        for text in ("approve", "{}", '{"verdict": "Approve", "reason": "ok"}', '{"verdict": "approve"}',
+                     '["approve"]', '```json\n{"verdict": "approve", "reason": "ok"}\n```'):
+            with self.assertRaises(ValueError, msg=text):
+                fmd.parse_verdict(text)
+
+
+class MergeRepositoryTests(unittest.TestCase):
+    """`check_merge` against a real branch."""
+
+    setUp, git, write = RepositoryTests.setUp, RepositoryTests.git, RepositoryTests.write
+
+    def commit(self, message):
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", message)
+
+    def test_a_branch_is_judged_without_checking_it_out(self):
+        self.git("branch", "base")
+        self.git("switch", "-q", "-c", "draft")
+        self.write("docs/a.md", "one\n2\nthree\n")
+        self.commit("fix")
+        self.git("switch", "-q", "base")
+        problems, text = fmd.check_merge(self.repo, "base", "draft")
+        self.assertEqual(problems, [])
+        self.assertIn("+2\n", text)
+
+    def test_a_deletion_on_a_branch_needs_a_person(self):
+        self.git("branch", "base")
+        (self.repo / "docs/a.md").unlink()
+        self.commit("delete")
+        self.assertIn("deletes a file", " ".join(fmd.check_merge(self.repo, "base", "HEAD")[0]))
+
+
 if __name__ == "__main__":
     unittest.main()

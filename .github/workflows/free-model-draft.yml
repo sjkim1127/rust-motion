@@ -1,7 +1,7 @@
 name: Free-model draft
 
 # An issue labelled `agent:free` gets a draft fix from an OpenCode Zen free
-# model, opened as a draft PR labelled `agent:free-draft`
+# model, opened as a PR labelled `agent:free-draft`
 # (scripts/ci/free_model_draft.py). It is for simple issues only: typos, docs,
 # small single-purpose code changes. Adapted from fission-systems/Fission.
 #
@@ -23,9 +23,10 @@ name: Free-model draft
 # - Models: free ones have usage limits, so the run number picks which goes
 #   first and a failing or rate-limited one hands over to the next (up to
 #   four), each starting from a clean checkout.
-# - Review: the PR stays a draft and CI does not run on it. A reviewer reads
-#   it first (an Opus review), then marks it ready, which starts CI
-#   (`ready_for_review`).
+# - Review: with the repository variable AGENT_AUTOPILOT `on`, the PR opens
+#   ready and free-model-merge.yml reviews, tests and merges it or leaves it to
+#   a person. Otherwise it stays a draft and CI does not run on it: a person
+#   reads it, then marks it ready, which starts CI (`ready_for_review`).
 #
 # Requires the repository setting that lets GitHub Actions create pull requests.
 
@@ -142,18 +143,20 @@ jobs:
           retention-days: 7
 
   open-pr:
-    name: Open the draft PR
+    name: Open the PR
     needs: draft
     if: github.event_name == 'issues' || inputs.open_pr
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
+      actions: write
       contents: write
       pull-requests: write
       issues: write
     env:
       ISSUE: ${{ github.event.issue.number || inputs.issue }}
       MODEL: ${{ needs.draft.outputs.model }}
+      AUTOPILOT: ${{ vars.AGENT_AUTOPILOT }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -186,22 +189,31 @@ jobs:
             echo "Drafted by \`$MODEL\`, an OpenCode Zen free model ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID))."
             echo "It could only read and edit files; nothing was built or tested."
             echo
-            echo "**Before this leaves draft:** an Opus review of the diff. Marking it ready starts CI."
+            if [ "$AUTOPILOT" = on ]; then
+              echo "free-model-merge.yml reviews it with another model, runs CI and merges it, or leaves it to a person."
+            else
+              echo "**Before this leaves draft:** a person reviews the diff. Marking it ready starts CI."
+            fi
           } > "$RUNNER_TEMP/body.md"
-          url="$(gh pr create --draft --base main --head "$branch" --label agent:free-draft \
-            --title "draft: $title" --body-file "$RUNNER_TEMP/body.md")"
-          gh issue comment "$ISSUE" --body "A free model drafted a fix: $url (draft, unreviewed)."
+          options=(--draft --title "draft: $title")
+          if [ "$AUTOPILOT" = on ]; then options=(--title "$title"); fi
+          url="$(gh pr create "${options[@]}" --base main --head "$branch" --label agent:free-draft \
+            --body-file "$RUNNER_TEMP/body.md")"
+          gh issue comment "$ISSUE" --body "A free model drafted a fix: $url (unreviewed)."
+          if [ "$AUTOPILOT" = on ]; then
+            gh workflow run free-model-merge.yml --ref main -f pr="${url##*/}" -f drafter="$MODEL"
+          fi
 
   report-failure:
     name: Say the draft failed
     needs: draft
-    if: failure() && github.event_name == 'issues'
+    if: failure() && (github.event_name == 'issues' || inputs.open_pr)
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       issues: write
     env:
-      ISSUE: ${{ github.event.issue.number }}
+      ISSUE: ${{ github.event.issue.number || inputs.issue }}
     steps:
       - name: Comment on the issue
         env:
@@ -209,3 +221,9 @@ jobs:
         run: |
           gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body \
             "The free model produced no acceptable draft ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)). It may need a stronger model."
+          # An issue a model filed and no model can fix is closed, so it does not
+          # hold one of the places free-model-triage.yml counts.
+          if gh issue view "$ISSUE" --repo "$GITHUB_REPOSITORY" --json labels \
+              | jq -e 'any(.labels[]; .name == "agent:auto")' > /dev/null; then
+            gh issue close "$ISSUE" --repo "$GITHUB_REPOSITORY" --reason "not planned"
+          fi
