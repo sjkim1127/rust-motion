@@ -1,0 +1,221 @@
+{
+  "commit": "c9510b7f212ad0ce5f5698740d238f9460cdeed9",
+  "runner": "GitHub Actions ubuntu24 20261116.376.1",
+  "logical_cpus": 4,
+  "memory_gb": 16,
+  "scene": "32 opaque spring-animated rectangles, no fonts/media/effects",
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "frames": 180,
+  "concurrency": 4,
+  "codec": "h264",
+  "crf": 18,
+  "preset": "fast",
+  "imageFormat": "png",
+  "repeats": 5,
+  "platform": "linux",
+  "arch": "x64",
+  "cpu": "AMD EPYC 7763 64-Core Processor",
+  "node": "v24.22.3",
+  "chrome": "Google Chrome 157.0.8103.78",
+  "validation": {
+    "pixel_checks": [
+      {
+        "frame": 0,
+        "identical": true,
+        "rgba_bytes": 3686400
+      },
+      {
+        "frame": 1,
+        "identical": true,
+        "rgba_bytes": 3686400
+      },
+      {
+        "frame": 7,
+        "identical": true,
+        "rgba_bytes": 3686400
+      },
+      {
+        "frame": 15,
+        "identical": true,
+        "rgba_bytes": 3686400
+      },
+      {
+        "frame": 30,
+        "identical": true,
+        "rgba_bytes": 3686400
+      },
+      {
+        "frame": 59,
+        "identical": true,
+        "rgba_bytes": 3686400
+      },
+      {
+        "frame": 60,
+        "identical": true,
+        "rgba_bytes": 3686400
+      },
+      {
+        "frame": 179,
+        "identical": true,
+        "rgba_bytes": 3686400
+      }
+    ],
+    "probes": {
+      "native": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 720,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "30/1",
+        "nb_read_frames": "180"
+      },
+      "remotion": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 720,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "30/1",
+        "nb_read_frames": "180"
+      }
+    },
+    "decoded_ssim": {
+      "normalized_to": "limited-range yuv420p",
+      "frames": 180,
+      "min": 1,
+      "mean": 1
+    }
+  },
+  "ffmpeg_shared": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers",
+  "bundle_ms": 11226.37536,
+  "browser_ms": 921.7980359999983,
+  "warmup": {
+    "rust-motion": {
+      "process_ms": 1295.623450000001,
+      "render_ms": 1272.30328
+    },
+    "remotion_ms": 16985.994947
+  },
+  "samples_ms": {
+    "rust-motion": [
+      1269.652812999997,
+      1295.4066779999994,
+      1269.602574000004,
+      1287.827827999994,
+      1290.0347699999984
+    ],
+    "remotion": [
+      17297.362105999997,
+      16893.601877999994,
+      16899.930143000005,
+      16948.563078000006,
+      16956.226710999996
+    ]
+  },
+  "native_render_ms": [
+    1250.809071,
+    1279.387829,
+    1253.2512740000002,
+    1271.088392,
+    1273.8400969999998
+  ],
+  "host_load_before_samples": [
+    {
+      "engine": "rust-motion",
+      "run": 0,
+      "load": [
+        1.33,
+        1.66,
+        0.86
+      ]
+    },
+    {
+      "engine": "remotion",
+      "run": 0,
+      "load": [
+        1.46,
+        1.69,
+        0.87
+      ]
+    },
+    {
+      "engine": "remotion",
+      "run": 1,
+      "load": [
+        1.29,
+        1.64,
+        0.87
+      ]
+    },
+    {
+      "engine": "rust-motion",
+      "run": 1,
+      "load": [
+        1.78,
+        1.71,
+        0.91
+      ]
+    },
+    {
+      "engine": "rust-motion",
+      "run": 2,
+      "load": [
+        1.78,
+        1.71,
+        0.91
+      ]
+    },
+    {
+      "engine": "remotion",
+      "run": 2,
+      "load": [
+        1.78,
+        1.71,
+        0.91
+      ]
+    },
+    {
+      "engine": "remotion",
+      "run": 3,
+      "load": [
+        1.68,
+        1.69,
+        0.92
+      ]
+    },
+    {
+      "engine": "rust-motion",
+      "run": 3,
+      "load": [
+        1.9,
+        1.76,
+        0.95
+      ]
+    },
+    {
+      "engine": "rust-motion",
+      "run": 4,
+      "load": [
+        1.9,
+        1.76,
+        0.95
+      ]
+    },
+    {
+      "engine": "remotion",
+      "run": 4,
+      "load": [
+        1.9,
+        1.76,
+        0.95
+      ]
+    }
+  ],
+  "median_ms": {
+    "rust-motion": 1287.827827999994,
+    "remotion": 16948.563078000006
+  },
+  "speedup": 13.160581491953973,
+  "scope": "warm render plus encoding; reused Chrome; native includes process startup; bundling/browser startup excluded; PNG pixels and all decoded MP4 frames verified"
+}

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fail when the benchmark figures quoted in the docs disagree with the committed measurement.
 
-The headline number is derived from one raw file (benchmarks/render-png-first.json). Two checks:
+Each quoted comparison is derived from a committed raw file. Two checks:
 
-1. Every figure the docs quote for that comparison must equal what the raw file gives.
+1. Every figure the docs quote for a comparison must equal what its raw file gives.
 2. Any table row that shows two durations and a speedup must be internally consistent, which is
    the mistake that put a 10.125 s Remotion time next to an unrelated 1.347 s native time and an
    18.66x ratio (the real ratio of those two is 7.52x).
@@ -19,8 +19,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SNAPSHOT = "benchmarks/render-png-first.json"
-DOCS = ["README.md", "benchmarks/README.md", "benchmarks/BATTLE_REPORT.md"]
+HOSTED = "benchmarks/render-png-gha-ubuntu24.json"
+M4_PRO = "benchmarks/render-png-first.json"
+# Which raw files each document has to quote. BATTLE_REPORT.md is the M4 Pro machine's report.
+DOCS = {
+    "README.md": [HOSTED, M4_PRO],
+    "benchmarks/README.md": [HOSTED, M4_PRO],
+    "benchmarks/BATTLE_REPORT.md": [M4_PRO],
+}
 # Figures that were quoted without any raw data behind them; they must not come back.
 RETRACTED = ["18.66", "18.7×", "10.125 s", "1.347 s"]
 
@@ -28,33 +34,37 @@ DURATION = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?) s\b")
 RATIO = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?)\s?[x×](?!\w)")
 
 
-def load_snapshot() -> tuple[float, float]:
-    data = json.loads((ROOT / SNAPSHOT).read_text(encoding="utf-8"))
+def load_snapshot(path: str) -> tuple[float, float]:
+    data = json.loads((ROOT / path).read_text(encoding="utf-8"))
     median = data.get("median_ms", {})
     native, remotion = median.get("rust-motion"), median.get("remotion")
     if not isinstance(native, (int, float)) or not isinstance(remotion, (int, float)):
-        sys.exit(f"{SNAPSHOT}: median_ms needs numeric 'rust-motion' and 'remotion' entries")
+        sys.exit(f"{path}: median_ms needs numeric 'rust-motion' and 'remotion' entries")
     return native / 1000, remotion / 1000
 
 
-def main() -> int:
-    native, remotion = load_snapshot()
-    expected = {
+def expected_figures(path: str) -> dict[str, str]:
+    native, remotion = load_snapshot(path)
+    return {
         "remotion": f"{remotion:.3f} s",
         "native": f"{native:.3f} s",
         "ratio": f"{remotion / native:.2f}",
     }
-    errors: list[str] = []
 
+
+def main() -> int:
+    errors: list[str] = []
     texts = {doc: (ROOT / doc).read_text(encoding="utf-8") for doc in DOCS}
 
-    for doc, text in texts.items():
-        for name in ("remotion", "native"):
-            # benchmarks/README.md writes the figures without a space ("2.192s").
-            if expected[name] not in text and expected[name].replace(" s", "s") not in text:
-                errors.append(f"{doc}: expected {name} time {expected[name]} (from {SNAPSHOT}) is not quoted")
-        if not re.search(re.escape(expected["ratio"]) + r"\s?[x×]", text):
-            errors.append(f"{doc}: expected speedup {expected['ratio']}x (from {SNAPSHOT}) is not quoted")
+    for doc, snapshots in DOCS.items():
+        text = texts[doc]
+        for snapshot in snapshots:
+            expected = expected_figures(snapshot)
+            for name in ("remotion", "native"):
+                if expected[name] not in text:
+                    errors.append(f"{doc}: expected {name} time {expected[name]} (from {snapshot}) is not quoted")
+            if not re.search(re.escape(expected["ratio"]) + r"\s?[x×]", text):
+                errors.append(f"{doc}: expected speedup {expected['ratio']}x (from {snapshot}) is not quoted")
         for stale in RETRACTED:
             if stale in text:
                 errors.append(f"{doc}: contains retracted figure {stale!r}")
@@ -76,7 +86,9 @@ def main() -> int:
         print("Benchmark claims disagree with the raw data:", file=sys.stderr)
         print("\n".join(f"  - {e}" for e in errors), file=sys.stderr)
         return 1
-    print(f"OK: {expected['remotion']} vs {expected['native']} = {expected['ratio']}x ({SNAPSHOT})")
+    for snapshot in (HOSTED, M4_PRO):
+        expected = expected_figures(snapshot)
+        print(f"OK: {expected['remotion']} vs {expected['native']} = {expected['ratio']}x ({snapshot})")
     return 0
 
 

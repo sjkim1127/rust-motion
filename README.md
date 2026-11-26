@@ -365,12 +365,13 @@ Measured results live in [`benchmarks/`](benchmarks/) and are reproducible with 
 
 | Workload | Remotion | Rust Motion |
 |---|---|---|
-| 720p spring scene, 4 workers/threads — render time | 11.041 s | 2.192 s (≈5.04× faster, median of 3 paired runs) |
+| 720p spring scene, 4 workers/threads — GitHub-hosted `ubuntu-24.04` (4 vCPU), Remotion 4.0.547 | 16.949 s | 1.288 s (≈13.16× faster, median of 5 paired runs) |
+| 720p spring scene, 4 workers/threads — Apple M4 Pro, Remotion 4.0.495 (earlier) | 11.041 s | 2.192 s (≈5.04× faster, median of 3 paired runs) |
 | 720p spring scene — peak RSS | not measured | 143.84 MB |
 | 1080p text/VFX scene (180 frames) — render time | not measured | 9.683 s (≈18.6 FPS) |
 | 1080p text/VFX scene — peak RSS | not measured | 277.77 MB |
 
-This is a small sample (one paired workload), so treat it as indicative rather than a general speedup claim. Serverless cost figures in the report are model outputs from assumed inputs, not measurements. Spring-kernel micro-benchmarks against the real Remotion implementation are in [`benchmarks/README.md`](benchmarks/README.md).
+Both rows are the same workload (32 rectangles, warm render plus encoding), and the ratio depends strongly on the machine and Remotion version, so treat it as indicative rather than a general speedup claim. Reproduce the first row with the **Benchmark** workflow. Serverless cost figures in the report are model outputs from assumed inputs, not measurements. Spring-kernel micro-benchmarks against the real Remotion implementation are in [`benchmarks/README.md`](benchmarks/README.md).
 
 ---
 
