@@ -46,7 +46,7 @@ pub(super) fn mesh_command(
     })
 }
 
-pub(super) fn gpu_path_mask_from_svg(
+pub(crate) fn gpu_path_mask_from_svg(
     d: &str,
     transform: Transform,
     color: Color,
