@@ -26,6 +26,20 @@ updates:
       interval: monthly
     open-pull-requests-limit: 3
     labels: [dependencies, javascript]
+    # These packages must share one version, so each family moves in a single pull request.
+    # Security updates need their own group: version-update groups do not apply to them, and a
+    # security update that raised only @remotion/bundler is what broke the benchmark before.
+    groups:
+      remotion:
+        patterns: ["remotion", "@remotion/*"]
+      remotion-security:
+        applies-to: security-updates
+        patterns: ["remotion", "@remotion/*"]
+      react:
+        patterns: ["react", "react-dom"]
+      react-security:
+        applies-to: security-updates
+        patterns: ["react", "react-dom"]
   - package-ecosystem: pip
     directory: /crates/python
     schedule:
