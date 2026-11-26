@@ -1,0 +1,82 @@
+name: Benchmark
+
+# Remotion vs Rust Motion on a GitHub-hosted runner, with the commit and runner recorded in the
+# result. Hosted VMs are shared, so trust the ratio of the two engines (they alternate within one
+# job) rather than the absolute times, and never compare those against another machine.
+#
+# Run it from the Actions tab (workflow_dispatch), or push a branch named bench/<anything>.
+# The result is uploaded as an artifact; commit it with `git add -f` to back a documented number.
+
+on:
+  workflow_dispatch:
+    inputs:
+      repeats:
+        description: Measured renders per engine
+        required: false
+        default: "5"
+        type: string
+  push:
+    branches: ["bench/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  render-png:
+    name: Remotion vs Rust Motion (PNG path)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install FFmpeg and system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libssl-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build the native renderer
+        run: cargo build --release --locked -p rust-motion-composition --example render_bench
+
+      - name: Install Remotion
+        working-directory: benchmarks/remotion
+        run: npm ci --no-audit --no-fund
+
+      - name: Run the benchmark
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          REPEATS: ${{ inputs.repeats || '5' }}
+        run: node benchmarks/remotion/render-bench.mjs
+
+      - name: Summarize
+        if: always()
+        run: |
+          if [[ -f benchmarks/render-png.json ]]; then
+            jq -r '"| | |\n|---|---|\n| commit | \(.commit) |\n| runner | \(.runner) |\n| cpu | \(.cpu) x\(.logical_cpus), \(.memory_gb) GB |\n| Rust Motion median | \(.median_ms["rust-motion"] | . / 1000 | tostring) s |\n| Remotion median | \(.median_ms.remotion | . / 1000 | tostring) s |\n| speedup | \(.speedup) |"' benchmarks/render-png.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the raw result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-png-${{ github.sha }}
+          path: benchmarks/render-png.json
+          if-no-files-found: warn
