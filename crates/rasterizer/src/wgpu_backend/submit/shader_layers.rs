@@ -3,65 +3,6 @@
 use super::*;
 
 impl WgpuBackend {
-    pub(crate) fn render_interleaved_shader_scene(
-        &self,
-        scene: &Scene,
-        config: &FrameConfig,
-    ) -> Result<RgbaImage, RasterError> {
-        let mut output = RgbaImage::new(config.width, config.height);
-        let mut regular_nodes = Vec::new();
-        for node in &scene.nodes {
-            if matches!(node, SceneNode::Shader { .. }) {
-                if !regular_nodes.is_empty() {
-                    let segment = Scene {
-                        nodes: std::mem::take(&mut regular_nodes),
-                    };
-                    let rendered = self.render_frame(&segment, config)?;
-                    image::imageops::overlay(&mut output, &rendered, 0, 0);
-                }
-                let shader_scene = Scene {
-                    nodes: vec![node.clone()],
-                };
-                let rendered = match node {
-                    SceneNode::Shader {
-                        x,
-                        y,
-                        w,
-                        h,
-                        source,
-                        opacity,
-                        ..
-                    } if *opacity >= 0.0
-                        && *opacity <= 1.0
-                        && *x >= 0.0
-                        && *y >= 0.0
-                        && *w > 0.0
-                        && *h > 0.0
-                        && *x + *w <= config.width as f32
-                        && *y + *h <= config.height as f32
-                        && shader_opacity_supported(source) =>
-                    {
-                        self.render_shader_layers_direct(&shader_scene, config)?
-                    }
-                    _ => self.render_shader_layers(&shader_scene, config)?,
-                };
-                image::imageops::overlay(&mut output, &rendered, 0, 0);
-            } else {
-                regular_nodes.push(node.clone());
-            }
-        }
-        if !regular_nodes.is_empty() {
-            let rendered = self.render_frame(
-                &Scene {
-                    nodes: regular_nodes,
-                },
-                config,
-            )?;
-            image::imageops::overlay(&mut output, &rendered, 0, 0);
-        }
-        Ok(output)
-    }
-
     /// Render opaque shader layers directly into one GPU target and read it
     /// back once. Opacity layers retain the compatibility path until opacity
     /// is carried as a target-pass uniform.

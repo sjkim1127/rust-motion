@@ -56,6 +56,7 @@ pub mod play_wait_schedule;
 pub mod procedural_scenes;
 pub mod psd;
 pub mod render;
+pub(crate) mod render_ir;
 pub mod scene;
 pub mod scene3d;
 pub mod security;
