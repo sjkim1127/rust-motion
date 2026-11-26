@@ -26,8 +26,8 @@ pub use jobs::*;
 pub use model::*;
 pub use nle::{
     insert_clip, overwrite_clip, ripple_delete, roll_edit, slide_clip, slip_clip, split_clip_at,
-    trim_clip, NleClip, NleError, NleTimeline, NleTrack, NleTransition, TrackKind,
-    TransitionAlignment, TransitionKind, TrimEdge, TrimMode,
+    split_clip_at_index, trim_clip, NleClip, NleError, NleTimeline, NleTrack, NleTransition,
+    TrackKind, TransitionAlignment, TransitionKind, TrimEdge, TrimMode,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use remote_net::*;
