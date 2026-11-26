@@ -72,21 +72,32 @@ jobs:
       - name: Cargo Check Workspace
         run: cargo check --locked --workspace --all-targets --all-features
 
+      # nextest runs test binaries in parallel instead of one after another. On the hosted runners
+      # the test step went from 20.1 to 13.2 min on Linux and 17.1 to 15.7 min on macOS, but from
+      # 14.9 to 23.9 min on Windows (one process per test is expensive there), so Windows keeps
+      # `cargo test`. nextest cannot list `harness = false` targets and does not run doctests, so
+      # both run separately.
       - name: Install cargo-nextest
+        if: runner.os != 'Windows'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
 
-      # nextest runs test binaries in parallel instead of one after another. It cannot list
-      # `harness = false` targets, and it does not run doctests, so both are run separately below.
       - name: Run All Workspace Tests
+        if: runner.os != 'Windows'
         run: cargo nextest run --locked --workspace --exclude rust-motion-python --no-fail-fast -E 'not binary(monitor_macos)'
 
       - name: Run tests with a custom harness
+        if: runner.os != 'Windows'
         run: cargo test --locked -p rust-motion-tablet --test monitor_macos
 
       - name: Run doc tests
+        if: runner.os != 'Windows'
         run: cargo test --locked --workspace --exclude rust-motion-python --doc
+
+      - name: Run All Workspace Tests (Windows)
+        if: runner.os == 'Windows'
+        run: cargo test --locked --workspace --exclude rust-motion-python
 
       - name: Test GPU scene compilation without device initialization
         run: 'cargo test --locked -p rust-motion-rasterizer --features gpu support_tests::'
