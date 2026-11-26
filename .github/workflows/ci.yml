@@ -8,6 +8,9 @@ on:
     # Free-model drafts open as draft PRs by GITHUB_TOKEN, which starts no workflow:
     # `ready_for_review` runs CI once a reviewer marks one ready.
     types: [opened, synchronize, reopened, ready_for_review]
+  # free-model-merge.yml dispatches CI for the same reason, on a draft's branch and
+  # then on main.
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always

@@ -1,0 +1,218 @@
+name: Free-model merge
+
+# Reviews a free-model draft pull request and merges it with no person involved
+# (docs/agent-autopilot.md). free-model-draft.yml starts it; it can also be run
+# by hand on an open draft.
+#
+# A draft is merged only if all of this holds, and otherwise it is labelled
+# `agent:needs-human` and left open:
+# - the repository variable AGENT_AUTOPILOT is `on`;
+# - it is an open pull request of this repository from an agent-free/ branch,
+#   opened by GitHub Actions, for an issue written by the owner or by Actions;
+# - the merge guard passes (scripts/ci/free_model_draft.py merge-check): the
+#   draft limits, plus no deleted file, no change to existing tests or
+#   assertions, no code reaching outside the renderer, no new link;
+# - a free model other than the author approves it. The first usable verdict
+#   counts: a rejection is not put to another model;
+# - CI passes on the reviewed commit, and that exact commit is merged.
+# The review runs the guard from `main` and reads `main`: nothing from the
+# branch is executed or obeyed outside the CI run, which has a read-only token.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Number of a free-model draft pull request"
+        required: true
+        type: string
+      drafter:
+        description: "Model that drafted it, which must not review it"
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: free-model-merge-${{ inputs.pr }}
+  cancel-in-progress: false
+
+env:
+  OPENCODE_VERSION: "1.19.5"
+  OPENCODE_DISABLE_AUTOUPDATE: "1"
+  PR: ${{ inputs.pr }}
+
+jobs:
+  review:
+    name: Guard and review
+    if: >-
+      github.repository == 'sjkim1127/rust-motion' && github.ref == 'refs/heads/main'
+      && vars.AGENT_AUTOPILOT == 'on'
+    runs-on: ubuntu-24.04
+    # Up to four models at 12 minutes each.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      head: ${{ steps.guard.outputs.head }}
+      branch: ${{ steps.guard.outputs.branch }}
+      model: ${{ steps.review.outputs.model }}
+      reason: ${{ steps.review.outputs.reason || steps.guard.outputs.reason }}
+    env:
+      DRAFTER: ${{ inputs.drafter }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the pull request and its patch
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$PR" =~ ^[0-9]+$ ]] || { echo "::error::pr must be a number"; exit 1; }
+          cp scripts/ci/free_model_draft.py "$RUNNER_TEMP/free_model_draft.py"
+          gh pr view "$PR" --repo "$GITHUB_REPOSITORY" \
+            --json state,isDraft,isCrossRepository,baseRefName,headRefName,headRefOid,author,labels \
+            > "$RUNNER_TEMP/pr.json"
+          jq -e '.state == "OPEN" and (.isDraft | not) and (.isCrossRepository | not)
+                 and .baseRefName == "main" and .author.login == "app/github-actions"
+                 and (.headRefName | test("^agent-free/issue-[0-9]+-[0-9]+$"))
+                 and any(.labels[]; .name == "agent:free-draft")
+                 and (any(.labels[]; .name == "agent:needs-human") | not)' \
+            "$RUNNER_TEMP/pr.json" > /dev/null \
+            || { echo "::error::#$PR is not an open free-model draft awaiting review"; exit 1; }
+          branch="$(jq -r .headRefName "$RUNNER_TEMP/pr.json")"
+          head="$(jq -r .headRefOid "$RUNNER_TEMP/pr.json")"
+          git fetch -q "https://github.com/$GITHUB_REPOSITORY" "$branch"
+          python3 -I "$RUNNER_TEMP/free_model_draft.py" merge-check --base HEAD --head "$head" \
+            --patch-out "$RUNNER_TEMP/review.patch" 2>&1 | tee "$RUNNER_TEMP/guard.log" \
+            || { echo "reason=$(tail -n 1 "$RUNNER_TEMP/guard.log" | cut -c1-600)" >> "$GITHUB_OUTPUT"; exit 1; }
+          issue="${branch#agent-free/issue-}"
+          gh issue view "${issue%-*}" --repo "$GITHUB_REPOSITORY" --json number,title,body,author \
+            > "$RUNNER_TEMP/issue.json"
+          # Anyone else could rewrite their issue after it was labelled.
+          jq -e --arg owner "$GITHUB_REPOSITORY_OWNER" \
+            '.author.login == "app/github-actions" or .author.login == $owner' \
+            "$RUNNER_TEMP/issue.json" > /dev/null \
+            || { echo "reason=needs a person: someone else wrote the issue" >> "$GITHUB_OUTPUT"; exit 1; }
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+      - name: Install OpenCode
+        run: npm install --global --no-fund --no-audit "opencode-ai@$OPENCODE_VERSION"
+      - name: Review with another free model
+        id: review
+        run: |
+          set -euo pipefail
+          guard="$RUNNER_TEMP/free_model_draft.py"
+          python3 -I "$guard" review-prompt --issue-json "$RUNNER_TEMP/issue.json" \
+            --patch "$RUNNER_TEMP/review.patch" --out "$RUNNER_TEMP/review"
+          opencode models opencode > "$RUNNER_TEMP/models.txt"
+          models=()
+          while IFS= read -r model; do models+=("$model"); done < <(python3 -I "$guard" \
+            order-models --models-file "$RUNNER_TEMP/models.txt" --seed "$GITHUB_RUN_NUMBER" \
+            --exclude "$DRAFTER")
+          OPENCODE_CONFIG_CONTENT="$(cat "$RUNNER_TEMP/review/permissions.json")"
+          export OPENCODE_CONFIG_CONTENT
+          cp -a .git "$RUNNER_TEMP/git.pristine"
+          for model in "${models[@]}"; do
+            echo "::group::$model"
+            git reset -q --hard HEAD
+            git clean -ffdqx
+            status=0
+            timeout 12m opencode run --model "$model" "$(cat "$RUNNER_TEMP/review/prompt.txt")" || status=$?
+            rm -rf .git
+            cp -a "$RUNNER_TEMP/git.pristine" .git
+            find . -mindepth 2 -name .git -prune -exec rm -rf {} +
+            echo "::endgroup::"
+            if [ "$status" -ne 0 ]; then
+              echo "$model exited with status $status"
+              continue
+            fi
+            verdict=0
+            line="$(python3 -I "$guard" review-check --verdict agent-verdict.json)" || verdict=$?
+            case "$verdict" in
+              0 | 2)
+                echo "model=$model" >> "$GITHUB_OUTPUT"
+                echo "reason=$line" >> "$GITHUB_OUTPUT"
+                echo "$model — $line" >> "$GITHUB_STEP_SUMMARY"
+                exit "$verdict"
+                ;;
+            esac
+          done
+          echo "reason=no free model returned a usable verdict" >> "$GITHUB_OUTPUT"
+          exit 1
+
+  merge:
+    name: Test and merge
+    needs: review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      actions: write
+      checks: read
+      contents: write
+      issues: write
+      pull-requests: write
+    env:
+      BRANCH: ${{ needs.review.outputs.branch }}
+      HEAD_SHA: ${{ needs.review.outputs.head }}
+      MODEL: ${{ needs.review.outputs.model }}
+      REASON: ${{ needs.review.outputs.reason }}
+    steps:
+      - name: Run CI on the reviewed commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # A push made with GITHUB_TOKEN started no workflow: dispatch CI.
+          gh workflow run ci.yml --ref "$BRANCH"
+          run=""
+          for _ in $(seq 30); do
+            sleep 10
+            run="$(gh run list --workflow ci.yml --branch "$BRANCH" --event workflow_dispatch \
+              --json databaseId,headSha --jq "[.[] | select(.headSha == \"$HEAD_SHA\")][0].databaseId // empty")"
+            [ -n "$run" ] && break
+          done
+          [ -n "$run" ] || { echo "::error::no CI run appeared for $HEAD_SHA"; exit 1; }
+          gh run watch "$run" --interval 60 --exit-status
+      - name: Merge that commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Stop if the switch was turned off, or a person stepped in, meanwhile.
+          gh pr view "$PR" --json labels,state \
+            | jq -e '.state == "OPEN" and (any(.labels[]; .name == "agent:needs-human") | not)' > /dev/null
+          gh pr comment "$PR" --body "Reviewed by \`$MODEL\` ($REASON). CI passed; merging unattended."
+          gh pr merge "$PR" --squash --match-head-commit "$HEAD_SHA"
+          # The merge by GITHUB_TOKEN starts no push workflow: check main too.
+          gh workflow run ci.yml --ref main
+
+  report:
+    name: Leave it to a person
+    needs: [review, merge]
+    if: failure()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
+    env:
+      REASON: ${{ needs.review.outputs.reason }}
+    steps:
+      - name: Label and comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$PR" =~ ^[0-9]+$ ]] || exit 0
+          gh label create agent:needs-human --color fbca04 --force \
+            --description "An unattended free-model draft that a person has to look at"
+          gh pr edit "$PR" --add-label agent:needs-human
+          gh pr comment "$PR" --body "Not merged unattended ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)). ${REASON:-CI or the merge failed.}"

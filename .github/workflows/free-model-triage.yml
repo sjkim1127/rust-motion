@@ -1,0 +1,151 @@
+name: Free-model triage
+
+# Every six hours an OpenCode Zen free model looks for one small defect, files
+# it as an issue (`agent:free`, `agent:auto`) and starts free-model-draft.yml,
+# which hands its pull request to free-model-merge.yml (docs/agent-autopilot.md).
+#
+# Guardrails:
+# - Off unless the repository variable AGENT_AUTOPILOT is `on`.
+# - Nothing is filed while 5 `agent:auto` issues or 5 drafts are open.
+# - The model can only read and edit files in a throwaway checkout, and its
+#   answer is one JSON file. The quoted text has to be in the named file, and a
+#   known title or a file with an open issue is not filed again
+#   (scripts/ci/free_model_draft.py). The check runs again in the job that files.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: free-model-triage
+  cancel-in-progress: false
+
+env:
+  OPENCODE_VERSION: "1.19.5"
+  OPENCODE_DISABLE_AUTOUPDATE: "1"
+  MAX_OPEN: "5"
+
+jobs:
+  find:
+    name: Find a defect
+    if: github.repository == 'sjkim1127/rust-motion' && vars.AGENT_AUTOPILOT == 'on'
+    runs-on: ubuntu-24.04
+    # Up to four models at 12 minutes each.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      model: ${{ steps.model.outputs.model }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Count open work and list known issues
+        id: capacity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Taken before any model runs: later steps use this copy, not the checkout's.
+          cp scripts/ci/free_model_draft.py "$RUNNER_TEMP/free_model_draft.py"
+          issues="$(gh issue list --repo "$GITHUB_REPOSITORY" --label agent:auto --state open --limit 100 \
+            --json number --jq length)"
+          drafts="$(gh pr list --repo "$GITHUB_REPOSITORY" --label agent:free-draft --state open --limit 100 \
+            --json number --jq length)"
+          if [ "$issues" -ge "$MAX_OPEN" ] || [ "$drafts" -ge "$MAX_OPEN" ]; then
+            echo "::notice::$issues open agent issues and $drafts open drafts (limit $MAX_OPEN): nothing to file"
+            exit 0
+          fi
+          gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 300 \
+            --json number,title,state,labels,body > "$RUNNER_TEMP/issues.json"
+          echo "open=true" >> "$GITHUB_OUTPUT"
+      - name: Install OpenCode
+        if: steps.capacity.outputs.open == 'true'
+        run: npm install --global --no-fund --no-audit "opencode-ai@$OPENCODE_VERSION"
+      - name: Ask free models in turn
+        id: model
+        if: steps.capacity.outputs.open == 'true'
+        run: |
+          set -euo pipefail
+          guard="$RUNNER_TEMP/free_model_draft.py"
+          python3 -I "$guard" triage-prompt --issues-file "$RUNNER_TEMP/issues.json" --out "$RUNNER_TEMP/triage"
+          opencode models opencode > "$RUNNER_TEMP/models.txt"
+          models=()
+          while IFS= read -r model; do models+=("$model"); done < <(python3 -I "$guard" \
+            order-models --models-file "$RUNNER_TEMP/models.txt" --seed "$GITHUB_RUN_NUMBER")
+          OPENCODE_CONFIG_CONTENT="$(cat "$RUNNER_TEMP/triage/permissions.json")"
+          export OPENCODE_CONFIG_CONTENT
+          cp -a .git "$RUNNER_TEMP/git.pristine"
+          for model in "${models[@]}"; do
+            echo "::group::$model"
+            git reset -q --hard HEAD
+            git clean -ffdqx
+            status=0
+            timeout 12m opencode run --model "$model" "$(cat "$RUNNER_TEMP/triage/prompt.txt")" || status=$?
+            rm -rf .git
+            cp -a "$RUNNER_TEMP/git.pristine" .git
+            find . -mindepth 2 -name .git -prune -exec rm -rf {} +
+            if [ "$status" -ne 0 ]; then
+              echo "$model exited with status $status"
+            elif python3 -I "$guard" triage-check --proposal agent-proposal.json \
+                --issues-file "$RUNNER_TEMP/issues.json" --model "$model" --out "$RUNNER_TEMP/checked"; then
+              cp agent-proposal.json "$RUNNER_TEMP/triage/proposal.json"
+              echo "model=$model" >> "$GITHUB_OUTPUT"
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+          done
+          echo "::notice::no free model reported a usable defect (tried: ${models[*]})"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.model.outputs.model
+        with:
+          name: free-model-proposal
+          path: ${{ runner.temp }}/triage/proposal.json
+          if-no-files-found: error
+          retention-days: 7
+
+  file:
+    name: File the issue
+    needs: find
+    if: needs.find.outputs.model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+    env:
+      MODEL: ${{ needs.find.outputs.model }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: free-model-proposal
+          path: ${{ runner.temp }}/triage
+      - name: Check again, file and start the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 300 \
+            --json number,title,state,labels,body > "$RUNNER_TEMP/issues.json"
+          python3 -I scripts/ci/free_model_draft.py triage-check --proposal "$RUNNER_TEMP/triage/proposal.json" \
+            --issues-file "$RUNNER_TEMP/issues.json" --model "$MODEL" --out "$RUNNER_TEMP/checked"
+          gh label create agent:free --color c5def5 --force \
+            --description "Simple issue: an OpenCode Zen free model drafts a fix (free-model-draft.yml)"
+          gh label create agent:auto --color c5def5 --force \
+            --description "Filed by a free model (free-model-triage.yml)"
+          url="$(gh issue create --title "$(cat "$RUNNER_TEMP/checked/title.txt")" \
+            --body-file "$RUNNER_TEMP/checked/body.md" --label agent:free --label agent:auto)"
+          echo "Filed $url" >> "$GITHUB_STEP_SUMMARY"
+          # An issue opened with GITHUB_TOKEN starts no workflow: dispatch the draft.
+          gh workflow run free-model-draft.yml --ref main -f issue="${url##*/}"
+        shell: bash
