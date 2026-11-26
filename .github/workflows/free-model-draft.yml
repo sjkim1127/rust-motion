@@ -1,0 +1,211 @@
+name: Free-model draft
+
+# An issue labelled `agent:free` gets a draft fix from an OpenCode Zen free
+# model, opened as a draft PR labelled `agent:free-draft`
+# (scripts/ci/free_model_draft.py). It is for simple issues only: typos, docs,
+# small single-purpose code changes. Adapted from fission-systems/Fission.
+#
+# Guardrails:
+# - Input: the model sees the public checkout and the issue's title and body,
+#   nothing else. An issue with a long code block (a log, decompiled output)
+#   is refused.
+# - Tools: everything is denied except reading and editing files in the
+#   checkout. It cannot run commands or reach the network, and in a
+#   non-interactive run a permission request is rejected.
+# - Edits: kept only under docs/, in Markdown at the root or under crates/ and
+#   in Rust under crates/, tests/ and examples/; small; text-only; no workflow,
+#   script, build, manifest or toolchain file. The check runs again in the job
+#   that opens the PR.
+# - The checker itself: the model can edit any file in the checkout, so the
+#   check runs from a copy taken before the model starts (or before its patch
+#   is applied), and git's metadata is restored after each model.
+# - No API key: free models need none. No secret reaches the model's job.
+# - Models: free ones have usage limits, so the run number picks which goes
+#   first and a failing or rate-limited one hands over to the next (up to
+#   four), each starting from a clean checkout.
+# - Review: the PR stays a draft and CI does not run on it. A reviewer reads
+#   it first (an Opus review), then marks it ready, which starts CI
+#   (`ready_for_review`).
+#
+# Requires the repository setting that lets GitHub Actions create pull requests.
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Issue number (it must carry the agent:free label)"
+        required: true
+        type: string
+      open_pr:
+        description: "Open the draft PR (off: only show the edits in the run)"
+        required: false
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: free-model-draft-${{ github.event.issue.number || inputs.issue }}
+  cancel-in-progress: false
+
+env:
+  OPENCODE_VERSION: "1.19.5"
+  OPENCODE_DISABLE_AUTOUPDATE: "1"
+
+jobs:
+  draft:
+    name: Draft with a free model
+    if: >-
+      github.repository == 'sjkim1127/rust-motion'
+      && (github.event_name == 'workflow_dispatch' || github.event.label.name == 'agent:free')
+    runs-on: ubuntu-24.04
+    # Up to four models at 12 minutes each.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      model: ${{ steps.model.outputs.model }}
+    env:
+      ISSUE: ${{ github.event.issue.number || inputs.issue }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read and check the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$ISSUE" =~ ^[0-9]+$ ]] || { echo "::error::issue must be a number"; exit 1; }
+          # Taken before any model runs: later steps use this copy, not the checkout's.
+          cp scripts/ci/free_model_draft.py "$RUNNER_TEMP/free_model_draft.py"
+          gh issue view "$ISSUE" --repo "$GITHUB_REPOSITORY" --json number,title,body,labels,state \
+            > "$RUNNER_TEMP/issue.json"
+          python3 -I "$RUNNER_TEMP/free_model_draft.py" prepare --issue-json "$RUNNER_TEMP/issue.json" \
+            --out "$RUNNER_TEMP/draft"
+      - name: Install OpenCode
+        run: npm install --global --no-fund --no-audit "opencode-ai@$OPENCODE_VERSION"
+      - name: Draft with free models in turn
+        id: model
+        run: |
+          set -euo pipefail
+          guard="$RUNNER_TEMP/free_model_draft.py"
+          opencode models opencode > "$RUNNER_TEMP/models.txt"
+          echo "Free models listed:"; cat "$RUNNER_TEMP/models.txt"
+          # Free models have usage limits: the run number picks which one goes
+          # first, and a model that fails, is rate-limited or leaves no
+          # acceptable edits hands over to the next.
+          models=()
+          while IFS= read -r model; do models+=("$model"); done < <(python3 -I "$guard" \
+            order-models --models-file "$RUNNER_TEMP/models.txt" --seed "$GITHUB_RUN_NUMBER")
+          OPENCODE_CONFIG_CONTENT="$(cat "$RUNNER_TEMP/draft/permissions.json")"
+          export OPENCODE_CONFIG_CONTENT
+          cp -a .git "$RUNNER_TEMP/git.pristine"
+          used=""
+          for model in "${models[@]}"; do
+            echo "::group::$model"
+            git reset -q --hard HEAD
+            git clean -ffdqx
+            status=0
+            timeout 12m opencode run --model "$model" "$(cat "$RUNNER_TEMP/draft/prompt.txt")" || status=$?
+            # Nothing the model wrote may steer git: restore its metadata and
+            # drop nested repositories.
+            rm -rf .git
+            cp -a "$RUNNER_TEMP/git.pristine" .git
+            find . -mindepth 2 -name .git -prune -exec rm -rf {} +
+            # A model that failed may have stopped halfway: its edits are dropped.
+            if [ "$status" -ne 0 ]; then
+              echo "$model exited with status $status"
+            elif python3 -I "$guard" check; then
+              used="$model"
+              echo "::endgroup::"
+              break
+            fi
+            echo "::endgroup::"
+          done
+          if [ -z "$used" ]; then
+            echo "::error::no free model left an acceptable draft (tried: ${models[*]})"
+            exit 1
+          fi
+          echo "model=$used" >> "$GITHUB_OUTPUT"
+          git diff --cached --no-renames > "$RUNNER_TEMP/draft/edits.patch"
+          { echo "### Free-model draft by \`$used\`"; echo; echo '```diff'; cat "$RUNNER_TEMP/draft/edits.patch"; echo '```'; } \
+            >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: free-model-draft
+          path: ${{ runner.temp }}/draft/edits.patch
+          if-no-files-found: error
+          retention-days: 7
+
+  open-pr:
+    name: Open the draft PR
+    needs: draft
+    if: github.event_name == 'issues' || inputs.open_pr
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      ISSUE: ${{ github.event.issue.number || inputs.issue }}
+      MODEL: ${{ needs.draft.outputs.model }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: free-model-draft
+          path: ${{ runner.temp }}/draft
+      - name: Apply, check again and push
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$ISSUE" =~ ^[0-9]+$ ]] || { echo "::error::issue must be a number"; exit 1; }
+          # Taken before the patch touches the tree.
+          cp scripts/ci/free_model_draft.py "$RUNNER_TEMP/free_model_draft.py"
+          git apply --index "$RUNNER_TEMP/draft/edits.patch"
+          python3 -I "$RUNNER_TEMP/free_model_draft.py" check
+          branch="agent-free/issue-$ISSUE-$GITHUB_RUN_ID"
+          git switch -c "$branch"
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Draft fix for #$ISSUE by $MODEL (free model, unreviewed)"
+          gh auth setup-git
+          git push -q origin "$branch"
+          title="$(gh issue view "$ISSUE" --repo "$GITHUB_REPOSITORY" --json title --jq .title)"
+          {
+            echo "Fixes #$ISSUE"
+            echo
+            echo "Drafted by \`$MODEL\`, an OpenCode Zen free model ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID))."
+            echo "It could only read and edit files; nothing was built or tested."
+            echo
+            echo "**Before this leaves draft:** an Opus review of the diff. Marking it ready starts CI."
+          } > "$RUNNER_TEMP/body.md"
+          url="$(gh pr create --draft --base main --head "$branch" --label agent:free-draft \
+            --title "draft: $title" --body-file "$RUNNER_TEMP/body.md")"
+          gh issue comment "$ISSUE" --body "A free model drafted a fix: $url (draft, unreviewed)."
+
+  report-failure:
+    name: Say the draft failed
+    needs: draft
+    if: failure() && github.event_name == 'issues'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      - name: Comment on the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body \
+            "The free model produced no acceptable draft ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)). It may need a stronger model."
