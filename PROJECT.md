@@ -60,15 +60,15 @@ Rust Motion is a high-performance programmatic video composition and rendering e
 |---|------|-------|-------------|--------|
 | M1 | Native Noise & Procedural Shaders | `crates/noise` (Simplex 2D/3D/4D, Mulberry32, fBm, turbulence, `<NoiseBackground />`) | none | DONE |
 | M2 | Visual Effects & Transitions Engine | `crates/rasterizer` (filters), `crates/transitions` (wipes/flips/zoom), `crates/composition` | none | DONE |
-| M3 | Typography, Text Fitting & Rounded Boxes | `crates/rasterizer/src/font.rs`, `crates/shapes`, `crates/core` re-exports, formatting | none | DONE |
+| M3 | Typography, Text Fitting & Rounded Boxes | `crates/rasterizer/src/font/`, `crates/shapes`, `crates/core` re-exports, formatting | none | DONE |
 | M4 | E2E Testing Suite (Tiers 1-4) | Independent E2E test harness & test suite creating `TEST_READY.md` | none | DONE |
 | M5 | Final Integration & Adversarial Hardening | Pass 100% of E2E suite, Tier 5 white-box challenger hardening, full workspace check | M1, M2, M3, M4 | DONE |
 | M6 | Transform Builder & Style Interpolation | `crates/animation` (`make_transform`, `TransformOp`, `interpolate_styles`) | none | DONE |
 | M7 | Camera Motion Blur Filter | `crates/rasterizer` (`SceneFilter::CameraMotionBlur`, `tiny_skia_backend`) | none | DONE |
 | M8 | Audio Waveform Visualization | `crates/media` (`AudioData`, `visualize_audio`, `create_smooth_svg_path`) | none | DONE |
 | M9 | GIF Media Component & Frame Cache | `crates/rasterizer/src/gif_cache.rs`, `crates/media/src/gif.rs`, `SceneNode::Gif` | none | DONE |
-| M10 | Dynamic Font Registration | `crates/rasterizer/src/font.rs` (`register_font_bytes`, `register_font_from_path`) | none | DONE |
-| M11 | Render Cancellation Signal | `crates/rasterizer/src/render.rs` (`make_cancel_signal`, `CancelSignal`) | none | DONE |
+| M10 | Dynamic Font Registration | `crates/rasterizer/src/font/` (`register_font_bytes`, `register_font_from_path`) | none | DONE |
+| M11 | Render Cancellation Signal | `crates/rasterizer/src/render/` (`make_cancel_signal`, `CancelSignal`) | none | DONE |
 
 
 ## Interface Contracts
@@ -179,8 +179,8 @@ pub fn create_rounded_text_box(
   - `noise_bg.rs`: Dioxus `<NoiseBackground />` SVG/Canvas component
 - `crates/rasterizer/src/`:
   - `scene.rs`: `SceneFilter` enum definition and `SceneNode::Layer` filter list
-  - `tiny_skia_backend.rs`: `apply_filter` pixel processing algorithms
-  - `font.rs`: typography, `fit_text_on_n_lines`, `fill_text_box`, `create_rounded_text_box`
+  - `tiny_skia_backend/`: `apply_filter` pixel processing algorithms
+  - `font/`: typography, `fit_text_on_n_lines`, `fill_text_box`, `create_rounded_text_box`
 - `crates/transitions/src/`:
   - `lib.rs`: transition presentations index
   - `clock_wipe.rs`: pie arc clipping transition
