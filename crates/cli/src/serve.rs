@@ -1207,6 +1207,49 @@ mod tests {
             server.abort();
         }
 
+        /// Latency of `/health` while idle and while slow frames render. Run with
+        /// `cargo test --release -p rust-motion-cli --lib health_latency -- --ignored --nocapture`.
+        #[tokio::test]
+        #[ignore = "latency benchmark; prints timings instead of asserting them"]
+        async fn health_latency_during_renders() {
+            async fn sample(address: SocketAddr) -> (Duration, Duration) {
+                let mut times = Vec::new();
+                for _ in 0..50 {
+                    let start = std::time::Instant::now();
+                    health(address).await;
+                    times.push(start.elapsed());
+                }
+                times.sort();
+                (times[times.len() / 2], times[times.len() - 1])
+            }
+
+            let directory = tempfile::tempdir().unwrap();
+            let script = directory.path().join("slow.rhai");
+            fs::write(&script, SLOW_SCRIPT).unwrap();
+            let (address, server) = serve(config(script, None, 1920, 1080)).await;
+
+            let (idle_median, idle_max) = sample(address).await;
+            // Eight clients, each on its own frame, so that nothing is served from the cache.
+            let mut clients = Vec::new();
+            for frame in 0..8 {
+                let url = format!("ws://{address}/ws?frame={frame}");
+                clients.push(connect_async(url).await.unwrap().0);
+            }
+            let start = std::time::Instant::now();
+            let (busy_median, busy_max) = sample(address).await;
+            let sampled = start.elapsed();
+            for client in &mut clients {
+                next_json(client).await;
+            }
+            println!(
+                "idle: median {idle_median:?}, max {idle_max:?}\n\
+                 rendering: median {busy_median:?}, max {busy_max:?} \
+                 (sampled in {sampled:?}; 8 frames done after {:?})",
+                start.elapsed()
+            );
+            server.abort();
+        }
+
         #[tokio::test]
         async fn a_burst_of_seeks_renders_only_the_latest() {
             let directory = tempfile::tempdir().unwrap();
