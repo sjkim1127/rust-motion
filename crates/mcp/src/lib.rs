@@ -5,6 +5,8 @@
 //! and visually inspect complete video productions through standardized tool calls.
 
 mod args;
+mod assets;
+pub mod preview;
 pub mod session;
 pub mod tools;
 
@@ -82,7 +84,7 @@ impl McpServer {
                         "name": "Rust Motion & LightCraft MCP Server",
                         "version": env!("CARGO_PKG_VERSION")
                     },
-                    "instructions": "Video/audio editing server: create projects, edit timeline tracks and clips, apply color grading, and add captions. preview_frame is a schematic preview, not a render, and render_composition is not implemented."
+                    "instructions": "Video/audio editing server: create projects, edit timeline tracks and clips, apply color grading, and add captions. Register media with asset_import before using it in clips. preview_frame decodes image and video assets but is not a final render, and render_composition is not implemented."
                 })
             }
             "notifications/initialized" | "initialized" => {
@@ -116,8 +118,22 @@ impl McpServer {
                                 .get("image_data_url")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("");
+                            let mut report = result.clone();
+                            if let Some(report) = report.as_object_mut() {
+                                report.remove("image_data_url");
+                            }
+                            let label = match result.get("preview_kind").and_then(Value::as_str) {
+                                Some("media") => "Media",
+                                Some("mixed") => "Mixed",
+                                _ => "Schematic",
+                            };
+                            let summary = format!(
+                                "{label} preview (not a final render) at frame {}\n{}",
+                                result.get("frame_number").unwrap_or(&json!(0)),
+                                serde_json::to_string_pretty(&report).unwrap_or_default()
+                            );
                             vec![
-                                json!({ "type": "text", "text": format!("Schematic preview (not a render) at frame {}", result.get("frame_number").unwrap_or(&json!(0))) }),
+                                json!({ "type": "text", "text": summary }),
                                 json!({ "type": "image", "data": data_url.trim_start_matches("data:image/png;base64,"), "mimeType": "image/png" }),
                             ]
                         } else {

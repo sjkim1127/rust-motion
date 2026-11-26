@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **MCP (`rust-motion-mcp`)**: `preview_frame` decodes image and video assets instead of drawing every clip as a block. Register files with the new `asset_import` tool; only files inside the server's media root (its working directory by default, unless that is the file system root) can be read.
+- **MCP, breaking**: `clip_insert` rejects an `asset_id` that has not been registered with `asset_import`.
+- **MCP**: preview results list `preview_kind` (`media`, `mixed` or `schematic`), the media, placeholder and omitted clips, and the preview's limitations. The preview is still not a final render.
+
 ## 1.1.0 - 2026-11-23
 
 ### Added

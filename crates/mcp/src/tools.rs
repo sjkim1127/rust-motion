@@ -1,8 +1,10 @@
 //! MCP Tool definitions and execution dispatch.
 
 use crate::args::Args;
-use crate::session::{secs_to_frame, ColorGradeParams, McpSession, PREVIEW_LIMITATIONS};
+use crate::preview::PREVIEW_LIMITATIONS;
+use crate::session::{ColorGradeParams, McpSession};
 use rust_motion_project::nle::TrackKind;
+use rust_motion_project::AssetKind;
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
@@ -16,7 +18,8 @@ pub struct ToolDef {
 
 /// Returned by `render_composition`, which is not connected to the renderer yet.
 pub const RENDER_UNSUPPORTED: &str = "render_composition is not implemented yet: no video was \
-rendered and nothing was written. Export the project and render it with the rust-motion CLI.";
+rendered and nothing was written. The rust-motion CLI does not composite this timeline's media \
+assets either.";
 
 /// All MCP tools exposed by the video/audio editing server.
 pub fn get_tools() -> Vec<ToolDef> {
@@ -49,6 +52,19 @@ pub fn get_tools() -> Vec<ToolDef> {
             }),
         },
         ToolDef {
+            name: "asset_import",
+            description: "Register a local media file inside the server's media root so clips can use it. Images and videos are checked to decode (video needs FFmpeg); audio is only checked to exist. SVG is not supported. Requires a project.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "File path, absolute or relative to the media root (by default the server's working directory, unless that is the file system root)" },
+                    "kind": { "type": "string", "enum": ["image", "video", "audio"], "description": "Media type" },
+                    "asset_id": { "type": "string", "description": "Optional ID; derived from the file name when omitted" }
+                },
+                "required": ["path", "kind"]
+            }),
+        },
+        ToolDef {
             name: "clip_insert",
             description: "Insert a video, audio, or title clip at a precise timeline offset.",
             input_schema: json!({
@@ -58,7 +74,7 @@ pub fn get_tools() -> Vec<ToolDef> {
                     "name": { "type": "string", "description": "Clip label" },
                     "start_secs": { "type": "number", "description": "Timeline start position in seconds" },
                     "duration_secs": { "type": "number", "description": "Clip duration in seconds" },
-                    "asset_id": { "type": "string", "description": "Optional asset reference ID" }
+                    "asset_id": { "type": "string", "description": "ID returned by asset_import; omit for a clip without media" }
                 },
                 "required": ["track_id", "name", "start_secs", "duration_secs"]
             }),
@@ -121,7 +137,7 @@ pub fn get_tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "preview_frame",
-            description: "Render a SCHEMATIC preview of the timeline at a timestamp as a base64 PNG: colored blocks for visible clips plus plain caption text. It does not decode source media and is not the final render.",
+            description: "Preview the timeline at a timestamp as a base64 PNG: decoded image and video assets, colored placeholder blocks for clips without an asset, and plain caption text. It is not the final render; the result lists its limitations.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -185,6 +201,17 @@ pub fn execute_tool(
             let track_id = sess.add_track(kind, t_name)?;
             Ok(json!({ "status": "ok", "track_id": track_id }))
         }
+        "asset_import" => {
+            let path = args.str("path")?;
+            let kind = match args.str("kind")? {
+                "image" => AssetKind::Image,
+                "video" => AssetKind::Video,
+                "audio" => AssetKind::Audio,
+                other => return Err(format!("unsupported 'kind': '{other}'")),
+            };
+            let asset = sess.import_asset(path, kind, args.opt_str("asset_id")?)?;
+            Ok(json!({ "status": "ok", "asset_id": asset.id, "path": asset.path }))
+        }
         "clip_insert" => {
             let track_id = args.str("track_id")?;
             let c_name = args.str("name")?;
@@ -244,16 +271,18 @@ pub fn execute_tool(
             let width = args.opt_u32("width")?.unwrap_or(640);
             let height = args.opt_u32("height")?.unwrap_or(360);
 
-            let data_url = sess.render_frame_preview(time_secs, width, height)?;
-            let frame_idx = secs_to_frame("time_secs", time_secs, sess.timeline.fps)?;
+            let preview = sess.render_frame_preview(time_secs, width, height)?;
 
             Ok(json!({
                 "status": "ok",
-                "preview_kind": "schematic",
+                "preview_kind": preview.kind,
                 "limitations": PREVIEW_LIMITATIONS,
+                "media_clips": preview.media_clips,
+                "placeholder_clips": preview.placeholder_clips,
+                "omitted_clips": preview.omitted_clips,
                 "time_secs": time_secs,
-                "frame_number": frame_idx,
-                "image_data_url": data_url
+                "frame_number": preview.frame,
+                "image_data_url": preview.data_url
             }))
         }
         "render_composition" => {

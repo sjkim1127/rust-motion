@@ -52,6 +52,7 @@ fn test_mcp_initialize_and_tools_list() {
 
     assert!(tool_names.contains(&"project_create"));
     assert!(tool_names.contains(&"timeline_add_track"));
+    assert!(tool_names.contains(&"asset_import"));
     assert!(tool_names.contains(&"clip_insert"));
     assert!(tool_names.contains(&"clip_trim"));
     assert!(tool_names.contains(&"clip_split"));
