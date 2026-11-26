@@ -4,6 +4,7 @@
 //! enabling LLMs (Claude, Gemini, ChatGPT) to autonomously compose, edit, grade,
 //! and visually inspect complete video productions through standardized tool calls.
 
+mod args;
 pub mod session;
 pub mod tools;
 
@@ -81,7 +82,7 @@ impl McpServer {
                         "name": "Rust Motion & LightCraft MCP Server",
                         "version": env!("CARGO_PKG_VERSION")
                     },
-                    "instructions": "Autonomous video/audio production server: create projects, manipulate timeline tracks/clips, apply color grading, generate subtitles, and render visual preview screenshots."
+                    "instructions": "Video/audio editing server: create projects, edit timeline tracks and clips, apply color grading, and add captions. preview_frame is a schematic preview, not a render, and render_composition is not implemented."
                 })
             }
             "notifications/initialized" | "initialized" => {
@@ -116,7 +117,7 @@ impl McpServer {
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("");
                             vec![
-                                json!({ "type": "text", "text": format!("Rendered preview at frame {}", result.get("frame_number").unwrap_or(&json!(0))) }),
+                                json!({ "type": "text", "text": format!("Schematic preview (not a render) at frame {}", result.get("frame_number").unwrap_or(&json!(0))) }),
                                 json!({ "type": "image", "data": data_url.trim_start_matches("data:image/png;base64,"), "mimeType": "image/png" }),
                             ]
                         } else {
