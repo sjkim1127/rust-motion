@@ -91,12 +91,18 @@ all product features, browser startup, or compile/bundle time.
 
 ## Interpretation
 
-The currently recorded lossless PNG batch (`render-png.json`) was taken on an
-Apple M4 Pro and measured a 0.543s Rust Motion median versus 10.125s for Remotion
-(18.66x). This file contains one measured sample per engine, so it is a
-directional snapshot rather than a production latency budget. Earlier batches
-in this repository report different absolute timings; always use a fresh run
-on the target machine when making a performance claim.
+The committed lossless PNG snapshot (`render-png-first.json`) was taken on an
+Apple M4 Pro and measured a 2.192s Rust Motion median versus 11.041s for Remotion
+(5.04×), the median of 3 warm runs per engine. It is a directional snapshot
+rather than a production latency budget: other batches report different
+absolute timings and ratios, so always use a fresh run on the target machine
+when making a performance claim.
+
+`render-bench.mjs` writes each run to `render-<format>.json`, but
+`benchmarks/render-*.json` is gitignored, so a fresh run is not part of the
+repository. Force-add a result (`git add -f`) when it should back a number in
+the docs, then update the quoted figures; `python3 benchmarks/check_claims.py`
+fails when a documented ratio does not match the snapshot it cites.
 
 This scene does not exercise media decoding or audio, and its browser SVG/CSS
 effects are only a representative subset of complex filters. The recorded

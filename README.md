@@ -365,7 +365,7 @@ Measured results live in [`benchmarks/`](benchmarks/) and are reproducible with 
 
 | Workload | Remotion | Rust Motion |
 |---|---|---|
-| 720p spring scene, 4 workers/threads — render time | 10.125 s | 1.347 s (≈18.7× faster, paired run) |
+| 720p spring scene, 4 workers/threads — render time | 11.041 s | 2.192 s (≈5.04× faster, median of 3 paired runs) |
 | 720p spring scene — peak RSS | not measured | 143.84 MB |
 | 1080p text/VFX scene (180 frames) — render time | not measured | 9.683 s (≈18.6 FPS) |
 | 1080p text/VFX scene — peak RSS | not measured | 277.77 MB |
