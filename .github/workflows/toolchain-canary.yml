@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install latest stable Rust
         run: rustup toolchain install stable --profile minimal --component clippy
