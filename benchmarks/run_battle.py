@@ -25,9 +25,14 @@ def run_cmd(cmd, cwd=ROOT):
     return res
 
 
-def measured_render_baseline():
-    """Return the paired native/Remotion timing report when one exists."""
-    report_path = BENCH_DIR / "render-png.json"
+def measured_render_baseline(file_name="render-png.json"):
+    """Return the paired native/Remotion timing report when one exists.
+
+    `file_name` is relative to benchmarks/. render-bench.mjs writes render-<format>.json there on
+    every run, but benchmarks/render-*.json is gitignored: pass a committed snapshot (for example
+    render-png-first.json) when regenerating the report that is checked in.
+    """
+    report_path = BENCH_DIR / file_name
     if not report_path.exists():
         return None
     with report_path.open(encoding="utf-8") as f:
@@ -37,13 +42,23 @@ def measured_render_baseline():
     remotion_ms = medians.get("remotion")
     if not isinstance(native_ms, (int, float)) or not isinstance(remotion_ms, (int, float)):
         return None
-    return {"native_sec": native_ms / 1000, "remotion_sec": remotion_ms / 1000}
+    return {
+        "native_sec": native_ms / 1000,
+        "remotion_sec": remotion_ms / 1000,
+        "runs": report.get("repeats"),
+        "source": file_name,
+    }
 
 
 def main():
     parser = argparse.ArgumentParser(description="Remotion vs Rust Motion 3-Axis Benchmark Battle")
     parser.add_argument("--skip-build", action="store_true", help="Skip cargo build")
     parser.add_argument("--quick", action="store_true", help="Quick mode (single run)")
+    parser.add_argument(
+        "--paired-json",
+        default="render-png.json",
+        help="paired Remotion/native timings under benchmarks/ (use a committed file for the checked-in report)",
+    )
     args = parser.parse_args()
 
     print("\n" + "="*70)
@@ -114,15 +129,21 @@ def main():
     d_720p_time = rust_motion_720p_mem["duration_sec"]
     d_cyber_peak = rust_motion_cyberpunk_mem["peak_rss_mb"]
     d_cyber_time = rust_motion_cyberpunk_mem["duration_sec"]
-    paired_render = measured_render_baseline()
-    paired_remotion_time = (
-        f"{paired_render['remotion_sec']:.3f} s" if paired_render else "not measured"
-    )
-    paired_speedup = (
-        f"{paired_render['remotion_sec'] / paired_render['native_sec']:.2f}x"
-        if paired_render
-        else "not available"
-    )
+    # Both durations and the ratio must come from the same paired run. The profiling run behind
+    # d_720p_time is a different execution, so it is never shown next to the Remotion time.
+    paired_render = measured_render_baseline(args.paired_json)
+    if paired_render:
+        runs = f"median of {paired_render['runs']} runs, " if paired_render["runs"] else "median, "
+        paired_remotion_time = f"{paired_render['remotion_sec']:.3f} s"
+        paired_native_time = f"{paired_render['native_sec']:.3f} s"
+        paired_speedup = (
+            f"{paired_render['remotion_sec'] / paired_render['native_sec']:.2f}x paired speedup "
+            f"({runs}{paired_render['source']})"
+        )
+    else:
+        paired_remotion_time = "not measured"
+        paired_native_time = f"{d_720p_time} s (unpaired profiling run)"
+        paired_speedup = "no speedup claim"
     remotion_memory_note = "not measured"
     remotion_concurrency_note = "not measured"
 
@@ -141,7 +162,7 @@ Remotion requires Node.js and Chromium renderer/GPU child processes, while Rust 
 |:---|:---:|:---:|:---:|
 | **720p Spring Scene Peak RAM** | {remotion_memory_note} | **{d_720p_peak} MB** | **no memory ratio claim** |
 | **1080p Cyberpunk VFX Peak RAM**| {remotion_memory_note} | **{d_cyber_peak} MB** | **no memory ratio claim** |
-| **720p Spring Scene Render Duration** | {paired_remotion_time} | **{d_720p_time} s** | **{paired_speedup} paired speedup when measured** |
+| **720p Spring Scene Render Duration** | {paired_remotion_time} | **{paired_native_time}** | **{paired_speedup}** |
 | **1080p VFX Render Duration** | not measured by this harness | **{d_cyber_time} s** | **no speedup claim** |
 
 ### 🖥️ Concurrency Capacity on Common Cloud Servers (Available RAM)

@@ -13,7 +13,7 @@ Remotion requires Node.js and Chromium renderer/GPU child processes, while Rust 
 |:---|:---:|:---:|:---:|
 | **720p Spring Scene Peak RAM** | not measured | **143.84 MB** | **no memory ratio claim** |
 | **1080p Cyberpunk VFX Peak RAM**| not measured | **277.77 MB** | **no memory ratio claim** |
-| **720p Spring Scene Render Duration** | 10.125 s | **1.347 s** | **18.66x paired speedup when measured** |
+| **720p Spring Scene Render Duration** | 11.041 s | **2.192 s** | **5.04x paired speedup (median of 3 runs, render-png-first.json)** |
 | **1080p VFX Render Duration** | not measured by this harness | **9.683 s** | **no speedup claim** |
 
 ### Concurrency Capacity on Common Cloud Servers (Available RAM)
