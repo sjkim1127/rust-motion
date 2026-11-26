@@ -37,15 +37,26 @@ Rust Motion is designed to be executed headlessly in untrusted environments (e.g
   - *Status*: **Resolved** in Rust Motion 0.3.0 / 1.0.0.
   - *Resolution*: Upgraded `rustls` to `0.23.45` across all workspace targets.
 
-### 2.2 Reachability-Analyzed Advisories
+### 2.2 Accepted Exceptions
 
-#### RUSTSEC-2026-0257: `webbrowser 0.8.15` (Argument Injection)
-- **Origin**: Transitive dependency pulled in by `dioxus-desktop 0.6.3` (which pins `webbrowser = "^0.8"`).
-- **Reachability Assessment**: **UNREACHABLE in headless & server paths.**
-  - `webbrowser` is only used by desktop GUI frameworks to launch the user's default browser when clicking external hyperlinks inside the Studio UI.
-  - The core rasterizer (`rust-motion-rasterizer`), CLI binary (`rust-motion`), server pipeline (`rust-motion-cli serve`), and Python package (`rust-motion`) do not call `webbrowser::open`.
-  - In automated agent and server environments, Studio GUI is not spawned.
-- **Remediation Plan**: Upstream Dioxus is tracking the upgrade to `webbrowser >= 1.2.2`. Tracked in `.cargo/audit.toml`.
+None. `.cargo/audit.toml` ignores no advisories.
+
+### 2.3 Open Warnings
+
+`cargo audit` fails on known vulnerabilities; unmaintained, unsound, and yanked crates only warn. As of 2026-11-26 (cargo-audit 0.22.2, 567 locked dependencies) it reports no vulnerabilities and the following warnings. None of them has had a reachability analysis.
+
+| Crate | Warning | Advisory | Pulled in by (direct path) |
+|---|---|---|---|
+| `rustix 1.1.4` | unsound, patched in 1.1.6 | RUSTSEC-2026-0486 | `tempfile`, among others |
+| `tokio 1.53.1` | unsound, patched in 1.53.3 | RUSTSEC-2026-0386 | `rust-motion-cli`, `rust-motion-renderer` (via `axum` and others) |
+| `paste 1.0.15` | unmaintained | RUSTSEC-2024-0436 | `wgpu` (`metal`), `image` (`exr`, `ravif`) |
+| `rustybuzz 0.20.1` | unmaintained | RUSTSEC-2026-0206 | `rust-motion-rasterizer` |
+| `ttf-parser 0.25.1` | unmaintained | RUSTSEC-2026-0192 | `rustybuzz`, `ab_glyph` |
+| `smartstring 1.0.1` | unmaintained | RUSTSEC-2026-0249 | `rhai` |
+| `wasmi 2.0.0` | yanked | none | `rust-motion-plugins` |
+| `wasmi_core 2.0.0` | yanked | none | `wasmi` |
+
+The list changes as advisories are published; run `cargo audit` for the current result.
 
 ---
 
@@ -55,7 +66,3 @@ If you discover a security vulnerability in Rust Motion:
 1. Please do **NOT** open a public GitHub issue.
 2. Report the vulnerability privately via GitHub Security Advisories or email the maintainers directly.
 3. We will acknowledge receipt within 48 hours and work with you on a coordinated disclosure timeline.
-
-## 5. Dependency Advisory Tracking (`#32`)
-- The legacy Tauri shell (`apps/studio-tauri`) and its transitive dependencies have been completely removed from the repository in favor of native Dioxus Desktop (`apps/studio`) and direct TypeScript/Remotion bindings (`crates/ts`), eliminating the conflicting `wry` / `webkit2gtk-sys` link graph.
-- All headless rendering, CLI, MCP, codec, and rasterizer crates build with zero GTK/WebKit native dependencies.
