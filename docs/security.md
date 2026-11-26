@@ -48,7 +48,7 @@ None. `.cargo/audit.toml` ignores no advisories.
 | Crate | Warning | Advisory | Pulled in by (direct path) |
 |---|---|---|---|
 | `rustix 1.1.4` | unsound, patched in 1.1.6 | RUSTSEC-2026-0486 | `tempfile`, among others |
-| `tokio 1.53.1` | unsound, patched in 1.53.3 | RUSTSEC-2026-0386 | `rust-motion-cli`, `rust-motion-renderer` (via `axum` and others) |
+| `tokio 1.53.1` | unsound, patched in 1.53.3 | RUSTSEC-2026-0386 | `rust-motion-cli`, `-mcp`, `-python`, `-renderer`, `-ts`, and third-party crates such as `axum` and `reqwest` |
 | `paste 1.0.15` | unmaintained | RUSTSEC-2024-0436 | `wgpu` (`metal`), `image` (`exr`, `ravif`) |
 | `rustybuzz 0.20.1` | unmaintained | RUSTSEC-2026-0206 | `rust-motion-rasterizer` |
 | `ttf-parser 0.25.1` | unmaintained | RUSTSEC-2026-0192 | `rustybuzz`, `ab_glyph` |
