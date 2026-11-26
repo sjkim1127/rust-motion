@@ -1,0 +1,56 @@
+name: Setup Rust
+description: >
+  Install the toolchain pinned in rust-toolchain.toml, so CI never drifts onto a
+  newer `stable` than the one developers use, and restore the cargo cache.
+
+inputs:
+  targets:
+    description: Comma-separated extra compilation targets.
+    default: ""
+  install:
+    description: Set to "false" to only read the pinned channel (e.g. when a container installs Rust itself).
+    default: "true"
+  cache:
+    description: Set to "false" to skip the Swatinem/rust-cache step.
+    default: "true"
+
+outputs:
+  channel:
+    description: The toolchain channel pinned in rust-toolchain.toml.
+    value: ${{ steps.pin.outputs.channel }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read pinned toolchain
+      id: pin
+      shell: bash
+      run: |
+        channel=$(sed -nE 's/^channel[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' rust-toolchain.toml)
+        if [[ -z "$channel" ]]; then
+          echo "::error::No channel found in rust-toolchain.toml"
+          exit 1
+        fi
+        echo "channel=$channel" >> "$GITHUB_OUTPUT"
+
+    - name: Install toolchain
+      if: inputs.install == 'true'
+      shell: bash
+      env:
+        CHANNEL: ${{ steps.pin.outputs.channel }}
+        TARGETS: ${{ inputs.targets }}
+      run: |
+        args=(--profile minimal --component rustfmt --component clippy)
+        for target in ${TARGETS//,/ }; do
+          args+=(--target "$target")
+        done
+        rustup toolchain install "$CHANNEL" "${args[@]}"
+        rustup default "$CHANNEL"
+        rustc --version
+
+    - name: Rust cache
+      if: inputs.install == 'true' && inputs.cache == 'true'
+      uses: Swatinem/rust-cache@v2
+      with:
+        # Only default-branch runs write the cache; PRs and tags just restore it.
+        save-if: ${{ github.ref == 'refs/heads/main' }}

@@ -1,0 +1,59 @@
+name: Toolchain canary
+
+# CI is pinned to rust-toolchain.toml. This job tells us, without blocking anyone, when the
+# newest stable Rust starts failing clippy so the pin can be bumped on purpose.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  latest-stable:
+    name: Clippy on latest stable
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install latest stable Rust
+        run: rustup toolchain install stable --profile minimal --component clippy
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev
+
+      - name: Clippy with -D warnings
+        run: cargo +stable clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Open an issue when stable breaks the build
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Latest stable Rust fails clippy (toolchain canary)"
+          existing=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [[ -n "$existing" ]]; then
+            echo "Issue #$existing is already open."
+            exit 0
+          fi
+          rustc_version=$(rustc +stable --version)
+          pinned=$(sed -nE 's/^channel[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' rust-toolchain.toml)
+          gh issue create \
+            --title "$title" \
+            --label "needs-triage" --label "area:ci" \
+            --body "The weekly canary failed on \`$rustc_version\` while CI is pinned to \`$pinned\`.
+
+          Fix the new lints, then bump \`channel\` in \`rust-toolchain.toml\`.
+
+          Run: $RUN_URL"

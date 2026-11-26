@@ -1,0 +1,41 @@
+name: Install FFmpeg
+description: >
+  Install FFmpeg on the runner, retrying because package mirrors are flaky, and fail the step if
+  it is still missing. Chocolatey in particular can report "0/0 packages installed" and exit
+  successfully, which used to surface much later as "program not found" inside a test.
+
+runs:
+  using: composite
+  steps:
+    - name: Install FFmpeg
+      shell: bash
+      run: |
+        install_ffmpeg() {
+          case "$RUNNER_OS" in
+            Linux)
+              sudo apt-get update
+              sudo apt-get install -y ffmpeg libssl-dev
+              ;;
+            macOS)
+              brew install ffmpeg
+              ;;
+            Windows)
+              choco install ffmpeg -y --no-progress
+              ;;
+          esac
+        }
+
+        for attempt in 1 2 3; do
+          install_ffmpeg || true
+          if command -v ffmpeg > /dev/null 2>&1; then
+            break
+          fi
+          echo "::warning::ffmpeg is not available after attempt ${attempt}"
+          sleep 20
+        done
+
+        if ! command -v ffmpeg > /dev/null 2>&1; then
+          echo "::error::Could not install ffmpeg"
+          exit 1
+        fi
+        ffmpeg -version | head -n 1

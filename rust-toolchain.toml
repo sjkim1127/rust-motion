@@ -1,0 +1,7 @@
+# Single source of truth for the Rust version used locally and in CI.
+# Bump deliberately (and fix any new lints) instead of drifting with `stable`;
+# .github/workflows/toolchain-canary.yml tells us weekly when stable moves ahead.
+[toolchain]
+channel = "1.100.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]

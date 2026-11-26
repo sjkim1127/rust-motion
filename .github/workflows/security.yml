@@ -1,0 +1,42 @@
+name: Security audit
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - ".cargo/audit.toml"
+      - ".github/workflows/security.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - ".cargo/audit.toml"
+      - ".github/workflows/security.yml"
+  schedule:
+    # New advisories land independently of our commits, so audit on a schedule too.
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      # Fails on known vulnerabilities. Unmaintained or yanked crates only warn, and the
+      # accepted exceptions live in .cargo/audit.toml with their justification.
+      - name: Audit Cargo.lock
+        run: cargo audit
