@@ -21,6 +21,7 @@ pub const PREVIEW_LIMITATIONS: &[&str] = &[
     "Captions are drawn as plain text without animation",
     "Exposure is applied as a 2^EV multiplier on encoded values, not in scene-linear light",
     "Audio and adjustment tracks are not represented, and media clips with speed changes, reverse or transitions are rejected",
+    "When video decoding is unavailable (for example an ffmpeg-free build or unsupported codec), affected video clips degrade to placeholders",
 ];
 
 /// How much of a preview comes from real content.
@@ -99,66 +100,111 @@ impl McpSession {
         };
 
         let font_size = (height as f32 * 0.07).max(8.0);
-        let mut captions = Vec::new();
-        let mut media_clips = Vec::new();
-        let mut placeholder_clips = Vec::new();
-        let mut omitted_clips = Vec::new();
-
-        // Later tracks are composited on top of earlier ones.
-        for track in self.timeline.tracks.iter().filter(|track| !track.muted) {
-            let visible = track
-                .clips
-                .iter()
-                .filter(|clip| frame >= clip.track_in && frame < clip.track_out);
-            for clip in visible {
-                let asset = self.asset_of(clip)?;
-                if matches!(track.kind, TrackKind::Audio | TrackKind::Adjustment)
-                    || asset.is_some_and(|asset| asset.kind == AssetKind::Audio)
-                {
-                    omitted_clips.push(clip.id.clone());
-                    continue;
+        let build =
+            |allow_video: bool| -> Result<(Scene, Vec<String>, Vec<String>, Vec<String>), String> {
+                let mut scene = Scene::new();
+                scene.push(SceneNode::Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: width as f32,
+                    h: height as f32,
+                    fill: Color::rgb(18, 18, 24),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    corner_radius: 0.0,
+                });
+                let mut captions: Vec<(String, f32, Option<&ColorGradeParams>)> = Vec::new();
+                let mut media_clips = Vec::new();
+                let mut placeholder_clips = Vec::new();
+                let mut omitted_clips = Vec::new();
+                for track in self.timeline.tracks.iter().filter(|track| !track.muted) {
+                    let visible = track
+                        .clips
+                        .iter()
+                        .filter(|clip| frame >= clip.track_in && frame < clip.track_out);
+                    for clip in visible {
+                        let asset = self.asset_of(clip)?;
+                        if matches!(track.kind, TrackKind::Audio | TrackKind::Adjustment)
+                            || asset.is_some_and(|asset| asset.kind == AssetKind::Audio)
+                        {
+                            omitted_clips.push(clip.id.clone());
+                            continue;
+                        }
+                        let grade = self
+                            .active_grades
+                            .iter()
+                            .find(|(id, _)| id == &clip.id)
+                            .map(|(_, grade)| grade);
+                        let caption = self.captions.iter().find(|(id, _)| id == &clip.id);
+                        if let Some(asset) = asset {
+                            if !allow_video && asset.kind == AssetKind::Video {
+                                let node = placeholder(track.kind, width, height);
+                                scene.push(graded_layer(clip.opacity, grade, node));
+                                placeholder_clips.push(clip.id.clone());
+                            } else {
+                                let node = self.media_node(clip, asset, frame, canvas)?;
+                                scene.push(graded_layer(clip.opacity, grade, node));
+                                media_clips.push(clip.id.clone());
+                            }
+                        } else if caption.is_none() {
+                            let node = placeholder(track.kind, width, height);
+                            scene.push(graded_layer(clip.opacity, grade, node));
+                            placeholder_clips.push(clip.id.clone());
+                        }
+                        if let Some((_, text)) = caption {
+                            captions.push((text.clone(), clip.opacity, grade));
+                        }
+                    }
                 }
-                let grade = self
-                    .active_grades
+                for (line, (content, opacity, grade)) in captions.into_iter().enumerate() {
+                    let text = SceneNode::Text {
+                        x: width as f32 * 0.08,
+                        y: height as f32 * 0.72 - line as f32 * font_size * 1.3,
+                        content,
+                        font_size,
+                        color: Color::WHITE,
+                        font_weight: 700,
+                        font_sources: Vec::new(),
+                    };
+                    scene.push(graded_layer(opacity, grade, text));
+                }
+                Ok((scene, media_clips, placeholder_clips, omitted_clips))
+            };
+
+        let backend = TinySkiaBackend::new_with_policy(self.media_policy());
+        let (scene, mut media_clips, mut placeholder_clips, omitted_clips) = build(true)?;
+        let rendered = backend.render_frame(&scene, &FrameConfig::new(width, height, frame, fps));
+        let img = match rendered {
+            Ok(img) => img,
+            Err(error) => {
+                let msg = error.to_string();
+                let has_video = self
+                    .timeline
+                    .tracks
                     .iter()
-                    .find(|(id, _)| id == &clip.id)
-                    .map(|(_, grade)| grade);
-                let caption = self.captions.iter().find(|(id, _)| id == &clip.id);
-
-                if let Some(asset) = asset {
-                    let node = self.media_node(clip, asset, frame, canvas)?;
-                    scene.push(graded_layer(clip.opacity, grade, node));
-                    media_clips.push(clip.id.clone());
-                } else if caption.is_none() {
-                    let node = placeholder(track.kind, width, height);
-                    scene.push(graded_layer(clip.opacity, grade, node));
-                    placeholder_clips.push(clip.id.clone());
-                }
-                if let Some((_, text)) = caption {
-                    captions.push((text.clone(), clip.opacity, grade));
+                    .flat_map(|t| &t.clips)
+                    .any(|clip| {
+                        frame >= clip.track_in
+                            && frame < clip.track_out
+                            && self
+                                .asset_of(clip)
+                                .ok()
+                                .flatten()
+                                .is_some_and(|a| a.kind == AssetKind::Video)
+                    });
+                if has_video {
+                    let (scene2, m2, p2, _o2) = build(false)?;
+                    media_clips = m2;
+                    placeholder_clips = p2;
+                    let backend2 = TinySkiaBackend::new_with_policy(self.media_policy());
+                    backend2
+                        .render_frame(&scene2, &FrameConfig::new(width, height, frame, fps))
+                        .map_err(|e| format!("preview failed: {e}; original video error: {msg}"))?
+                } else {
+                    return Err(format!("preview failed: {msg}"));
                 }
             }
-        }
-
-        // Captions go on top of every clip, stacked upwards from the lower part of the frame.
-        for (line, (content, opacity, grade)) in captions.into_iter().enumerate() {
-            let text = SceneNode::Text {
-                x: width as f32 * 0.08,
-                y: height as f32 * 0.72 - line as f32 * font_size * 1.3,
-                content,
-                font_size,
-                color: Color::WHITE,
-                font_weight: 700,
-                font_sources: Vec::new(),
-            };
-            scene.push(graded_layer(opacity, grade, text));
-        }
-
-        // A new backend per preview: its media caches never notice that a file has changed.
-        let backend = TinySkiaBackend::new_with_policy(self.media_policy());
-        let img = backend
-            .render_frame(&scene, &FrameConfig::new(width, height, frame, fps))
-            .map_err(|error| format!("preview failed: {error}"))?;
+        };
 
         let mut png_bytes = Vec::new();
         img.write_to(

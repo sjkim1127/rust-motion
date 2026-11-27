@@ -446,7 +446,12 @@ impl McpSession {
                             .to_string(),
                     );
                 }
-                (_, AssetKind::Image | AssetKind::Video) => {}
+                (TrackKind::Video, AssetKind::Image | AssetKind::Video) => {}
+                (track, media @ (AssetKind::Image | AssetKind::Video)) => {
+                    return Err(format!(
+                        "invalid 'asset_id': {media:?} assets cannot be inserted on a {track:?} track"
+                    ));
+                }
                 (_, other) => {
                     return Err(format!(
                         "invalid 'asset_id': {other:?} assets cannot be inserted on this track"

@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 const MAX_CACHE_BYTES: usize = 128 * 1024 * 1024;
 const MAX_DECODER_SOURCES: usize = 4;
 const MAX_FORWARD_DECODE_SECONDS: f64 = 5.0;
-const MAX_DECODED_VIDEO_PIXELS: u64 = 64 * 1024 * 1024;
+const _MAX_DECODED_VIDEO_PIXELS: u64 = 64 * 1024 * 1024;
 const STDERR_LIMIT_BYTES: u64 = 64 * 1024;
 
 /// Video stream information reported by FFprobe.
@@ -203,7 +203,7 @@ impl VideoFrameCache {
     fn decoder_for(
         &self,
         key: DecoderKey,
-        metadata: &VideoMetadata,
+        _metadata: &VideoMetadata,
         sampling_fps: f64,
         first_frame: u64,
     ) -> Result<Arc<Mutex<DecoderSession>>, RasterError> {
@@ -243,7 +243,7 @@ impl VideoFrameCache {
         };
         let decoder = Arc::new(Mutex::new(self.spawn_decoder(
             &key.path,
-            metadata,
+            _metadata,
             sampling_fps,
             decoder_start,
         )?));
@@ -330,10 +330,52 @@ impl VideoFrameCache {
     }
 }
 
+pub(crate) trait VideoFrameSource: Send {
+    fn read_frame(&mut self, width: u32, height: u32) -> Result<RgbaImage, RasterError>;
+}
+
 struct DecoderSession {
-    path: PathBuf,
     width: u32,
     height: u32,
+    next_frame: u64,
+    source: Box<dyn VideoFrameSource>,
+}
+
+impl DecoderSession {
+    fn spawn(
+        path: &Path,
+        metadata: &VideoMetadata,
+        sampling_fps: f64,
+        first_frame: u64,
+    ) -> Result<Self, RasterError> {
+        #[cfg(feature = "ffmpeg-cli")]
+        {
+            let source = FfmpegFrameSource::spawn(path, metadata, sampling_fps, first_frame)?;
+            Ok(Self {
+                width: metadata.display_width,
+                height: metadata.display_height,
+                next_frame: first_frame,
+                source: Box::new(source),
+            })
+        }
+        #[cfg(not(feature = "ffmpeg-cli"))]
+        {
+            let _ = (metadata, sampling_fps, first_frame);
+            Err(media_error(
+                path.display().to_string(),
+                "video decoding requires the ffmpeg-cli feature; this build has no video decode backend",
+            ))
+        }
+    }
+
+    fn read_frame(&mut self) -> Result<RgbaImage, RasterError> {
+        self.source.read_frame(self.width, self.height)
+    }
+}
+
+#[cfg(feature = "ffmpeg-cli")]
+struct FfmpegFrameSource {
+    path: PathBuf,
     next_frame: u64,
     child: Child,
     stdout: ChildStdout,
@@ -341,10 +383,11 @@ struct DecoderSession {
     stderr_thread: Option<JoinHandle<()>>,
 }
 
-impl DecoderSession {
+#[cfg(feature = "ffmpeg-cli")]
+impl FfmpegFrameSource {
     fn spawn(
         path: &Path,
-        metadata: &VideoMetadata,
+        _metadata: &VideoMetadata,
         sampling_fps: f64,
         first_frame: u64,
     ) -> Result<Self, RasterError> {
@@ -395,6 +438,11 @@ impl DecoderSession {
                 "failed to capture FFmpeg decoder stdout",
             )
         })?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let _ = set_stdout_nonblocking(stdout.as_raw_fd());
+        }
         let child_stderr = child.stderr.take().ok_or_else(|| {
             media_error(
                 path.display().to_string(),
@@ -413,8 +461,6 @@ impl DecoderSession {
 
         Ok(Self {
             path: path.to_path_buf(),
-            width: metadata.display_width,
-            height: metadata.display_height,
             next_frame: first_frame,
             child,
             stdout,
@@ -422,10 +468,16 @@ impl DecoderSession {
             stderr_thread: Some(stderr_thread),
         })
     }
+}
 
-    fn read_frame(&mut self) -> Result<RgbaImage, RasterError> {
-        let byte_len = u64::from(self.width)
-            .checked_mul(u64::from(self.height))
+#[cfg(feature = "ffmpeg-cli")]
+const FRAME_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+#[cfg(feature = "ffmpeg-cli")]
+impl VideoFrameSource for FfmpegFrameSource {
+    fn read_frame(&mut self, width: u32, height: u32) -> Result<RgbaImage, RasterError> {
+        let byte_len = u64::from(width)
+            .checked_mul(u64::from(height))
             .and_then(|pixels| pixels.checked_mul(4))
             .and_then(|bytes| usize::try_from(bytes).ok())
             .ok_or_else(|| {
@@ -435,7 +487,9 @@ impl DecoderSession {
                 )
             })?;
         let mut raw = vec![0; byte_len];
-        if let Err(error) = self.stdout.read_exact(&mut raw) {
+        if let Err(error) = read_exact_with_timeout(&mut self.stdout, &mut raw, FRAME_READ_TIMEOUT)
+        {
+            let _ = self.child.kill();
             let _ = self.child.wait();
             if let Some(thread) = self.stderr_thread.take() {
                 let _ = thread.join();
@@ -458,7 +512,8 @@ impl DecoderSession {
             return Err(media_error(self.path.display().to_string(), reason));
         }
 
-        RgbaImage::from_raw(self.width, self.height, raw).ok_or_else(|| {
+        self.next_frame += 1;
+        RgbaImage::from_raw(width, height, raw).ok_or_else(|| {
             media_error(
                 self.path.display().to_string(),
                 "FFmpeg returned an invalid RGBA frame length",
@@ -467,7 +522,68 @@ impl DecoderSession {
     }
 }
 
-impl Drop for DecoderSession {
+#[cfg(all(feature = "ffmpeg-cli", unix))]
+fn set_stdout_nonblocking(fd: std::os::unix::io::RawFd) -> std::io::Result<()> {
+    extern "C" {
+        fn fcntl(fd: std::os::unix::io::RawFd, cmd: i32, ...) -> i32;
+    }
+    const F_GETFL: i32 = 3;
+    const F_SETFL: i32 = 4;
+    #[cfg(target_os = "macos")]
+    const O_NONBLOCK: i32 = 0x0004;
+    #[cfg(not(target_os = "macos"))]
+    const O_NONBLOCK: i32 = 2048;
+    let flags = unsafe { fcntl(fd, F_GETFL) };
+    if flags < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    let r = unsafe { fcntl(fd, F_SETFL, flags | O_NONBLOCK) };
+    if r < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+#[cfg(feature = "ffmpeg-cli")]
+fn read_exact_with_timeout<R: std::io::Read>(
+    reader: &mut R,
+    buf: &mut [u8],
+    timeout: std::time::Duration,
+) -> std::io::Result<()> {
+    let start = std::time::Instant::now();
+    let mut offset = 0;
+    while offset < buf.len() {
+        match reader.read(&mut buf[offset..]) {
+            Ok(0) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "unexpected EOF",
+                ));
+            }
+            Ok(n) => offset += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                if start.elapsed() >= timeout {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        format!("frame read timed out after {}s", timeout.as_secs()),
+                    ));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(e) => return Err(e),
+        }
+        if start.elapsed() >= timeout {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!("frame read timed out after {}s", timeout.as_secs()),
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "ffmpeg-cli")]
+impl Drop for FfmpegFrameSource {
     fn drop(&mut self) {
         if self.child.try_wait().ok().flatten().is_none() {
             let _ = self.child.kill();
@@ -479,7 +595,8 @@ impl Drop for DecoderSession {
     }
 }
 
-/// Probe a local video with FFprobe.
+/// Probe a local video. Tries native container parsing first, then FFprobe when
+/// the `ffmpeg-cli` feature is enabled.
 pub fn probe_video_metadata(src: &str) -> Result<VideoMetadata, RasterError> {
     let path = canonical_local_path(src)?;
     probe_path(&path)
@@ -496,24 +613,49 @@ pub(crate) fn canonical_local_path_with_policy(
     policy.validate_path(src)
 }
 
-const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+fn probe_path(path: &Path) -> Result<VideoMetadata, RasterError> {
+    if let Ok(meta) = crate::video_probe::probe_native(path) {
+        return Ok(meta);
+    }
+    #[cfg(feature = "ffmpeg-cli")]
+    {
+        probe_path_ffprobe(path)
+    }
+    #[cfg(not(feature = "ffmpeg-cli"))]
+    {
+        Err(media_error(
+            path.display().to_string(),
+            "native video probe could not read this container; enable the ffmpeg-cli feature for FFprobe fallback",
+        ))
+    }
+}
 
-fn read_pipe<R: std::io::Read + Send + 'static>(pipe: Option<R>) -> Option<JoinHandle<Vec<u8>>> {
-    pipe.map(|mut pipe| {
+#[cfg(feature = "ffmpeg-cli")]
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+#[cfg(feature = "ffmpeg-cli")]
+const PROBE_OUTPUT_LIMIT_BYTES: usize = 1024 * 1024;
+
+#[cfg(feature = "ffmpeg-cli")]
+fn read_pipe_limited<R: std::io::Read + Send + 'static>(
+    pipe: Option<R>,
+    limit: usize,
+) -> Option<JoinHandle<Vec<u8>>> {
+    pipe.map(|pipe| {
         std::thread::spawn(move || {
             let mut buf = Vec::new();
-            let _ = pipe.read_to_end(&mut buf);
+            let _ = pipe.take(limit as u64).read_to_end(&mut buf);
             buf
         })
     })
 }
 
+#[cfg(feature = "ffmpeg-cli")]
 fn wait_output_with_timeout(
     mut child: Child,
     timeout: std::time::Duration,
 ) -> std::io::Result<std::process::Output> {
-    let stdout = read_pipe(child.stdout.take());
-    let stderr = read_pipe(child.stderr.take());
+    let stdout = read_pipe_limited(child.stdout.take(), PROBE_OUTPUT_LIMIT_BYTES);
+    let stderr = read_pipe_limited(child.stderr.take(), PROBE_OUTPUT_LIMIT_BYTES);
     let start = std::time::Instant::now();
     let status = loop {
         if let Some(status) = child.try_wait()? {
@@ -544,7 +686,8 @@ fn wait_output_with_timeout(
     })
 }
 
-fn probe_path(path: &Path) -> Result<VideoMetadata, RasterError> {
+#[cfg(feature = "ffmpeg-cli")]
+fn probe_path_ffprobe(path: &Path) -> Result<VideoMetadata, RasterError> {
     let mut command = Command::new("ffprobe");
     command
         .args([
@@ -595,25 +738,15 @@ fn probe_path(path: &Path) -> Result<VideoMetadata, RasterError> {
         .iter()
         .find(|stream| stream.codec_type.as_deref() == Some("video"))
         .ok_or_else(|| media_error(path.display().to_string(), "no video stream found"))?;
+
     let width = video
         .width
-        .filter(|value| *value > 0)
-        .ok_or_else(|| media_error(path.display().to_string(), "video width is missing"))?;
+        .ok_or_else(|| media_error(path.display().to_string(), "missing video width"))?;
     let height = video
         .height
-        .filter(|value| *value > 0)
-        .ok_or_else(|| media_error(path.display().to_string(), "video height is missing"))?;
-    let pixels = u64::from(width) * u64::from(height);
-    if pixels > MAX_DECODED_VIDEO_PIXELS {
-        return Err(media_error(
-            path.display().to_string(),
-            format!(
-                "video dimensions {width}x{height} exceed the decoded-frame limit of {MAX_DECODED_VIDEO_PIXELS} pixels"
-            ),
-        ));
-    }
+        .ok_or_else(|| media_error(path.display().to_string(), "missing video height"))?;
     let rotation = stream_rotation(video);
-    let (display_width, display_height) = if rotation == 90 || rotation == 270 {
+    let (display_width, display_height) = if matches!(rotation, 90 | 270) {
         (height, width)
     } else {
         (width, height)
@@ -731,7 +864,7 @@ struct ProbeSideData {
     rotation: Option<i32>,
 }
 
-fn media_error(path: impl Into<String>, reason: impl Into<String>) -> RasterError {
+pub(crate) fn media_error(path: impl Into<String>, reason: impl Into<String>) -> RasterError {
     RasterError::MediaAsset {
         path: path.into(),
         reason: reason.into(),
