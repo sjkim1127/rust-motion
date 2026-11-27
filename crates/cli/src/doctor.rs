@@ -94,6 +94,9 @@ pub fn run_doctor() -> DoctorReport {
         native_encoders.push("h264 (videotoolbox)".into());
         native_encoders.push("hevc (videotoolbox)".into());
     }
+    if rust_motion_media_hwaccel::is_audiotoolbox_available() {
+        native_encoders.push("aac (audiotoolbox)".into());
+    }
 
     let mut supported_codecs = vec!["h264".into(), "png".into(), "jpeg".into(), "webp".into()];
     if vt_available || ffmpeg_avail {
