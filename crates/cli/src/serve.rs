@@ -838,6 +838,30 @@ mod tests {
     #[cfg(feature = "rhai")]
     use std::{collections::VecDeque, fs, sync::Mutex};
 
+    /// Pins a file's modification time without depending on the deprecated `filetime` crate.
+    #[cfg(feature = "rhai")]
+    fn set_mtime(path: &std::path::Path, secs: u64) {
+        std::fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_times(
+                std::fs::FileTimes::new()
+                    .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs)),
+            )
+            .unwrap();
+    }
+
+    #[cfg(feature = "rhai")]
+    fn mtime(path: &std::path::Path) -> std::time::SystemTime {
+        fs::metadata(path).unwrap().modified().unwrap()
+    }
+
+    #[cfg(feature = "rhai")]
+    fn unix_time(secs: u64) -> std::time::SystemTime {
+        std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs)
+    }
+
     #[test]
     fn websocket_seek_accepts_normal_and_maximum_u32_values() {
         assert_eq!(parse_ws_seek(&json!({ "seek": 42 })), Ok(Some(42)));
@@ -984,33 +1008,19 @@ mod tests {
 
         fs::write(&script, source("one")).unwrap();
         fs::write(&props, r##"{"color":"#ff0000"}"##).unwrap();
-        let first_mtime = filetime::FileTime::from_unix_time(1_000, 0);
-        filetime::set_file_mtime(&script, first_mtime).unwrap();
-        filetime::set_file_mtime(&props, first_mtime).unwrap();
-        assert_eq!(
-            filetime::FileTime::from_last_modification_time(&fs::metadata(&script).unwrap()),
-            first_mtime
-        );
-        assert_eq!(
-            filetime::FileTime::from_last_modification_time(&fs::metadata(&props).unwrap()),
-            first_mtime
-        );
+        set_mtime(&script, 1_000);
+        set_mtime(&props, 1_000);
+        assert_eq!(mtime(&script), unix_time(1_000));
+        assert_eq!(mtime(&props), unix_time(1_000));
         let initial_stamp = source_stamp(&config);
         let initial_png = cached_frame(&config, 0, &cache).unwrap();
 
         fs::write(&script, source("two")).unwrap();
         fs::write(&props, r##"{"color":"#00ff00"}"##).unwrap();
-        let second_mtime = filetime::FileTime::from_unix_time(2_000, 0);
-        filetime::set_file_mtime(&script, second_mtime).unwrap();
-        filetime::set_file_mtime(&props, second_mtime).unwrap();
-        assert_eq!(
-            filetime::FileTime::from_last_modification_time(&fs::metadata(&script).unwrap()),
-            second_mtime
-        );
-        assert_eq!(
-            filetime::FileTime::from_last_modification_time(&fs::metadata(&props).unwrap()),
-            second_mtime
-        );
+        set_mtime(&script, 2_000);
+        set_mtime(&props, 2_000);
+        assert_eq!(mtime(&script), unix_time(2_000));
+        assert_eq!(mtime(&props), unix_time(2_000));
 
         let updated_stamp = source_stamp(&config);
         let updated_png = cached_frame(&config, 0, &cache).unwrap();
@@ -1026,6 +1036,7 @@ mod tests {
             cached_frame, poll_changes, serve_router, source_stamp, AppState, ServeConfig,
             CHANNEL_CAPACITY,
         };
+        use super::set_mtime;
         use futures_util::{SinkExt, StreamExt};
         use std::{
             collections::VecDeque,
@@ -1093,8 +1104,7 @@ mod tests {
             let directory = tempfile::tempdir().unwrap();
             let (config, asset) = image_project(directory.path());
             let cache = Mutex::new(VecDeque::new());
-            let mtime = filetime::FileTime::from_unix_time(1_000, 0);
-            filetime::set_file_mtime(&asset, mtime).unwrap();
+            set_mtime(&asset, 1_000);
 
             let first = cached_frame(&config, 0, &cache).unwrap();
             assert_eq!(pixel(&first), [255, 0, 0, 255]);
@@ -1108,7 +1118,7 @@ mod tests {
             assert_eq!(pixel(&rewritten), [0, 255, 0, 255]);
 
             // Atomically replaced by a file with the same modification time and length.
-            filetime::set_file_mtime(&asset, mtime).unwrap();
+            set_mtime(&asset, 1_000);
             let before = cached_frame(&config, 0, &cache).unwrap();
             let replacement = directory.path().join("replacement.png");
             write_png(&replacement, [0, 0, 255, 255]);
@@ -1116,7 +1126,7 @@ mod tests {
                 fs::metadata(&replacement).unwrap().len(),
                 fs::metadata(&asset).unwrap().len()
             );
-            filetime::set_file_mtime(&replacement, mtime).unwrap();
+            set_mtime(&replacement, 1_000);
             fs::rename(&replacement, &asset).unwrap();
             let after = cached_frame(&config, 0, &cache).unwrap();
             assert_eq!(pixel(&before), [0, 255, 0, 255]);
