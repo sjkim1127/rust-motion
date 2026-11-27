@@ -52,6 +52,7 @@ async fn test_tier4_real_world_acceptance_scenario() {
         crf: 18,
         preset: "fast".into(),
         hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
+        encoder: rust_motion_rasterizer::EncoderBackend::Auto,
         sandbox_roots: Vec::new(),
         permissive: false,
     };

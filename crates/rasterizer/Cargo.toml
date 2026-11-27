@@ -42,6 +42,9 @@ rust-motion-plugins  = { workspace = true }
 rust-motion-lensdb   = { workspace = true }
 rust-motion-dng      = { workspace = true }
 rust-motion-inpaint  = { workspace = true }
+rust-motion-h264enc  = { workspace = true }
+rust-motion-media-core = { workspace = true }
+rust-motion-media-container = { workspace = true }
 wgpu       = { version = "22", optional = true }
 pollster   = { version = "0.4", optional = true }
 lyon_tessellation = { workspace = true, optional = true }

@@ -167,3 +167,147 @@ fn failed_render_preserves_existing_output() {
     assert_eq!(std::fs::read(&output).unwrap(), original);
     std::fs::remove_dir_all(temp).unwrap();
 }
+
+#[test]
+fn native_h264_streaming_pipe_renders_valid_faststart_mp4_without_ffmpeg() {
+    let temp = unique_temp_dir("native_h264_mp4");
+    std::fs::create_dir_all(&temp).unwrap();
+    let output = temp.join("native.mp4");
+    let config = PipeConfig::new(160, 96, 24.0, 12, &output)
+        .with_encoder_backend(EncoderBackend::Native)
+        .with_quality(22, "fast")
+        .with_concurrency(2);
+
+    render_to_video(&TinySkiaBackend::headless(), &config, |frame| {
+        let mut scene = Scene::new();
+        scene.push(SceneNode::Rect {
+            x: 0.0,
+            y: 0.0,
+            w: 160.0,
+            h: 96.0,
+            fill: Color::rgb(16, 28, 48),
+            stroke: None,
+            stroke_width: 0.0,
+            corner_radius: 0.0,
+        });
+        scene.push(SceneNode::Rect {
+            x: 12.0 + frame as f32 * 8.0,
+            y: 24.0,
+            w: 40.0,
+            h: 40.0,
+            fill: Color::rgb(230, 110, 40),
+            stroke: None,
+            stroke_width: 0.0,
+            corner_radius: 6.0,
+        });
+        scene
+    })
+    .unwrap();
+
+    let bytes = std::fs::read(&output).unwrap();
+    assert_eq!(&bytes[4..8], b"ftyp");
+    let moov_pos = bytes
+        .windows(4)
+        .position(|w| w == b"moov")
+        .expect("missing moov");
+    let mdat_pos = bytes
+        .windows(4)
+        .position(|w| w == b"mdat")
+        .expect("missing mdat");
+    assert!(moov_pos < mdat_pos, "expected faststart moov before mdat");
+    assert!(bytes.windows(4).any(|w| w == b"colr"));
+    assert!(bytes.windows(4).any(|w| w == b"nclx"));
+    assert!(bytes.windows(4).any(|w| w == b"avcC"));
+
+    if ffmpeg_available() {
+        let probe = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=codec_name,width,height,nb_frames,color_primaries",
+                "-of",
+                "default=noprint_wrappers=1",
+            ])
+            .arg(&output)
+            .output()
+            .unwrap();
+        assert!(probe.status.success());
+        let probe_text = String::from_utf8_lossy(&probe.stdout);
+        assert!(probe_text.contains("codec_name=h264"), "{probe_text}");
+        assert!(probe_text.contains("width=160"), "{probe_text}");
+        assert!(probe_text.contains("height=96"), "{probe_text}");
+        assert!(probe_text.contains("nb_frames=12"), "{probe_text}");
+        assert!(probe_text.contains("color_primaries=bt709"), "{probe_text}");
+
+        let decode = Command::new("ffmpeg")
+            .args(["-v", "error", "-i"])
+            .arg(&output)
+            .args(["-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+            .output()
+            .unwrap();
+        assert!(
+            decode.status.success(),
+            "ffmpeg decode failed: {}",
+            String::from_utf8_lossy(&decode.stderr)
+        );
+        assert_eq!(decode.stdout.len(), 12 * 160 * 96 * 3);
+    }
+
+    std::fs::remove_dir_all(temp).unwrap();
+}
+
+#[test]
+fn native_h264_respects_cancellation_and_rejects_unsupported_inputs() {
+    let temp = unique_temp_dir("native_h264_errors");
+    std::fs::create_dir_all(&temp).unwrap();
+
+    let cancelled_out = temp.join("cancelled.mp4");
+    let control = RenderControl::new();
+    control.cancellation_token().cancel();
+    let cfg = PipeConfig::new(64, 64, 30.0, 4, &cancelled_out)
+        .with_encoder_backend(EncoderBackend::Native)
+        .with_control(control);
+    let err = render_to_video(
+        &TinySkiaBackend::headless(),
+        &cfg,
+        solid_scene(Color::rgb(1, 2, 3)),
+    )
+    .unwrap_err();
+    assert!(matches!(err, RasterError::Cancelled));
+    assert!(!cancelled_out.exists());
+
+    let vp9_out = temp.join("unsupported.webm");
+    let cfg_vp9 = PipeConfig::new(64, 64, 30.0, 2, &vp9_out)
+        .with_encoder_backend(EncoderBackend::Native)
+        .with_codec(VideoCodec::Vp9);
+    let err = render_to_video(
+        &TinySkiaBackend::headless(),
+        &cfg_vp9,
+        solid_scene(Color::rgb(1, 2, 3)),
+    )
+    .unwrap_err();
+    assert!(matches!(err, RasterError::ImageEncode(_)));
+    assert!(!vp9_out.exists());
+
+    let dummy_wav = temp.join("dummy.wav");
+    std::fs::write(&dummy_wav, b"RIFF").unwrap();
+    let audio_out = temp.join("audio.mp4");
+    let cfg_audio = PipeConfig::new(64, 64, 30.0, 2, &audio_out)
+        .with_encoder_backend(EncoderBackend::Native)
+        .with_security_policy(crate::security::MediaSecurityPolicy::Permissive)
+        .with_audio_tracks([AudioTrack::new(dummy_wav.to_string_lossy().into_owned())]);
+    let err = render_to_video(
+        &TinySkiaBackend::headless(),
+        &cfg_audio,
+        solid_scene(Color::rgb(1, 2, 3)),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, RasterError::ImageEncode(_)),
+        "expected ImageEncode for audio tracks with native encoder, got {err:?}"
+    );
+    assert!(!audio_out.exists());
+
+    std::fs::remove_dir_all(temp).unwrap();
+}

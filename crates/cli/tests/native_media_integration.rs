@@ -211,6 +211,7 @@ async fn rhai_media_nodes_flow_through_the_cli_renderer() {
         crf: 18,
         preset: "fast".into(),
         hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
+        encoder: rust_motion_rasterizer::EncoderBackend::Auto,
         sandbox_roots: Vec::new(),
         permissive: false,
     })

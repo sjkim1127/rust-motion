@@ -152,6 +152,7 @@ fn render_native(
         crf,
         preset: preset.to_string(),
         hw_accel: parsed_hw_accel,
+        encoder: rust_motion_rasterizer::EncoderBackend::Auto,
         sandbox_roots: parsed_sandbox_roots,
         permissive,
     };

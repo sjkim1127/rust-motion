@@ -6,6 +6,8 @@ members = [
     "crates/audio-dsp",
     "crates/composition",
     "crates/media",
+    "crates/media-core",
+    "crates/media-container",
     "crates/renderer",
     "crates/transitions",
     "crates/cli",
@@ -117,6 +119,8 @@ rust-motion-audio-dsp   = { version = "1.1.0", path = "crates/audio-dsp" }
 rust-motion-cli         = { version = "1.1.0", path = "crates/cli" }
 rust-motion-composition = { version = "1.1.0", path = "crates/composition" }
 rust-motion-media       = { version = "1.1.0", path = "crates/media" }
+rust-motion-media-core  = { version = "1.1.0", path = "crates/media-core" }
+rust-motion-media-container = { version = "1.1.0", path = "crates/media-container" }
 rust-motion-renderer    = { version = "1.1.0", path = "crates/renderer" }
 rust-motion-transitions = { version = "1.1.0", path = "crates/transitions" }
 rust-motion-shapes      = { version = "1.1.0", path = "crates/shapes" }

@@ -58,6 +58,7 @@ async fn main() -> anyhow::Result<()> {
             crf,
             preset,
             hw_accel,
+            encoder,
             sandbox_roots,
             permissive,
             profile,
@@ -86,6 +87,7 @@ async fn main() -> anyhow::Result<()> {
                 crf: *crf,
                 preset: preset.clone(),
                 hw_accel: (*hw_accel).into(),
+                encoder: (*encoder).into(),
                 sandbox_roots: sandbox_roots.clone(),
                 permissive: *permissive,
             };
@@ -390,6 +392,7 @@ async fn main() -> anyhow::Result<()> {
                     .clone()
                     .unwrap_or_else(|| "fast".into()),
                 hw_accel: rust_motion_rasterizer::HwAccel::Auto,
+                encoder: rust_motion_rasterizer::EncoderBackend::Auto,
                 sandbox_roots: vec![],
                 permissive: true,
             };
@@ -736,11 +739,15 @@ async fn main() -> anyhow::Result<()> {
                 println!("Rust Motion Environment Doctor");
                 println!("============================");
                 println!(
+                    "Native:      AVAILABLE ({})",
+                    report.native_encoders.join(", ")
+                );
+                println!(
                     "FFmpeg:      {} ({})",
                     if report.ffmpeg.available {
                         "AVAILABLE"
                     } else {
-                        "MISSING"
+                        "OPTIONAL (not found; using built-in H.264/MP4)"
                     },
                     report.ffmpeg.version.as_deref().unwrap_or("not found")
                 );
@@ -752,7 +759,7 @@ async fn main() -> anyhow::Result<()> {
                     if report.ffprobe.available {
                         "AVAILABLE"
                     } else {
-                        "MISSING"
+                        "OPTIONAL"
                     },
                     report.ffprobe.version.as_deref().unwrap_or("not found")
                 );
@@ -761,7 +768,7 @@ async fn main() -> anyhow::Result<()> {
                     if report.node.available {
                         "AVAILABLE"
                     } else {
-                        "MISSING"
+                        "OPTIONAL"
                     },
                     report.node.version.as_deref().unwrap_or("not found")
                 );
@@ -777,7 +784,7 @@ async fn main() -> anyhow::Result<()> {
                     if report.ok {
                         "READY"
                     } else {
-                        "INCOMPLETE (ffmpeg or writable temp dir missing)"
+                        "INCOMPLETE (writable temp dir missing)"
                     }
                 );
             }

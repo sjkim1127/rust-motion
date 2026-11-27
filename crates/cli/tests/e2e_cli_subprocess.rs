@@ -436,3 +436,93 @@ fn e2e_odd_resolution_fails() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// P0/P1 verification: with an empty PATH (zero external FFmpeg/FFprobe available),
+/// `doctor --json` reports ok=true and `render` produces valid faststart MP4s via both
+/// explicit `--encoder native` and default `--encoder auto` fallback.
+#[test]
+fn e2e_ffmpeg_free_doctor_and_mp4_render() {
+    let doctor = Command::new(cli_bin())
+        .args(["doctor", "--json"])
+        .env("PATH", "")
+        .output()
+        .expect("Failed to spawn rust-motion doctor with empty PATH");
+    assert!(
+        doctor.status.success(),
+        "doctor should succeed without FFmpeg: stderr={}",
+        String::from_utf8_lossy(&doctor.stderr)
+    );
+    let doc_json: serde_json::Value =
+        serde_json::from_slice(&doctor.stdout).expect("doctor --json must return valid JSON");
+    assert_eq!(doc_json["ok"], true);
+    assert_eq!(doc_json["ffmpeg"]["available"], false);
+    assert!(doc_json["native_encoders"]
+        .as_array()
+        .is_some_and(|arr| !arr.is_empty()));
+    assert!(doc_json["supported_codecs"]
+        .as_array()
+        .is_some_and(|arr| arr.iter().any(|v| v == "h264")));
+
+    let dir = tmp_dir("ffmpeg_free_render");
+    for (mode, encoder_arg) in [("auto", "auto"), ("native", "native")] {
+        let output = dir.join(format!("out_{mode}.mp4"));
+        let res = Command::new(cli_bin())
+            .env("PATH", "")
+            .args([
+                "render",
+                "--composition",
+                "HelloWorld",
+                "--encoder",
+                encoder_arg,
+                "--output",
+                output.to_str().unwrap(),
+                "--width",
+                "160",
+                "--height",
+                "96",
+                "--fps",
+                "24",
+                "--duration",
+                "6",
+                "--codec",
+                "h264",
+                "--preset",
+                "fast",
+                "--crf",
+                "22",
+            ])
+            .output()
+            .expect("Failed to spawn rust-motion render with empty PATH");
+        assert!(
+            res.status.success(),
+            "FFmpeg-free render ({mode}) failed: stderr={}",
+            String::from_utf8_lossy(&res.stderr)
+        );
+        let bytes = fs::read(&output).unwrap();
+        assert_eq!(&bytes[4..8], b"ftyp");
+        let moov = bytes.windows(4).position(|w| w == b"moov").unwrap();
+        let mdat = bytes.windows(4).position(|w| w == b"mdat").unwrap();
+        assert!(moov < mdat);
+
+        if ffprobe_available() {
+            let probe = Command::new("ffprobe")
+                .args([
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "stream=codec_name,width,height,nb_frames",
+                    "-of",
+                    "default=noprint_wrappers=1",
+                ])
+                .arg(&output)
+                .output()
+                .unwrap();
+            assert!(probe.status.success());
+            let txt = String::from_utf8_lossy(&probe.stdout);
+            assert!(txt.contains("codec_name=h264"), "{txt}");
+            assert!(txt.contains("nb_frames=6"), "{txt}");
+        }
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}
