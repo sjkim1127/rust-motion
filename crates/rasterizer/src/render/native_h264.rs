@@ -392,10 +392,11 @@ impl FrameSink for NativeH264FrameSink<'_> {
             return Ok(None);
         }
         match &mut self.encoder {
-            NativeVideoEncoderImpl::Hardware(hw) => hw
-                .acquire_pixel_buffer()
-                .map(Some)
-                .map_err(|e| RasterError::ImageEncode(format!("Hardware pixel buffer acquire error: {e}"))),
+            NativeVideoEncoderImpl::Hardware(hw) => {
+                hw.acquire_pixel_buffer().map(Some).map_err(|e| {
+                    RasterError::ImageEncode(format!("Hardware pixel buffer acquire error: {e}"))
+                })
+            }
             NativeVideoEncoderImpl::PureRustH264(_) => Ok(None),
         }
     }
@@ -408,13 +409,13 @@ impl FrameSink for NativeH264FrameSink<'_> {
     ) -> Result<(), RasterError> {
         self.control.check(self.started)?;
         let packets = match &mut self.encoder {
-            NativeVideoEncoderImpl::Hardware(hw) => {
-                hw.encode_pixel_buffer(&pb, i64::from(frame), 1).map_err(|e| {
+            NativeVideoEncoderImpl::Hardware(hw) => hw
+                .encode_pixel_buffer(&pb, i64::from(frame), 1)
+                .map_err(|e| {
                     RasterError::ImageEncode(format!(
                         "Hardware zero-copy video encode error on frame {frame}: {e}"
                     ))
-                })?
-            }
+                })?,
             NativeVideoEncoderImpl::PureRustH264(_) => {
                 return Err(RasterError::ImageEncode(
                     "Pure-Rust H.264 encoder does not accept hardware pixel buffers".into(),

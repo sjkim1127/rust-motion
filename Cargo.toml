@@ -121,7 +121,6 @@ rust-motion-media-core  = { version = "1.1.0", path = "crates/media-core" }
 rust-motion-media-container = { version = "1.1.0", path = "crates/media-container" }
 rust-motion-media-hwaccel = { version = "1.1.0", path = "crates/media-hwaccel" }
 rust-motion-renderer    = { version = "1.1.0", path = "crates/renderer" }
-rust-motion-transitions = { version = "1.1.0", path = "crates/transitions" }
 rust-motion-shapes      = { version = "1.1.0", path = "crates/shapes" }
 rust-motion-paths       = { version = "1.1.0", path = "crates/paths" }
 rust-motion-captions    = { version = "1.1.0", path = "crates/captions" }

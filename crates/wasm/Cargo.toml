@@ -32,7 +32,6 @@ console_error_panic_hook = { workspace = true, optional = true }
 rust-motion-animation = { workspace = true }
 rust-motion-composition = { workspace = true }
 rust-motion-rasterizer = { workspace = true }
-rust-motion-transitions = { workspace = true }
 rust-motion-noise = { workspace = true }
 
 [features]

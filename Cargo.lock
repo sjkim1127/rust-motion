@@ -3618,7 +3618,6 @@ dependencies = [
  "rust-motion-composition",
  "rust-motion-noise",
  "rust-motion-rasterizer",
- "rust-motion-transitions",
  "serde",
  "serde_json",
  "wasm-bindgen",

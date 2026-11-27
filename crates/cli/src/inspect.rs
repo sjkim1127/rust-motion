@@ -37,6 +37,16 @@ pub fn run_inspect_backends() -> Vec<BackendCapability> {
             description: "Hardware-accelerated WGPU pipeline with GPU texture cache and compositor (driver-dependent)".into(),
         },
         BackendCapability {
+            name: "metal".into(),
+            tier: "native-gpu".into(),
+            status: if cfg!(all(target_os = "macos", feature = "metal")) {
+                "supported".into()
+            } else {
+                "optional (macos --features metal)".into()
+            },
+            description: "Native Apple Silicon Metal compute executor with zero-copy IOSurface VideoToolbox encoding".into(),
+        },
+        BackendCapability {
             name: "browser".into(),
             tier: "optional".into(),
             status: "supported with fallback".into(),
