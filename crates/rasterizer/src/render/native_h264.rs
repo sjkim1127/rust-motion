@@ -383,6 +383,56 @@ impl FrameSink for NativeH264FrameSink<'_> {
         }
         Ok(())
     }
+
+    #[cfg(all(target_os = "macos", feature = "metal"))]
+    fn try_acquire_hardware_pixel_buffer(
+        &mut self,
+    ) -> Result<Option<rust_motion_media_hwaccel::HardwarePixelBuffer>, RasterError> {
+        if self.input_width != self.output_width || self.input_height != self.output_height {
+            return Ok(None);
+        }
+        match &mut self.encoder {
+            NativeVideoEncoderImpl::Hardware(hw) => hw
+                .acquire_pixel_buffer()
+                .map(Some)
+                .map_err(|e| RasterError::ImageEncode(format!("Hardware pixel buffer acquire error: {e}"))),
+            NativeVideoEncoderImpl::PureRustH264(_) => Ok(None),
+        }
+    }
+
+    #[cfg(all(target_os = "macos", feature = "metal"))]
+    fn consume_hardware_pixel_buffer(
+        &mut self,
+        frame: u32,
+        pb: rust_motion_media_hwaccel::HardwarePixelBuffer,
+    ) -> Result<(), RasterError> {
+        self.control.check(self.started)?;
+        let packets = match &mut self.encoder {
+            NativeVideoEncoderImpl::Hardware(hw) => {
+                hw.encode_pixel_buffer(&pb, i64::from(frame), 1).map_err(|e| {
+                    RasterError::ImageEncode(format!(
+                        "Hardware zero-copy video encode error on frame {frame}: {e}"
+                    ))
+                })?
+            }
+            NativeVideoEncoderImpl::PureRustH264(_) => {
+                return Err(RasterError::ImageEncode(
+                    "Pure-Rust H.264 encoder does not accept hardware pixel buffers".into(),
+                ));
+            }
+        };
+        self.write_media_packets(packets)?;
+        self.flush_audio_up_to(f64::from(frame + 1) / self.effective_fps)?;
+
+        if let Some(callback) = &self.control.progress {
+            callback(RenderProgress {
+                completed_frames: frame + 1,
+                total_frames: self.total,
+                frame: self.start_frame + frame * self.frame_step,
+            });
+        }
+        Ok(())
+    }
 }
 
 /// Convert RGBA8 (straight alpha composited over black) into BT.709 limited-range planar YUV 4:2:0.

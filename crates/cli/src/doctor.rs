@@ -97,6 +97,9 @@ pub fn run_doctor() -> DoctorReport {
     if rust_motion_media_hwaccel::is_audiotoolbox_available() {
         native_encoders.push("aac (audiotoolbox)".into());
     }
+    if cfg!(all(target_os = "macos", feature = "metal")) {
+        native_encoders.push("metal (apple-silicon zero-copy)".into());
+    }
 
     let mut supported_codecs = vec!["h264".into(), "png".into(), "jpeg".into(), "webp".into()];
     if vt_available || ffmpeg_avail {

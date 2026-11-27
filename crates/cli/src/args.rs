@@ -69,6 +69,8 @@ pub enum RenderBackend {
     Browser,
     /// GPU rasterizer via wgpu. Requires `--features gpu`.
     Gpu,
+    /// Apple Silicon Metal compute + zero-copy IOSurface VideoToolbox pipeline. Requires `--features metal`.
+    Metal,
     /// Automatic hybrid dispatch (Native for motion graphics/subtitles, Chromium Browser for Three.js/DOM).
     Auto,
 }
@@ -185,6 +187,7 @@ pub fn resolve_hybrid_backend(
         RenderBackend::Native => RenderBackend::Native,
         RenderBackend::Browser => RenderBackend::Browser,
         RenderBackend::Gpu => RenderBackend::Gpu,
+        RenderBackend::Metal => RenderBackend::Metal,
         RenderBackend::Auto => {
             if script_path.is_some() {
                 return RenderBackend::Native;

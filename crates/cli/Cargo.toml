@@ -58,6 +58,7 @@ harness = true
 [features]
 default = ["rhai"]
 gpu     = ["rust-motion-rasterizer/gpu"]
+metal   = ["rust-motion-rasterizer/metal"]
 rhai    = ["dep:rhai"]
 
 [lints]
