@@ -61,7 +61,7 @@ gpu = ["wgpu", "pollster", "lyon_tessellation"]
 metal = ["dep:metal"]
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 rust-motion-lensdb = { workspace = true }
 
 [[bench]]
