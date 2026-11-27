@@ -5,7 +5,7 @@
 
 use super::types::*;
 use super::validate::{ExecutionPlan, GraphValidationError};
-use crate::backend::{FrameConfig, RasterError, RasterizerBackend};
+use crate::backend::{FrameConfig, RasterError};
 use crate::scene::SceneNode;
 use crate::tiny_skia_backend::color_blend::{composite_custom_psd_blend, tiny_skia_blend_mode};
 use crate::tiny_skia_backend::{svgpath_to_tiny_skia, TinySkiaBackend};
@@ -30,7 +30,11 @@ pub(crate) struct ExecutorCapabilities {
 pub(crate) struct ExecutionReport {
     pub(crate) backend_name: &'static str,
     pub(crate) passes_executed: usize,
+    pub(crate) gpu_passes: usize,
+    pub(crate) compute_passes: usize,
     pub(crate) cpu_island_passes: usize,
+    pub(crate) cpu_island_pixels: u64,
+    pub(crate) cpu_island_upload_bytes: u64,
     pub(crate) transient_pool_slots: usize,
     pub(crate) peak_transient_bytes: u64,
     pub(crate) fallback_reasons: Vec<String>,
@@ -113,6 +117,7 @@ impl<'a> RenderExecutor for CpuReferenceExecutor<'a> {
                 .union(CapabilityFlags::OFFSCREEN_COMPOSITE)
                 .union(CapabilityFlags::PATH_MASK)
                 .union(CapabilityFlags::SHADER_PASS)
+                .union(CapabilityFlags::COMPUTE_PASS)
                 .union(CapabilityFlags::COPY_OP)
                 .union(CapabilityFlags::CPU_ISLAND)
                 .union(CapabilityFlags::RASTER_EXTENDED),
@@ -168,7 +173,11 @@ impl<'a> RenderExecutor for CpuReferenceExecutor<'a> {
         let mut report = ExecutionReport {
             backend_name: caps.backend_name,
             passes_executed: 0,
+            gpu_passes: 0,
+            compute_passes: 0,
             cpu_island_passes: 0,
+            cpu_island_pixels: 0,
+            cpu_island_upload_bytes: 0,
             transient_pool_slots: plan.transient_pool_slots,
             peak_transient_bytes: plan.peak_transient_bytes,
             fallback_reasons: Vec::new(),
@@ -323,7 +332,10 @@ impl<'a> RenderExecutor for CpuReferenceExecutor<'a> {
                         }
                     };
 
-                    let _ = region;
+                    let (dx, dy) = match region {
+                        Some(r) => (r.x.round() as i32, r.y.round() as i32),
+                        None => (0, 0),
+                    };
                     if let Some(sk_mode) = tiny_skia_blend_mode(*blend_mode) {
                         let paint = PixmapPaint {
                             opacity: *opacity,
@@ -331,8 +343,8 @@ impl<'a> RenderExecutor for CpuReferenceExecutor<'a> {
                             quality: tiny_skia::FilterQuality::Bilinear,
                         };
                         dst.draw_pixmap(
-                            0,
-                            0,
+                            dx,
+                            dy,
                             src_clone.as_ref(),
                             &paint,
                             Transform::identity(),
@@ -344,8 +356,8 @@ impl<'a> RenderExecutor for CpuReferenceExecutor<'a> {
                             &src_clone,
                             blend_mode.to_color_blend_mode(),
                             *opacity,
-                            0,
-                            0,
+                            dx,
+                            dy,
                         );
                     }
                 }
@@ -437,11 +449,20 @@ impl<'a> RenderExecutor for CpuReferenceExecutor<'a> {
                     )?;
                 }
 
-                PassOp::CpuIsland { scene, reason, .. } => {
-                    let rendered = self.backend.render_frame(
-                        scene,
-                        &FrameConfig::new(config.width, config.height, config.frame, config.fps),
-                    )?;
+                PassOp::CpuIsland {
+                    scene,
+                    bounds,
+                    reason,
+                } => {
+                    let island_nodes = if let Some(b) = bounds {
+                        vec![SceneNode::Group {
+                            transform: crate::scene::Transform2D::translate(-b.x, -b.y),
+                            opacity: 1.0,
+                            children: scene.nodes.clone(),
+                        }]
+                    } else {
+                        scene.nodes.clone()
+                    };
                     let dst = match surfaces.get_mut(&dst_id) {
                         Some(CpuSurface::Color(p)) => p,
                         _ => {
@@ -451,20 +472,155 @@ impl<'a> RenderExecutor for CpuReferenceExecutor<'a> {
                             })
                         }
                     };
-                    let raw = rendered.into_raw();
-                    if raw.len() == dst.data().len() {
-                        dst.data_mut().copy_from_slice(&raw);
-                    }
+                    let target_w = dst.width();
+                    let target_h = dst.height();
+                    dst.fill(tiny_skia::Color::TRANSPARENT);
+                    self.backend
+                        .render_nodes_into_pixmap(dst, &island_nodes, config.fps)?;
                     report.cpu_island_passes += 1;
+                    report.cpu_island_pixels += u64::from(target_w) * u64::from(target_h);
                     report.fallback_reasons.push(reason.clone());
                 }
 
-                PassOp::Compute { .. } => {
-                    return Err(ExecutionError::UnsupportedCapability {
-                        backend: caps.backend_name,
-                        pass: pid,
-                        missing: vec!["compute_pass"],
-                    });
+                PassOp::Compute { kernel, params, .. } => {
+                    if !matches!(
+                        kernel.as_str(),
+                        KERNEL_SEPARABLE_BOX_BLUR_H
+                            | KERNEL_SEPARABLE_BOX_BLUR_V
+                            | KERNEL_COLOR_MATRIX
+                    ) {
+                        return Err(ExecutionError::UnsupportedCapability {
+                            backend: caps.backend_name,
+                            pass: pid,
+                            missing: vec!["compute_kernel"],
+                        });
+                    }
+                    let src_id = pass.reads.first().copied().ok_or_else(|| {
+                        ExecutionError::SubmissionFailed {
+                            pass: pid,
+                            reason: "Compute pass requires at least one read resource".into(),
+                        }
+                    })?;
+                    let src_snapshot = match surfaces.get(&src_id) {
+                        Some(CpuSurface::Color(p)) => (p.width(), p.height(), p.data().to_vec()),
+                        _ => {
+                            return Err(ExecutionError::SubmissionFailed {
+                                pass: pid,
+                                reason: "Compute source must be a color surface".into(),
+                            })
+                        }
+                    };
+                    let dst = match surfaces.get_mut(&dst_id) {
+                        Some(CpuSurface::Color(p)) => p,
+                        _ => {
+                            return Err(ExecutionError::SubmissionFailed {
+                                pass: pid,
+                                reason: "Compute destination must be a color surface".into(),
+                            })
+                        }
+                    };
+                    let (sw, sh, src_bytes) = src_snapshot;
+                    if sw != dst.width() || sh != dst.height() {
+                        return Err(ExecutionError::SubmissionFailed {
+                            pass: pid,
+                            reason: "Compute source and destination dimensions must match".into(),
+                        });
+                    }
+                    let w = sw as usize;
+                    let h = sh as usize;
+                    let out = dst.data_mut();
+                    match kernel.as_str() {
+                        KERNEL_SEPARABLE_BOX_BLUR_H => {
+                            let radius = params.first().copied().unwrap_or(0.0).max(0.0) as usize;
+                            if radius == 0 {
+                                out.copy_from_slice(&src_bytes);
+                            } else {
+                                let k = (radius * 2 + 1) as u32;
+                                for y in 0..h {
+                                    for x in 0..w {
+                                        let mut sums = [0u32; 4];
+                                        let x0 = x.saturating_sub(radius);
+                                        let x1 = x.saturating_add(radius).min(w - 1);
+                                        for sx in x0..=x1 {
+                                            let si = (y * w + sx) * 4;
+                                            for c in 0..4 {
+                                                sums[c] += u32::from(src_bytes[si + c]);
+                                            }
+                                        }
+                                        let di = (y * w + x) * 4;
+                                        for c in 0..4 {
+                                            out[di + c] = (sums[c] / k) as u8;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        KERNEL_SEPARABLE_BOX_BLUR_V => {
+                            let radius = params.first().copied().unwrap_or(0.0).max(0.0) as usize;
+                            if radius == 0 {
+                                out.copy_from_slice(&src_bytes);
+                            } else {
+                                let k = (radius * 2 + 1) as u32;
+                                for y in 0..h {
+                                    for x in 0..w {
+                                        let mut sums = [0u32; 4];
+                                        let y0 = y.saturating_sub(radius);
+                                        let y1 = y.saturating_add(radius).min(h - 1);
+                                        for sy in y0..=y1 {
+                                            let si = (sy * w + x) * 4;
+                                            for c in 0..4 {
+                                                sums[c] += u32::from(src_bytes[si + c]);
+                                            }
+                                        }
+                                        let di = (y * w + x) * 4;
+                                        for c in 0..4 {
+                                            out[di + c] = (sums[c] / k) as u8;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        KERNEL_COLOR_MATRIX => {
+                            if params.len() < 12 {
+                                return Err(ExecutionError::SubmissionFailed {
+                                    pass: pid,
+                                    reason: "color_matrix requires 12 matrix floats".into(),
+                                });
+                            }
+                            for (dst_px, src_px) in
+                                out.chunks_exact_mut(4).zip(src_bytes.chunks_exact(4))
+                            {
+                                let r = f32::from(src_px[0]);
+                                let g = f32::from(src_px[1]);
+                                let b = f32::from(src_px[2]);
+                                let a = f32::from(src_px[3]);
+                                dst_px[0] =
+                                    (params[0] * r + params[1] * g + params[2] * b + params[3] * a)
+                                        .round()
+                                        .clamp(0.0, a) as u8;
+                                dst_px[1] =
+                                    (params[4] * r + params[5] * g + params[6] * b + params[7] * a)
+                                        .round()
+                                        .clamp(0.0, a) as u8;
+                                dst_px[2] = (params[8] * r
+                                    + params[9] * g
+                                    + params[10] * b
+                                    + params[11] * a)
+                                    .round()
+                                    .clamp(0.0, a)
+                                    as u8;
+                                dst_px[3] = src_px[3];
+                            }
+                        }
+                        _ => {
+                            return Err(ExecutionError::UnsupportedCapability {
+                                backend: caps.backend_name,
+                                pass: pid,
+                                missing: vec!["compute_kernel"],
+                            });
+                        }
+                    }
+                    report.compute_passes += 1;
                 }
             }
 

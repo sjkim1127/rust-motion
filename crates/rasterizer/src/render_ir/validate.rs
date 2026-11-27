@@ -1,6 +1,7 @@
 //! Render graph validation, deterministic topological scheduling, and liveness analysis.
 
 use super::types::*;
+use crate::scene::SceneNode;
 use serde::Serialize;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
@@ -587,6 +588,34 @@ impl ExecutionPlan {
         };
         serde_json::to_string_pretty(&dump)
     }
+}
+
+pub(crate) fn layer_has_only_gpu_basic_effects(node: &SceneNode) -> bool {
+    let SceneNode::Layer {
+        filters, shadow, ..
+    } = node
+    else {
+        return true;
+    };
+    if shadow.is_some() {
+        return false;
+    }
+    filters.iter().all(|f| {
+        matches!(
+            f,
+            crate::scene::SceneFilter::Opacity { .. }
+                | crate::scene::SceneFilter::Brightness { .. }
+                | crate::scene::SceneFilter::Grayscale { .. }
+                | crate::scene::SceneFilter::Contrast { .. }
+                | crate::scene::SceneFilter::Saturation { .. }
+                | crate::scene::SceneFilter::Vignette { .. }
+                | crate::scene::SceneFilter::Invert { .. }
+                | crate::scene::SceneFilter::HueRotate { .. }
+                | crate::scene::SceneFilter::Tint { .. }
+                | crate::scene::SceneFilter::Duotone { .. }
+                | crate::scene::SceneFilter::ColorGrading { .. }
+        )
+    })
 }
 
 fn pass_reads_existing_target(pass: &PassNode, target: ResourceId) -> bool {

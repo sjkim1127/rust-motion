@@ -599,15 +599,15 @@ fn cpu_executor_runs_explicit_path_mask_and_copy_and_rejects_compute() {
     assert_eq!(img.get_pixel(48, 16).0, [0, 0, 0, 255]);
     assert_eq!(img.get_pixel(48, 48).0, [0, 0, 255, 255]);
 
-    // Unsupported compute pass must return explicit UnsupportedCapability error.
+    // Unsupported compute kernel must return explicit UnsupportedCapability error.
     let mut compute_graph = RenderGraph::new(32, 32);
     compute_graph.add_resource(color_res(0, "out", 32, 32, ResourceLifetime::Output));
     compute_graph.set_output(ResourceId(0));
     compute_graph.add_pass(PassNode {
         id: PassId(0),
-        label: "blur_compute".into(),
+        label: "unknown_compute".into(),
         op: PassOp::Compute {
-            kernel: "separable_blur".into(),
+            kernel: "unknown_compute_kernel".into(),
             workgroups: [4, 4, 1],
             params: vec![2.0],
         },
@@ -627,6 +627,266 @@ fn cpu_executor_runs_explicit_path_mask_and_copy_and_rejects_compute() {
             pass: PassId(0),
             ..
         }
+    ));
+}
+
+#[test]
+fn compute_separable_box_blur_matches_tiny_skia_filter_exactly() {
+    let scene = Scene {
+        nodes: vec![
+            SceneNode::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 96.0,
+                h: 96.0,
+                fill: Color::rgb(12, 18, 30),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            },
+            SceneNode::Layer {
+                opacity: 0.85,
+                blend_mode: BlendMode::Normal,
+                clip: None,
+                mask: None,
+                mask_mode: MaskMode::Alpha,
+                filters: vec![SceneFilter::Blur { sigma: 2.0 }],
+                shadow: None,
+                children: vec![SceneNode::Rect {
+                    x: 24.0,
+                    y: 24.0,
+                    w: 48.0,
+                    h: 48.0,
+                    fill: Color::rgb(240, 90, 50),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    corner_radius: 0.0,
+                }],
+            },
+        ],
+    };
+    let cfg = FrameConfig::new(96, 96, 0, 30.0);
+    let opts = LowerOptions {
+        max_texture_dimension_2d: 8192,
+        capabilities: CapabilityFlags::RASTER_2D_ANALYTIC
+            .union(CapabilityFlags::OFFSCREEN_COMPOSITE)
+            .union(CapabilityFlags::COMPUTE_PASS)
+            .union(CapabilityFlags::CPU_ISLAND),
+        msaa_samples: 4,
+    };
+    let plan = lower_scene_to_plan(&scene, &cfg, &opts).unwrap();
+    assert!(plan
+        .pass_order
+        .iter()
+        .filter_map(|pid| plan.graph.pass(*pid))
+        .any(|p| matches!(
+            &p.op,
+            PassOp::Compute { kernel, .. } if kernel == KERNEL_SEPARABLE_BOX_BLUR_H
+        )));
+
+    let backend = TinySkiaBackend::headless();
+    let executor = CpuReferenceExecutor::new(&backend);
+    let (exec_img, report) = executor.execute_plan(&plan, &cfg).unwrap();
+    let ref_img = backend.render_frame(&scene, &cfg).unwrap();
+    assert_eq!(report.compute_passes, 2);
+    assert_eq!(report.cpu_island_passes, 0);
+    assert_eq!(exec_img.as_raw(), ref_img.as_raw());
+}
+
+#[test]
+fn compute_color_matrix_executes_on_cpu_reference() {
+    let mut graph = RenderGraph::new(16, 16);
+    graph.add_resource(color_res(0, "out", 16, 16, ResourceLifetime::Output));
+    graph.add_resource(color_res(1, "src", 16, 16, ResourceLifetime::Transient));
+    graph.set_output(ResourceId(0));
+
+    graph.add_pass(PassNode {
+        id: PassId(0),
+        label: "fill".into(),
+        op: PassOp::Raster2D {
+            scene: Scene {
+                nodes: vec![SceneNode::Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 16.0,
+                    h: 16.0,
+                    fill: Color::rgb(100, 150, 200),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    corner_radius: 0.0,
+                }],
+            },
+            clear: ClearOp::Clear(Color::TRANSPARENT),
+            path_mask: None,
+        },
+        reads: Vec::new(),
+        writes: vec![ResourceId(1)],
+        order_deps: Vec::new(),
+        required_capabilities: CapabilityFlags::RASTER_2D_ANALYTIC,
+    });
+    // Scale R by 0.5, swap G and B with 0.5 scaling.
+    graph.add_pass(PassNode {
+        id: PassId(1),
+        label: "cm".into(),
+        op: PassOp::Compute {
+            kernel: KERNEL_COLOR_MATRIX.into(),
+            workgroups: [2, 2, 1],
+            params: vec![
+                0.5, 0.0, 0.0, 0.0, // R
+                0.0, 0.0, 0.5, 0.0, // G <- 0.5*B
+                0.0, 0.5, 0.0, 0.0, // B <- 0.5*G
+            ],
+        },
+        reads: vec![ResourceId(1)],
+        writes: vec![ResourceId(0)],
+        order_deps: Vec::new(),
+        required_capabilities: CapabilityFlags::COMPUTE_PASS,
+    });
+    let plan = ExecutionPlan::compile(graph).unwrap();
+    let backend = TinySkiaBackend::headless();
+    let executor = CpuReferenceExecutor::new(&backend);
+    let (img, report) = executor
+        .execute_plan(&plan, &FrameConfig::new(16, 16, 0, 30.0))
+        .unwrap();
+    assert_eq!(report.compute_passes, 1);
+    assert_eq!(img.get_pixel(8, 8).0, [50, 100, 75, 255]);
+}
+
+#[test]
+fn lowering_partitions_mixed_scene_into_bounded_cpu_island_and_gpu_passes() {
+    let scene = Scene {
+        nodes: vec![
+            SceneNode::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 1920.0,
+                h: 1080.0,
+                fill: Color::rgb(10, 16, 28),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            },
+            SceneNode::FractalNoise {
+                x: 100.0,
+                y: 200.0,
+                w: 128.0,
+                h: 128.0,
+                noise_type: Default::default(),
+                fractal_type: Default::default(),
+                contrast: 1.0,
+                brightness: 0.0,
+                complexity: 3,
+                scale_x: 32.0,
+                scale_y: 32.0,
+                evolution: 0.0,
+                seed: 7,
+                opacity: 0.9,
+            },
+            SceneNode::Rect {
+                x: 300.0,
+                y: 220.0,
+                w: 80.0,
+                h: 80.0,
+                fill: Color::rgb(220, 140, 40),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            },
+        ],
+    };
+    let cfg = FrameConfig::new(1920, 1080, 0, 30.0);
+    let opts = LowerOptions {
+        max_texture_dimension_2d: 8192,
+        capabilities: CapabilityFlags::RASTER_2D_ANALYTIC
+            .union(CapabilityFlags::OFFSCREEN_COMPOSITE)
+            .union(CapabilityFlags::CPU_ISLAND),
+        msaa_samples: 4,
+    };
+    let plan = lower_scene_to_plan(&scene, &cfg, &opts).unwrap();
+    // Expect: base Raster2D -> bounded 128x128 CpuIsland -> Composite -> trailing gpu segment -> Composite
+    assert_eq!(plan.pass_order.len(), 5);
+    let island_res = plan
+        .graph
+        .resources
+        .iter()
+        .find(|r| r.label == "cpu_island_surface")
+        .expect("bounded island surface created");
+    assert_eq!((island_res.width, island_res.height), (128, 128));
+
+    let backend = TinySkiaBackend::headless();
+    let executor = CpuReferenceExecutor::new(&backend);
+    let (exec_img, report) = executor.execute_plan(&plan, &cfg).unwrap();
+    let ref_img = backend.render_frame(&scene, &cfg).unwrap();
+    assert_eq!(report.cpu_island_passes, 1);
+    assert_eq!(report.cpu_island_pixels, 128 * 128);
+    assert_eq!(exec_img.dimensions(), ref_img.dimensions());
+    for y in 0..ref_img.height() {
+        for x in 0..ref_img.width() {
+            let e = exec_img.get_pixel(x, y).0;
+            let r = ref_img.get_pixel(x, y).0;
+            let in_island = (100..228).contains(&x) && (200..328).contains(&y);
+            if in_island {
+                for c in 0..4 {
+                    assert!(
+                        e[c].abs_diff(r[c]) <= 1,
+                        "island pixel mismatch > 1 LSB at ({x}, {y}) channel {c}: exec={e:?} ref={r:?}"
+                    );
+                }
+            } else {
+                assert_eq!(e, r, "pixel mismatch outside island at ({x}, {y})");
+            }
+        }
+    }
+}
+
+#[test]
+fn lowering_retains_full_frame_fallback_for_non_isolatable_blend() {
+    let scene = Scene {
+        nodes: vec![
+            SceneNode::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 64.0,
+                h: 64.0,
+                fill: Color::rgb(30, 40, 60),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            },
+            SceneNode::Layer {
+                opacity: 1.0,
+                blend_mode: BlendMode::Overlay,
+                clip: None,
+                mask: None,
+                mask_mode: MaskMode::Alpha,
+                filters: Vec::new(),
+                shadow: None,
+                children: vec![SceneNode::Rect {
+                    x: 8.0,
+                    y: 8.0,
+                    w: 32.0,
+                    h: 32.0,
+                    fill: Color::rgb(200, 120, 40),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    corner_radius: 0.0,
+                }],
+            },
+        ],
+    };
+    let cfg = FrameConfig::new(64, 64, 0, 30.0);
+    let opts = LowerOptions {
+        max_texture_dimension_2d: 8192,
+        capabilities: CapabilityFlags::RASTER_2D_ANALYTIC
+            .union(CapabilityFlags::OFFSCREEN_COMPOSITE)
+            .union(CapabilityFlags::CPU_ISLAND),
+        msaa_samples: 4,
+    };
+    let plan = lower_scene_to_plan(&scene, &cfg, &opts).unwrap();
+    assert_eq!(plan.pass_order.len(), 1);
+    assert!(matches!(
+        plan.graph.pass(PassId(0)).unwrap().op,
+        PassOp::CpuIsland { bounds: None, .. }
     ));
 }
 

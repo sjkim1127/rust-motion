@@ -4,9 +4,11 @@ use super::*;
 use crate::render_ir::{
     lower_scene_to_plan, shader_inline_opacity_supported, CapabilityFlags, ClearOp, ExecutionError,
     ExecutionPlan, ExecutionReport, ExecutorCapabilities, LowerOptions, PassId, PassOp,
-    PixelFormat, RenderExecutor, ResourceId,
+    PixelFormat, RenderExecutor, ResourceId, KERNEL_COLOR_MATRIX, KERNEL_SEPARABLE_BOX_BLUR_H,
+    KERNEL_SEPARABLE_BOX_BLUR_V,
 };
 use crate::scene::Color;
+use tiny_skia::Pixmap;
 
 impl WgpuBackend {
     /// Lower a 1.x [`Scene`] into a validated [`ExecutionPlan`] using this
@@ -261,8 +263,14 @@ impl WgpuBackend {
         plan: &ExecutionPlan,
         config: &FrameConfig,
     ) -> Result<(RgbaImage, ExecutionReport), ExecutionError> {
+        struct GpuSurface {
+            texture: wgpu::Texture,
+            view: wgpu::TextureView,
+            width: u32,
+            height: u32,
+        }
         enum Surface {
-            Color(RgbaImage),
+            GpuTexture(GpuSurface),
             Mask(Box<GpuPathMask>),
         }
 
@@ -270,14 +278,25 @@ impl WgpuBackend {
             std::collections::BTreeMap::new();
         for res in &plan.graph.resources {
             if res.format.is_color() {
+                let (texture, view) =
+                    self.create_compute_texture(res.width, res.height, &res.label);
                 surfaces.insert(
                     res.id,
-                    Surface::Color(RgbaImage::new(res.width, res.height)),
+                    Surface::GpuTexture(GpuSurface {
+                        texture,
+                        view,
+                        width: res.width,
+                        height: res.height,
+                    }),
                 );
             }
         }
 
+        let mut gpu_passes = 0usize;
+        let mut compute_passes = 0usize;
         let mut cpu_island_passes = 0usize;
+        let mut cpu_island_pixels = 0u64;
+        let mut cpu_island_upload_bytes = 0u64;
         let mut fallback_reasons = Vec::new();
 
         for &pid in &plan.pass_order {
@@ -286,6 +305,7 @@ impl WgpuBackend {
                 .pass(pid)
                 .expect("scheduled pass must exist in graph");
             let dst_id = pass.writes[0];
+
             match &pass.op {
                 PassOp::PathMask { path_d, transform } => {
                     let mask =
@@ -295,7 +315,9 @@ impl WgpuBackend {
                                 reason: "failed to tessellate PathMask SVG path".into(),
                             })?;
                     surfaces.insert(dst_id, Surface::Mask(Box::new(mask)));
+                    gpu_passes += 1;
                 }
+
                 PassOp::Raster2D {
                     scene,
                     clear,
@@ -305,36 +327,240 @@ impl WgpuBackend {
                         Some(Surface::Mask(mask)) => Some(*mask),
                         _ => None,
                     });
-                    let (rendered, islands, reason) = self
-                        .execute_single_raster_with_optional_shaders(
-                            scene,
-                            explicit_mask,
-                            None,
-                            config,
-                            None,
-                        )?;
-                    cpu_island_passes += islands;
-                    if let Some(r) = reason {
-                        fallback_reasons.push(r);
-                    }
-                    match clear {
-                        ClearOp::Clear(_) | ClearOp::DontCare => {
-                            surfaces.insert(dst_id, Surface::Color(rendered));
+                    let (dst_w, dst_h) = match surfaces.get(&dst_id) {
+                        Some(Surface::GpuTexture(s)) => (s.width, s.height),
+                        _ => {
+                            return Err(ExecutionError::SubmissionFailed {
+                                pass: pid,
+                                reason: "Raster2D target is not a color surface".into(),
+                            })
                         }
-                        ClearOp::Load => {
-                            let target = match surfaces.get_mut(&dst_id) {
-                                Some(Surface::Color(img)) => img,
-                                _ => {
-                                    return Err(ExecutionError::SubmissionFailed {
-                                        pass: pid,
-                                        reason: "missing color target for Load Raster2D".into(),
-                                    })
-                                }
+                    };
+
+                    // Prepend clear color if non-transparent Clear is requested.
+                    let effective_scene = match clear {
+                        ClearOp::Clear(c) if c.a > 0 => {
+                            let mut nodes = vec![SceneNode::Rect {
+                                x: 0.0,
+                                y: 0.0,
+                                w: dst_w as f32,
+                                h: dst_h as f32,
+                                fill: *c,
+                                stroke: None,
+                                stroke_width: 0.0,
+                                corner_radius: 0.0,
+                            }];
+                            nodes.extend(scene.nodes.iter().cloned());
+                            Scene { nodes }
+                        }
+                        _ => scene.clone(),
+                    };
+
+                    let compiled = compile_scene_with_path_mask(&effective_scene, &self.fallback)
+                        .and_then(|(cmds, mask, _)| {
+                            let final_mask = match (mask, explicit_mask) {
+                                (Some(_), Some(_)) => return None,
+                                (Some(m), None) | (None, Some(m)) => Some(m),
+                                (None, None) => None,
                             };
-                            image::imageops::overlay(target, &rendered, 0, 0);
+                            Some((cmds, final_mask))
+                        });
+
+                    if let Some((commands, final_mask)) = compiled {
+                        let slot_arc = self.offscreen_layer_slot(dst_w, dst_h);
+                        let slot = slot_arc.lock().map_err(|_| {
+                            RasterError::Init("GPU layer resource mutex poisoned".into())
+                        })?;
+                        let submitted = self.submit_frame_to_slot(FrameSubmission {
+                            commands: &commands,
+                            path_mask: final_mask.as_ref(),
+                            width: dst_w,
+                            height: dst_h,
+                            sampling_fps: config.fps,
+                            slot: &slot,
+                            shader_suffix: None,
+                            readback: false,
+                        })?;
+                        self.ctx
+                            .device
+                            .poll(wgpu::Maintain::wait_for(submitted.submission_index));
+
+                        let Some(Surface::GpuTexture(dst_surf)) = surfaces.get(&dst_id) else {
+                            unreachable!();
+                        };
+                        match clear {
+                            ClearOp::Clear(_) | ClearOp::DontCare => {
+                                let mut encoder = self.ctx.device.create_command_encoder(
+                                    &wgpu::CommandEncoderDescriptor {
+                                        label: Some("raster2d_copy_to_surface"),
+                                    },
+                                );
+                                encoder.copy_texture_to_texture(
+                                    slot.texture.as_image_copy(),
+                                    dst_surf.texture.as_image_copy(),
+                                    wgpu::Extent3d {
+                                        width: dst_w,
+                                        height: dst_h,
+                                        depth_or_array_layers: 1,
+                                    },
+                                );
+                                let sub = self.ctx.queue.submit(Some(encoder.finish()));
+                                self.ctx.device.poll(wgpu::Maintain::wait_for(sub));
+                            }
+                            ClearOp::Load => {
+                                let sub = self.composite_external_texture_view(
+                                    &slot.texture_view,
+                                    &dst_surf.view,
+                                    dst_w,
+                                    dst_h,
+                                    None,
+                                    1.0,
+                                    true,
+                                )?;
+                                self.ctx.device.poll(wgpu::Maintain::wait_for(sub));
+                            }
                         }
+                        gpu_passes += 1;
+                    } else {
+                        // Local pass-level CPU fallback if compile_scene_with_path_mask declines.
+                        let reason = gpu_fallback_reason(&effective_scene);
+                        let img = self.fallback.render_frame(
+                            &effective_scene,
+                            &FrameConfig::new(dst_w, dst_h, config.frame, config.fps),
+                        )?;
+                        let pixels = img.into_raw();
+                        let upload_bytes = pixels.len() as u64;
+                        let (tmp_tex, tmp_view) =
+                            self.upload_rgba_texture(dst_w, dst_h, &pixels, "raster_cpu_fallback");
+                        let Some(Surface::GpuTexture(dst_surf)) = surfaces.get(&dst_id) else {
+                            unreachable!();
+                        };
+                        match clear {
+                            ClearOp::Clear(_) | ClearOp::DontCare => {
+                                let mut encoder = self.ctx.device.create_command_encoder(
+                                    &wgpu::CommandEncoderDescriptor {
+                                        label: Some("raster_cpu_fallback_copy"),
+                                    },
+                                );
+                                encoder.copy_texture_to_texture(
+                                    tmp_tex.as_image_copy(),
+                                    dst_surf.texture.as_image_copy(),
+                                    wgpu::Extent3d {
+                                        width: dst_w,
+                                        height: dst_h,
+                                        depth_or_array_layers: 1,
+                                    },
+                                );
+                                let sub = self.ctx.queue.submit(Some(encoder.finish()));
+                                self.ctx.device.poll(wgpu::Maintain::wait_for(sub));
+                            }
+                            ClearOp::Load => {
+                                let sub = self.composite_external_texture_view(
+                                    &tmp_view,
+                                    &dst_surf.view,
+                                    dst_w,
+                                    dst_h,
+                                    None,
+                                    1.0,
+                                    true,
+                                )?;
+                                self.ctx.device.poll(wgpu::Maintain::wait_for(sub));
+                            }
+                        }
+                        cpu_island_passes += 1;
+                        cpu_island_pixels += u64::from(dst_w) * u64::from(dst_h);
+                        cpu_island_upload_bytes += upload_bytes;
+                        fallback_reasons.push(reason.to_string());
                     }
                 }
+
+                PassOp::Compute { kernel, params, .. } => {
+                    if !matches!(
+                        kernel.as_str(),
+                        KERNEL_SEPARABLE_BOX_BLUR_H
+                            | KERNEL_SEPARABLE_BOX_BLUR_V
+                            | KERNEL_COLOR_MATRIX
+                    ) {
+                        return Err(ExecutionError::UnsupportedCapability {
+                            backend: "wgpu",
+                            pass: pid,
+                            missing: vec!["compute_kernel"],
+                        });
+                    }
+                    let src_id = pass.reads.first().copied().ok_or_else(|| {
+                        ExecutionError::SubmissionFailed {
+                            pass: pid,
+                            reason: "Compute pass requires at least one read resource".into(),
+                        }
+                    })?;
+                    let (src_surf, dst_surf) = match (surfaces.get(&src_id), surfaces.get(&dst_id))
+                    {
+                        (Some(Surface::GpuTexture(s)), Some(Surface::GpuTexture(d))) => (s, d),
+                        _ => {
+                            return Err(ExecutionError::SubmissionFailed {
+                                pass: pid,
+                                reason: "Compute pass requires color texture resources".into(),
+                            })
+                        }
+                    };
+                    if src_surf.width != dst_surf.width || src_surf.height != dst_surf.height {
+                        return Err(ExecutionError::SubmissionFailed {
+                            pass: pid,
+                            reason: "Compute source and destination dimensions must match".into(),
+                        });
+                    }
+                    let mut encoder =
+                        self.ctx
+                            .device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("compute_pass_encoder"),
+                            });
+                    match kernel.as_str() {
+                        KERNEL_SEPARABLE_BOX_BLUR_H | KERNEL_SEPARABLE_BOX_BLUR_V => {
+                            let radius = params.first().copied().unwrap_or(0.0).max(0.0) as u32;
+                            let vertical = kernel == KERNEL_SEPARABLE_BOX_BLUR_V;
+                            self.encode_box_blur_compute(
+                                &mut encoder,
+                                &src_surf.view,
+                                &dst_surf.view,
+                                src_surf.width,
+                                src_surf.height,
+                                radius,
+                                vertical,
+                            );
+                        }
+                        KERNEL_COLOR_MATRIX => {
+                            if params.len() < 12 {
+                                return Err(ExecutionError::SubmissionFailed {
+                                    pass: pid,
+                                    reason: "color_matrix requires 12 float parameters".into(),
+                                });
+                            }
+                            let matrix: [f32; 12] = params[..12].try_into().unwrap();
+                            self.encode_color_matrix_compute(
+                                &mut encoder,
+                                &src_surf.view,
+                                &dst_surf.view,
+                                src_surf.width,
+                                src_surf.height,
+                                &matrix,
+                            );
+                        }
+                        _ => {
+                            return Err(ExecutionError::UnsupportedCapability {
+                                backend: "wgpu",
+                                pass: pid,
+                                missing: vec!["compute_kernel"],
+                            });
+                        }
+                    }
+                    let sub = self.ctx.queue.submit(Some(encoder.finish()));
+                    self.ctx.device.poll(wgpu::Maintain::wait_for(sub));
+                    self.compute_pass_count.fetch_add(1, Ordering::Relaxed);
+                    compute_passes += 1;
+                    gpu_passes += 1;
+                }
+
                 PassOp::Shader {
                     x,
                     y,
@@ -371,92 +597,189 @@ impl WgpuBackend {
                     } else {
                         self.render_shader_layers(&shader_scene, config)?
                     };
+                    let Some(Surface::GpuTexture(dst_surf)) = surfaces.get(&dst_id) else {
+                        return Err(ExecutionError::SubmissionFailed {
+                            pass: pid,
+                            reason: "Shader destination missing".into(),
+                        });
+                    };
+                    let (tmp_tex, tmp_view) = self.upload_rgba_texture(
+                        rendered.width(),
+                        rendered.height(),
+                        rendered.as_raw(),
+                        "shader_segment_tex",
+                    );
                     match clear {
                         ClearOp::Clear(_) | ClearOp::DontCare => {
-                            surfaces.insert(dst_id, Surface::Color(rendered));
+                            let mut encoder = self.ctx.device.create_command_encoder(
+                                &wgpu::CommandEncoderDescriptor {
+                                    label: Some("shader_segment_copy"),
+                                },
+                            );
+                            encoder.copy_texture_to_texture(
+                                tmp_tex.as_image_copy(),
+                                dst_surf.texture.as_image_copy(),
+                                wgpu::Extent3d {
+                                    width: dst_surf.width,
+                                    height: dst_surf.height,
+                                    depth_or_array_layers: 1,
+                                },
+                            );
+                            let sub = self.ctx.queue.submit(Some(encoder.finish()));
+                            self.ctx.device.poll(wgpu::Maintain::wait_for(sub));
                         }
                         ClearOp::Load => {
-                            let target = match surfaces.get_mut(&dst_id) {
-                                Some(Surface::Color(img)) => img,
-                                _ => {
-                                    return Err(ExecutionError::SubmissionFailed {
-                                        pass: pid,
-                                        reason: "missing color target for Load Shader".into(),
-                                    })
-                                }
-                            };
-                            image::imageops::overlay(target, &rendered, 0, 0);
+                            let sub = self.composite_external_texture_view(
+                                &tmp_view,
+                                &dst_surf.view,
+                                dst_surf.width,
+                                dst_surf.height,
+                                None,
+                                1.0,
+                                false,
+                            )?;
+                            self.ctx.device.poll(wgpu::Maintain::wait_for(sub));
                         }
                     }
+                    gpu_passes += 1;
                 }
+
                 PassOp::Composite {
-                    source, opacity, ..
+                    source,
+                    opacity,
+                    region,
+                    ..
                 } => {
-                    let mut src_img = match surfaces.get(source) {
-                        Some(Surface::Color(img)) => img.clone(),
+                    let (src_surf, dst_surf) = match (surfaces.get(source), surfaces.get(&dst_id)) {
+                        (Some(Surface::GpuTexture(s)), Some(Surface::GpuTexture(d))) => (s, d),
                         _ => {
                             return Err(ExecutionError::SubmissionFailed {
                                 pass: pid,
-                                reason: "Composite source missing".into(),
+                                reason: "Composite source/destination missing".into(),
                             })
                         }
                     };
-                    if *opacity < 1.0 {
-                        for px in src_img.pixels_mut() {
-                            px[3] = (f32::from(px[3]) * *opacity).round() as u8;
-                        }
-                    }
-                    let target = match surfaces.get_mut(&dst_id) {
-                        Some(Surface::Color(img)) => img,
-                        _ => {
-                            return Err(ExecutionError::SubmissionFailed {
-                                pass: pid,
-                                reason: "Composite destination missing".into(),
-                            })
-                        }
-                    };
-                    image::imageops::overlay(target, &src_img, 0, 0);
+                    let sub = self.composite_external_texture_view(
+                        &src_surf.view,
+                        &dst_surf.view,
+                        dst_surf.width,
+                        dst_surf.height,
+                        *region,
+                        *opacity,
+                        true,
+                    )?;
+                    self.ctx.device.poll(wgpu::Maintain::wait_for(sub));
+                    gpu_passes += 1;
                 }
+
                 PassOp::Copy { source, dst_origin } => {
-                    let src_img = match surfaces.get(source) {
-                        Some(Surface::Color(img)) => img.clone(),
+                    let (src_surf, dst_surf) = match (surfaces.get(source), surfaces.get(&dst_id)) {
+                        (Some(Surface::GpuTexture(s)), Some(Surface::GpuTexture(d))) => (s, d),
                         _ => {
                             return Err(ExecutionError::SubmissionFailed {
                                 pass: pid,
-                                reason: "Copy source missing".into(),
+                                reason: "Copy source/destination missing".into(),
                             })
                         }
                     };
-                    let target = match surfaces.get_mut(&dst_id) {
-                        Some(Surface::Color(img)) => img,
-                        _ => {
-                            return Err(ExecutionError::SubmissionFailed {
-                                pass: pid,
-                                reason: "Copy destination missing".into(),
-                            })
-                        }
-                    };
-                    image::imageops::overlay(
-                        target,
-                        &src_img,
-                        i64::from(dst_origin[0]),
-                        i64::from(dst_origin[1]),
+                    let mut encoder =
+                        self.ctx
+                            .device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("copy_pass_encoder"),
+                            });
+                    encoder.copy_texture_to_texture(
+                        src_surf.texture.as_image_copy(),
+                        wgpu::ImageCopyTexture {
+                            texture: &dst_surf.texture,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d {
+                                x: dst_origin[0],
+                                y: dst_origin[1],
+                                z: 0,
+                            },
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        wgpu::Extent3d {
+                            width: src_surf.width,
+                            height: src_surf.height,
+                            depth_or_array_layers: 1,
+                        },
                     );
+                    let sub = self.ctx.queue.submit(Some(encoder.finish()));
+                    self.ctx.device.poll(wgpu::Maintain::wait_for(sub));
+                    gpu_passes += 1;
                 }
-                PassOp::CpuIsland { scene, reason, .. } => {
-                    self.record_cpu_fallback(reason.as_str());
-                    let rendered = self.fallback.render_frame(scene, config)?;
+
+                PassOp::CpuIsland {
+                    scene,
+                    bounds,
+                    reason,
+                } => {
+                    let Some(Surface::GpuTexture(dst_surf)) = surfaces.get(&dst_id) else {
+                        return Err(ExecutionError::SubmissionFailed {
+                            pass: pid,
+                            reason: "CpuIsland destination missing".into(),
+                        });
+                    };
+                    let island_w = dst_surf.width;
+                    let island_h = dst_surf.height;
+                    let mut pixmap = Pixmap::new(island_w, island_h).ok_or_else(|| {
+                        ExecutionError::ResourceAllocation {
+                            resource: dst_id,
+                            reason: "invalid CPU island dimensions".into(),
+                        }
+                    })?;
+                    let island_nodes = if let Some(b) = bounds {
+                        vec![SceneNode::Group {
+                            transform: crate::scene::Transform2D::translate(-b.x, -b.y),
+                            opacity: 1.0,
+                            children: scene.nodes.clone(),
+                        }]
+                    } else {
+                        scene.nodes.clone()
+                    };
+                    self.fallback.render_nodes_into_pixmap(
+                        &mut pixmap,
+                        &island_nodes,
+                        config.fps,
+                    )?;
+                    let pixels = pixmap.take();
+                    let upload_bytes = pixels.len() as u64;
+                    self.ctx.queue.write_texture(
+                        dst_surf.texture.as_image_copy(),
+                        &pixels,
+                        wgpu::ImageDataLayout {
+                            offset: 0,
+                            bytes_per_row: Some(island_w * 4),
+                            rows_per_image: Some(island_h),
+                        },
+                        wgpu::Extent3d {
+                            width: island_w,
+                            height: island_h,
+                            depth_or_array_layers: 1,
+                        },
+                    );
                     cpu_island_passes += 1;
+                    cpu_island_pixels += u64::from(island_w) * u64::from(island_h);
+                    cpu_island_upload_bytes += upload_bytes;
                     fallback_reasons.push(reason.clone());
-                    surfaces.insert(dst_id, Surface::Color(rendered));
                 }
-                PassOp::Compute { .. } => {
-                    return Err(ExecutionError::UnsupportedCapability {
-                        backend: "wgpu",
-                        pass: pid,
-                        missing: vec!["compute_pass"],
-                    });
-                }
+            }
+        }
+
+        if cpu_island_passes > 0 {
+            self.cpu_island_frames.fetch_add(1, Ordering::Relaxed);
+            self.cpu_island_pixels
+                .fetch_add(cpu_island_pixels, Ordering::Relaxed);
+            self.cpu_island_upload_bytes
+                .fetch_add(cpu_island_upload_bytes, Ordering::Relaxed);
+        }
+        if gpu_passes > 0 {
+            self.gpu_frame_count.fetch_add(1, Ordering::Relaxed);
+        } else if cpu_island_passes > 0 {
+            if let Some(first_reason) = fallback_reasons.first() {
+                self.record_cpu_fallback(first_reason.as_str());
             }
         }
 
@@ -464,8 +787,8 @@ impl WgpuBackend {
             .graph
             .output
             .ok_or(crate::render_ir::GraphValidationError::MissingOutput)?;
-        let out_img = match surfaces.remove(&out_id) {
-            Some(Surface::Color(img)) => img,
+        let out_surf = match surfaces.remove(&out_id) {
+            Some(Surface::GpuTexture(s)) => s,
             _ => {
                 return Err(ExecutionError::ResourceAllocation {
                     resource: out_id,
@@ -473,13 +796,18 @@ impl WgpuBackend {
                 })
             }
         };
+        let out_img = self.readback_texture(&out_surf.texture, out_surf.width, out_surf.height)?;
 
         Ok((
             out_img,
             ExecutionReport {
                 backend_name: "wgpu",
                 passes_executed: plan.pass_order.len(),
+                gpu_passes,
+                compute_passes,
                 cpu_island_passes,
+                cpu_island_pixels,
+                cpu_island_upload_bytes,
                 transient_pool_slots: plan.transient_pool_slots,
                 peak_transient_bytes: plan.peak_transient_bytes,
                 fallback_reasons,
@@ -498,6 +826,7 @@ impl RenderExecutor for WgpuBackend {
             .union(CapabilityFlags::OFFSCREEN_COMPOSITE)
             .union(CapabilityFlags::PATH_MASK)
             .union(CapabilityFlags::SHADER_PASS)
+            .union(CapabilityFlags::COMPUTE_PASS)
             .union(CapabilityFlags::COPY_OP)
             .union(CapabilityFlags::CPU_ISLAND);
         if self.ctx.supports_timestamp_queries {
@@ -535,9 +864,14 @@ impl RenderExecutor for WgpuBackend {
             .filter_map(|pid| plan.graph.pass(*pid))
             .collect();
 
-        // Fast path 1: single CpuIsland pass.
+        // Fast path 1: single full-frame CpuIsland pass.
         if let [pass] = ordered_passes.as_slice() {
-            if let PassOp::CpuIsland { scene, reason, .. } = &pass.op {
+            if let PassOp::CpuIsland {
+                scene,
+                bounds: None,
+                reason,
+            } = &pass.op
+            {
                 self.record_cpu_fallback(reason.as_str());
                 let is_profiling = self.is_profiling_enabled();
                 let frame_started = Instant::now();
@@ -567,12 +901,17 @@ impl RenderExecutor for WgpuBackend {
                     });
                     self.last_session_wall_ns.store(total_ns, Ordering::Relaxed);
                 }
+                let pixels = u64::from(config.width) * u64::from(config.height);
                 return Ok((
                     img,
                     ExecutionReport {
                         backend_name: caps.backend_name,
                         passes_executed: 1,
+                        gpu_passes: 0,
+                        compute_passes: 0,
                         cpu_island_passes: 1,
+                        cpu_island_pixels: pixels,
+                        cpu_island_upload_bytes: 0,
                         transient_pool_slots: plan.transient_pool_slots,
                         peak_transient_bytes: plan.peak_transient_bytes,
                         fallback_reasons: vec![reason.clone()],
@@ -619,7 +958,11 @@ impl RenderExecutor for WgpuBackend {
                 ExecutionReport {
                     backend_name: caps.backend_name,
                     passes_executed: ordered_passes.len(),
+                    gpu_passes: ordered_passes.len(),
+                    compute_passes: 0,
                     cpu_island_passes: 0,
+                    cpu_island_pixels: 0,
+                    cpu_island_upload_bytes: 0,
                     transient_pool_slots: plan.transient_pool_slots,
                     peak_transient_bytes: plan.peak_transient_bytes,
                     fallback_reasons: Vec::new(),
@@ -660,14 +1003,17 @@ impl RenderExecutor for WgpuBackend {
                             ExecutionReport {
                                 backend_name: caps.backend_name,
                                 passes_executed: 3,
+                                gpu_passes: 3,
+                                compute_passes: 0,
                                 cpu_island_passes: 0,
+                                cpu_island_pixels: 0,
+                                cpu_island_upload_bytes: 0,
                                 transient_pool_slots: plan.transient_pool_slots,
                                 peak_transient_bytes: plan.peak_transient_bytes,
                                 fallback_reasons: Vec::new(),
                             },
                         ));
                     }
-                    // Preserve exact fallback behavior if base/layer compilation fails.
                     let mut combined_nodes = base_scene.nodes.clone();
                     combined_nodes.push(SceneNode::Layer {
                         opacity: *opacity,
@@ -693,7 +1039,11 @@ impl RenderExecutor for WgpuBackend {
                         ExecutionReport {
                             backend_name: caps.backend_name,
                             passes_executed: 3,
+                            gpu_passes: 0,
+                            compute_passes: 0,
                             cpu_island_passes: 1,
+                            cpu_island_pixels: u64::from(config.width) * u64::from(config.height),
+                            cpu_island_upload_bytes: 0,
                             transient_pool_slots: plan.transient_pool_slots,
                             peak_transient_bytes: plan.peak_transient_bytes,
                             fallback_reasons: vec![reason.to_string()],
@@ -758,7 +1108,19 @@ impl RenderExecutor for WgpuBackend {
                         ExecutionReport {
                             backend_name: caps.backend_name,
                             passes_executed: ordered_passes.len(),
+                            gpu_passes: if islands == 0 {
+                                ordered_passes.len()
+                            } else {
+                                0
+                            },
+                            compute_passes: 0,
                             cpu_island_passes: islands,
+                            cpu_island_pixels: if islands > 0 {
+                                u64::from(config.width) * u64::from(config.height)
+                            } else {
+                                0
+                            },
+                            cpu_island_upload_bytes: 0,
                             transient_pool_slots: plan.transient_pool_slots,
                             peak_transient_bytes: plan.peak_transient_bytes,
                             fallback_reasons: reason.into_iter().collect(),
@@ -798,7 +1160,15 @@ impl RenderExecutor for WgpuBackend {
                         ExecutionReport {
                             backend_name: caps.backend_name,
                             passes_executed: 2,
+                            gpu_passes: if islands == 0 { 2 } else { 0 },
+                            compute_passes: 0,
                             cpu_island_passes: islands,
+                            cpu_island_pixels: if islands > 0 {
+                                u64::from(config.width) * u64::from(config.height)
+                            } else {
+                                0
+                            },
+                            cpu_island_upload_bytes: 0,
                             transient_pool_slots: plan.transient_pool_slots,
                             peak_transient_bytes: plan.peak_transient_bytes,
                             fallback_reasons: reason.into_iter().collect(),
@@ -808,7 +1178,7 @@ impl RenderExecutor for WgpuBackend {
             }
         }
 
-        // General multi-pass fallback (e.g. interleaved Raster2D/Shader or custom DAGs).
+        // General multi-pass GPU-resident DAG execution (compute passes, bounded CPU islands, composites).
         self.execute_general_dag(plan, config)
     }
 }
