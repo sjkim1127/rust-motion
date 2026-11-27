@@ -252,7 +252,10 @@ pub enum NleError {
 // NLE Editing Operations
 // -------------------------------------------------------------------------------------------------
 
-/// Split the clip on `track` at `at_frame` into two independent clips.
+/// Split whichever clip covers `at_frame` on `track`.
+///
+/// Callers that mean one particular clip should use [`split_clip_at_index`], which cannot cut a
+/// neighbour that happens to cover the requested frame.
 pub fn split_clip_at(track: &mut NleTrack, at_frame: u32) -> Result<(NleClip, NleClip), NleError> {
     if track.locked {
         return Err(NleError::TrackLocked);
@@ -260,7 +263,25 @@ pub fn split_clip_at(track: &mut NleTrack, at_frame: u32) -> Result<(NleClip, Nl
     let idx = track
         .find_clip_at(at_frame)
         .ok_or_else(|| NleError::ClipNotFound(format!("No clip at frame {at_frame}")))?;
-    let original = &track.clips[idx];
+    split_clip_at_index(track, idx, at_frame)
+}
+
+/// Split the clip at `clip_idx` at timeline frame `at_frame`, which must lie strictly inside it.
+///
+/// The left part keeps the clip's ID; the right part gets `<id>_split`, or `<id>_split_2`,
+/// `_split_3`, ... when that ID is already taken on the track.
+pub fn split_clip_at_index(
+    track: &mut NleTrack,
+    clip_idx: usize,
+    at_frame: u32,
+) -> Result<(NleClip, NleClip), NleError> {
+    if track.locked {
+        return Err(NleError::TrackLocked);
+    }
+    let original = track
+        .clips
+        .get(clip_idx)
+        .ok_or_else(|| NleError::ClipNotFound(format!("Index {clip_idx}")))?;
     if at_frame <= original.track_in || at_frame >= original.track_out {
         return Err(NleError::InvalidDuration);
     }
@@ -271,12 +292,18 @@ pub fn split_clip_at(track: &mut NleTrack, at_frame: u32) -> Result<(NleClip, Nl
     left.source_out = original.source_in + cut_offset;
 
     let mut right = original.clone();
-    right.id = format!("{}_split", original.id);
+    let mut right_id = format!("{}_split", original.id);
+    let mut suffix = 2usize;
+    while track.clips.iter().any(|clip| clip.id == right_id) {
+        right_id = format!("{}_split_{suffix}", original.id);
+        suffix += 1;
+    }
+    right.id = right_id;
     right.track_in = at_frame;
     right.source_in = original.source_in + cut_offset;
 
-    track.clips[idx] = left.clone();
-    track.clips.insert(idx + 1, right.clone());
+    track.clips[clip_idx] = left.clone();
+    track.clips.insert(clip_idx + 1, right.clone());
     Ok((left, right))
 }
 

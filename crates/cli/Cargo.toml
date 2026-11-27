@@ -38,7 +38,6 @@ rhai               = { workspace = true, optional = true }
 axum               = { workspace = true, features = ["ws"] }
 tower-http         = { workspace = true }
 image              = { workspace = true }
-notify             = "6"
 base64             = { workspace = true }
 taffy              = { workspace = true }
 

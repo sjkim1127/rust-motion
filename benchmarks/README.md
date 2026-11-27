@@ -39,7 +39,8 @@ frame rates, and fractional steps, with a 1e-9 tolerance.
 
 ```sh
 npm ci --prefix benchmarks/remotion --ignore-scripts --no-audit --no-fund
-cargo build --locked --release -p rust-motion-core --example render_bench
+cargo build --locked --release -p rust-motion-composition --example render_bench
+(cd benchmarks/remotion && npm install)
 IMAGE_FORMAT=png node benchmarks/remotion/render-bench.mjs
 IMAGE_FORMAT=jpeg node benchmarks/remotion/render-bench.mjs
 ```
@@ -91,12 +92,27 @@ all product features, browser startup, or compile/bundle time.
 
 ## Interpretation
 
-The currently recorded lossless PNG batch (`render-png.json`) was taken on an
-Apple M4 Pro and measured a 0.543s Rust Motion median versus 10.125s for Remotion
-(18.66x). This file contains one measured sample per engine, so it is a
-directional snapshot rather than a production latency budget. Earlier batches
-in this repository report different absolute timings; always use a fresh run
-on the target machine when making a performance claim.
+Two lossless PNG snapshots are committed. Both pass the pixel and SSIM gates above.
+
+| Snapshot | Machine | Remotion | Rust Motion median | Remotion median | Ratio |
+|---|---|---|---|---|---|
+| `render-png-gha-ubuntu24.json` | GitHub-hosted `ubuntu-24.04`, AMD EPYC 7763, 4 vCPU | 4.0.547 | 1.288 s | 16.949 s | 13.16× |
+| `render-png-first.json` | Apple M4 Pro | 4.0.495 | 2.192 s | 11.041 s | 5.04× |
+
+The first is the median of 5 warm runs per engine (about 2% spread) and records
+its commit and runner image; the second is the median of 3. They differ in
+machine and Remotion version, so the gap between the ratios is not attributable
+to either one alone. Neither is a production latency budget: use a fresh run on
+the target machine when making a performance claim.
+
+To reproduce the hosted-runner numbers, run the **Benchmark** workflow from the
+Actions tab (or push a `bench/<name>` branch) and download the artifact.
+
+`render-bench.mjs` writes each run to `render-<format>.json`, but
+`benchmarks/render-*.json` is gitignored, so a fresh run is not part of the
+repository. Force-add a result (`git add -f`) when it should back a number in
+the docs, then update the quoted figures; `python3 benchmarks/check_claims.py`
+fails when a documented ratio does not match the snapshot it cites.
 
 This scene does not exercise media decoding or audio, and its browser SVG/CSS
 effects are only a representative subset of complex filters. The recorded

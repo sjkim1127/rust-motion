@@ -7,15 +7,22 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to build and publish
-        required: true
+        description: Existing release tag to build and publish. Leave empty to dry-run the selected branch.
+        required: false
         type: string
+      dry_run:
+        description: Build and smoke-test the wheels, but publish nothing.
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
 
 env:
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  # A dry run builds the dispatched commit itself; a real run builds the release tag.
+  BUILD_REF: ${{ inputs.dry_run && github.sha || inputs.tag || github.ref_name }}
 
 concurrency:
   group: pypi-release-${{ inputs.tag || github.ref_name }}
@@ -23,12 +30,16 @@ concurrency:
 
 jobs:
   validate_tag:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      checks: read
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref_name }}
+          ref: ${{ env.BUILD_REF }}
       - name: Validate release tag
+        if: ${{ !inputs.dry_run }}
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
@@ -40,6 +51,17 @@ jobs:
             echo "The requested tag does not point at the checked out commit: $RELEASE_TAG" >&2
             exit 1
           fi
+      # fmt, clippy and the tests already ran in CI for this exact commit; do not publish unless
+      # that run is green. (release.yml applies the same gate before publishing to crates.io.)
+      - name: Resolve tagged commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Require green CI on the tagged commit
+        if: ${{ !inputs.dry_run }}
+        uses: ./.github/actions/require-ci
+        with:
+          sha: ${{ steps.commit.outputs.sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   linux:
     runs-on: ${{ matrix.platform.runner }}
@@ -48,22 +70,29 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             manylinux: manylinux2014
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             target: aarch64-unknown-linux-gnu
             manylinux: manylinux_2_28
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref_name }}
+          ref: ${{ env.BUILD_REF }}
+      - name: Setup Rust toolchain
+        id: rust
+        uses: ./.github/actions/setup-rust
+        with:
+          install: "false"
+          cache: "false"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
+          rust-toolchain: ${{ steps.rust.outputs.channel }}
           target: ${{ matrix.platform.target }}
           args: --release --out dist --manifest-path crates/python/Cargo.toml
           sccache: 'true'
@@ -108,9 +137,9 @@ jobs:
                 test -f "$TARGET_DIR/lib/libssl.a"
               )
             fi
-      - name: Install FFmpeg (Linux)
+      - name: Install FFmpeg
         if: matrix.platform.target == 'x86_64-unknown-linux-gnu'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        uses: ./.github/actions/install-ffmpeg
       - name: Checkout Python smoke test harness
         if: matrix.platform.target == 'x86_64-unknown-linux-gnu'
         uses: actions/checkout@v4
@@ -144,13 +173,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref_name }}
+          ref: ${{ env.BUILD_REF }}
+      - name: Setup Rust toolchain
+        id: rust
+        uses: ./.github/actions/setup-rust
+        with:
+          install: "true"
+          cache: "false"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
+          rust-toolchain: ${{ steps.rust.outputs.channel }}
           target: ${{ matrix.platform.target }}
           args: --release --out dist --manifest-path crates/python/Cargo.toml
           sccache: 'true'
@@ -177,7 +213,7 @@ jobs:
           path: dist
 
   windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
     needs: [validate_tag]
     strategy:
       fail-fast: false
@@ -187,7 +223,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref_name }}
+          ref: ${{ env.BUILD_REF }}
+      - name: Setup Rust toolchain
+        id: rust
+        uses: ./.github/actions/setup-rust
+        with:
+          install: "true"
+          cache: "false"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -195,11 +237,12 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
+          rust-toolchain: ${{ steps.rust.outputs.channel }}
           target: ${{ matrix.platform.target }}
           args: --release --out dist --manifest-path crates/python/Cargo.toml
           sccache: 'true'
-      - name: Install FFmpeg (Windows)
-        run: choco install ffmpeg -y
+      - name: Install FFmpeg
+        uses: ./.github/actions/install-ffmpeg
       - name: Checkout Python smoke test harness
         uses: actions/checkout@v4
         with:
@@ -220,15 +263,22 @@ jobs:
           path: dist
 
   sdist:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [validate_tag]
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref_name }}
+          ref: ${{ env.BUILD_REF }}
+      - name: Setup Rust toolchain
+        id: rust
+        uses: ./.github/actions/setup-rust
+        with:
+          install: "true"
+          cache: "false"
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
+          rust-toolchain: ${{ steps.rust.outputs.channel }}
           command: sdist
           args: --out dist --manifest-path crates/python/Cargo.toml
       - name: Upload sdist
@@ -239,9 +289,9 @@ jobs:
 
   release:
     name: Release to PyPI
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [validate_tag, linux, macos, windows, sdist]
-    if: startsWith(inputs.tag || github.ref_name, 'v')
+    if: ${{ !inputs.dry_run && startsWith(inputs.tag || github.ref_name, 'v') }}
     permissions:
       contents: write
       id-token: write
@@ -251,6 +301,9 @@ jobs:
           pattern: wheels-*
           merge-multiple: true
           path: dist
+      # Trusted publishing (OIDC) is already enabled for this job via `id-token: write`. Once a
+      # trusted publisher for this repository and workflow is registered on PyPI, delete the
+      # PYPI_API_TOKEN secret: an empty password makes this action fall back to OIDC.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

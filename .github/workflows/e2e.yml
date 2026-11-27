@@ -28,10 +28,7 @@ jobs:
 
       # ── 2. Rust toolchain ──────────────────────────────────────────────────
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: ./.github/actions/setup-rust
 
       # ── 3. System dependencies ─────────────────────────────────────────────
       - name: Install FFmpeg, ffprobe, and system dependencies

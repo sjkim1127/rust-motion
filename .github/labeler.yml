@@ -1,0 +1,82 @@
+# Applied to pull requests by .github/workflows/labeler.yml.
+area:rendering:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/rasterizer/**
+          - crates/renderer/**
+          - crates/raster/**
+          - crates/paint/**
+          - crates/vector/**
+          - crates/shapes/**
+          - crates/paths/**
+          - crates/tablet/**
+area:codec:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/h264enc/**
+          - crates/hevc/**
+          - crates/apv/**
+          - crates/mxf/**
+          - crates/media/**
+          - crates/bitstream/**
+area:color:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/color/**
+          - crates/cms/**
+          - crates/noise/**
+area:algo:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/algo/**
+          - crates/inpaint/**
+          - crates/geom/**
+          - crates/lensdb/**
+          - crates/dng/**
+area:psd:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/psd/**
+          - crates/doc/**
+          - crates/affinity/**
+          - crates/cfb/**
+area:composition:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/composition/**
+          - crates/animation/**
+          - crates/transitions/**
+          - crates/captions/**
+          - crates/charts/**
+area:audio:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/audio-dsp/**
+area:cli:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/cli/**
+          - crates/project/**
+          - crates/mcp/**
+          - crates/plugins/**
+area:python:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/python/**
+area:typescript:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/ts/**
+area:wasm:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/wasm/**
+area:ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+area:docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - "**/*.md"

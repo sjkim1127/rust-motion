@@ -1,0 +1,63 @@
+name: Bug report
+description: Something renders wrong, crashes, or does not work as documented.
+labels: ["bug", "needs-triage"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: A short description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The smallest Rhai script, composition, CLI command, or SDK snippet that shows it.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: rust-motion version
+      description: Output of `rust-motion --version`, or the crate / package version.
+      placeholder: "1.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did you use it?
+      options:
+        - CLI
+        - Rust crates
+        - Python SDK
+        - TypeScript SDK
+        - WebAssembly
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and output
+      description: Error messages, panics, or `rust-motion doctor` output.
+      render: shell
