@@ -3222,7 +3222,7 @@ version = "1.1.0"
 dependencies = [
  "anyhow",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "clap",
  "futures-util",
  "image",
@@ -3341,7 +3341,7 @@ dependencies = [
 name = "rust-motion-mcp"
 version = "1.1.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "image",
  "rust-motion-color",
  "rust-motion-project",
@@ -3505,7 +3505,7 @@ name = "rust-motion-rasterizer"
 version = "1.1.0"
 dependencies = [
  "ab_glyph",
- "base64 0.22.1",
+ "base64 0.23.1",
  "criterion",
  "image",
  "lyon_tessellation",
@@ -3610,7 +3610,7 @@ dependencies = [
 name = "rust-motion-ts"
 version = "1.1.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "rust-motion-animation",
  "rust-motion-cli",
  "rust-motion-composition",
