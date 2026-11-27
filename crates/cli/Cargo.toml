@@ -44,7 +44,6 @@ taffy              = { workspace = true }
 rust-motion-renderer = { workspace = true }
 reqwest            = { workspace = true }
 serde_json         = { workspace = true }
-filetime           = "0.2"
 futures-util       = "0.3"
 tempfile           = { workspace = true }
 tokio-tungstenite   = "0.24"
