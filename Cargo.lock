@@ -2852,9 +2852,9 @@ checksum = "ca45419789ae5a7899559e9512e58ca889e41f04f1f2445e9f4b290ceccd1d08"
 
 [[package]]
 name = "rasterlottie"
-version = "0.2.4"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d927b491163e8ef9fc7859e900beba5a4e3331021e73a068982ffbe40c38b359"
+checksum = "dec0be5cbb669d6a8685a7175f7c45b0beb9d704c6ac9b0c2322ea5cc64c28da"
 dependencies = [
  "rustc-hash 2.1.3",
  "serde",
