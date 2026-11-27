@@ -76,6 +76,7 @@ fn test_cli_inspect_backends_json() {
         .collect();
     assert!(names.contains(&"native"), "native backend must be present");
     assert!(names.contains(&"gpu"), "gpu backend must be present");
+    assert!(names.contains(&"metal"), "metal backend must be present");
     assert!(
         names.contains(&"browser"),
         "browser backend must be present"

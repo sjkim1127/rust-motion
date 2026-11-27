@@ -14,6 +14,7 @@ This document tracks verified repository audits, architecture decisions, impleme
   - Cycle 6 (`P3/P4, #164`): `83f268f`
   - Cycle 7 (`P1/P4`): `20b0859`
   - Cycle 8 (`#163, #164, #168`): `89b8652`
+  - Cycle 9 (`#165`): `3a07db5`
 - **Active Working Branch**: `autonomous_engineering_mission`
 - **Host / Hardware**: macOS (`Darwin 25.5.0`, `arm64`), **Apple M4 Pro**
 - **Toolchain**: `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `cargo 1.100.0 (3acc79c0c 2026-11-05)`, `/opt/homebrew/bin/ffmpeg`
@@ -243,8 +244,31 @@ This document tracks verified repository audits, architecture decisions, impleme
 
 ---
 
+## Cycle 10 — Three-Way CPU/WGPU/Metal Differential & Determinism Suite (`#166`), Section 10 Unified Engine E2E, `inspect --backends` Metal Reporting & Workspace Warning Cleanup
+
+### Implemented Changes
+- **Three-Way Differential & Frame-Order Determinism Suite (`crates/rasterizer/tests/differential_backends.rs`, `#166`)**:
+  - Added multi-frame corpus covering `analytic_2d`, `blur_layer` (`SceneNode::Layer` + `SceneFilter::Blur`), and `mixed_3d_2d` (`Scene3D` cube/torus + PBR lighting + `SceneFilter::Blur` + `Text`).
+  - Verified sequential `[0..=4]`, reverse `[4..=0]`, and random `[2,0,4,1,3]` frame rendering is bit-exact (`max_diff == 0`) on CPU (`TinySkiaBackend`), `WgpuBackend`, and `MetalComputeExecutor`.
+  - Verified differential parity: Metal vs CPU `max_diff <= 1` LSB across all 3 scenes; WGPU vs CPU `mean_abs_diff <= 1.5` (analytic 2D) / `<= 2.0` (blur/3D); Metal vs WGPU `mean_abs_diff <= 2.0`.
+- **Section 10 End-to-End Unified Engine Verification (`crates/rasterizer/tests/unified_engine_e2e.rs`)**:
+  - Verified 3D geometry & custom `Mesh3D` pyramid hierarchy + procedural HDR Aurora landscape backdrop (`render_procedural_scene_pixmap`) + PBR materials & lights + seeded `ConfettiEmitter` simulation + 2D blurred HUD/text compositing + 48 kHz stereo WAV sync + zero-FFmpeg MP4 export via both pure-Rust CPU/H.264 (`avc1`) and zero-copy Metal/VideoToolbox HEVC + AudioToolbox AAC (`hvc1` + `aac`) verified with `probe_isobmff_path`, `Mp4Demuxer`, and `ffprobe`.
+- **CLI & Manifest Hygiene**:
+  - Reported `"metal"` (`native-gpu`) in `crates/cli/src/inspect.rs::run_inspect_backends()` and asserted its presence in `crates/cli/tests/cli_agent_contract_tests.rs`.
+  - Removed unused `rust-motion-transitions` dependency from `crates/wasm/Cargo.toml` and root `Cargo.toml` `[workspace.dependencies]` (eliminating the final `rust-motion-wasm` manifest warning) and refreshed `Cargo.lock` offline.
+
+### Verification (Bounded Concurrency: `RAYON_NUM_THREADS=2`, `-j 4`, `--test-threads=2`)
+- `cargo fmt --all -- --check`: passed (exit 0).
+- `rust-motion-rasterizer --features "gpu metal" --test differential_backends --test unified_engine_e2e`: 4 passed (`3 + 1`).
+- `rust-motion-rasterizer` default features `--test differential_backends --test unified_engine_e2e`: 2 passed (`1 + 1`).
+- `rust-motion-cli --features "gpu metal" --test cli_agent_contract_tests`: 10 passed.
+- `cargo clippy --locked -j 4 --workspace --all-targets --all-features -- -D warnings`: passed (0 manifest warnings).
+- `cargo check --locked -j 4 -p rust-motion-wasm`: passed (0 warnings).
+
+---
+
 ## Remaining Roadmap & Next Priorities
 
-- **Next Immediate Priority — Cycle 10**:
+- **Next Immediate Priority — Cycle 11**:
   - **Option A (`#169` / `#171` Feature Isolation)**: Gate creative-suite crates (`psd`, `affinity`, `dng`, `inpaint`, `algo`, `plugins`, etc.) behind optional feature flags in `rasterizer` while preserving default features so minimal headless video/WASM callers build minimally.
-  - **Option B (`#194`–`#205` Unified Creative Engine Vertical Slice)**: Strengthen 3D/geometry (`geom`, `scene3d`, `mesh3d`) + procedural node graph + agent MCP inspection/transactional scene editing & real native MP4 export (`mcp/tools.rs::render_composition` & `session.rs`).
+  - **Option B (`#194`–`#205` Unified Creative Engine / Geometry / Procedural Graph / MCP)**: Avoid overlapping PR `#223` (`crates/mcp/src/{assets,preview,session,tools}.rs`); focus on procedural geometry/material graph lowering (`#197`–`#200`), deterministic physics/simulation (`#203`), or real-time 3D GPU path (`#200`).

@@ -1734,12 +1734,18 @@ mod tests {
         assert!(stats.gpu_submit_readback_ns > 0);
 
         let probe = probe_isobmff_path(&mp4_path).unwrap();
-        let video = probe.video_streams.first().expect("missing HEVC video stream");
+        let video = probe
+            .video_streams
+            .first()
+            .expect("missing HEVC video stream");
         assert_eq!(video.width, 320);
         assert_eq!(video.height, 240);
         assert_eq!(video.codec, VideoCodecId::Hevc);
 
-        let audio = probe.audio_streams.first().expect("missing AAC audio stream");
+        let audio = probe
+            .audio_streams
+            .first()
+            .expect("missing AAC audio stream");
         assert_eq!(audio.codec, AudioCodecId::Aac);
         assert_eq!(audio.sample_rate, 48_000);
         assert_eq!(audio.channels, 2);
@@ -1769,7 +1775,10 @@ mod tests {
         assert_eq!(metal_exec.render_stats().gpu_frames, 5);
 
         let probe = probe_isobmff_path(&mp4_path).unwrap();
-        let video = probe.video_streams.first().expect("missing H.264 video stream");
+        let video = probe
+            .video_streams
+            .first()
+            .expect("missing H.264 video stream");
         assert_eq!(video.width, 160);
         assert_eq!(video.height, 120);
         assert_eq!(video.codec, VideoCodecId::H264);
