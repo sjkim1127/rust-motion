@@ -8,7 +8,7 @@ use rust_motion_project::nle::{
     insert_clip, split_clip_at_index, trim_clip, NleClip, NleTimeline, NleTrack, TrackKind,
     TrimEdge, TrimMode,
 };
-use rust_motion_project::{BackendKind, Clip, Project, ProjectSettings, Track};
+use rust_motion_project::{AssetKind, BackendKind, Clip, Project, ProjectSettings, Track};
 use rust_motion_rasterizer::lut3d::Lut3d;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -410,16 +410,48 @@ impl McpSession {
         caption: Option<String>,
     ) -> Result<String, String> {
         require_text("name", name)?;
-        if let Some(asset_id) = &asset_id {
-            let registered = self
+        let asset_kind = if let Some(asset_id) = &asset_id {
+            let asset = self
                 .project
                 .iter()
                 .flat_map(|project| &project.assets)
-                .any(|asset| &asset.id == asset_id);
-            if !registered {
-                return Err(format!(
-                    "invalid 'asset_id': '{asset_id}' is not a registered asset; import it with asset_import first"
-                ));
+                .find(|asset| &asset.id == asset_id)
+                .ok_or_else(|| {
+                    format!(
+                        "invalid 'asset_id': '{asset_id}' is not a registered asset; import it with asset_import first"
+                    )
+                })?;
+            Some(asset.kind)
+        } else {
+            None
+        };
+        let track_kind = self
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.id == track_id)
+            .map(|track| track.kind)
+            .ok_or_else(|| format!("Track '{track_id}' not found"))?;
+        if let Some(kind) = asset_kind {
+            match (track_kind, kind) {
+                (TrackKind::Audio, AssetKind::Audio) => {}
+                (TrackKind::Audio, other) => {
+                    return Err(format!(
+                        "invalid 'asset_id': {other:?} assets cannot be inserted on an audio track"
+                    ));
+                }
+                (_, AssetKind::Audio) => {
+                    return Err(
+                        "invalid 'asset_id': audio assets can only be inserted on an audio track"
+                            .to_string(),
+                    );
+                }
+                (_, AssetKind::Image | AssetKind::Video) => {}
+                (_, other) => {
+                    return Err(format!(
+                        "invalid 'asset_id': {other:?} assets cannot be inserted on this track"
+                    ));
+                }
             }
         }
         let fps = self.timeline.fps;

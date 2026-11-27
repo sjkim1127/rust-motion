@@ -557,7 +557,14 @@ fn preview_reports_placeholders_and_omitted_clips() {
     import(&mut server, "red.png", "image", "red");
     import(&mut server, "music.wav", "audio", "music");
     let red = insert_media(&mut server, &track, "red", 0.0, 1.0);
-    let sound = add_track(&mut server, "Sound");
+    let sound = ok(
+        &mut server,
+        "timeline_add_track",
+        json!({ "track_type": "audio", "name": "Sound" }),
+    )["track_id"]
+        .as_str()
+        .expect("track id")
+        .to_string();
     let music = insert_media(&mut server, &sound, "music", 0.0, 1.0);
 
     // Audio does not paint over the picture.

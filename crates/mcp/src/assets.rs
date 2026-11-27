@@ -9,6 +9,69 @@ use rust_motion_rasterizer::backend::{FrameConfig, RasterizerBackend};
 use rust_motion_rasterizer::scene::{ImageFit, Scene, SceneNode};
 use rust_motion_rasterizer::{probe_video_metadata, MediaSecurityPolicy, TinySkiaBackend};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::time::Duration;
+
+fn check_video_decodes(path: &Path) -> Result<(), String> {
+    let mut command = Command::new("ffmpeg");
+    command
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-protocol_whitelist",
+            "file,pipe",
+            "-i",
+        ])
+        .arg(path)
+        .args(["-map", "0:v:0", "-frames:v", "1", "-f", "null", "-"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("invalid 'path': cannot run ffmpeg to decode video ({error})"))?;
+    let stderr = child.stderr.take();
+    let stderr_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(mut pipe) = stderr {
+            let _ = std::io::Read::read_to_end(&mut pipe, &mut buf);
+        }
+        buf
+    });
+    let timeout = Duration::from_secs(15);
+    let start = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if start.elapsed() < timeout => {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stderr_handle.join();
+                return Err(
+                    "invalid 'path': ffmpeg timed out while decoding the first video frame"
+                        .to_string(),
+                );
+            }
+            Err(error) => {
+                let _ = stderr_handle.join();
+                return Err(format!("invalid 'path': cannot decode video ({error})"));
+            }
+        }
+    };
+    let stderr = stderr_handle.join().unwrap_or_default();
+    if !status.success() {
+        return Err(format!(
+            "invalid 'path': cannot decode video ({})",
+            String::from_utf8_lossy(&stderr).trim()
+        ));
+    }
+    Ok(())
+}
 
 impl McpSession {
     /// A session that may only read media inside `root`.
@@ -78,6 +141,7 @@ impl McpSession {
                     .ok_or("invalid 'path': the file name is not valid UTF-8")?;
                 probe_video_metadata(source)
                     .map_err(|error| format!("invalid 'path': cannot read video ({error})"))?;
+                check_video_decodes(&resolved)?;
             }
             AssetKind::Audio => {}
             other => {

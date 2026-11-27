@@ -350,7 +350,14 @@ impl DecoderSession {
     ) -> Result<Self, RasterError> {
         let seek_time = first_frame as f64 / sampling_fps;
         let mut command = Command::new("ffmpeg");
-        command.args(["-hide_banner", "-loglevel", "error"]);
+        command.args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-protocol_whitelist",
+            "file,pipe",
+        ]);
         if first_frame > 0 {
             command.args(["-ss", &format!("{seek_time:.9}")]);
         }
@@ -489,24 +496,83 @@ pub(crate) fn canonical_local_path_with_policy(
     policy.validate_path(src)
 }
 
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+fn read_pipe<R: std::io::Read + Send + 'static>(pipe: Option<R>) -> Option<JoinHandle<Vec<u8>>> {
+    pipe.map(|mut pipe| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = pipe.read_to_end(&mut buf);
+            buf
+        })
+    })
+}
+
+fn wait_output_with_timeout(
+    mut child: Child,
+    timeout: std::time::Duration,
+) -> std::io::Result<std::process::Output> {
+    let stdout = read_pipe(child.stdout.take());
+    let stderr = read_pipe(child.stderr.take());
+    let start = std::time::Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if start.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            if let Some(handle) = stdout {
+                let _ = handle.join();
+            }
+            if let Some(handle) = stderr {
+                let _ = handle.join();
+            }
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!("process timed out after {}s", timeout.as_secs()),
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    let stdout = stdout.and_then(|h| h.join().ok()).unwrap_or_default();
+    let stderr = stderr.and_then(|h| h.join().ok()).unwrap_or_default();
+    Ok(std::process::Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
 fn probe_path(path: &Path) -> Result<VideoMetadata, RasterError> {
-    let output = Command::new("ffprobe")
+    let mut command = Command::new("ffprobe");
+    command
         .args([
             "-v",
             "error",
+            "-protocol_whitelist",
+            "file,pipe",
             "-show_entries",
             "stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,pix_fmt,duration:stream_tags=rotate:stream_side_data=rotation:format=duration",
             "-of",
             "json",
         ])
         .arg(path)
-        .output()
-        .map_err(|error| {
-            media_error(
-                path.display().to_string(),
-                format!("failed to run FFprobe: {error}"),
-            )
-        })?;
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let child = command.spawn().map_err(|error| {
+        media_error(
+            path.display().to_string(),
+            format!("failed to run FFprobe: {error}"),
+        )
+    })?;
+    let output = wait_output_with_timeout(child, PROBE_TIMEOUT).map_err(|error| {
+        media_error(
+            path.display().to_string(),
+            format!("failed to run FFprobe: {error}"),
+        )
+    })?;
 
     if !output.status.success() {
         return Err(media_error(
