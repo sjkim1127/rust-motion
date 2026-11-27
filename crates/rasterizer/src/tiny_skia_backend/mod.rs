@@ -13,7 +13,6 @@ pub mod visualizer;
 
 pub use filters::apply_photo_filter;
 pub(crate) use render_node::render_nodes;
-#[cfg(feature = "gpu")]
 pub(crate) use shapes::svgpath_to_tiny_skia;
 #[cfg(feature = "gpu")]
 pub(crate) use visualizer::render_audio_visualizer;
@@ -113,6 +112,25 @@ impl TinySkiaBackend {
     /// Decoders are also stopped automatically when the backend is dropped.
     pub fn shutdown_media(&self) {
         self.videos.shutdown();
+    }
+
+    pub(crate) fn render_nodes_into_pixmap(
+        &self,
+        pixmap: &mut Pixmap,
+        nodes: &[crate::scene::SceneNode],
+        fps: f64,
+    ) -> Result<(), RasterError> {
+        let resources = RenderResources {
+            font: &self.font,
+            images: &self.images,
+            videos: &self.videos,
+            gifs: &self.gifs,
+            lotties: &self.lotties,
+            audios: &self.audios,
+            sampling_fps: fps,
+            security: &self.security,
+        };
+        render_nodes(pixmap, nodes, Transform::identity(), 1.0, &resources)
     }
 
     #[cfg(feature = "gpu")]
@@ -231,23 +249,7 @@ impl RasterizerBackend for TinySkiaBackend {
 
         // Pixmap::new already allocates zeroed (transparent) pixels.
 
-        let resources = RenderResources {
-            font: &self.font,
-            images: &self.images,
-            videos: &self.videos,
-            gifs: &self.gifs,
-            lotties: &self.lotties,
-            audios: &self.audios,
-            sampling_fps: config.fps,
-            security: &self.security,
-        };
-        render_nodes(
-            &mut pixmap,
-            &scene.nodes,
-            Transform::identity(),
-            1.0,
-            &resources,
-        )?;
+        self.render_nodes_into_pixmap(&mut pixmap, &scene.nodes, config.fps)?;
 
         // Transfer the pixel allocation; copying a full frame here doubles
         // output-buffer traffic and temporarily retains two frame buffers.

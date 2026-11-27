@@ -74,6 +74,19 @@ pub enum HwAccel {
     Nvenc,
 }
 
+/// Container/codec execution backend selection for video export.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EncoderBackend {
+    /// Use external FFmpeg when available (for HW accel, audio mixing, and extra codecs),
+    /// automatically falling back to the built-in pure-Rust H.264/MP4 encoder when FFmpeg is absent.
+    #[default]
+    Auto,
+    /// Force the built-in pure-Rust H.264 encoder and streaming MP4 muxer (zero FFmpeg dependency).
+    Native,
+    /// Force external FFmpeg subprocess piping.
+    Ffmpeg,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RenderProgress {
     pub completed_frames: u32,
@@ -344,6 +357,8 @@ pub struct PipeConfig {
     pub codec: VideoCodec,
     /// Hardware acceleration mode for video encoding.
     pub hw_accel: HwAccel,
+    /// Encoder backend selection (`Auto`, `Native` pure-Rust H.264/MP4, or `Ffmpeg`).
+    pub encoder_backend: EncoderBackend,
     /// Audio tracks mixed and trimmed to the rendered video duration.
     pub audio_tracks: Vec<AudioTrack>,
     pub control: RenderControl,
@@ -373,6 +388,7 @@ impl PipeConfig {
             preset: "fast".to_string(),
             codec: VideoCodec::H264,
             hw_accel: HwAccel::default(),
+            encoder_backend: EncoderBackend::default(),
             audio_tracks: Vec::new(),
             control: RenderControl::default(),
             security_policy: MediaSecurityPolicy::default(),
@@ -391,6 +407,11 @@ impl PipeConfig {
 
     pub fn with_hw_accel(mut self, hw_accel: HwAccel) -> Self {
         self.hw_accel = hw_accel;
+        self
+    }
+
+    pub fn with_encoder_backend(mut self, encoder_backend: EncoderBackend) -> Self {
+        self.encoder_backend = encoder_backend;
         self
     }
 

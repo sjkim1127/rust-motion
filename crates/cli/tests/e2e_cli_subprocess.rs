@@ -436,3 +436,245 @@ fn e2e_odd_resolution_fails() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// P0/P1 verification: with an empty PATH (zero external FFmpeg/FFprobe available),
+/// `doctor --json` reports ok=true and `render` produces valid faststart MP4s via both
+/// explicit `--encoder native` and default `--encoder auto` fallback.
+#[test]
+fn e2e_ffmpeg_free_doctor_and_mp4_render() {
+    let doctor = Command::new(cli_bin())
+        .args(["doctor", "--json"])
+        .env("PATH", "")
+        .output()
+        .expect("Failed to spawn rust-motion doctor with empty PATH");
+    assert!(
+        doctor.status.success(),
+        "doctor should succeed without FFmpeg: stderr={}",
+        String::from_utf8_lossy(&doctor.stderr)
+    );
+    let doc_json: serde_json::Value =
+        serde_json::from_slice(&doctor.stdout).expect("doctor --json must return valid JSON");
+    assert_eq!(doc_json["ok"], true);
+    assert_eq!(doc_json["ffmpeg"]["available"], false);
+    assert!(doc_json["native_encoders"]
+        .as_array()
+        .is_some_and(|arr| !arr.is_empty()));
+    assert!(doc_json["supported_codecs"]
+        .as_array()
+        .is_some_and(|arr| arr.iter().any(|v| v == "h264")));
+    #[cfg(target_os = "macos")]
+    assert!(
+        doc_json["native_encoders"]
+            .as_array()
+            .is_some_and(|arr| arr.iter().any(|v| v == "aac (audiotoolbox)")),
+        "expected aac (audiotoolbox) in macOS doctor native_encoders: {}",
+        doc_json["native_encoders"]
+    );
+
+    let dir = tmp_dir("ffmpeg_free_render");
+    for (mode, encoder_arg) in [("auto", "auto"), ("native", "native")] {
+        let output = dir.join(format!("out_{mode}.mp4"));
+        let res = Command::new(cli_bin())
+            .env("PATH", "")
+            .args([
+                "render",
+                "--composition",
+                "HelloWorld",
+                "--encoder",
+                encoder_arg,
+                "--output",
+                output.to_str().unwrap(),
+                "--width",
+                "160",
+                "--height",
+                "96",
+                "--fps",
+                "24",
+                "--duration",
+                "6",
+                "--codec",
+                "h264",
+                "--preset",
+                "fast",
+                "--crf",
+                "22",
+            ])
+            .output()
+            .expect("Failed to spawn rust-motion render with empty PATH");
+        assert!(
+            res.status.success(),
+            "FFmpeg-free render ({mode}) failed: stderr={}",
+            String::from_utf8_lossy(&res.stderr)
+        );
+        let bytes = fs::read(&output).unwrap();
+        assert_eq!(&bytes[4..8], b"ftyp");
+        let moov = bytes.windows(4).position(|w| w == b"moov").unwrap();
+        let mdat = bytes.windows(4).position(|w| w == b"mdat").unwrap();
+        assert!(moov < mdat);
+
+        if ffprobe_available() {
+            let probe = Command::new("ffprobe")
+                .args([
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "stream=codec_name,width,height,nb_frames",
+                    "-of",
+                    "default=noprint_wrappers=1",
+                ])
+                .arg(&output)
+                .output()
+                .unwrap();
+            assert!(probe.status.success());
+            let txt = String::from_utf8_lossy(&probe.stdout);
+            assert!(txt.contains("codec_name=h264"), "{txt}");
+            assert!(txt.contains("nb_frames=6"), "{txt}");
+        }
+
+        // P2 verification: probe, probe --full, and inspect succeed with empty PATH (zero ffprobe).
+        let native_probe = Command::new(cli_bin())
+            .env("PATH", "")
+            .args(["probe", output.to_str().unwrap()])
+            .output()
+            .expect("Failed to spawn rust-motion probe");
+        assert!(
+            native_probe.status.success(),
+            "FFprobe-free probe ({mode}) failed: stderr={}",
+            String::from_utf8_lossy(&native_probe.stderr)
+        );
+        let probe_json: serde_json::Value =
+            serde_json::from_slice(&native_probe.stdout).expect("native probe stdout must be JSON");
+        assert_eq!(probe_json["width"], 160);
+        assert_eq!(probe_json["height"], 96);
+        assert_eq!(probe_json["fps"], 24.0);
+        assert_eq!(probe_json["duration_in_frames"], 6);
+
+        let full_probe = Command::new(cli_bin())
+            .env("PATH", "")
+            .args(["probe", "--full", output.to_str().unwrap()])
+            .output()
+            .expect("Failed to spawn rust-motion probe --full");
+        assert!(full_probe.status.success());
+        let full_json: serde_json::Value = serde_json::from_slice(&full_probe.stdout).unwrap();
+        assert_eq!(full_json["video"]["width"], 160);
+        assert_eq!(full_json["video"]["height"], 96);
+
+        let inspect_out = Command::new(cli_bin())
+            .env("PATH", "")
+            .args(["inspect", output.to_str().unwrap()])
+            .output()
+            .expect("Failed to spawn rust-motion inspect");
+        assert!(inspect_out.status.success());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let vt_hevc_output = dir.join("out_vt_hevc.mp4");
+        let res = Command::new(cli_bin())
+            .env("PATH", "")
+            .args([
+                "render",
+                "--composition",
+                "HelloWorld",
+                "--encoder",
+                "native",
+                "--codec",
+                "h265",
+                "--output",
+                vt_hevc_output.to_str().unwrap(),
+                "--width",
+                "160",
+                "--height",
+                "96",
+                "--fps",
+                "24",
+                "--duration",
+                "6",
+                "--crf",
+                "22",
+            ])
+            .output()
+            .expect("Failed to spawn VideoToolbox HEVC native render with empty PATH");
+        assert!(
+            res.status.success(),
+            "FFmpeg-free VideoToolbox HEVC render failed: stderr={}",
+            String::from_utf8_lossy(&res.stderr)
+        );
+        let bytes = fs::read(&vt_hevc_output).unwrap();
+        assert_eq!(&bytes[4..8], b"ftyp");
+        assert!(bytes.windows(4).any(|w| w == b"hvc1"));
+
+        let hevc_probe = Command::new(cli_bin())
+            .env("PATH", "")
+            .args(["probe", vt_hevc_output.to_str().unwrap()])
+            .output()
+            .unwrap();
+        assert!(hevc_probe.status.success());
+        let hevc_json: serde_json::Value = serde_json::from_slice(&hevc_probe.stdout).unwrap();
+        assert_eq!(hevc_json["width"], 160);
+        assert_eq!(hevc_json["height"], 96);
+        assert_eq!(hevc_json["fps"], 24.0);
+        assert_eq!(hevc_json["duration_in_frames"], 6);
+
+        if ffprobe_available() {
+            let probe = Command::new("ffprobe")
+                .args([
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "stream=codec_name,width,height,nb_frames",
+                    "-of",
+                    "default=noprint_wrappers=1",
+                ])
+                .arg(&vt_hevc_output)
+                .output()
+                .unwrap();
+            assert!(probe.status.success());
+            let txt = String::from_utf8_lossy(&probe.stdout);
+            assert!(txt.contains("codec_name=hevc"), "{txt}");
+            assert!(txt.contains("nb_frames=6"), "{txt}");
+        }
+    }
+
+    #[cfg(all(target_os = "macos", feature = "metal"))]
+    {
+        let metal_output = dir.join("out_metal_hevc.mp4");
+        let res = Command::new(cli_bin())
+            .env("PATH", "")
+            .args([
+                "render",
+                "--composition",
+                "HelloWorld",
+                "--backend",
+                "metal",
+                "--encoder",
+                "native",
+                "--codec",
+                "h265",
+                "--output",
+                metal_output.to_str().unwrap(),
+                "--width",
+                "160",
+                "--height",
+                "96",
+                "--fps",
+                "24",
+                "--duration",
+                "6",
+                "--crf",
+                "22",
+            ])
+            .output()
+            .expect("Failed to spawn Metal HEVC native render with empty PATH");
+        assert!(
+            res.status.success(),
+            "FFmpeg-free Metal HEVC render failed: stderr={}",
+            String::from_utf8_lossy(&res.stderr)
+        );
+        let bytes = fs::read(&metal_output).unwrap();
+        assert_eq!(&bytes[4..8], b"ftyp");
+        assert!(bytes.windows(4).any(|w| w == b"hvc1"));
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}

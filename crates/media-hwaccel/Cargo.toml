@@ -1,0 +1,21 @@
+[package]
+name        = "rust-motion-media-hwaccel"
+description = "Platform hardware-accelerated video codecs (macOS VideoToolbox) for Rust Motion"
+version.workspace     = true
+edition.workspace     = true
+authors.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+readme.workspace      = true
+
+[dependencies]
+rust-motion-media-core = { workspace = true }
+
+[dev-dependencies]
+rust-motion-h264enc         = { workspace = true }
+rust-motion-media-container = { workspace = true }
+rust-motion-hevc            = { workspace = true }
+tempfile                    = { workspace = true }
+
+[lints]
+workspace = true

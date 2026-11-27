@@ -25,6 +25,8 @@ pub struct DoctorReport {
     pub node: ToolCheck,
     pub temp_dir: TempDirCheck,
     pub hw_accel: String,
+    #[serde(default)]
+    pub native_encoders: Vec<String>,
     pub supported_codecs: Vec<String>,
 }
 
@@ -80,17 +82,36 @@ pub fn run_doctor() -> DoctorReport {
         "none (cpu rasterizer)".into()
     };
 
-    let supported_codecs = vec![
-        "h264".into(),
-        "vp9".into(),
-        "prores".into(),
-        "gif".into(),
+    let vt_available = rust_motion_media_hwaccel::is_videotoolbox_available();
+    let mut native_encoders = vec![
+        "h264 (pure-rust)".into(),
+        "mp4 (streaming)".into(),
         "png".into(),
         "jpeg".into(),
         "webp".into(),
     ];
+    if vt_available {
+        native_encoders.push("h264 (videotoolbox)".into());
+        native_encoders.push("hevc (videotoolbox)".into());
+    }
+    if rust_motion_media_hwaccel::is_audiotoolbox_available() {
+        native_encoders.push("aac (audiotoolbox)".into());
+    }
+    if cfg!(all(target_os = "macos", feature = "metal")) {
+        native_encoders.push("metal (apple-silicon zero-copy)".into());
+    }
 
-    let ok = ffmpeg_avail && temp_writable;
+    let mut supported_codecs = vec!["h264".into(), "png".into(), "jpeg".into(), "webp".into()];
+    if vt_available || ffmpeg_avail {
+        supported_codecs.push("h265".into());
+    }
+    if ffmpeg_avail {
+        supported_codecs.extend(["vp9".into(), "av1".into(), "prores".into(), "gif".into()]);
+    }
+
+    // Core H.264/MP4 and still image rendering are natively built into Rust Motion;
+    // FFmpeg and FFprobe remain optional for audio mixing and extended formats.
+    let ok = temp_writable;
 
     DoctorReport {
         ok,
@@ -129,6 +150,7 @@ pub fn run_doctor() -> DoctorReport {
             writable: temp_writable,
         },
         hw_accel,
+        native_encoders,
         supported_codecs,
     }
 }

@@ -18,5 +18,6 @@ mod support;
 pub(crate) use effects::*;
 use masks::*;
 pub(crate) use nodes::*;
+pub(crate) use path_mask::gpu_path_mask_from_svg;
 use path_mask::*;
 pub(crate) use support::*;

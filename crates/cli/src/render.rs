@@ -377,6 +377,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                 .with_frame_step(request.frame_step)
                 .with_codec(request.codec.video_codec().expect("video codec validated"))
                 .with_hw_accel(request.hw_accel)
+                .with_encoder_backend(request.encoder)
                 .with_quality(request.crf, &request.preset)
                 .with_audio_tracks(audio_tracks.clone())
                 .with_control(control.clone())
@@ -476,6 +477,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                 .with_frame_step(request.frame_step)
                 .with_codec(request.codec.video_codec().expect("video codec validated"))
                 .with_hw_accel(request.hw_accel)
+                .with_encoder_backend(request.encoder)
                 .with_quality(request.crf, &request.preset)
                 .with_audio_tracks(audio_tracks.clone())
                 .with_control(control.clone())
@@ -554,6 +556,7 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                     .with_frame_step(request.frame_step)
                     .with_codec(request.codec.video_codec().expect("video codec validated"))
                     .with_hw_accel(request.hw_accel)
+                    .with_encoder_backend(request.encoder)
                     .with_quality(request.crf, &request.preset)
                     .with_audio_tracks(audio_tracks.clone())
                     .with_control(control.clone())
@@ -574,6 +577,111 @@ async fn execute_render_command_with_registry_and_time_events_and_control(
                     let summary = rasterizer.profile_summary();
                     eprintln!("\n{}", summary.render_table());
                     gpu_profile_summary = Some(summary);
+                }
+            }
+        }
+        RenderBackend::Metal => {
+            #[cfg(not(all(target_os = "macos", feature = "metal")))]
+            anyhow::bail!(
+                "Metal backend is only available on macOS when compiled with `--features metal`:\n  \
+                 cargo build -p rust-motion-cli --features metal"
+            );
+
+            #[cfg(all(target_os = "macos", feature = "metal"))]
+            {
+                use rust_motion_rasterizer::{
+                    render_still_fallible_scaled, render_to_video_fallible, EncoderBackend,
+                    HwAccel, MetalComputeExecutor, PipeConfig, VideoCodec,
+                };
+
+                let rasterizer = MetalComputeExecutor::new()
+                    .map_err(|error| anyhow::anyhow!("Metal backend init failed: {error}"))?
+                    .with_image_cache_bytes(
+                        native_image_cache_bytes()
+                            .unwrap_or(rust_motion_rasterizer::DEFAULT_IMAGE_CACHE_BYTES),
+                    )
+                    .with_security_policy(security_policy.clone());
+
+                if let Some(format) = request.codec.still_format() {
+                    let first_scene = std::sync::Arc::clone(&first_scene_cache);
+                    render_still_fallible_scaled(
+                        &rasterizer,
+                        request.width,
+                        request.height,
+                        request.fps,
+                        frame_start,
+                        &request.output,
+                        format,
+                        &control,
+                        request.scale,
+                        |frame| {
+                            if frame == 0 {
+                                let mut cached = first_scene
+                                    .lock()
+                                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                                if let Some(scene) = cached.take() {
+                                    return Ok(scene);
+                                }
+                            }
+                            prepared.render(frame)
+                        },
+                    )?;
+                } else {
+                    let video_codec = request.codec.video_codec().expect("video codec validated");
+                    let effective_hw_accel = if request.hw_accel == HwAccel::Auto
+                        && matches!(video_codec, VideoCodec::H264 | VideoCodec::H265)
+                    {
+                        HwAccel::VideoToolbox
+                    } else {
+                        request.hw_accel
+                    };
+                    let effective_encoder = if request.encoder == EncoderBackend::Auto
+                        && matches!(video_codec, VideoCodec::H264 | VideoCodec::H265)
+                        && (audio_tracks.is_empty()
+                            || rust_motion_media_hwaccel::is_audiotoolbox_available())
+                    {
+                        EncoderBackend::Native
+                    } else {
+                        request.encoder
+                    };
+
+                    let first_scene = std::sync::Arc::clone(&first_scene_cache);
+                    let pipe_config = PipeConfig::new(
+                        request.width,
+                        request.height,
+                        request.fps,
+                        output_frame_count,
+                        &request.output,
+                    )
+                    .with_scale(request.scale)
+                    .with_concurrency(
+                        request.effective_concurrency(
+                            std::thread::available_parallelism()
+                                .map(|n| n.get())
+                                .unwrap_or(4),
+                        ),
+                    )
+                    .with_frame_start(frame_start)
+                    .with_frame_step(request.frame_step)
+                    .with_codec(video_codec)
+                    .with_hw_accel(effective_hw_accel)
+                    .with_encoder_backend(effective_encoder)
+                    .with_quality(request.crf, &request.preset)
+                    .with_audio_tracks(audio_tracks.clone())
+                    .with_control(control.clone())
+                    .with_security_policy(security_policy.clone());
+
+                    render_to_video_fallible(&rasterizer, &pipe_config, move |frame| {
+                        if frame == 0 {
+                            let mut cached = first_scene
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            if let Some(scene) = cached.take() {
+                                return Ok(scene);
+                            }
+                        }
+                        prepared.render(frame)
+                    })?;
                 }
             }
         }

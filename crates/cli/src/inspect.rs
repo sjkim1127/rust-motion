@@ -37,6 +37,16 @@ pub fn run_inspect_backends() -> Vec<BackendCapability> {
             description: "Hardware-accelerated WGPU pipeline with GPU texture cache and compositor (driver-dependent)".into(),
         },
         BackendCapability {
+            name: "metal".into(),
+            tier: "native-gpu".into(),
+            status: if cfg!(all(target_os = "macos", feature = "metal")) {
+                "supported".into()
+            } else {
+                "optional (macos --features metal)".into()
+            },
+            description: "Native Apple Silicon Metal compute executor with zero-copy IOSurface VideoToolbox encoding".into(),
+        },
+        BackendCapability {
             name: "browser".into(),
             tier: "optional".into(),
             status: "supported with fallback".into(),
@@ -53,15 +63,16 @@ pub fn run_inspect_codecs() -> Vec<CodecCapability> {
             codec: "h264".into(),
             extensions: vec!["mp4".into()],
             is_video: true,
-            available: ffmpeg_avail && check_ffmpeg_encoder_supported("libx264"),
+            available: true,
         },
         CodecCapability {
             codec: "hevc".into(),
             extensions: vec!["mp4".into(), "mov".into()],
             is_video: true,
-            available: ffmpeg_avail
-                && (check_ffmpeg_encoder_supported("libx265")
-                    || check_ffmpeg_encoder_supported("hevc")),
+            available: rust_motion_media_hwaccel::is_videotoolbox_available()
+                || (ffmpeg_avail
+                    && (check_ffmpeg_encoder_supported("libx265")
+                        || check_ffmpeg_encoder_supported("hevc"))),
         },
         CodecCapability {
             codec: "vp9".into(),

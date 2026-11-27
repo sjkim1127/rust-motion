@@ -211,6 +211,7 @@ async fn rhai_media_nodes_flow_through_the_cli_renderer() {
         crf: 18,
         preset: "fast".into(),
         hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
+        encoder: rust_motion_rasterizer::EncoderBackend::Auto,
         sandbox_roots: Vec::new(),
         permissive: false,
     })
@@ -234,4 +235,66 @@ async fn rhai_media_nodes_flow_through_the_cli_renderer() {
     assert!(streams.lines().any(|line| line == "audio"));
 
     fs::remove_dir_all(temp_dir).unwrap();
+}
+
+#[cfg(all(target_os = "macos", feature = "metal"))]
+#[tokio::test]
+async fn cli_metal_backend_renders_zero_copy_hevc_mp4_without_ffmpeg() {
+    use rust_motion_cli::{execute_render_command, RenderBackend, RenderCodec, RenderRequest};
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let output = temp_dir.path().join("cli_metal_hevc.mp4");
+
+    execute_render_command(&RenderRequest {
+        composition: Some("HelloWorld".into()),
+        script: None,
+        props: None,
+        output: output.clone(),
+        audio: Vec::new(),
+        width: 320,
+        height: 180,
+        scale: 1.0,
+        fps: 30.0,
+        duration: 10,
+        backend: RenderBackend::Metal,
+        codec: RenderCodec::H265,
+        frame_start: 0,
+        frame_end: None,
+        frame_step: 1,
+        concurrency: Some(2),
+        timeout_seconds: None,
+        crf: 20,
+        preset: "fast".into(),
+        hw_accel: rust_motion_rasterizer::HwAccel::Auto,
+        encoder: rust_motion_rasterizer::EncoderBackend::Native,
+        sandbox_roots: Vec::new(),
+        permissive: false,
+    })
+    .await
+    .unwrap();
+
+    assert!(output.is_file());
+    let meta = rust_motion_media::get_video_metadata(&output).unwrap();
+    assert_eq!(meta.width, 320);
+    assert_eq!(meta.height, 180);
+    assert!(meta.duration_in_seconds > 0.25);
+    assert_eq!(meta.duration_in_frames, 10);
+    if command_available("ffprobe") {
+        let probe = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=codec_name",
+                "-of",
+                "csv=p=0",
+            ])
+            .arg(&output)
+            .output()
+            .unwrap();
+        let codec_name = String::from_utf8_lossy(&probe.stdout).trim().to_string();
+        assert_eq!(codec_name, "hevc");
+    }
 }

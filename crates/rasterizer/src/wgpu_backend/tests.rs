@@ -2404,7 +2404,8 @@ fn gpu_interleaved_shader_preserves_top_level_draw_order() {
     assert_eq!(image.get_pixel(1, 1)[1], 255);
     assert_eq!(image.get_pixel(6, 4)[1], 255);
     assert_eq!(image.get_pixel(6, 4)[2], 0);
-    assert_eq!(gpu.render_stats().gpu_frames, 2);
+    assert_eq!(gpu.render_stats().gpu_frames, 1);
+    assert_eq!(gpu.render_stats().cpu_fallback_frames, 0);
 }
 
 #[test]
@@ -4065,4 +4066,573 @@ fn gpu_e2e_profiling_disabled_zero_samples() {
 
     assert_eq!(backend.profile_samples().len(), 0);
     assert_eq!(backend.profile_summary().total_frames, 0);
+}
+
+#[test]
+fn render_ir_representative_scene_matches_cpu_and_wgpu_executors() {
+    use crate::render_ir::{
+        lower_scene_to_plan, CpuReferenceExecutor, LowerOptions, RenderExecutor,
+    };
+
+    let Ok(wgpu) = WgpuBackend::new() else {
+        println!("GPU backend unavailable; skipping Render IR differential test");
+        return;
+    };
+    let cpu_backend = TinySkiaBackend::new();
+    let cpu_exec = CpuReferenceExecutor::new(&cpu_backend);
+    let tiny_png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+    let scene = Scene {
+        nodes: vec![
+            SceneNode::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 160.0,
+                h: 120.0,
+                fill: Color::rgb(16, 24, 40),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            },
+            SceneNode::Rect {
+                x: 12.0,
+                y: 12.0,
+                w: 64.0,
+                h: 40.0,
+                fill: Color::rgb(235, 110, 45),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            },
+            SceneNode::Path {
+                d: "M 96 16 L 144 16 L 144 64 L 96 64 Z".into(),
+                fill: Some(Color::rgb(50, 200, 140)),
+                stroke: None,
+                stroke_width: 0.0,
+                opacity: 1.0,
+            },
+            SceneNode::Image {
+                src: tiny_png.into(),
+                x: 16.0,
+                y: 72.0,
+                w: 32.0,
+                h: 32.0,
+                fit: ImageFit::Fill,
+                opacity: 1.0,
+            },
+            SceneNode::Text {
+                x: 60.0,
+                y: 96.0,
+                content: "IR".into(),
+                font_size: 20.0,
+                color: Color::WHITE,
+                font_weight: 400,
+                font_sources: Vec::new(),
+            },
+        ],
+    };
+    let config = FrameConfig::new(160, 120, 0, 30.0);
+    let caps = RenderExecutor::capabilities(&wgpu);
+    let opts = LowerOptions {
+        max_texture_dimension_2d: caps.max_texture_dimension_2d,
+        capabilities: caps.flags,
+        msaa_samples: SAMPLE_COUNT,
+    };
+
+    let plan_a = lower_scene_to_plan(&scene, &config, &opts).expect("lowering succeeds");
+    let plan_b = lower_scene_to_plan(&scene, &config, &opts).expect("lowering succeeds");
+    assert_eq!(plan_a.pass_order, plan_b.pass_order);
+    assert_eq!(plan_a.dump_text(), plan_b.dump_text());
+    assert!(plan_a.dump_json().is_ok());
+
+    let (cpu_img, cpu_report) = cpu_exec.execute_plan(&plan_a, &config).expect("CPU plan");
+    let (gpu_img, gpu_report) = wgpu.execute_plan(&plan_a, &config).expect("WGPU plan");
+    assert_eq!(cpu_report.cpu_island_passes, 0);
+    assert_eq!(gpu_report.cpu_island_passes, 0);
+    assert_eq!(gpu_report.passes_executed, plan_a.pass_order.len());
+
+    // Exact match on interior solid rect, path rect, and background pixels.
+    assert_eq!(gpu_img.get_pixel(4, 4), cpu_img.get_pixel(4, 4));
+    assert_eq!(gpu_img.get_pixel(40, 30), cpu_img.get_pixel(40, 30));
+    assert_eq!(gpu_img.get_pixel(120, 40), cpu_img.get_pixel(120, 40));
+
+    let max_channel_diff = cpu_img
+        .as_raw()
+        .iter()
+        .zip(gpu_img.as_raw().iter())
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap_or(0);
+    assert!(
+        max_channel_diff <= 24,
+        "unexpected CPU/WGPU channel diff: {max_channel_diff}"
+    );
+}
+
+#[test]
+fn render_ir_offscreen_overlap_plan_executes_multi_pass_on_wgpu() {
+    use crate::render_ir::{CpuReferenceExecutor, RenderExecutor};
+
+    let Ok(wgpu) = WgpuBackend::new() else {
+        println!("GPU backend unavailable; skipping multi-pass Render IR test");
+        return;
+    };
+    let cpu_backend = TinySkiaBackend::headless();
+    let cpu_exec = CpuReferenceExecutor::new(&cpu_backend);
+    let tiny_png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+    let scene = Scene {
+        nodes: vec![
+            SceneNode::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 64.0,
+                h: 64.0,
+                fill: Color::rgb(20, 30, 50),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            },
+            SceneNode::Layer {
+                opacity: 0.5,
+                blend_mode: crate::scene::BlendMode::Normal,
+                clip: None,
+                mask: None,
+                mask_mode: crate::scene::MaskMode::Alpha,
+                filters: Vec::new(),
+                shadow: None,
+                children: vec![
+                    SceneNode::Image {
+                        src: tiny_png.into(),
+                        x: 8.0,
+                        y: 8.0,
+                        w: 32.0,
+                        h: 32.0,
+                        fit: ImageFit::Fill,
+                        opacity: 1.0,
+                    },
+                    SceneNode::Image {
+                        src: tiny_png.into(),
+                        x: 20.0,
+                        y: 20.0,
+                        w: 32.0,
+                        h: 32.0,
+                        fit: ImageFit::Fill,
+                        opacity: 1.0,
+                    },
+                ],
+            },
+        ],
+    };
+    let config = FrameConfig::new(64, 64, 0, 30.0);
+    let plan = wgpu
+        .compile_render_plan(&scene, &config)
+        .expect("overlap plan compiles");
+    assert_eq!(plan.pass_order.len(), 3);
+    assert_eq!(plan.transient_pool_slots, 1);
+    assert!(plan.peak_transient_bytes > 0);
+
+    let (cpu_img, _) = cpu_exec.execute_plan(&plan, &config).unwrap();
+    let (gpu_img, gpu_report) = wgpu.execute_plan(&plan, &config).unwrap();
+    assert_eq!(gpu_report.passes_executed, 3);
+    assert_eq!(gpu_report.cpu_island_passes, 0);
+
+    let max_diff = cpu_img
+        .as_raw()
+        .iter()
+        .zip(gpu_img.as_raw().iter())
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap_or(0);
+    assert!(max_diff <= 2, "overlap diff too high: {max_diff}");
+}
+
+#[test]
+fn render_ir_unsupported_compute_pass_returns_explicit_error_on_wgpu() {
+    use crate::render_ir::{
+        CapabilityFlags, ColorMetadata, ExecutionError, ExecutionPlan, PassId, PassNode, PassOp,
+        PixelFormat, RenderExecutor, RenderGraph, ResourceDesc, ResourceId, ResourceLifetime,
+        TextureUsage,
+    };
+
+    let Ok(wgpu) = WgpuBackend::new() else {
+        println!("GPU backend unavailable; skipping unsupported compute error test");
+        return;
+    };
+    let mut graph = RenderGraph::new(32, 32);
+    graph.add_resource(ResourceDesc {
+        id: ResourceId(0),
+        label: "out".into(),
+        width: 32,
+        height: 32,
+        format: PixelFormat::Rgba8Unorm,
+        color: ColorMetadata::srgb_premultiplied(),
+        sample_count: 1,
+        usage: TextureUsage::STORAGE.union(TextureUsage::COPY_SRC),
+        lifetime: ResourceLifetime::Output,
+    });
+    graph.set_output(ResourceId(0));
+    graph.add_pass(PassNode {
+        id: PassId(0),
+        label: "unknown_compute".into(),
+        op: PassOp::Compute {
+            kernel: "unknown_compute_kernel".into(),
+            workgroups: [2, 2, 1],
+            params: vec![1.5],
+        },
+        reads: Vec::new(),
+        writes: vec![ResourceId(0)],
+        order_deps: Vec::new(),
+        required_capabilities: CapabilityFlags::COMPUTE_PASS,
+    });
+    let plan = ExecutionPlan::compile(graph).unwrap();
+    let err = wgpu
+        .execute_plan(&plan, &FrameConfig::new(32, 32, 0, 30.0))
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        ExecutionError::UnsupportedCapability {
+            backend: "wgpu",
+            pass: PassId(0),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn render_ir_cpu_island_pass_reports_fallback_telemetry() {
+    use crate::render_ir::{
+        CapabilityFlags, ColorMetadata, ExecutionPlan, PassId, PassNode, PassOp, PixelFormat,
+        RenderExecutor, RenderGraph, ResourceDesc, ResourceId, ResourceLifetime, TextureUsage,
+    };
+
+    let Ok(wgpu) = WgpuBackend::new() else {
+        println!("GPU backend unavailable; skipping CpuIsland telemetry test");
+        return;
+    };
+    let mut graph = RenderGraph::new(64, 64);
+    graph.add_resource(ResourceDesc {
+        id: ResourceId(0),
+        label: "out".into(),
+        width: 64,
+        height: 64,
+        format: PixelFormat::Rgba8Unorm,
+        color: ColorMetadata::srgb_premultiplied(),
+        sample_count: 1,
+        usage: TextureUsage::RENDER_TARGET.union(TextureUsage::CPU_READBACK),
+        lifetime: ResourceLifetime::Output,
+    });
+    graph.set_output(ResourceId(0));
+    graph.add_pass(PassNode {
+        id: PassId(0),
+        label: "explicit_cpu_island".into(),
+        op: PassOp::CpuIsland {
+            scene: Scene {
+                nodes: vec![SceneNode::Rect {
+                    x: 8.0,
+                    y: 8.0,
+                    w: 48.0,
+                    h: 48.0,
+                    fill: Color::rgb(90, 180, 240),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    corner_radius: 0.0,
+                }],
+            },
+            bounds: None,
+            reason: "explicit test island".into(),
+        },
+        reads: Vec::new(),
+        writes: vec![ResourceId(0)],
+        order_deps: Vec::new(),
+        required_capabilities: CapabilityFlags::CPU_ISLAND,
+    });
+    let plan = ExecutionPlan::compile(graph).unwrap();
+    let (img, report) = wgpu
+        .execute_plan(&plan, &FrameConfig::new(64, 64, 0, 30.0))
+        .unwrap();
+    assert_eq!(report.cpu_island_passes, 1);
+    assert_eq!(report.fallback_reasons, vec!["explicit test island"]);
+    assert_eq!(img.get_pixel(20, 20).0, [90, 180, 240, 255]);
+}
+
+#[test]
+fn gpu_compute_blur_layer_matches_cpu_reference_on_apple_silicon() {
+    let Ok(wgpu) = WgpuBackend::new() else {
+        println!("GPU backend unavailable; skipping GPU compute blur test");
+        return;
+    };
+    let cpu = TinySkiaBackend::headless();
+    let scene = Scene {
+        nodes: vec![
+            SceneNode::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 96.0,
+                h: 96.0,
+                fill: Color::rgb(14, 20, 34),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            },
+            SceneNode::Layer {
+                opacity: 0.8,
+                blend_mode: crate::scene::BlendMode::Normal,
+                clip: None,
+                mask: None,
+                mask_mode: crate::scene::MaskMode::Alpha,
+                filters: vec![crate::scene::SceneFilter::Blur { sigma: 2.0 }],
+                shadow: None,
+                children: vec![SceneNode::Rect {
+                    x: 24.0,
+                    y: 24.0,
+                    w: 48.0,
+                    h: 48.0,
+                    fill: Color::rgb(235, 95, 45),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    corner_radius: 0.0,
+                }],
+            },
+        ],
+    };
+    let config = FrameConfig::new(96, 96, 0, 30.0);
+    let cpu_img = cpu.render_frame(&scene, &config).unwrap();
+    let gpu_img = wgpu.render_frame(&scene, &config).unwrap();
+
+    assert!(wgpu.compute_pass_count() >= 2);
+    assert_eq!(wgpu.render_stats().gpu_frames, 1);
+    assert_eq!(wgpu.render_stats().cpu_fallback_frames, 0);
+
+    let max_diff = cpu_img
+        .as_raw()
+        .iter()
+        .zip(gpu_img.as_raw().iter())
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap_or(0);
+    assert!(max_diff <= 2, "GPU compute blur diff too high: {max_diff}");
+}
+
+#[test]
+fn gpu_compute_color_matrix_matches_cpu_reference() {
+    use crate::render_ir::{
+        CapabilityFlags, ClearOp, ColorMetadata, CpuReferenceExecutor, ExecutionPlan, PassId,
+        PassNode, PassOp, PixelFormat, RenderExecutor, RenderGraph, ResourceDesc, ResourceId,
+        ResourceLifetime, TextureUsage, KERNEL_COLOR_MATRIX,
+    };
+
+    let Ok(wgpu) = WgpuBackend::new() else {
+        println!("GPU backend unavailable; skipping GPU compute color matrix test");
+        return;
+    };
+    let cpu_backend = TinySkiaBackend::headless();
+    let cpu_exec = CpuReferenceExecutor::new(&cpu_backend);
+
+    let mut graph = RenderGraph::new(32, 32);
+    let make_desc = |id: u32, label: &str, lifetime: ResourceLifetime| ResourceDesc {
+        id: ResourceId(id),
+        label: label.into(),
+        width: 32,
+        height: 32,
+        format: PixelFormat::Rgba8Unorm,
+        color: ColorMetadata::srgb_premultiplied(),
+        sample_count: 1,
+        usage: TextureUsage::RENDER_TARGET
+            .union(TextureUsage::STORAGE)
+            .union(TextureUsage::SAMPLED)
+            .union(TextureUsage::COPY_SRC),
+        lifetime,
+    };
+    graph.add_resource(make_desc(0, "out", ResourceLifetime::Output));
+    graph.add_resource(make_desc(1, "src", ResourceLifetime::Transient));
+    graph.set_output(ResourceId(0));
+
+    graph.add_pass(PassNode {
+        id: PassId(0),
+        label: "fill".into(),
+        op: PassOp::Raster2D {
+            scene: Scene {
+                nodes: vec![SceneNode::Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 32.0,
+                    h: 32.0,
+                    fill: Color::rgb(120, 80, 200),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    corner_radius: 0.0,
+                }],
+            },
+            clear: ClearOp::Clear(Color::TRANSPARENT),
+            path_mask: None,
+        },
+        reads: Vec::new(),
+        writes: vec![ResourceId(1)],
+        order_deps: Vec::new(),
+        required_capabilities: CapabilityFlags::RASTER_2D_ANALYTIC,
+    });
+    graph.add_pass(PassNode {
+        id: PassId(1),
+        label: "cm".into(),
+        op: PassOp::Compute {
+            kernel: KERNEL_COLOR_MATRIX.into(),
+            workgroups: [4, 4, 1],
+            params: vec![0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0, 0.0, 0.5, 0.0],
+        },
+        reads: vec![ResourceId(1)],
+        writes: vec![ResourceId(0)],
+        order_deps: Vec::new(),
+        required_capabilities: CapabilityFlags::COMPUTE_PASS,
+    });
+
+    let plan = ExecutionPlan::compile(graph).unwrap();
+    let cfg = FrameConfig::new(32, 32, 0, 30.0);
+    let (cpu_img, _) = cpu_exec.execute_plan(&plan, &cfg).unwrap();
+    let (gpu_img, gpu_report) = wgpu.execute_plan(&plan, &cfg).unwrap();
+    assert_eq!(gpu_report.compute_passes, 1);
+    assert_eq!(gpu_img.as_raw(), cpu_img.as_raw());
+}
+
+#[test]
+fn gpu_mixed_scene_uses_bounded_cpu_island_with_area_telemetry() {
+    let Ok(wgpu) = WgpuBackend::new() else {
+        println!("GPU backend unavailable; skipping bounded CPU island GPU test");
+        return;
+    };
+    let cpu = TinySkiaBackend::headless();
+    let scene = Scene {
+        nodes: vec![
+            SceneNode::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 256.0,
+                h: 256.0,
+                fill: Color::rgb(15, 22, 38),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            },
+            SceneNode::FractalNoise {
+                x: 32.0,
+                y: 48.0,
+                w: 64.0,
+                h: 64.0,
+                noise_type: Default::default(),
+                fractal_type: Default::default(),
+                contrast: 1.0,
+                brightness: 0.0,
+                complexity: 3,
+                scale_x: 24.0,
+                scale_y: 24.0,
+                evolution: 0.0,
+                seed: 9,
+                opacity: 0.85,
+            },
+            SceneNode::Rect {
+                x: 140.0,
+                y: 140.0,
+                w: 72.0,
+                h: 72.0,
+                fill: Color::rgb(60, 200, 140),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            },
+        ],
+    };
+    let cfg = FrameConfig::new(256, 256, 0, 30.0);
+    let cpu_img = cpu.render_frame(&scene, &cfg).unwrap();
+    let gpu_img = wgpu.render_frame(&scene, &cfg).unwrap();
+
+    assert_eq!(wgpu.render_stats().gpu_frames, 1);
+    assert_eq!(wgpu.render_stats().cpu_fallback_frames, 0);
+    assert_eq!(wgpu.cpu_island_frames(), 1);
+    assert_eq!(wgpu.cpu_island_pixels(), 64 * 64);
+    assert_eq!(wgpu.cpu_island_upload_bytes(), 64 * 64 * 4);
+
+    let max_diff = cpu_img
+        .as_raw()
+        .iter()
+        .zip(gpu_img.as_raw().iter())
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap_or(0);
+    assert!(
+        max_diff <= 2,
+        "bounded CPU island + GPU composite diff too high: {max_diff}"
+    );
+}
+
+#[test]
+fn gpu_render_stream_executes_blur_layer_without_full_frame_fallback() {
+    let Ok(wgpu) = WgpuBackend::new() else {
+        println!("GPU backend unavailable; skipping streaming blur layer test");
+        return;
+    };
+    let cpu = TinySkiaBackend::headless();
+    let make_scene = |frame: u32| Scene {
+        nodes: vec![
+            SceneNode::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 64.0,
+                h: 64.0,
+                fill: Color::rgb(12, 16, 24),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            },
+            SceneNode::Layer {
+                opacity: 1.0,
+                blend_mode: crate::scene::BlendMode::Normal,
+                clip: None,
+                mask: None,
+                mask_mode: crate::scene::MaskMode::Alpha,
+                filters: vec![crate::scene::SceneFilter::Blur { sigma: 1.5 }],
+                shadow: None,
+                children: vec![SceneNode::Rect {
+                    x: 16.0 + frame as f32 * 2.0,
+                    y: 16.0,
+                    w: 24.0,
+                    h: 24.0,
+                    fill: Color::rgb(200, 80, 120),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    corner_radius: 0.0,
+                }],
+            },
+        ],
+    };
+
+    let mut stream_frames: Vec<Vec<u8>> = Vec::new();
+    wgpu.render_stream(
+        3,
+        &|f| Ok(make_scene(f)),
+        &|f| FrameConfig::new(64, 64, f, 30.0),
+        &mut |_f, rgba: &[u8]| {
+            stream_frames.push(rgba.to_vec());
+            Ok(())
+        },
+    )
+    .unwrap();
+
+    assert_eq!(wgpu.render_stats().cpu_fallback_frames, 0);
+    assert!(wgpu.compute_pass_count() >= 6);
+    for (f, gpu_bytes) in stream_frames.iter().enumerate() {
+        let cpu_img = cpu
+            .render_frame(
+                &make_scene(f as u32),
+                &FrameConfig::new(64, 64, f as u32, 30.0),
+            )
+            .unwrap();
+        let max_diff = cpu_img
+            .as_raw()
+            .iter()
+            .zip(gpu_bytes.iter())
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap_or(0);
+        assert!(max_diff <= 2, "stream blur frame {f} diff: {max_diff}");
+    }
 }

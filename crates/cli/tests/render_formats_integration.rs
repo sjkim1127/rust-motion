@@ -41,6 +41,7 @@ fn request(output: &Path, codec: RenderCodec) -> RenderRequest {
         crf: 18,
         preset: "fast".into(),
         hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
+        encoder: rust_motion_rasterizer::EncoderBackend::Auto,
         sandbox_roots: Vec::new(),
         permissive: false,
     }

@@ -119,102 +119,10 @@ impl WgpuBackend {
                 }],
             });
 
-            // The shared pipeline layout requires group 2 even for analytic
-            // and mesh draws. A 1x1 dummy texture keeps those pipelines valid;
-            // image draws replace it with their per-command texture group.
-            let dummy_texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("dummy_image_texture"),
-                size: wgpu::Extent3d {
-                    width: 1,
-                    height: 1,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-            queue.write_texture(
-                dummy_texture.as_image_copy(),
-                &[0, 0, 0, 0],
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(4),
-                    rows_per_image: Some(1),
-                },
-                wgpu::Extent3d {
-                    width: 1,
-                    height: 1,
-                    depth_or_array_layers: 1,
-                },
-            );
-            let dummy_view = dummy_texture.create_view(&wgpu::TextureViewDescriptor::default());
-            let dummy_sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
-            let dummy_image_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("dummy_image_bg"),
-                layout: &self.ctx.image_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&dummy_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&dummy_sampler),
-                    },
-                ],
-            });
+            let dummy_image_bg = &self.ctx.dummy_image_bg;
+            let default_path_mask_bg = &self.ctx.default_path_mask_bg;
 
-            let default_path_mask_texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("default_path_mask_texture"),
-                size: wgpu::Extent3d {
-                    width: 1,
-                    height: 1,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::R8Unorm,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-            queue.write_texture(
-                default_path_mask_texture.as_image_copy(),
-                &[255],
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(1),
-                    rows_per_image: Some(1),
-                },
-                wgpu::Extent3d {
-                    width: 1,
-                    height: 1,
-                    depth_or_array_layers: 1,
-                },
-            );
-            let default_path_mask_view =
-                default_path_mask_texture.create_view(&wgpu::TextureViewDescriptor::default());
-            let default_path_mask_sampler =
-                device.create_sampler(&wgpu::SamplerDescriptor::default());
-            let default_path_mask_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("default_path_mask_bg"),
-                layout: &self.ctx.path_mask_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&default_path_mask_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&default_path_mask_sampler),
-                    },
-                ],
-            });
-
-            let (_path_mask_texture, path_mask_view) = if path_mask.is_some() {
+            let owned_path_mask = if path_mask.is_some() {
                 let texture = device.create_texture(&wgpu::TextureDescriptor {
                     label: Some("path_mask_texture"),
                     size: wgpu::Extent3d {
@@ -231,54 +139,29 @@ impl WgpuBackend {
                     view_formats: &[],
                 });
                 let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                (texture, view)
-            } else {
-                let texture = device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("default_path_mask_texture"),
-                    size: wgpu::Extent3d {
-                        width: 1,
-                        height: 1,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::R8Unorm,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                    view_formats: &[],
+                let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+                let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("path_mask_bg"),
+                    layout: &self.ctx.path_mask_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&sampler),
+                        },
+                    ],
                 });
-                queue.write_texture(
-                    texture.as_image_copy(),
-                    &[255],
-                    wgpu::ImageDataLayout {
-                        offset: 0,
-                        bytes_per_row: Some(1),
-                        rows_per_image: Some(1),
-                    },
-                    wgpu::Extent3d {
-                        width: 1,
-                        height: 1,
-                        depth_or_array_layers: 1,
-                    },
-                );
-                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                (texture, view)
+                Some((view, bg))
+            } else {
+                None
             };
-            let path_mask_sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
-            let path_mask_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("path_mask_bg"),
-                layout: &self.ctx.path_mask_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&path_mask_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&path_mask_sampler),
-                    },
-                ],
-            });
+            let path_mask_bg = owned_path_mask
+                .as_ref()
+                .map(|(_, bg)| bg)
+                .unwrap_or(default_path_mask_bg);
 
             let mesh_buffers: Vec<Option<(wgpu::Buffer, wgpu::Buffer)>> = commands
                 .iter()
@@ -323,13 +206,15 @@ impl WgpuBackend {
                 (vertex_buffer, index_buffer)
             });
 
-            if let (Some(mask), Some((vertex_buffer, index_buffer))) =
-                (path_mask, path_mask_buffers.as_ref())
-            {
+            if let (Some(mask), Some((vertex_buffer, index_buffer)), Some((path_mask_view, _))) = (
+                path_mask,
+                path_mask_buffers.as_ref(),
+                owned_path_mask.as_ref(),
+            ) {
                 let mut mask_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("path_mask_pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &path_mask_view,
+                        view: path_mask_view,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -341,8 +226,8 @@ impl WgpuBackend {
                 mask_pass.set_pipeline(&self.ctx.path_mask_pipeline);
                 mask_pass.set_bind_group(0, &globals_bg, &[]);
                 mask_pass.set_bind_group(1, &instance_bg, &[]);
-                mask_pass.set_bind_group(2, &dummy_image_bg, &[]);
-                mask_pass.set_bind_group(3, &default_path_mask_bg, &[]);
+                mask_pass.set_bind_group(2, dummy_image_bg, &[]);
+                mask_pass.set_bind_group(3, default_path_mask_bg, &[]);
                 mask_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 mask_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 mask_pass.draw_indexed(
@@ -381,8 +266,8 @@ impl WgpuBackend {
 
             pass.set_bind_group(0, &globals_bg, &[]);
             pass.set_bind_group(1, &instance_bg, &[]);
-            pass.set_bind_group(2, &dummy_image_bg, &[]);
-            pass.set_bind_group(3, &path_mask_bg, &[]);
+            pass.set_bind_group(2, dummy_image_bg, &[]);
+            pass.set_bind_group(3, path_mask_bg, &[]);
 
             let mut i = 0;
             while i < commands.len() {

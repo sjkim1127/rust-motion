@@ -69,6 +69,8 @@ pub enum RenderBackend {
     Browser,
     /// GPU rasterizer via wgpu. Requires `--features gpu`.
     Gpu,
+    /// Apple Silicon Metal compute + zero-copy IOSurface VideoToolbox pipeline. Requires `--features metal`.
+    Metal,
     /// Automatic hybrid dispatch (Native for motion graphics/subtitles, Chromium Browser for Three.js/DOM).
     Auto,
 }
@@ -185,6 +187,7 @@ pub fn resolve_hybrid_backend(
         RenderBackend::Native => RenderBackend::Native,
         RenderBackend::Browser => RenderBackend::Browser,
         RenderBackend::Gpu => RenderBackend::Gpu,
+        RenderBackend::Metal => RenderBackend::Metal,
         RenderBackend::Auto => {
             if script_path.is_some() {
                 return RenderBackend::Native;
@@ -325,6 +328,10 @@ pub enum Commands {
         /// Hardware acceleration mode for video encoding.
         #[arg(long, value_enum, default_value_t = HwAccelArg::Auto)]
         hw_accel: HwAccelArg,
+
+        /// Video encoder backend ('auto' uses FFmpeg when available with pure-Rust H.264/MP4 fallback).
+        #[arg(long, value_enum, default_value_t = EncoderArg::Auto)]
+        encoder: EncoderArg,
 
         /// Allowed root directory for media assets. May be repeated (alias: --media-root).
         #[arg(long = "sandbox-root", alias = "media-root", value_name = "DIR")]
@@ -546,6 +553,25 @@ impl From<HwAccelArg> for rust_motion_rasterizer::HwAccel {
     }
 }
 
+/// Video encoder backend selection for the CLI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
+pub enum EncoderArg {
+    #[default]
+    Auto,
+    Native,
+    Ffmpeg,
+}
+
+impl From<EncoderArg> for rust_motion_rasterizer::EncoderBackend {
+    fn from(arg: EncoderArg) -> Self {
+        match arg {
+            EncoderArg::Auto => rust_motion_rasterizer::EncoderBackend::Auto,
+            EncoderArg::Native => rust_motion_rasterizer::EncoderBackend::Native,
+            EncoderArg::Ffmpeg => rust_motion_rasterizer::EncoderBackend::Ffmpeg,
+        }
+    }
+}
+
 /// A validated render request independent from argument parsing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RenderRequest {
@@ -569,6 +595,7 @@ pub struct RenderRequest {
     pub crf: u32,
     pub preset: String,
     pub hw_accel: rust_motion_rasterizer::HwAccel,
+    pub encoder: rust_motion_rasterizer::EncoderBackend,
     pub sandbox_roots: Vec<PathBuf>,
     pub permissive: bool,
 }
@@ -647,6 +674,7 @@ mod tests {
             crf: 23,
             preset: "medium".into(),
             hw_accel: rust_motion_rasterizer::HwAccel::Auto,
+            encoder: rust_motion_rasterizer::EncoderBackend::Auto,
             sandbox_roots: vec![],
             permissive: false,
         }

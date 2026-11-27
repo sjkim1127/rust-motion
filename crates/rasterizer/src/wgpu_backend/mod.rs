@@ -2,7 +2,9 @@
 #![cfg(feature = "gpu")]
 
 pub(crate) mod compile;
+pub(crate) mod compute;
 pub(crate) mod context;
+pub(crate) mod executor;
 pub(crate) mod metrics;
 pub(crate) mod pipeline;
 pub(crate) mod resources;
@@ -85,6 +87,10 @@ pub struct WgpuBackend {
     gpu_submit_no_readback_ns: AtomicU64,
     gpu_frame_count: AtomicU64,
     cpu_fallback_frame_count: AtomicU64,
+    cpu_island_frames: AtomicU64,
+    cpu_island_pixels: AtomicU64,
+    cpu_island_upload_bytes: AtomicU64,
+    compute_pass_count: AtomicU64,
     last_cpu_fallback_reason: Mutex<Option<String>>,
     profiling_enabled: AtomicBool,
     profile_samples: Mutex<Vec<FrameProfileSample>>,
@@ -123,6 +129,10 @@ impl WgpuBackend {
             gpu_submit_no_readback_ns: AtomicU64::new(0),
             gpu_frame_count: AtomicU64::new(0),
             cpu_fallback_frame_count: AtomicU64::new(0),
+            cpu_island_frames: AtomicU64::new(0),
+            cpu_island_pixels: AtomicU64::new(0),
+            cpu_island_upload_bytes: AtomicU64::new(0),
+            compute_pass_count: AtomicU64::new(0),
             last_cpu_fallback_reason: Mutex::new(None),
             profiling_enabled: AtomicBool::new(false),
             profile_samples: Mutex::new(Vec::new()),
@@ -138,6 +148,26 @@ impl WgpuBackend {
             texture_cache_hits: self.gpu_texture_cache_hits.load(Ordering::Relaxed),
             texture_cache_misses: self.gpu_texture_cache_misses.load(Ordering::Relaxed),
         }
+    }
+
+    /// Number of frames that executed at least one bounded CPU island pass.
+    pub fn cpu_island_frames(&self) -> u64 {
+        self.cpu_island_frames.load(Ordering::Relaxed)
+    }
+
+    /// Cumulative pixels rasterized inside bounded CPU island passes.
+    pub fn cpu_island_pixels(&self) -> u64 {
+        self.cpu_island_pixels.load(Ordering::Relaxed)
+    }
+
+    /// Cumulative RGBA bytes uploaded to GPU from bounded CPU island passes.
+    pub fn cpu_island_upload_bytes(&self) -> u64 {
+        self.cpu_island_upload_bytes.load(Ordering::Relaxed)
+    }
+
+    /// Cumulative GPU compute shader passes dispatched.
+    pub fn compute_pass_count(&self) -> u64 {
+        self.compute_pass_count.load(Ordering::Relaxed)
     }
 
     /// Return the most recent reason a frame was rendered by the CPU fallback.
@@ -332,268 +362,8 @@ impl RasterizerBackend for WgpuBackend {
     }
 
     fn render_frame(&self, scene: &Scene, config: &FrameConfig) -> Result<RgbaImage, RasterError> {
-        if !scene.nodes.is_empty()
-            && scene
-                .nodes
-                .iter()
-                .all(|node| matches!(node, SceneNode::Shader { .. }))
-        {
-            let image = if scene.nodes.iter().all(|node| {
-                matches!(node, SceneNode::Shader { x, y, w, h, source, opacity, .. }
-                        if *opacity >= 0.0
-                            && *opacity <= 1.0
-                            && shader_opacity_supported(source)
-                            && *x >= 0.0
-                            && *y >= 0.0
-                            && *w > 0.0
-                            && *h > 0.0
-                            && *x + *w <= config.width as f32
-                            && *y + *h <= config.height as f32)
-            }) {
-                self.render_shader_layers_direct(scene, config)?
-            } else {
-                self.render_shader_layers(scene, config)?
-            };
-            self.gpu_frame_count.fetch_add(1, Ordering::Relaxed);
-            return Ok(image);
-        }
-        if scene
-            .nodes
-            .iter()
-            .any(|node| matches!(node, SceneNode::Shader { .. }))
-        {
-            let first_shader = scene
-                .nodes
-                .iter()
-                .position(|node| matches!(node, SceneNode::Shader { .. }))
-                .unwrap();
-            let trailing_shader_only = scene.nodes[first_shader..]
-                .iter()
-                .all(|node| matches!(node, SceneNode::Shader { .. }));
-            if !trailing_shader_only {
-                let image = self.render_interleaved_shader_scene(scene, config)?;
-                return Ok(image);
-            }
-        }
-        if config.width > self.ctx.max_texture_dimension_2d
-            || config.height > self.ctx.max_texture_dimension_2d
-        {
-            self.record_cpu_fallback("frame dimensions exceed the GPU texture limit");
-            return self.fallback.render_frame(scene, config);
-        }
-        if let Some((base_scene, layer_scene, layer_opacity)) =
-            trailing_overlap_texture_layer(scene)
-        {
-            if let Ok(image) =
-                self.render_trailing_overlap_layer(&base_scene, &layer_scene, layer_opacity, config)
-            {
-                return Ok(image);
-            }
-        }
-        let mut gpu_base_scene = None;
-        let shader_suffix = scene
-            .nodes
-            .iter()
-            .position(|node| matches!(node, SceneNode::Shader { .. }))
-            .filter(|start| *start > 0)
-            .and_then(|start| {
-                let suffix = &scene.nodes[start..];
-                let valid = suffix.iter().all(|node| {
-                    matches!(node, SceneNode::Shader { x, y, w, h, source, opacity, .. }
-                        if *opacity >= 0.0
-                            && *opacity <= 1.0
-                            && shader_opacity_supported(source)
-                            && *x >= 0.0
-                            && *y >= 0.0
-                            && *w > 0.0
-                            && *h > 0.0
-                            && *x + *w <= config.width as f32
-                            && *y + *h <= config.height as f32)
-                });
-                if valid {
-                    gpu_base_scene = Some(Scene {
-                        nodes: scene.nodes[..start].to_vec(),
-                    });
-                    Some(suffix)
-                } else {
-                    None
-                }
-            });
-        let is_profiling = self.is_profiling_enabled();
-        let frame_started = Instant::now();
-        let decode_before = if is_profiling {
-            self.video_decode_ns.load(Ordering::Relaxed)
-        } else {
-            0
-        };
-        let upload_ns_before = if is_profiling {
-            self.texture_upload_ns.load(Ordering::Relaxed)
-                + self.text_atlas_upload_ns.load(Ordering::Relaxed)
-        } else {
-            0
-        };
-        let upload_bytes_before = if is_profiling {
-            self.gpu_texture_upload_bytes.load(Ordering::Relaxed)
-                + self.text_atlas_upload_bytes.load(Ordering::Relaxed)
-        } else {
-            0
-        };
-
-        let encode_start = if is_profiling {
-            Some(Instant::now())
-        } else {
-            None
-        };
-        let gpu_scene = gpu_base_scene.as_ref().unwrap_or(scene);
-        let Some((commands, path_mask, asset_decode_ns)) =
-            compile_scene_with_path_mask(gpu_scene, &self.fallback)
-        else {
-            let reason = gpu_fallback_reason(gpu_scene);
-            if reason == "overlapping texture layer requires offscreen compositing" {
-                // Allocate/reuse the layer target now so the eventual child
-                // pass does not compete with the ordered output ring.
-                let _ = self.offscreen_layer_slot(config.width, config.height);
-            }
-            self.record_cpu_fallback(reason);
-            let fb_start = if is_profiling {
-                Some(Instant::now())
-            } else {
-                None
-            };
-            let img = self.fallback.render_frame(scene, config)?;
-            let fb_render_ns = fb_start.map(|t| t.elapsed().as_nanos() as u64).unwrap_or(0);
-            if is_profiling {
-                let total_ns = frame_started.elapsed().as_nanos() as u64;
-                self.record_profile_sample(FrameProfileSample {
-                    frame_idx: config.frame,
-                    scene_eval_ns: 0,
-                    decode_ns: 0,
-                    upload_ns: 0,
-                    upload_bytes: 0,
-                    compile_encode_ns: fb_render_ns,
-                    submission_wait_ns: 0,
-                    gpu_exec_ns: None,
-                    readback_ns: 0,
-                    readback_bytes: 0,
-                    video_encode_ns: 0,
-                    total_frame_ns: total_ns,
-                    cpu_fallback: true,
-                });
-                self.last_session_wall_ns.store(total_ns, Ordering::Relaxed);
-            }
-            return Ok(img);
-        };
-
-        let width = config.width;
-        let height = config.height;
-
-        let resource = {
-            let mut pool = self
-                .frame_resources
-                .lock()
-                .map_err(|_| RasterError::Init("GPU resource pool mutex poisoned".into()))?;
-            pool.entry((width, height))
-                .or_insert_with(|| {
-                    std::sync::Arc::new(Mutex::new(GpuFrameResources::new(
-                        &self.ctx.device,
-                        width,
-                        height,
-                        self.ctx.supports_timestamp_queries,
-                    )))
-                })
-                .clone()
-        };
-        let mut res = resource
-            .lock()
-            .map_err(|_| RasterError::Init("GPU frame resource mutex poisoned".into()))?;
-
-        let slot_idx = res.active_index % RING_BUFFER_SIZE;
-        res.active_index = res.active_index.wrapping_add(1);
-
-        let submitted = self.submit_frame_to_slot(FrameSubmission {
-            commands: &commands,
-            path_mask: path_mask.as_ref(),
-            width,
-            height,
-            sampling_fps: config.fps,
-            slot: &res.slots[slot_idx],
-            shader_suffix,
-            readback: true,
-        })?;
-        let submission_index = submitted.submission_index;
-        let rx = submitted.readback_rx;
-        let query_rx = submitted.query_rx;
-        let encode_total_ns = encode_start
-            .map(|t| t.elapsed().as_nanos() as u64)
-            .unwrap_or(0);
-
-        let (decode_ns, upload_ns, upload_bytes, compile_encode_ns) = if is_profiling {
-            let decode_after = self.video_decode_ns.load(Ordering::Relaxed);
-            let upload_ns_after = self.texture_upload_ns.load(Ordering::Relaxed)
-                + self.text_atlas_upload_ns.load(Ordering::Relaxed);
-            let upload_bytes_after = self.gpu_texture_upload_bytes.load(Ordering::Relaxed)
-                + self.text_atlas_upload_bytes.load(Ordering::Relaxed);
-
-            let video_decode_diff = decode_after.saturating_sub(decode_before);
-            let dec_ns = video_decode_diff.saturating_add(asset_decode_ns);
-            let upl_ns = upload_ns_after.saturating_sub(upload_ns_before);
-            let upl_bytes = upload_bytes_after.saturating_sub(upload_bytes_before);
-            let comp_enc_ns = encode_total_ns
-                .saturating_sub(upl_ns)
-                .saturating_sub(asset_decode_ns);
-            (dec_ns, upl_ns, upl_bytes, comp_enc_ns)
-        } else {
-            (0, 0, 0, 0)
-        };
-
-        // Texture preparation (including video decode and cache-miss upload)
-        // is measured separately. This interval is GPU command submission,
-        // synchronization, and CPU readback only.
-        let gpu_submit_start = Instant::now();
-
-        let mut out_pixels = None;
-        let mut scratch = Vec::new();
-        self.drain_slot(
-            InFlight {
-                frame_idx: config.frame,
-                slot_idx,
-                submission_index,
-                rx: rx.expect("readback was requested for render_frame"),
-                query_rx,
-                frame_started,
-                scene_eval_ns: 0,
-                decode_ns,
-                upload_ns,
-                upload_bytes,
-                compile_encode_ns,
-            },
-            &res,
-            width,
-            height,
-            &mut scratch,
-            &mut |_frame, pixels: &[u8]| {
-                out_pixels = Some(pixels.to_vec());
-                Ok(())
-            },
-        )?;
-
-        let pixels = out_pixels.ok_or_else(|| {
-            RasterError::ImageEncode("Failed to assemble RgbaImage from GPU readback".into())
-        })?;
-
-        let image = RgbaImage::from_raw(width, height, pixels).ok_or_else(|| {
-            RasterError::ImageEncode("Failed to assemble RgbaImage from GPU readback".into())
-        })?;
-        if is_profiling {
-            let total_frame_ns = frame_started.elapsed().as_nanos() as u64;
-            self.last_session_wall_ns
-                .store(total_frame_ns, Ordering::Relaxed);
-        }
-        self.gpu_submit_readback_ns.fetch_add(
-            gpu_submit_start.elapsed().as_nanos() as u64,
-            Ordering::Relaxed,
-        );
-        self.gpu_frame_count.fetch_add(1, Ordering::Relaxed);
+        let plan = self.compile_render_plan(scene, config)?;
+        let (image, _report) = crate::render_ir::RenderExecutor::execute_plan(self, &plan, config)?;
         Ok(image)
     }
 
@@ -648,7 +418,7 @@ impl RasterizerBackend for WgpuBackend {
                 })
                 .clone()
         };
-        let res = resource
+        let mut res = resource
             .lock()
             .map_err(|_| RasterError::Init("GPU frame resource mutex poisoned".into()))?;
 
@@ -700,6 +470,52 @@ impl RasterizerBackend for WgpuBackend {
             else {
                 while let Some(prev) = in_flight.pop_front() {
                     self.drain_slot(prev, &res, width, height, &mut scratch, sink)?;
+                }
+                if let Ok(plan) = self.compile_render_plan(&scene, &cfg) {
+                    let is_single_cpu_island = plan.pass_order.len() == 1
+                        && plan
+                            .pass_order
+                            .first()
+                            .and_then(|pid| plan.graph.pass(*pid))
+                            .is_some_and(|p| {
+                                matches!(p.op, crate::render_ir::PassOp::CpuIsland { .. })
+                            });
+                    if !is_single_cpu_island {
+                        drop(res);
+                        let (img, report) =
+                            crate::render_ir::RenderExecutor::execute_plan(self, &plan, &cfg)?;
+                        let enc_start = if is_profiling {
+                            Some(Instant::now())
+                        } else {
+                            None
+                        };
+                        sink.consume(frame, img.as_raw())?;
+                        let enc_ns = enc_start
+                            .map(|t| t.elapsed().as_nanos() as u64)
+                            .unwrap_or(0);
+                        if is_profiling {
+                            self.record_profile_sample(FrameProfileSample {
+                                frame_idx: frame,
+                                scene_eval_ns,
+                                decode_ns: 0,
+                                upload_ns: 0,
+                                upload_bytes: report.cpu_island_upload_bytes,
+                                compile_encode_ns: 0,
+                                submission_wait_ns: 0,
+                                gpu_exec_ns: None,
+                                readback_ns: 0,
+                                readback_bytes: u64::from(width) * u64::from(height) * 4,
+                                video_encode_ns: enc_ns,
+                                total_frame_ns: frame_started.elapsed().as_nanos() as u64,
+                                cpu_fallback: report.cpu_island_passes > 0
+                                    && report.gpu_passes == 0,
+                            });
+                        }
+                        res = resource.lock().map_err(|_| {
+                            RasterError::Init("GPU frame resource mutex poisoned".into())
+                        })?;
+                        continue;
+                    }
                 }
                 self.record_cpu_fallback(gpu_fallback_reason(&scene));
                 let fb_start = if is_profiling {

@@ -144,6 +144,19 @@ pub fn parse_media(
             image: Some(image),
         });
     }
+    if let Ok(meta) = rust_motion_media_container::probe_isobmff_path(path_ref) {
+        let video = video_metadata_from_container(&meta);
+        let audio = audio_metadata_from_container(&meta, fps);
+        if video.is_some() || audio.is_some() {
+            let duration_in_seconds = max_known_track_duration(video.as_ref(), audio.as_ref());
+            return Ok(ParsedMediaMetadata {
+                duration_in_seconds,
+                video,
+                audio,
+                image: None,
+            });
+        }
+    }
     let video = get_video_metadata(path_ref).ok();
     let audio = get_audio_metadata(path_ref, fps).ok();
     if video.is_none() && audio.is_none() {
@@ -193,13 +206,75 @@ pub fn static_file(relative_path: impl AsRef<Path>) -> Result<PathBuf, MediaMeta
     Err(MediaMetadataError::FileNotFound(rel.display().to_string()))
 }
 
-/// Probe a video file using `ffprobe` to extract width, height, fps, and duration.
+fn video_metadata_from_container(
+    meta: &rust_motion_media_core::MediaMetadata,
+) -> Option<VideoMetadata> {
+    let video = meta.video_streams.first()?;
+    if video.width == 0 || video.height == 0 {
+        return None;
+    }
+    let (width, height) = match video.rotation_degrees {
+        90 | 270 => (video.height, video.width),
+        _ => (video.width, video.height),
+    };
+    let fps = {
+        let rate = video.fps.as_f64();
+        if rate.is_finite() && rate > 0.0 {
+            rate
+        } else {
+            30.0
+        }
+    };
+    let duration_in_seconds = video
+        .duration_secs
+        .or(meta.duration_secs)
+        .filter(|d| d.is_finite() && *d >= 0.0)
+        .unwrap_or(0.0);
+    let duration_in_frames = (duration_in_seconds * fps).round() as u32;
+    let aspect_ratio = width as f64 / height as f64;
+    Some(VideoMetadata {
+        width,
+        height,
+        fps,
+        duration_in_seconds,
+        duration_in_frames,
+        aspect_ratio,
+        is_landscape: width >= height,
+    })
+}
+
+fn audio_metadata_from_container(
+    meta: &rust_motion_media_core::MediaMetadata,
+    fps: f64,
+) -> Option<AudioMetadata> {
+    let audio = meta.audio_streams.first()?;
+    let duration_secs = audio
+        .duration_secs
+        .or(meta.duration_secs)
+        .filter(|d| d.is_finite() && *d >= 0.0)
+        .unwrap_or(0.0);
+    Some(AudioMetadata {
+        channels: audio.channels,
+        sample_rate: audio.sample_rate,
+        duration_in_seconds: duration_secs,
+        duration_in_frames: (duration_secs * fps).round() as u32,
+    })
+}
+
+/// Probe container/stream metadata natively first, falling back to `ffprobe` for formats
+/// not yet supported by native container parsers (e.g. WebM/MKV).
 pub fn get_video_metadata(path: impl AsRef<Path>) -> Result<VideoMetadata, MediaMetadataError> {
     let path_ref = path.as_ref();
     if !path_ref.exists() {
         return Err(MediaMetadataError::FileNotFound(
             path_ref.display().to_string(),
         ));
+    }
+
+    if let Ok(meta) = rust_motion_media_container::probe_isobmff_path(path_ref) {
+        if let Some(video) = video_metadata_from_container(&meta) {
+            return Ok(video);
+        }
     }
 
     let output = Command::new("ffprobe")
@@ -284,7 +359,7 @@ pub fn get_video_metadata(path: impl AsRef<Path>) -> Result<VideoMetadata, Media
     })
 }
 
-/// Probe an audio file using `hound` or `ffprobe`.
+/// Probe an audio file natively (`hound`, ISO-BMFF container, or `symphonia`), falling back to `ffprobe`.
 pub fn get_audio_metadata(
     path: impl AsRef<Path>,
     fps: f64,
@@ -308,6 +383,26 @@ pub fn get_audio_metadata(
         return Ok(AudioMetadata {
             channels: spec.channels,
             sample_rate: spec.sample_rate,
+            duration_in_seconds: duration_secs,
+            duration_in_frames: (duration_secs * fps).round() as u32,
+        });
+    }
+
+    // Try native ISO-BMFF (MP4 / M4A / MOV) container probe next
+    if let Ok(meta) = rust_motion_media_container::probe_isobmff_path(path_ref) {
+        if let Some(audio) = audio_metadata_from_container(&meta, fps) {
+            return Ok(audio);
+        }
+        return Err(MediaMetadataError::AudioDecode(
+            "ISO-BMFF container has no audio stream".into(),
+        ));
+    }
+
+    // Try Symphonia for MP3 / AAC / ISO-MP4 / PCM streams
+    if let Some((channels, sample_rate, duration_secs)) = probe_audio_with_symphonia(path_ref) {
+        return Ok(AudioMetadata {
+            channels,
+            sample_rate,
             duration_in_seconds: duration_secs,
             duration_in_frames: (duration_secs * fps).round() as u32,
         });
@@ -373,6 +468,44 @@ pub fn get_audio_metadata(
         duration_in_seconds,
         duration_in_frames: (duration_in_seconds * fps).round() as u32,
     })
+}
+
+fn probe_audio_with_symphonia(path: &Path) -> Option<(u16, u32, f64)> {
+    use symphonia::core::formats::FormatOptions;
+    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::meta::MetadataOptions;
+    use symphonia::core::probe::Hint;
+
+    let file = std::fs::File::open(path).ok()?;
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+    let mut hint = Hint::new();
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        hint.with_extension(ext);
+    }
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .ok()?;
+    let track = probed
+        .format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.channels.is_some() && t.codec_params.sample_rate.is_some())?;
+    let channels = track.codec_params.channels?.count() as u16;
+    let sample_rate = track.codec_params.sample_rate?;
+    let duration_secs = match (track.codec_params.n_frames, track.codec_params.time_base) {
+        (Some(n_frames), Some(tb)) => {
+            let t = tb.calc_time(n_frames);
+            t.seconds as f64 + t.frac
+        }
+        (Some(n_frames), None) if sample_rate > 0 => n_frames as f64 / f64::from(sample_rate),
+        _ => return None,
+    };
+    Some((channels, sample_rate, duration_secs))
 }
 
 fn parse_frame_rate(s: &str) -> Option<f64> {
@@ -543,5 +676,89 @@ mod tests {
         assert_eq!(bytes.len(), 4);
         assert!(read_media_range(&path, 4, 3).is_err());
         assert!(read_media_range(&path, 0, MAX_MEDIA_RANGE_BYTES + 1).is_err());
+    }
+
+    #[test]
+    fn test_native_isobmff_probe_and_parse_media_without_ffprobe() {
+        use rust_motion_media_container::{Mp4Muxer, Mp4MuxerOptions};
+        use rust_motion_media_core::{
+            AudioCodecId, AudioTrackConfig, ColorDescription, ContainerMuxer, EncodedPacket,
+            Rational, TrackConfig, VideoCodecId, VideoTrackConfig,
+        };
+
+        let dir = std::env::temp_dir().join(format!(
+            "rust_motion_native_probe_test_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mp4_path = dir.join("native.mp4");
+
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&mp4_path)
+            .unwrap();
+        let avcc = [1u8, 100, 0, 30, 0xFF, 0xE1];
+        let v = TrackConfig::Video(VideoTrackConfig {
+            width: 320,
+            height: 240,
+            timescale: 24,
+            fps: Rational::new(24, 1),
+            codec: VideoCodecId::H264,
+            codec_config: avcc.to_vec(),
+            color: ColorDescription::bt709_limited(),
+        });
+        let a = TrackConfig::Audio(AudioTrackConfig {
+            codec: AudioCodecId::Aac,
+            sample_rate: 48000,
+            channels: 2,
+            timescale: 48000,
+            codec_config: vec![0x11, 0x90],
+        });
+        let mut muxer = Mp4Muxer::new(file, &[v, a], Mp4MuxerOptions::default()).unwrap();
+        for i in 0..12 {
+            muxer
+                .write_packet(&EncodedPacket {
+                    stream_index: 0,
+                    data: vec![0, 0, 0, 2, 0x65, i as u8],
+                    pts: i,
+                    dts: i,
+                    duration: 1,
+                    is_keyframe: i == 0,
+                })
+                .unwrap();
+        }
+        muxer
+            .write_packet(&EncodedPacket {
+                stream_index: 1,
+                data: vec![0xAA; 8],
+                pts: 0,
+                dts: 0,
+                duration: 24000,
+                is_keyframe: true,
+            })
+            .unwrap();
+        muxer.finish().unwrap();
+
+        let vmeta = get_video_metadata(&mp4_path).unwrap();
+        assert_eq!((vmeta.width, vmeta.height), (320, 240));
+        assert!((vmeta.fps - 24.0).abs() < 1e-6);
+        assert!((vmeta.duration_in_seconds - 0.5).abs() < 1e-4);
+        assert_eq!(vmeta.duration_in_frames, 12);
+
+        let ameta = get_audio_metadata(&mp4_path, 24.0).unwrap();
+        assert_eq!(ameta.channels, 2);
+        assert_eq!(ameta.sample_rate, 48000);
+        assert!((ameta.duration_in_seconds - 0.5).abs() < 1e-4);
+
+        let parsed = parse_media(&mp4_path, 24.0).unwrap();
+        assert!(parsed.video.is_some());
+        assert!(parsed.audio.is_some());
+        assert!((parsed.duration_in_seconds - 0.5).abs() < 1e-4);
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

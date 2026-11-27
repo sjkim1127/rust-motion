@@ -276,3 +276,38 @@ fn test_frame_range_streams_absolute_frames_in_order() {
     assert!(std::fs::metadata(&output).unwrap().len() > 0);
     std::fs::remove_dir_all(temp).unwrap();
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn native_videotoolbox_renders_h264_and_hevc_without_ffmpeg() {
+    let temp = unique_temp_dir("vt_native_render");
+    std::fs::create_dir_all(&temp).unwrap();
+
+    for (name, codec, hw_accel, marker) in [
+        (
+            "vt_h264.mp4",
+            VideoCodec::H264,
+            HwAccel::VideoToolbox,
+            b"avc1",
+        ),
+        ("vt_hevc.mp4", VideoCodec::H265, HwAccel::Auto, b"hvc1"),
+    ] {
+        let out = temp.join(name);
+        let config = PipeConfig::new(128, 96, 24.0, 6, &out)
+            .with_codec(codec)
+            .with_hw_accel(hw_accel)
+            .with_encoder_backend(EncoderBackend::Native);
+        render_to_video(&TinySkiaBackend::headless(), &config, |frame| {
+            solid_scene(Color::rgb((frame * 35) as u8, 80, 180))(frame)
+        })
+        .unwrap();
+
+        let bytes = std::fs::read(&out).unwrap();
+        assert_eq!(&bytes[4..8], b"ftyp");
+        assert!(bytes.windows(4).any(|w| w == marker));
+        let demux = rust_motion_media_container::Mp4Demuxer::open_path(&out).unwrap();
+        assert_eq!(demux.video_tracks()[0].samples.len(), 6);
+    }
+
+    std::fs::remove_dir_all(temp).unwrap();
+}

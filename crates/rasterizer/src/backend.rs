@@ -117,6 +117,30 @@ impl FrameConfig {
 /// changing scene scheduling or rasterizer implementations.
 pub trait FrameSink {
     fn consume(&mut self, frame: u32, rgba: &[u8]) -> Result<(), RasterError>;
+
+    /// Attempt to acquire an OS-managed hardware pixel buffer (`IOSurface` / `CVPixelBuffer`)
+    /// sized to the encoder output so a GPU backend can write directly into encoder memory
+    /// without a CPU readback. Returns `Ok(None)` when the sink does not support zero-copy
+    /// submission or requires CPU scaling.
+    #[cfg(all(target_os = "macos", feature = "metal"))]
+    fn try_acquire_hardware_pixel_buffer(
+        &mut self,
+    ) -> Result<Option<rust_motion_media_hwaccel::HardwarePixelBuffer>, RasterError> {
+        Ok(None)
+    }
+
+    /// Submit a previously acquired [`rust_motion_media_hwaccel::HardwarePixelBuffer`] directly
+    /// to the video encoder without CPU pixel readback.
+    #[cfg(all(target_os = "macos", feature = "metal"))]
+    fn consume_hardware_pixel_buffer(
+        &mut self,
+        _frame: u32,
+        _pb: rust_motion_media_hwaccel::HardwarePixelBuffer,
+    ) -> Result<(), RasterError> {
+        Err(RasterError::Init(
+            "hardware pixel buffer submission is not supported by this sink".into(),
+        ))
+    }
 }
 
 impl<F> FrameSink for F
