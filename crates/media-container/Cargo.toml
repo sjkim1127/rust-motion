@@ -14,6 +14,7 @@ thiserror              = { workspace = true }
 
 [dev-dependencies]
 rust-motion-h264enc = { workspace = true }
+rust-motion-hevc    = { workspace = true }
 serde_json          = { workspace = true }
 tempfile            = { workspace = true }
 

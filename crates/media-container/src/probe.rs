@@ -37,6 +37,13 @@ pub fn probe_isobmff_path(path: impl AsRef<Path>) -> Result<MediaMetadata, Media
 
 /// Probe container and track metadata from any seekable ISO-BMFF byte stream.
 pub fn probe_isobmff<R: Read + Seek>(reader: &mut R) -> Result<MediaMetadata, MediaError> {
+    let (format, moov) = read_moov_bytes(reader)?;
+    parse_moov(&moov, format.or(Some(ContainerFormat::Mp4)))
+}
+
+pub(crate) fn read_moov_bytes<R: Read + Seek>(
+    reader: &mut R,
+) -> Result<(Option<ContainerFormat>, Vec<u8>), MediaError> {
     let end = reader.seek(SeekFrom::End(0))?;
     if end < 8 {
         return Err(MediaError::Container(
@@ -138,15 +145,15 @@ pub fn probe_isobmff<R: Read + Seek>(reader: &mut R) -> Result<MediaMetadata, Me
     let moov = moov_bytes
         .ok_or_else(|| MediaError::Container("ISO-BMFF stream missing moov box".into()))?;
 
-    parse_moov(&moov, format.or(Some(ContainerFormat::Mp4)))
+    Ok((format, moov))
 }
 
-struct BoxSlice<'a> {
-    kind: [u8; 4],
-    payload: &'a [u8],
+pub(crate) struct BoxSlice<'a> {
+    pub(crate) kind: [u8; 4],
+    pub(crate) payload: &'a [u8],
 }
 
-fn iter_child_boxes<'a>(
+pub(crate) fn iter_child_boxes<'a>(
     mut data: &'a [u8],
     depth: usize,
     total_boxes: &mut usize,
@@ -273,13 +280,13 @@ fn parse_mvhd_duration(payload: &[u8]) -> Option<f64> {
 }
 
 #[derive(Default)]
-struct TkhdInfo {
-    width: u32,
-    height: u32,
-    rotation_degrees: i32,
+pub(crate) struct TkhdInfo {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) rotation_degrees: i32,
 }
 
-fn parse_tkhd(payload: &[u8]) -> Option<TkhdInfo> {
+pub(crate) fn parse_tkhd(payload: &[u8]) -> Option<TkhdInfo> {
     if payload.len() < 84 {
         return None;
     }
@@ -312,7 +319,7 @@ fn parse_tkhd(payload: &[u8]) -> Option<TkhdInfo> {
     })
 }
 
-fn parse_mdhd(payload: &[u8]) -> Option<(u32, u64)> {
+pub(crate) fn parse_mdhd(payload: &[u8]) -> Option<(u32, u64)> {
     if payload.len() < 20 {
         return None;
     }
@@ -427,7 +434,7 @@ fn parse_trak(
                     VideoCodecId::Unknown,
                     0,
                     0,
-                    ColorDescription::bt709_limited(),
+                    ColorDescription::unspecified_limited(),
                 ));
             let width = if stsd_w > 0 { stsd_w } else { tkhd.width };
             let height = if stsd_h > 0 { stsd_h } else { tkhd.height };
@@ -497,7 +504,11 @@ fn parse_stts(payload: &[u8]) -> Result<(u64, u64), MediaError> {
     Ok((total_samples, total_delta))
 }
 
-fn compute_fps_rational(timescale: u32, total_samples: u64, total_delta: u64) -> Rational {
+pub(crate) fn compute_fps_rational(
+    timescale: u32,
+    total_samples: u64,
+    total_delta: u64,
+) -> Rational {
     fn gcd_u128(mut a: u128, mut b: u128) -> u128 {
         while b != 0 {
             let r = a % b;
@@ -549,7 +560,7 @@ fn parse_video_stsd(
         _ => VideoCodecId::Unknown,
     };
 
-    let mut color = ColorDescription::bt709_limited();
+    let mut color = ColorDescription::unspecified_limited();
     if let Ok(sub_boxes) = iter_child_boxes(&entry.payload[78..], depth + 1, box_counter) {
         for sub in sub_boxes {
             if &sub.kind == b"colr" && sub.payload.len() >= 11 && &sub.payload[0..4] == b"nclx" {

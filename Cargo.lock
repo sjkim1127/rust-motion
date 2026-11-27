@@ -3477,6 +3477,7 @@ name = "rust-motion-media-container"
 version = "1.1.0"
 dependencies = [
  "rust-motion-h264enc",
+ "rust-motion-hevc",
  "rust-motion-media-core",
  "serde_json",
  "tempfile",
@@ -3610,6 +3611,7 @@ dependencies = [
  "rust-motion-doc",
  "rust-motion-geom",
  "rust-motion-h264enc",
+ "rust-motion-hevc",
  "rust-motion-inpaint",
  "rust-motion-lensdb",
  "rust-motion-media-container",

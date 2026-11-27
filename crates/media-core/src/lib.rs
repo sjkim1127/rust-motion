@@ -158,6 +158,16 @@ impl ColorDescription {
         }
     }
 
+    /// Unspecified primaries/transfer/matrix with limited range (default when `colr` is absent).
+    pub const fn unspecified_limited() -> Self {
+        Self {
+            primaries: ColorPrimaries::Unspecified,
+            transfer: TransferCharacteristics::Unspecified,
+            matrix: MatrixCoefficients::Unspecified,
+            range: ColorRange::Limited,
+        }
+    }
+
     /// Whether any non-unspecified color tag is present.
     pub fn is_specified(&self) -> bool {
         self.primaries != ColorPrimaries::Unspecified
