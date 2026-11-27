@@ -106,7 +106,7 @@ proptest          = "1"
 rayon             = "1"
 
 # Web server & HTTP
-axum              = { version = "0.7", features = ["ws"] }
+axum              = { version = "0.8", features = ["ws"] }
 tower-http        = { version = "0.5", features = ["fs", "trace", "cors"] }
 reqwest           = { version = "0.12", features = ["json", "blocking"] }
 

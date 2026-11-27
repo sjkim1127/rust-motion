@@ -580,7 +580,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, requested_frame: 
                 }
             } => {
                 pending = None;
-                if socket.send(Message::Text(payload)).await.is_err() {
+                if socket.send(Message::Text(payload.into())).await.is_err() {
                     break;
                 }
             }
@@ -619,7 +619,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, requested_frame: 
                                         ),
                                     })
                                     .to_string();
-                                    if socket.send(Message::Text(payload)).await.is_err() {
+                                    if socket.send(Message::Text(payload.into())).await.is_err() {
                                         break;
                                     }
                                 }

@@ -196,7 +196,8 @@ async fn handle_studio_socket(mut socket: WebSocket, _state: StudioState) {
                     "composition": current_comp,
                     "data": BASE64.encode(&png),
                 })
-                .to_string(),
+                .to_string()
+                .into(),
             ))
             .await;
     }
@@ -222,7 +223,8 @@ async fn handle_studio_socket(mut socket: WebSocket, _state: StudioState) {
                                     "composition": current_comp,
                                     "data": BASE64.encode(&png),
                                 })
-                                .to_string(),
+                                .to_string()
+                                .into(),
                             ))
                             .await;
                     }
