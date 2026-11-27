@@ -53,7 +53,7 @@ pub fn run_inspect_codecs() -> Vec<CodecCapability> {
             codec: "h264".into(),
             extensions: vec!["mp4".into()],
             is_video: true,
-            available: ffmpeg_avail && check_ffmpeg_encoder_supported("libx264"),
+            available: true,
         },
         CodecCapability {
             codec: "hevc".into(),

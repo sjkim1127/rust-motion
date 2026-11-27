@@ -3471,6 +3471,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-media-container"
+version = "1.1.0"
+dependencies = [
+ "rust-motion-h264enc",
+ "rust-motion-media-core",
+ "tempfile",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "rust-motion-media-core"
+version = "1.1.0"
+dependencies = [
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "rust-motion-mxf"
 version = "1.1.0"
 
@@ -3588,8 +3606,11 @@ dependencies = [
  "rust-motion-dng",
  "rust-motion-doc",
  "rust-motion-geom",
+ "rust-motion-h264enc",
  "rust-motion-inpaint",
  "rust-motion-lensdb",
+ "rust-motion-media-container",
+ "rust-motion-media-core",
  "rust-motion-paint",
  "rust-motion-plugins",
  "rust-motion-psd",
@@ -3623,6 +3644,8 @@ dependencies = [
  "image",
  "reqwest",
  "rust-motion-h264enc",
+ "rust-motion-media-container",
+ "rust-motion-media-core",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

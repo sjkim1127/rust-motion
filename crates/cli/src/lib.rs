@@ -15,9 +15,10 @@ pub mod studio;
 pub mod validate;
 
 pub use args::{
-    resolve_browser_worker_path, resolve_hybrid_backend, Cli, Commands, HwAccelArg, RenderBackend,
-    RenderCodec, RenderRequest, ValidationError, EXIT_GENERAL_ERROR, EXIT_INVALID_ARGUMENTS,
-    EXIT_MISSING_DEPENDENCY, EXIT_SUCCESS, EXIT_TIMEOUT_OR_CANCELLED, EXIT_VALIDATION_ERROR,
+    resolve_browser_worker_path, resolve_hybrid_backend, Cli, Commands, EncoderArg, HwAccelArg,
+    RenderBackend, RenderCodec, RenderRequest, ValidationError, EXIT_GENERAL_ERROR,
+    EXIT_INVALID_ARGUMENTS, EXIT_MISSING_DEPENDENCY, EXIT_SUCCESS, EXIT_TIMEOUT_OR_CANCELLED,
+    EXIT_VALIDATION_ERROR,
 };
 pub use audio::{project_audio_assets, project_audio_assets_from_dir};
 pub use composition::{

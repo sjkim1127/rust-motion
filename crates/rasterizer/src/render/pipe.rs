@@ -1,4 +1,5 @@
-//! FFmpeg pipe render mode: spawning the encoder and feeding it ordered RGBA frames.
+//! Video streaming coordinator: dispatches ordered RGBA frames to either the built-in
+//! pure-Rust H.264/MP4 pipeline or external FFmpeg stdin piping.
 
 use super::*;
 
@@ -28,6 +29,11 @@ impl<W: Write> FrameSink for FfmpegFrameSink<'_, W> {
         self.stdin
             .write_all(&scaled)
             .map_err(|e| RasterError::ImageEncode(format!("FFmpeg pipe write error: {e}")))?;
+        tracing::debug!(
+            frame = self.start_frame + frame * self.frame_step,
+            bytes = scaled.len(),
+            "frame written to FFmpeg pipe"
+        );
         if let Some(callback) = &self.control.progress {
             callback(RenderProgress {
                 completed_frames: frame + 1,
@@ -35,30 +41,51 @@ impl<W: Write> FrameSink for FfmpegFrameSink<'_, W> {
                 frame: self.start_frame + frame * self.frame_step,
             });
         }
+        self.control.report_encoding_progress(EncodingProgress {
+            encoded_frames: frame + 1,
+            total_frames: self.total,
+        });
         Ok(())
     }
 }
 
-// ── Mode 3: FFmpeg stdin pipe (fastest) ──────────────────────────────────────
-
-/// Render a bounded window of parallel frames while streaming ordered RGBA to FFmpeg.
+/// Render a bounded window of parallel frames and stream them into the selected video encoder.
 ///
-/// **This is the fastest rendering mode.** It eliminates:
-/// - PNG compression overhead
-/// - Disk write latency for intermediate frames
-/// - A second disk read by FFmpeg
+/// Uses external FFmpeg when configured/available, or automatically falls back to the built-in
+/// pure-Rust H.264 + streaming MP4 muxer when FFmpeg is absent.
+pub fn render_to_video<F, B>(
+    backend: &B,
+    config: &PipeConfig,
+    scene_fn: F,
+) -> Result<(), RasterError>
+where
+    B: RasterizerBackend + Send + Sync,
+    F: Fn(u32) -> Scene + Send + Sync,
+{
+    render_to_video_fallible(backend, config, |frame| {
+        Ok::<Scene, std::convert::Infallible>(scene_fn(frame))
+    })
+}
+
+/// Fallible variant of [`render_to_video`].
+pub fn render_to_video_fallible<F, B, E>(
+    backend: &B,
+    config: &PipeConfig,
+    scene_fn: F,
+) -> Result<(), RasterError>
+where
+    B: RasterizerBackend + Send + Sync,
+    F: Fn(u32) -> Result<Scene, E> + Send + Sync,
+    E: std::fmt::Display + Send,
+{
+    render_to_ffmpeg_pipe_fallible(backend, config, scene_fn)
+}
+
+/// Render a bounded window of parallel frames while streaming ordered RGBA to a video encoder.
 ///
 /// # Pipeline
 /// ```text
-/// bounded render window → ordered RGBA frames → FFmpeg stdin → MP4
-/// ```
-///
-/// # FFmpeg invocation
-/// ```text
-/// ffmpeg -f rawvideo -pix_fmt rgba -s WxH -r FPS -i pipe:0
-///        [-i audio ... -filter_complex mix] -c:v libx264 -c:a aac
-///        -pix_fmt yuv420p -crf N -preset P
-///        -movflags +faststart output.mp4
+/// bounded render window → ordered RGBA frames → FrameSink (Native H.264/MP4 or FFmpeg stdin)
 /// ```
 pub fn render_to_ffmpeg_pipe<F, B>(
     backend: &B,
@@ -160,186 +187,104 @@ where
     config.control.check(started)?;
     let output_preexisted = config.output.exists();
 
-    // ── 1. Spawn FFmpeg ──────────────────────────────────────────────────────
-    let ffmpeg_args = build_pipe_ffmpeg_args(config);
-    let mut ffmpeg = Command::new("ffmpeg")
-        .args(&ffmpeg_args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| {
-            RasterError::Init(format!("Failed to spawn FFmpeg: {e}\nIs ffmpeg installed?"))
-        })?;
-
-    // ── 2. Render frames in parallel ─────────────────────────────────────────
     let concurrency = config.concurrency.unwrap_or_else(|| {
         std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(4)
     });
     if concurrency == 0 {
-        let _ = ffmpeg.kill();
-        let _ = ffmpeg.wait();
         return Err(RasterError::Init(
             "Render concurrency must be greater than zero".into(),
         ));
     }
 
-    // ── 3. Keep a bounded window of renders ahead of the pipe writer ─────────
-    let mut stdin = ffmpeg
-        .stdin
-        .take()
-        .ok_or_else(|| RasterError::Init("Failed to open FFmpeg stdin".into()))?;
-
-    let render_result = if backend.supports_streaming() {
-        let mut sink = FfmpegFrameSink {
-            control: &config.control,
-            started,
-            input_width: width,
-            input_height: height,
-            output_width,
-            output_height,
-            total,
-            start_frame: config.start_frame,
-            frame_step: config.frame_step,
-            stdin: &mut stdin,
-        };
-        backend.render_stream(
-            total,
-            &|frame| {
-                config.control.check(started)?;
-                let composition_frame = config.start_frame + frame * config.frame_step;
-                scene_fn(composition_frame).map_err(|error| RasterError::Frame {
-                    frame: composition_frame,
-                    reason: error.to_string(),
-                })
-            },
-            &|frame| {
-                let composition_frame = config.start_frame + frame * config.frame_step;
-                FrameConfig::new(width, height, composition_frame, fps)
-            },
-            &mut sink,
-        )
-    } else {
-        if backend.capabilities().browser_runtime {
-            for frame in 0..total {
-                config.control.check(started)?;
-                let composition_frame = config.start_frame + frame * config.frame_step;
-                let scene = scene_fn(composition_frame).map_err(|error| RasterError::Frame {
-                    frame: composition_frame,
-                    reason: error.to_string(),
-                })?;
-                let frame_cfg = FrameConfig::new(width, height, composition_frame, fps);
-                let image = backend.render_frame(&scene, &frame_cfg)?;
-                config.control.check(started)?;
-                let rgba = image.into_raw();
-                let rgba = scale_rgba_frame(&rgba, width, height, output_width, output_height)?;
-                stdin.write_all(&rgba).map_err(|error| {
-                    RasterError::ImageEncode(format!("FFmpeg pipe write error: {error}"))
-                })?;
-                tracing::debug!(
-                    frame = composition_frame,
-                    bytes = rgba.len(),
-                    "browser frame written to FFmpeg pipe"
-                );
-                if let Some(callback) = &config.control.progress {
-                    callback(RenderProgress {
-                        completed_frames: frame + 1,
-                        total_frames: total,
-                        frame: composition_frame,
-                    });
-                }
-                config.control.report_encoding_progress(EncodingProgress {
-                    encoded_frames: frame + 1,
-                    total_frames: total,
-                });
-            }
-            Ok(())
-        } else {
-            let pool = rayon::ThreadPoolBuilder::new()
-                .num_threads(concurrency)
-                .build()
-                .map_err(|e| {
-                    let _ = ffmpeg.kill();
-                    let _ = ffmpeg.wait();
-                    RasterError::Init(format!("Rayon pool error: {e}"))
-                })?;
-
-            let result = stream_ordered_frames(
-                &pool,
-                total,
+    match config.encoder_backend {
+        EncoderBackend::Native => {
+            render_with_native_h264(
+                backend,
+                config,
+                &scene_fn,
                 concurrency,
-                |frame| {
-                    config.control.check(started)?;
-                    let composition_frame = config.start_frame + frame * config.frame_step; // validated above
-                    let scene =
-                        scene_fn(composition_frame).map_err(|error| RasterError::Frame {
-                            frame: composition_frame,
-                            reason: error.to_string(),
-                        })?;
-                    let frame_cfg = FrameConfig::new(width, height, composition_frame, fps);
-                    let img = backend.render_frame(&scene, &frame_cfg)?;
-                    config.control.check(started)?;
-                    let rgba = img.into_raw();
-                    scale_rgba_frame(&rgba, width, height, output_width, output_height)
-                },
-                |frame, rgba| {
-                    config.control.check(started)?;
-                    stdin.write_all(&rgba).map_err(|e| {
-                        RasterError::ImageEncode(format!("FFmpeg pipe write error: {e}"))
-                    })?;
-                    if let Some(callback) = &config.control.progress {
-                        callback(RenderProgress {
-                            completed_frames: frame + 1,
-                            total_frames: total,
-                            frame: config.start_frame + frame * config.frame_step,
-                        });
-                    }
-                    config.control.report_encoding_progress(EncodingProgress {
-                        encoded_frames: frame + 1,
-                        total_frames: total,
-                    });
-                    Ok(())
-                },
-            );
-            result
+                width,
+                height,
+                output_width,
+                output_height,
+                fps,
+                total,
+                started,
+                output_preexisted,
+            )?;
         }
-    };
-
-    if render_result.is_ok() {
-        tracing::debug!("flushing FFmpeg stdin after render");
-        let _ = stdin.flush();
-        tracing::debug!("FFmpeg stdin flush completed");
-    }
-    tracing::debug!("closing FFmpeg stdin to signal EOF");
-    drop(stdin); // EOF for FFmpeg
-
-    if let Err(error) = render_result {
-        let _ = ffmpeg.kill();
-        let _ = ffmpeg.wait();
-        remove_failed_output(&config.output, output_preexisted);
-        return Err(error);
-    }
-
-    // ── 4. Wait for FFmpeg to finish ─────────────────────────────────────────
-    tracing::debug!("waiting for FFmpeg process to exit");
-    let output = match wait_for_ffmpeg(ffmpeg, &config.control, started) {
-        Ok(output) => output,
-        Err(error) => {
-            remove_failed_output(&config.output, output_preexisted);
-            return Err(error);
+        EncoderBackend::Ffmpeg => {
+            let ffmpeg = spawn_ffmpeg(config).map_err(|e| {
+                RasterError::Init(format!("Failed to spawn FFmpeg: {e}\nIs ffmpeg installed?"))
+            })?;
+            render_with_ffmpeg(
+                ffmpeg,
+                backend,
+                config,
+                &scene_fn,
+                concurrency,
+                width,
+                height,
+                output_width,
+                output_height,
+                fps,
+                total,
+                started,
+                output_preexisted,
+            )?;
         }
-    };
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        remove_failed_output(&config.output, output_preexisted);
-        return Err(RasterError::ImageEncode(format!(
-            "FFmpeg exited with non-zero status {:?}: {}",
-            output.status.code(),
-            stderr.trim()
-        )));
+        EncoderBackend::Auto => match spawn_ffmpeg(config) {
+            Ok(ffmpeg) => {
+                render_with_ffmpeg(
+                    ffmpeg,
+                    backend,
+                    config,
+                    &scene_fn,
+                    concurrency,
+                    width,
+                    height,
+                    output_width,
+                    output_height,
+                    fps,
+                    total,
+                    started,
+                    output_preexisted,
+                )?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                if config.codec == VideoCodec::H264 && active_audio_tracks(config).is_empty() {
+                    tracing::info!(
+                        "FFmpeg not found; falling back to built-in pure-Rust H.264/MP4 encoder"
+                    );
+                    render_with_native_h264(
+                        backend,
+                        config,
+                        &scene_fn,
+                        concurrency,
+                        width,
+                        height,
+                        output_width,
+                        output_height,
+                        fps,
+                        total,
+                        started,
+                        output_preexisted,
+                    )?;
+                } else {
+                    return Err(RasterError::Init(format!(
+                        "Failed to spawn FFmpeg: {e}\nFFmpeg is required for {:?} or audio mixing when built-in H.264 fallback cannot be used.",
+                        config.codec
+                    )));
+                }
+            }
+            Err(e) => {
+                return Err(RasterError::Init(format!(
+                    "Failed to spawn FFmpeg: {e}\nIs ffmpeg installed?"
+                )));
+            }
+        },
     }
 
     let capabilities = backend.capabilities();
@@ -371,13 +316,236 @@ where
     Ok(())
 }
 
+fn spawn_ffmpeg(config: &PipeConfig) -> std::io::Result<std::process::Child> {
+    let ffmpeg_args = build_pipe_ffmpeg_args(config);
+    Command::new("ffmpeg")
+        .args(&ffmpeg_args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+}
+
+fn render_frames_into_sink<F, B, E, S>(
+    backend: &B,
+    config: &PipeConfig,
+    scene_fn: &F,
+    concurrency: usize,
+    width: u32,
+    height: u32,
+    fps: f64,
+    total: u32,
+    started: Instant,
+    sink: &mut S,
+) -> Result<(), RasterError>
+where
+    B: RasterizerBackend + Send + Sync,
+    F: Fn(u32) -> Result<Scene, E> + Send + Sync,
+    E: std::fmt::Display + Send,
+    S: FrameSink,
+{
+    if backend.supports_streaming() {
+        backend.render_stream(
+            total,
+            &|frame| {
+                config.control.check(started)?;
+                let composition_frame = config.start_frame + frame * config.frame_step;
+                scene_fn(composition_frame).map_err(|error| RasterError::Frame {
+                    frame: composition_frame,
+                    reason: error.to_string(),
+                })
+            },
+            &|frame| {
+                let composition_frame = config.start_frame + frame * config.frame_step;
+                FrameConfig::new(width, height, composition_frame, fps)
+            },
+            sink,
+        )
+    } else if backend.capabilities().browser_runtime {
+        for frame in 0..total {
+            config.control.check(started)?;
+            let composition_frame = config.start_frame + frame * config.frame_step;
+            let scene = scene_fn(composition_frame).map_err(|error| RasterError::Frame {
+                frame: composition_frame,
+                reason: error.to_string(),
+            })?;
+            let frame_cfg = FrameConfig::new(width, height, composition_frame, fps);
+            let image = backend.render_frame(&scene, &frame_cfg)?;
+            config.control.check(started)?;
+            let rgba = image.into_raw();
+            sink.consume(frame, &rgba)?;
+        }
+        Ok(())
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(concurrency)
+            .build()
+            .map_err(|e| RasterError::Init(format!("Rayon pool error: {e}")))?;
+
+        stream_ordered_frames(
+            &pool,
+            total,
+            concurrency,
+            |frame| {
+                config.control.check(started)?;
+                let composition_frame = config.start_frame + frame * config.frame_step;
+                let scene = scene_fn(composition_frame).map_err(|error| RasterError::Frame {
+                    frame: composition_frame,
+                    reason: error.to_string(),
+                })?;
+                let frame_cfg = FrameConfig::new(width, height, composition_frame, fps);
+                let img = backend.render_frame(&scene, &frame_cfg)?;
+                config.control.check(started)?;
+                Ok(img.into_raw())
+            },
+            |frame, rgba| sink.consume(frame, &rgba),
+        )
+    }
+}
+
+fn render_with_native_h264<F, B, E>(
+    backend: &B,
+    config: &PipeConfig,
+    scene_fn: &F,
+    concurrency: usize,
+    width: u32,
+    height: u32,
+    output_width: u32,
+    output_height: u32,
+    fps: f64,
+    total: u32,
+    started: Instant,
+    output_preexisted: bool,
+) -> Result<(), RasterError>
+where
+    B: RasterizerBackend + Send + Sync,
+    F: Fn(u32) -> Result<Scene, E> + Send + Sync,
+    E: std::fmt::Display + Send,
+{
+    let mut sink = NativeH264FrameSink::new(config, output_width, output_height, started)?;
+    let render_result = render_frames_into_sink(
+        backend,
+        config,
+        scene_fn,
+        concurrency,
+        width,
+        height,
+        fps,
+        total,
+        started,
+        &mut sink,
+    );
+    if let Err(error) = render_result {
+        drop(sink);
+        remove_failed_output(&config.output, output_preexisted);
+        return Err(error);
+    }
+    if let Err(error) = sink.finish() {
+        remove_failed_output(&config.output, output_preexisted);
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn render_with_ffmpeg<F, B, E>(
+    mut ffmpeg: std::process::Child,
+    backend: &B,
+    config: &PipeConfig,
+    scene_fn: &F,
+    concurrency: usize,
+    width: u32,
+    height: u32,
+    output_width: u32,
+    output_height: u32,
+    fps: f64,
+    total: u32,
+    started: Instant,
+    output_preexisted: bool,
+) -> Result<(), RasterError>
+where
+    B: RasterizerBackend + Send + Sync,
+    F: Fn(u32) -> Result<Scene, E> + Send + Sync,
+    E: std::fmt::Display + Send,
+{
+    let mut stdin = match ffmpeg.stdin.take() {
+        Some(stdin) => stdin,
+        None => {
+            let _ = ffmpeg.kill();
+            let _ = ffmpeg.wait();
+            return Err(RasterError::Init("Failed to open FFmpeg stdin".into()));
+        }
+    };
+
+    let render_result = {
+        let mut sink = FfmpegFrameSink {
+            control: &config.control,
+            started,
+            input_width: width,
+            input_height: height,
+            output_width,
+            output_height,
+            total,
+            start_frame: config.start_frame,
+            frame_step: config.frame_step,
+            stdin: &mut stdin,
+        };
+        render_frames_into_sink(
+            backend,
+            config,
+            scene_fn,
+            concurrency,
+            width,
+            height,
+            fps,
+            total,
+            started,
+            &mut sink,
+        )
+    };
+
+    if render_result.is_ok() {
+        tracing::debug!("flushing FFmpeg stdin after render");
+        let _ = stdin.flush();
+        tracing::debug!("FFmpeg stdin flush completed");
+    }
+    tracing::debug!("closing FFmpeg stdin to signal EOF");
+    drop(stdin); // EOF for FFmpeg
+
+    if let Err(error) = render_result {
+        let _ = ffmpeg.kill();
+        let _ = ffmpeg.wait();
+        remove_failed_output(&config.output, output_preexisted);
+        return Err(error);
+    }
+
+    tracing::debug!("waiting for FFmpeg process to exit");
+    let output = match wait_for_ffmpeg(ffmpeg, &config.control, started) {
+        Ok(output) => output,
+        Err(error) => {
+            remove_failed_output(&config.output, output_preexisted);
+            return Err(error);
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        remove_failed_output(&config.output, output_preexisted);
+        return Err(RasterError::ImageEncode(format!(
+            "FFmpeg exited with non-zero status {:?}: {}",
+            output.status.code(),
+            stderr.trim()
+        )));
+    }
+    Ok(())
+}
+
 fn remove_failed_output(path: &Path, preexisted: bool) {
     if !preexisted && path.exists() {
         let _ = std::fs::remove_file(path);
     }
 }
 
-/// Export browser-rendered frames through the shared FFmpeg pipeline.
+/// Export browser-rendered frames through the shared video pipeline.
 pub fn render_web_to_ffmpeg_pipe_fallible(
     backend: &crate::web_backend::BrowserFrameBackend,
     config: &PipeConfig,

@@ -48,6 +48,7 @@ async fn rhai_example_renders_a_real_mp4() {
         crf: 18,
         preset: "fast".into(),
         hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
+        encoder: rust_motion_rasterizer::EncoderBackend::Auto,
         sandbox_roots: Vec::new(),
         permissive: false,
     };
@@ -96,6 +97,7 @@ async fn showcase_example_renders_every_phase() {
             crf: 18,
             preset: "fast".into(),
             hw_accel: rust_motion_rasterizer::HwAccel::Disabled,
+            encoder: rust_motion_rasterizer::EncoderBackend::Auto,
             sandbox_roots: Vec::new(),
             permissive: false,
         };
@@ -142,6 +144,7 @@ fn test_untrusted_script_defaults_to_script_dir_without_cwd() {
         crf: 18,
         preset: "fast".into(),
         hw_accel: rust_motion_rasterizer::HwAccel::Auto,
+        encoder: rust_motion_rasterizer::EncoderBackend::Auto,
         sandbox_roots: Vec::new(),
         permissive: false,
     };

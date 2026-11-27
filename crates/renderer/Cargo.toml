@@ -22,6 +22,8 @@ bytes              = "1"
 tokio-util         = { version = "0.7", features = ["codec"] }
 futures            = { workspace = true }
 rust-motion-h264enc = { workspace = true }
+rust-motion-media-core = { workspace = true }
+rust-motion-media-container = { workspace = true }
 image              = { workspace = true }
 
 [dev-dependencies]

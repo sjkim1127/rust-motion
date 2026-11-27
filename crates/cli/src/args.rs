@@ -326,6 +326,10 @@ pub enum Commands {
         #[arg(long, value_enum, default_value_t = HwAccelArg::Auto)]
         hw_accel: HwAccelArg,
 
+        /// Video encoder backend ('auto' uses FFmpeg when available with pure-Rust H.264/MP4 fallback).
+        #[arg(long, value_enum, default_value_t = EncoderArg::Auto)]
+        encoder: EncoderArg,
+
         /// Allowed root directory for media assets. May be repeated (alias: --media-root).
         #[arg(long = "sandbox-root", alias = "media-root", value_name = "DIR")]
         sandbox_roots: Vec<PathBuf>,
@@ -546,6 +550,25 @@ impl From<HwAccelArg> for rust_motion_rasterizer::HwAccel {
     }
 }
 
+/// Video encoder backend selection for the CLI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
+pub enum EncoderArg {
+    #[default]
+    Auto,
+    Native,
+    Ffmpeg,
+}
+
+impl From<EncoderArg> for rust_motion_rasterizer::EncoderBackend {
+    fn from(arg: EncoderArg) -> Self {
+        match arg {
+            EncoderArg::Auto => rust_motion_rasterizer::EncoderBackend::Auto,
+            EncoderArg::Native => rust_motion_rasterizer::EncoderBackend::Native,
+            EncoderArg::Ffmpeg => rust_motion_rasterizer::EncoderBackend::Ffmpeg,
+        }
+    }
+}
+
 /// A validated render request independent from argument parsing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RenderRequest {
@@ -569,6 +592,7 @@ pub struct RenderRequest {
     pub crf: u32,
     pub preset: String,
     pub hw_accel: rust_motion_rasterizer::HwAccel,
+    pub encoder: rust_motion_rasterizer::EncoderBackend,
     pub sandbox_roots: Vec<PathBuf>,
     pub permissive: bool,
 }
@@ -647,6 +671,7 @@ mod tests {
             crf: 23,
             preset: "medium".into(),
             hw_accel: rust_motion_rasterizer::HwAccel::Auto,
+            encoder: rust_motion_rasterizer::EncoderBackend::Auto,
             sandbox_roots: vec![],
             permissive: false,
         }

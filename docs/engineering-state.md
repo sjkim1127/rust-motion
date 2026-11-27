@@ -5,6 +5,9 @@ This document tracks verified repository audits, architecture decisions, impleme
 ## Current Baseline & Environment
 
 - **Base Revision**: `7d32d36` (`refactor(composition,doc): split lib.rs into module files`)
+- **Latest Verified Cycle Commits**:
+  - Cycle 1 (`#161`): `db0e608`
+  - Cycle 2 (`#162`): `118856e`
 - **Active Working Branch**: `autonomous_engineering_mission`
 - **Host / Hardware**: macOS (`Darwin 25.5.0`, `arm64`), **Apple M4 Pro**
 - **Toolchain**: `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `cargo 1.100.0 (3acc79c0c 2026-11-05)`, `/opt/homebrew/bin/ffmpeg`
@@ -83,16 +86,37 @@ This document tracks verified repository audits, architecture decisions, impleme
 
 ---
 
+---
+
+## Cycle 3 — Rust Motion Media Engine P0 (FFmpeg Isolation) & P1 (Streaming Native H.264/MP4)
+
+### Architecture Decisions
+- **Backend-Independent Media Core (`crates/media-core`)**:
+  - Depends only on `thiserror` and `serde` (zero dependency on `rasterizer`, `tokio`, `wgpu`, or `ffmpeg`), preventing circular dependencies across codecs, containers, rasterizers, WASM, and CLI.
+  - Defines `PixelFormat`, CICP color metadata (`ColorPrimaries`, `TransferCharacteristics`, `MatrixCoefficients`, `ColorRange`, `ColorDescription`), `VideoCodecId`, `AudioCodecId`, `ContainerFormat`, `Rational` (`from_fps` recognizing NTSC fractional rates), `VideoFrame`, `EncodedPacket`, `TrackConfig`, `MediaError`, and traits (`VideoEncoder`, `ContainerMuxer`, `MediaProbe`).
+- **Streaming Container Engine (`crates/media-container`)**:
+  - Implemented `Mp4Muxer<W: Read + Write + Seek>` writing compressed sample payloads straight to storage (`O(N_frames)` compact metadata in memory instead of `O(total_bytes)` payload RAM).
+  - Supports extended 64-bit `mdat` + automatic `co64` (>4 GiB chunk offsets, plus `force_co64` test flag), B-frame composition offsets (`ctts` v0/v1), `colr` (`nclx` BT.709 color tags), multi-track video (`avc1`/`avcC`) + audio (`mp4a`/`esds`) interleaving with contiguous chunk detection, and bounded-memory (`256 KiB` buffer) in-place `+faststart` (`moov` before `mdat`).
+  - Preserved 100% public `crates/renderer/src/mp4.rs` API compatibility by delegating `renderer::mp4::mux` to `Mp4Muxer`.
+- **FFmpeg Isolation & Streaming H.264 CLI Pipeline (`rasterizer` + `cli`)**:
+  - Added `EncoderBackend` (`Auto | Native | Ffmpeg`) to `PipeConfig`, `--encoder <auto|native|ffmpeg>` to `rust-motion render`, and backend-neutral `render_to_video` / `render_to_video_fallible` exports.
+  - Implemented `NativeH264FrameSink` (`crates/rasterizer/src/render/native_h264.rs`) reusing pre-allocated planar YUV420p buffers and streaming `rust-motion-h264enc` directly into `Mp4Muxer`.
+  - When `--encoder auto` runs without FFmpeg installed (`ErrorKind::NotFound`) for H.264 without active audio mixing, rendering transparently falls back to `NativeH264FrameSink` with atomic temp-file replacement.
+  - Updated `rust-motion doctor` and `rust-motion inspect --codecs` so H.264/MP4 + still formats report ready without FFmpeg (`ok = temp_writable`), treating FFmpeg/FFprobe as optional.
+
+### Implemented Files
+- New crates: `crates/media-core/` (`Cargo.toml`, `src/lib.rs`), `crates/media-container/` (`Cargo.toml`, `src/lib.rs`, `src/mp4.rs`).
+- Updated: `Cargo.toml`, `Cargo.lock`, `crates/renderer/Cargo.toml`, `crates/renderer/src/mp4.rs`, `crates/rasterizer/Cargo.toml`, `crates/rasterizer/src/lib.rs`, `crates/rasterizer/src/render/{mod.rs,types.rs,pipe.rs,native_h264.rs}`, `crates/cli/src/{lib.rs,args.rs,render.rs,main.rs,doctor.rs,inspect.rs}`, plus `RenderRequest` callers in `crates/python`, `crates/ts`, and CLI integration tests.
+- Tests added: `media-core` unit tests, `media-container` unit + `ffprobe`/`ffmpeg` differential conformance tests, `rasterizer` streaming native H.264 + error/cancellation tests, and `PATH=""` FFmpeg-free E2E subprocess test (`e2e_ffmpeg_free_doctor_and_mp4_render`).
+
+---
+
 ## Remaining Roadmap & Next Priorities
 
-- **Active Immediate Directive (Cycle 3+) — Rust Motion Media Engine (FFmpeg Decoupling P0–P5)**:
-  - **P0**: Isolate FFmpeg (`media-core`, `EncoderBackend`, auto fallback, `doctor` passes without FFmpeg).
-  - **P1**: Standalone streaming native H.264 + MP4 output (`media-container`, `co64`, `ctts`, `colr`, multi-track, `faststart`) wired into `rasterizer` & `cli`.
-  - **P2**: Native container metadata probing (eliminating `ffprobe` hard dependency).
-  - **P3**: Native video decoding & keyframe seek cache.
-  - **P4**: Apple Silicon native Metal executor (`#163`) + VideoToolbox IOSurface/CVPixelBuffer hardware encoder (`#164`).
-  - **P5**: Full independent multimedia engine (AV1, ProRes, WebM, WASM).
-- **Parallel Platform Priorities**:
-  - `#160` / `#166`: Reproducible CPU/WGPU profiling harness + differential test suite.
-  - `#168` / `#169` / `#174`: Isolate core scene/render contracts from creative-suite dependencies and define feature profiles.
-  - `#194`–`#205`: Geometry kernel, mesh modeling, parametric CAD, procedural node graph, materials, 3D/raytracing, animation, simulation, runtime, and agent platform integration.
+- **Next Immediate Priority — Media Engine P2 (Remove FFprobe Hard Dependency)**:
+  - Implement native ISOBMFF/MP4/MOV metadata parser in `crates/media-container` implementing `MediaProbe` (`tkhd` rotation matrix, `mdhd`/`stts` fps & VFR detection, `colr` tags, audio channels/sample rate, duration) and wire `crates/media/src/metadata.rs` to probe natively first with `ffprobe` differential conformance tests.
+- **Subsequent Media Engine & GPU Roadmap**:
+  - **P3**: Native video decoding & keyframe seek cache (H.264 / `hevc` / OS hardware decode, exact A/V sync).
+  - **P4**: Apple Silicon native Metal executor (`#163`) + VideoToolbox `IOSurface`/`CVPixelBuffer` hardware H.264/HEVC encoder (`#164`) streaming into `Mp4Muxer`.
+  - **P5**: Full independent multimedia engine (AV1, ProRes, WebM/MKV muxing, WASM export).
+  - **Parallel Platform Priorities**: `#160`/`#166` (profiling & differential test harness), `#168`/`#169`/`#174` (dependency decoupling & feature profiles), `#194`–`#205` (geometry/CAD/nodes/3D/runtime/agent platform).

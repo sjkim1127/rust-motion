@@ -230,6 +230,7 @@ pub fn render_media_native(
         crf: req.crf.unwrap_or(18),
         preset: req.preset.unwrap_or_else(|| "fast".to_string()),
         hw_accel,
+        encoder: rust_motion_rasterizer::EncoderBackend::Auto,
         sandbox_roots,
         permissive: req.permissive.unwrap_or(true),
     };
