@@ -8,6 +8,7 @@ This document tracks verified repository audits, architecture decisions, impleme
 - **Latest Verified Cycle Commits**:
   - Cycle 1 (`#161`): `db0e608`
   - Cycle 2 (`#162`): `118856e`
+  - Cycle 3 (`P0/P1`): `2ae5511`
 - **Active Working Branch**: `autonomous_engineering_mission`
 - **Host / Hardware**: macOS (`Darwin 25.5.0`, `arm64`), **Apple M4 Pro**
 - **Toolchain**: `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `cargo 1.100.0 (3acc79c0c 2026-11-05)`, `/opt/homebrew/bin/ffmpeg`
@@ -111,12 +112,28 @@ This document tracks verified repository audits, architecture decisions, impleme
 
 ---
 
+---
+
+## Cycle 4 — Media Engine P2 (Native ISOBMFF/MP4/MOV Metadata Prober — Remove `ffprobe` Hard Dependency)
+
+### Implemented Changes
+- **Native Bounded Container Metadata Parser (`crates/media-container/src/probe.rs`)**:
+  - Implemented `IsobmffProbe` (`MediaProbe`), `probe_isobmff`, and `probe_isobmff_path`: reads only container boxes (`ftyp`, `mvhd`, `trak`, `tkhd`, `mdhd`, `hdlr`, `stsd`, `colr`, `stts`) while seeking cleanly past `mdat` payloads without reading frames into memory.
+  - Enforces safety limits on untrusted inputs (`MAX_BOX_DEPTH = 16`, `MAX_BOXES = 4096`, `MAX_MOOV_BYTES = 16 MiB`, `MAX_STTS_ENTRIES = 1_000_000`) and checked offset/size arithmetic.
+  - Extracts dimensions (`stsd`/`tkhd`), exact `tkhd` display matrix rotation (`0`/`90`/`180`/`270`), CICP `colr` (`nclx`) color metadata, exact rational VFR/CFR `fps` from `stts`, and audio `mp4a`/PCM channels & sample rates.
+  - Added `Mpeg4` and `Unknown` variants to `VideoCodecId` and `Unknown` to `AudioCodecId` in `crates/media-core`.
+- **FFprobe-Optional `rust-motion-media` & Clean CLI JSON Streams**:
+  - Wired `crates/media/src/metadata.rs` (`get_video_metadata`, `get_audio_metadata`, `parse_media`) to resolve ISO-BMFF (MP4/MOV/M4A) natively first, use `hound` for WAV and `symphonia` for MP3/AAC/PCM streams, and fall back to `ffprobe` only for containers not yet natively supported.
+  - Configured CLI `tracing_subscriber` in `crates/cli/src/main.rs` with `.with_writer(std::io::stderr)` so machine-readable JSON stdout (`probe`, `inspect`, `doctor`, `--json`) stays clean even when internal decoders log diagnostics.
+- **Verification**:
+  - Added adversarial, rotation-matrix, and `ffprobe` differential tests in `media-container/src/probe.rs`, native probing tests in `crates/media/src/metadata.rs`, and FFprobe-free `PATH=""` `probe`, `probe --full`, and `inspect` subprocess assertions in `crates/cli/tests/e2e_cli_subprocess.rs`.
+
+---
+
 ## Remaining Roadmap & Next Priorities
 
-- **Next Immediate Priority — Media Engine P2 (Remove FFprobe Hard Dependency)**:
-  - Implement native ISOBMFF/MP4/MOV metadata parser in `crates/media-container` implementing `MediaProbe` (`tkhd` rotation matrix, `mdhd`/`stts` fps & VFR detection, `colr` tags, audio channels/sample rate, duration) and wire `crates/media/src/metadata.rs` to probe natively first with `ffprobe` differential conformance tests.
-- **Subsequent Media Engine & GPU Roadmap**:
-  - **P3**: Native video decoding & keyframe seek cache (H.264 / `hevc` / OS hardware decode, exact A/V sync).
+- **Next Immediate Priority — Media Engine P3 & P4**:
+  - **P3**: Native video decoding & keyframe seek cache (wire native `probe_isobmff_path` + `hevc`/H.264/OS hardware decode into `crates/rasterizer/src/video_cache.rs`, removing the remaining `ffprobe` / `ffmpeg` persistent decode subprocess dependency for MP4/MOV inputs).
   - **P4**: Apple Silicon native Metal executor (`#163`) + VideoToolbox `IOSurface`/`CVPixelBuffer` hardware H.264/HEVC encoder (`#164`) streaming into `Mp4Muxer`.
   - **P5**: Full independent multimedia engine (AV1, ProRes, WebM/MKV muxing, WASM export).
   - **Parallel Platform Priorities**: `#160`/`#166` (profiling & differential test harness), `#168`/`#169`/`#174` (dependency decoupling & feature profiles), `#194`–`#205` (geometry/CAD/nodes/3D/runtime/agent platform).

@@ -175,7 +175,9 @@ pub enum VideoCodecId {
     Av1,
     Vp9,
     ProRes,
+    Mpeg4,
     Gif,
+    Unknown,
 }
 
 /// Logical audio codec identifiers independent of backend implementation.
@@ -187,6 +189,7 @@ pub enum AudioCodecId {
     PcmF32Le,
     Mp3,
     Flac,
+    Unknown,
 }
 
 /// Media container formats.
