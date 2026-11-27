@@ -39,7 +39,6 @@ rust-motion-vector = { workspace = true }
 rust-motion-affinity = { workspace = true }
 rust-motion-algo     = { workspace = true }
 rust-motion-plugins  = { workspace = true }
-rust-motion-lensdb   = { workspace = true }
 rust-motion-dng      = { workspace = true }
 rust-motion-inpaint  = { workspace = true }
 rust-motion-h264enc  = { workspace = true }
@@ -51,13 +50,19 @@ wgpu       = { version = "22", optional = true }
 pollster   = { version = "0.4", optional = true }
 lyon_tessellation = { workspace = true, optional = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+metal      = { version = "0.29", optional = true }
+
 [features]
 default = []
 # Enable wgpu GPU-accelerated offscreen rendering
 gpu = ["wgpu", "pollster", "lyon_tessellation"]
+# Enable direct Apple Silicon Metal compute RenderExecutor & zero-copy IOSurface VideoToolbox encode
+metal = ["dep:metal"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+rust-motion-lensdb = { workspace = true }
 
 [[bench]]
 name = "render_bench"

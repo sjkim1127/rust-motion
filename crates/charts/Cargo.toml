@@ -9,9 +9,7 @@ repository.workspace  = true
 readme.workspace      = true
 
 [dependencies]
-rust-motion-paths       = { workspace = true }
 rust-motion-rasterizer  = { workspace = true }
-rust-motion-composition = { workspace = true }
 rquickjs              = "0.13"
 serde                 = { workspace = true }
 serde_json            = { workspace = true }

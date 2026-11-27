@@ -1093,26 +1093,11 @@ checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.3"
+version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afa489199eaffb1211795df1c6236ce1ad0d41a6fa45250add73e3b02420f06e"
+checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "futures"
-version = "0.3.33"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a88cf1f829d945f548cf8fec32c61b1f202b6d93b45848602fc02af4b12ad218"
-dependencies = [
- "futures-channel",
- "futures-core",
- "futures-executor",
- "futures-io",
- "futures-sink",
- "futures-task",
- "futures-util",
 ]
 
 [[package]]
@@ -1130,17 +1115,6 @@ name = "futures-core"
 version = "0.3.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2cd50c473c80f6d7c3670a752354b8e569b1a7cbfdc0419ec88e5edad85e0dc7"
-
-[[package]]
-name = "futures-executor"
-version = "0.3.33"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6754879cc9f2c66f88c6e5c35344bb0bdb0708b0352b1201815667c7eabc7458"
-dependencies = [
- "futures-core",
- "futures-task",
- "futures-util",
-]
 
 [[package]]
 name = "futures-io"
@@ -1177,7 +1151,6 @@ version = "0.3.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a77a90a256fce34da66415271e30f94ee91c57b04b8a2c042d9cf3220179deaa"
 dependencies = [
- "futures-channel",
  "futures-core",
  "futures-io",
  "futures-macro",
@@ -2385,15 +2358,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ordered-float"
-version = "4.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "owned_ttf_parser"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3174,7 +3138,6 @@ version = "1.1.0"
 dependencies = [
  "approx",
  "num-traits",
- "ordered-float",
  "serde",
 ]
 
@@ -3218,8 +3181,6 @@ version = "1.1.0"
 dependencies = [
  "quick-xml",
  "rquickjs",
- "rust-motion-composition",
- "rust-motion-paths",
  "rust-motion-rasterizer",
  "serde",
  "serde_json",
@@ -3339,7 +3300,6 @@ name = "rust-motion-inpaint"
 version = "1.1.0"
 dependencies = [
  "rayon",
- "serde",
 ]
 
 [[package]]
@@ -3522,6 +3482,7 @@ dependencies = [
  "criterion",
  "image",
  "lyon_tessellation",
+ "metal",
  "pollster",
  "rasterlottie",
  "rayon",
@@ -3568,7 +3529,6 @@ dependencies = [
  "anyhow",
  "axum",
  "bytes",
- "futures",
  "image",
  "reqwest",
  "rust-motion-h264enc",
@@ -3625,13 +3585,11 @@ version = "1.1.0"
 dependencies = [
  "base64",
  "rust-motion-animation",
- "rust-motion-captions",
  "rust-motion-cli",
  "rust-motion-composition",
  "rust-motion-paths",
  "rust-motion-rasterizer",
  "rust-motion-shapes",
- "rust-motion-transitions",
  "serde",
  "serde_json",
  "tempfile",
@@ -3657,11 +3615,9 @@ dependencies = [
  "console_error_panic_hook",
  "js-sys",
  "rust-motion-animation",
- "rust-motion-captions",
  "rust-motion-composition",
  "rust-motion-noise",
  "rust-motion-rasterizer",
- "rust-motion-shapes",
  "rust-motion-transitions",
  "serde",
  "serde_json",
@@ -3732,9 +3688,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.17"
+version = "0.103.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3a0760a887c14823fca5a1c970b01d47c328c696c0c64829d1df50e8f853fd5"
+checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -4867,9 +4823,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "url"
-version = "2.5.9"
+version = "2.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f00cd2407bb42c0ef17be88d4cf020f5cceffd121665bac9b8b9493a369b3b1a"
+checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
 dependencies = [
  "form_urlencoded",
  "idna",

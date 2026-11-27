@@ -12,6 +12,7 @@ This document tracks verified repository audits, architecture decisions, impleme
   - Cycle 4 (`P2`): `e603b34`
   - Cycle 5 (`P3`): `75112ba`
   - Cycle 6 (`P3/P4, #164`): `83f268f`
+  - Cycle 7 (`P1/P4`): `20b0859`
 - **Active Working Branch**: `autonomous_engineering_mission`
 - **Host / Hardware**: macOS (`Darwin 25.5.0`, `arm64`), **Apple M4 Pro**
 - **Toolchain**: `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `cargo 1.100.0 (3acc79c0c 2026-11-05)`, `/opt/homebrew/bin/ffmpeg`
@@ -200,11 +201,29 @@ This document tracks verified repository audits, architecture decisions, impleme
 
 ---
 
+## Cycle 8 — Workspace Dependency Hygiene (`#168`/`#174`) + Native Apple Silicon Metal `RenderExecutor` & Zero-Copy `IOSurface` VideoToolbox Pipeline (`#163`/`#164`)
+
+### Implemented Changes
+- **Workspace Dependency Cleanup (`#168`, `#174`)**:
+  - Removed all 14 unused manifest dependencies across root `Cargo.toml` (`ordered-float`, `futures`, `rust-motion-apv`, `rust-motion-mcp`, `rust-motion-mxf`, `rust-motion-ts`, `rust-motion-wasm`) and `animation`, `charts`, `inpaint`, `renderer`, `ts`, `wasm`, plus moved `rust-motion-lensdb` to `[dev-dependencies]` in `rasterizer`. Cargo workspace builds now emit **0 manifest unused-dependency warnings**.
+- **Zero-Copy `IOSurface` & `CVMetalTextureCache` Interop (`crates/media-hwaccel`)**:
+  - Updated `VtEncoder` `CVPixelBuffer` pools with `kCVPixelBufferMetalCompatibilityKey = true`, added `HardwarePixelBuffer` (`IOSurfaceRef` access), `MetalTextureCache` (`CVMetalTextureCacheCreate`, `CVMetalTextureCacheCreateTextureFromImage`, `CVMetalTextureCacheFlush`), `BoundMetalTexture`, `acquire_pixel_buffer()`, and `encode_pixel_buffer()`.
+- **Native Apple Silicon Metal `RenderExecutor` (`crates/rasterizer/src/metal_backend/mod.rs`, feature `metal`)**:
+  - Implemented `MetalComputeExecutor` over `metal 0.29` (macOS-only optional dependency, keeping WASM and Linux/Windows untouched) using unified-memory `MTLStorageMode::Shared` textures and embedded MSL compute shaders (`cs_box_blur`, `cs_color_matrix`, `cs_composite_over`, `cs_rgba_to_bgra_surface`).
+  - Added `render_scene_into_pixel_buffer` / `execute_plan_into_pixel_buffer` executing `RenderGraph` passes directly into VideoToolbox `IOSurface` `BGRA8Unorm` buffers with zero CPU readback and zero CPU RGBA->BGRA swizzling.
+
+### Benchmark & Verification (Apple M4 Pro)
+- Release benchmark (`cargo test --release -p rust-motion-rasterizer --features metal metal_iosurface_zero_copy_1080p60_benchmark -- --ignored --nocapture`):
+  - **161.3 fps** (`0.372s` for 60 frames @ `1920x1080`, `16 KiB` HEVC) including `Raster2D` fill + 2-pass `cs_box_blur` + `cs_color_matrix` + zero-copy `CVMetalTextureCache` surface write + VideoToolbox HEVC hardware encode (~`6.2 ms/frame`).
+- Tests added & verified:
+  - `metal_executor_matches_cpu_reference_for_blur_color_matrix_and_composite` (`<= 1` LSB parity against `CpuReferenceExecutor`).
+  - `metal_iosurface_zero_copy_encodes_hevc_mp4_without_cpu_readback` (verified via `probe_isobmff_path` + pure-Rust `rust_motion_hevc::Decoder` chroma check).
+
+---
+
 ## Remaining Roadmap & Next Priorities
 
-- **Next Immediate Priority — Cycle 8 (`#163` Apple Silicon Native Metal `RenderExecutor` & `#164` Zero-Copy `IOSurface` GPU-to-VideoToolbox Path)**:
-  - Prototype native `RenderExecutor` on macOS Metal (`MTLDevice`/`MTLCommandQueue`/`MTLComputePipelineState`) OR zero-copy `IOSurface`-backed `MTLTexture` -> `CVPixelBuffer` encoding into `HardwareVideoEncoder` to eliminate CPU RGBA readback/swizzle on Apple Silicon.
-- **Subsequent Milestones**:
-  - **#168 / #169 / #174**: Workspace dependency cleanup (remaining unused deps & isolating creative-suite crates behind feature profiles in `rasterizer`).
-  - **P5**: Full independent multimedia engine (AV1, ProRes, WebM/MKV muxing, pure-Rust AAC/Opus audio encoding for Linux/Windows, WASM export).
-  - **#194–#205**: Unified creative engine vertical slices (3D/CAD geometry kernel, procedural node graph, material graph, deterministic simulation, agent MCP editing).
+- **Next Immediate Priority — Cycle 9**:
+  - **Option A (`#169` / `#171` Feature Isolation)**: Gate creative-suite crates (`psd`, `affinity`, `dng`, `inpaint`, `algo`, `plugins`, etc.) behind optional feature flags in `rasterizer` while preserving default features so headless video/WASM callers build minimally.
+  - **Option B (`#165` Streaming Metal Execution / `Wgpu` Parity + CLI `--gpu metal`)**: Expose native `MetalComputeExecutor` into `render_to_video` on macOS for zero-copy GPU-rendered MP4 exports end-to-end.
+  - **Option C (`#194`–`#205` Unified Creative Engine Vertical Slice)**: Strengthen 3D/geometry (`geom`, `scene3d`, `mesh3d`) + procedural node graph + agent MCP inspection/transactional scene editing.

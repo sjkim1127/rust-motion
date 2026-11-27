@@ -123,6 +123,116 @@ impl HardwareAacEncoder {
     }
 }
 
+/// Hardware/IOSurface-backed pixel buffer suitable for zero-copy Metal rendering & VideoToolbox encoding.
+pub struct HardwarePixelBuffer {
+    #[cfg(target_os = "macos")]
+    inner: videotoolbox::OwnedPixelBuffer,
+}
+
+impl HardwarePixelBuffer {
+    pub fn width(&self) -> u32 {
+        #[cfg(target_os = "macos")]
+        {
+            self.inner.width()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            0
+        }
+    }
+
+    pub fn height(&self) -> u32 {
+        #[cfg(target_os = "macos")]
+        {
+            self.inner.height()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            0
+        }
+    }
+
+    /// Underlying `IOSurfaceRef` pointer when running on macOS.
+    pub fn iosurface_ptr(&self) -> *mut std::ffi::c_void {
+        #[cfg(target_os = "macos")]
+        {
+            self.inner.iosurface_ptr()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Retained CoreVideo `CVMetalTextureRef` binding a [`HardwarePixelBuffer`] directly to an `MTLTexture`.
+pub struct BoundMetalTexture {
+    #[cfg(target_os = "macos")]
+    inner: videotoolbox::BoundMetalTexture,
+}
+
+impl BoundMetalTexture {
+    /// Raw Objective-C `id<MTLTexture>` pointer (`BGRA8Unorm`).
+    pub fn mtl_texture_ptr(&self) -> *mut std::ffi::c_void {
+        #[cfg(target_os = "macos")]
+        {
+            self.inner.mtl_texture_ptr()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Zero-copy `CVMetalTextureCache` mapping `IOSurface` pixel buffers into Metal textures.
+pub struct MetalTextureCache {
+    #[cfg(target_os = "macos")]
+    inner: videotoolbox::MetalTextureCache,
+}
+
+impl MetalTextureCache {
+    pub fn new(mtl_device_ptr: *mut std::ffi::c_void) -> Result<Self, MediaError> {
+        #[cfg(target_os = "macos")]
+        {
+            Ok(Self {
+                inner: videotoolbox::MetalTextureCache::new(mtl_device_ptr)?,
+            })
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = mtl_device_ptr;
+            Err(MediaError::Unsupported(
+                "CVMetalTextureCache is only available on macOS".into(),
+            ))
+        }
+    }
+
+    pub fn bind_bgra8_texture(
+        &self,
+        pb: &HardwarePixelBuffer,
+    ) -> Result<BoundMetalTexture, MediaError> {
+        #[cfg(target_os = "macos")]
+        {
+            Ok(BoundMetalTexture {
+                inner: self.inner.bind_bgra8_texture(&pb.inner)?,
+            })
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = pb;
+            Err(MediaError::Unsupported(
+                "CVMetalTextureCache is only available on macOS".into(),
+            ))
+        }
+    }
+
+    pub fn flush(&self) {
+        #[cfg(target_os = "macos")]
+        self.inner.flush();
+    }
+}
+
 /// Returns the list of codecs supported by native hardware acceleration on this host.
 pub fn hardware_video_codecs() -> Vec<VideoCodecId> {
     if is_videotoolbox_available() {
@@ -152,6 +262,42 @@ impl HardwareVideoEncoder {
         #[cfg(not(target_os = "macos"))]
         {
             let _ = codec;
+            Err(MediaError::Unsupported(
+                "hardware video encoding via VideoToolbox is only available on macOS".into(),
+            ))
+        }
+    }
+
+    /// Acquire a Metal-compatible `IOSurface` [`HardwarePixelBuffer`] from this encoder's pool.
+    pub fn acquire_pixel_buffer(&self) -> Result<HardwarePixelBuffer, MediaError> {
+        #[cfg(target_os = "macos")]
+        {
+            Ok(HardwarePixelBuffer {
+                inner: self.inner.acquire_pixel_buffer()?,
+            })
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Err(MediaError::Unsupported(
+                "hardware pixel buffer pool is only available on macOS".into(),
+            ))
+        }
+    }
+
+    /// Submit a GPU-populated [`HardwarePixelBuffer`] directly to VideoToolbox with zero CPU copy.
+    pub fn encode_pixel_buffer(
+        &mut self,
+        pb: &HardwarePixelBuffer,
+        pts: i64,
+        duration: i64,
+    ) -> Result<Vec<EncodedPacket>, MediaError> {
+        #[cfg(target_os = "macos")]
+        {
+            self.inner.encode_pixel_buffer(&pb.inner, pts, duration)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (pb, pts, duration);
             Err(MediaError::Unsupported(
                 "hardware video encoding via VideoToolbox is only available on macOS".into(),
             ))

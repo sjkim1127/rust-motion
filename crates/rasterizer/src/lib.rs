@@ -47,6 +47,8 @@ pub(crate) mod lottie_cache;
 pub mod lut3d;
 pub mod math_typeset;
 pub mod mesh3d;
+#[cfg(all(target_os = "macos", feature = "metal"))]
+pub mod metal_backend;
 pub mod motion_blur;
 pub mod neural_face;
 pub mod panorama;

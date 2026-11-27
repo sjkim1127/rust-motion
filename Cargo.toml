@@ -63,7 +63,6 @@ readme       = "README.md"
 [workspace.dependencies]
 # Async runtime
 tokio             = { version = "1", features = ["full"] }
-futures           = "0.3"
 
 # Serialization
 serde             = { version = "1", features = ["derive", "rc"] }
@@ -75,7 +74,6 @@ tracing           = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Math / utilities
-ordered-float     = "4"
 num-traits        = "0.2"
 base64            = "0.22"
 urlencoding       = "2.1"
@@ -115,7 +113,6 @@ reqwest           = { version = "0.12", features = ["json", "blocking"] }
 
 # Internal crates
 rust-motion-animation   = { version = "1.1.0", path = "crates/animation" }
-rust-motion-apv         = { version = "1.1.0", path = "crates/apv" }
 rust-motion-audio-dsp   = { version = "1.1.0", path = "crates/audio-dsp" }
 rust-motion-cli         = { version = "1.1.0", path = "crates/cli" }
 rust-motion-composition = { version = "1.1.0", path = "crates/composition" }
@@ -132,7 +129,6 @@ rust-motion-noise       = { version = "1.1.0", path = "crates/noise" }
 rust-motion-rasterizer  = { version = "1.1.0", path = "crates/rasterizer" }
 rust-motion-charts      = { version = "1.1.0", path = "crates/charts" }
 rust-motion-h264enc     = { version = "1.1.0", path = "crates/h264enc" }
-rust-motion-mxf         = { version = "1.1.0", path = "crates/mxf" }
 rust-motion-project     = { version = "1.1.0", path = "crates/project" }
 rust-motion-bitstream   = { version = "1.1.0", path = "crates/bitstream" }
 rust-motion-hevc        = { version = "1.1.0", path = "crates/hevc" }
@@ -152,9 +148,6 @@ rust-motion-algo        = { version = "1.1.0", path = "crates/algo" }
 rust-motion-plugins     = { version = "1.1.0", path = "crates/plugins" }
 rust-motion-lensdb      = { version = "1.1.0", path = "crates/lensdb" }
 rust-motion-inpaint     = { version = "1.1.0", path = "crates/inpaint" }
-rust-motion-mcp         = { version = "1.1.0", path = "crates/mcp" }
-rust-motion-ts          = { version = "1.1.0", path = "crates/ts" }
-rust-motion-wasm        = { version = "1.1.0", path = "crates/wasm" }
 
 # WebAssembly
 wasm-bindgen            = "0.2"

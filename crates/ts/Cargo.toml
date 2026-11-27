@@ -13,13 +13,11 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rust-motion-animation = { workspace = true }
-rust-motion-captions = { workspace = true }
 rust-motion-cli = { workspace = true }
 rust-motion-composition = { workspace = true }
 rust-motion-paths = { workspace = true }
 rust-motion-rasterizer = { workspace = true }
 rust-motion-shapes = { workspace = true }
-rust-motion-transitions = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
