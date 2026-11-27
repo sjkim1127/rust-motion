@@ -7,7 +7,7 @@
 use super::types::*;
 use super::validate::{ExecutionPlan, GraphValidationError};
 use crate::backend::FrameConfig;
-use crate::scene::{BlendMode, ClipRegion, Color, Scene, SceneNode};
+use crate::scene::{BlendMode, ClipRegion, Color, Scene, SceneFilter, SceneNode};
 use tiny_skia::Transform;
 
 /// Target capability and resource constraints used while lowering a [`Scene`].
@@ -241,6 +241,9 @@ pub(crate) fn required_capabilities_for_nodes(nodes: &[SceneNode]) -> Capability
                         caps = caps.union(CapabilityFlags::BLEND_EXTENDED);
                     }
                 }
+                if !crate::render_ir::validate::layer_has_only_gpu_basic_effects(node) {
+                    caps = caps.union(CapabilityFlags::RASTER_EXTENDED);
+                }
                 if matches!(clip, Some(ClipRegion::Path { .. }))
                     || mask
                         .as_deref()
@@ -269,6 +272,79 @@ pub(crate) fn required_capabilities_for_nodes(nodes: &[SceneNode]) -> Capability
         }
     }
     caps
+}
+
+fn gpu_blur_layer_parts<'a>(
+    node: &'a SceneNode,
+    opts: &LowerOptions,
+) -> Option<(f32, u32, &'a [SceneNode])> {
+    if !opts
+        .capabilities
+        .contains(CapabilityFlags::COMPUTE_PASS.union(CapabilityFlags::OFFSCREEN_COMPOSITE))
+    {
+        return None;
+    }
+    let SceneNode::Layer {
+        opacity,
+        blend_mode: BlendMode::Normal,
+        clip: None,
+        mask: None,
+        filters,
+        shadow: None,
+        children,
+        ..
+    } = node
+    else {
+        return None;
+    };
+    if !opacity.is_finite() || !(0.0..=1.0).contains(opacity) {
+        return None;
+    }
+    let [SceneFilter::Blur { sigma }] = filters.as_slice() else {
+        return None;
+    };
+    if !sigma.is_finite() || !(0.0..=100.0).contains(sigma) {
+        return None;
+    }
+    let child_caps = required_capabilities_for_nodes(children);
+    if child_caps.contains(CapabilityFlags::SHADER_PASS)
+        || !child_caps.missing(opts.capabilities).is_empty()
+    {
+        return None;
+    }
+    let radius = (sigma * 1.5).ceil().clamp(0.0, 128.0) as u32;
+    Some((*opacity, radius, children.as_slice()))
+}
+
+fn isolatable_cpu_node_bounds(
+    node: &SceneNode,
+    canvas_w: u32,
+    canvas_h: u32,
+) -> Option<RectBounds> {
+    let (x, y, w, h) = match node {
+        SceneNode::FractalNoise { x, y, w, h, .. } | SceneNode::Scene3D { x, y, w, h, .. } => {
+            (*x, *y, *w, *h)
+        }
+        _ => return None,
+    };
+    if ![x, y, w, h].iter().all(|v| v.is_finite()) || w <= 0.0 || h <= 0.0 {
+        return None;
+    }
+    let max_w = canvas_w as f32;
+    let max_h = canvas_h as f32;
+    let x0 = x.floor().clamp(0.0, max_w);
+    let y0 = y.floor().clamp(0.0, max_h);
+    let x1 = (x + w).ceil().clamp(0.0, max_w);
+    let y1 = (y + h).ceil().clamp(0.0, max_h);
+    if x1 <= x0 || y1 <= y0 {
+        return None;
+    }
+    Some(RectBounds {
+        x: x0,
+        y: y0,
+        w: x1 - x0,
+        h: y1 - y0,
+    })
 }
 
 fn color_output_desc(
@@ -594,19 +670,18 @@ pub(crate) fn lower_scene_to_graph(
     }
 
     // 6. Regular scene + optional trailing shader suffix.
-    let out = graph.add_resource(color_output_desc(
-        ResourceId(0),
-        "frame_output",
-        config.width,
-        config.height,
-        msaa,
-        ResourceLifetime::Output,
-        TextureUsage::CPU_READBACK,
-    ));
-    graph.set_output(out);
-
     if let Some(suffix_start) = trailing_shader_suffix_start {
         if opts.capabilities.contains(CapabilityFlags::SHADER_PASS) {
+            let out = graph.add_resource(color_output_desc(
+                ResourceId(0),
+                "frame_output",
+                config.width,
+                config.height,
+                msaa,
+                ResourceLifetime::Output,
+                TextureUsage::CPU_READBACK,
+            ));
+            graph.set_output(out);
             let prefix_nodes = scene.nodes[..suffix_start].to_vec();
             let prefix_caps = required_capabilities_for_nodes(&prefix_nodes);
             graph.add_pass(PassNode {
@@ -663,8 +738,397 @@ pub(crate) fn lower_scene_to_graph(
         }
     }
 
+    // 7. Partition scenes with GPU compute blur layers and/or isolatable bounded CPU islands
+    // (preserving painter order and falling back whole-frame if any node is non-isolatable).
+    enum PartitionItem<'a> {
+        GpuNode(&'a SceneNode),
+        GpuBlurLayer {
+            opacity: f32,
+            radius: u32,
+            children: &'a [SceneNode],
+        },
+        CpuIsland {
+            node: &'a SceneNode,
+            bounds: RectBounds,
+        },
+    }
+
+    let mut items = Vec::with_capacity(scene.nodes.len());
+    let mut has_blur_layer = false;
+    let mut has_bounded_island = false;
+    let mut gpu_node_count = 0usize;
+    let mut non_isolatable = false;
+
+    for node in &scene.nodes {
+        if let Some((opacity, radius, children)) = gpu_blur_layer_parts(node, opts) {
+            has_blur_layer = true;
+            items.push(PartitionItem::GpuBlurLayer {
+                opacity,
+                radius,
+                children,
+            });
+        } else {
+            let node_caps = required_capabilities_for_nodes(std::slice::from_ref(node));
+            if node_caps.missing(opts.capabilities).is_empty() {
+                gpu_node_count += 1;
+                items.push(PartitionItem::GpuNode(node));
+            } else if opts
+                .capabilities
+                .contains(CapabilityFlags::OFFSCREEN_COMPOSITE.union(CapabilityFlags::CPU_ISLAND))
+            {
+                if let Some(bounds) = isolatable_cpu_node_bounds(node, config.width, config.height)
+                {
+                    has_bounded_island = true;
+                    items.push(PartitionItem::CpuIsland { node, bounds });
+                } else {
+                    non_isolatable = true;
+                    break;
+                }
+            } else {
+                non_isolatable = true;
+                break;
+            }
+        }
+    }
+
+    if !non_isolatable && (has_blur_layer || (has_bounded_island && gpu_node_count > 0)) {
+        let out = graph.add_resource(color_output_desc(
+            ResourceId(0),
+            "frame_output",
+            config.width,
+            config.height,
+            msaa,
+            ResourceLifetime::Output,
+            TextureUsage::CPU_READBACK,
+        ));
+        graph.set_output(out);
+
+        let mut next_res_id = 1u32;
+        let mut next_pass_id = 0u32;
+        let mut output_initialized = false;
+        let mut last_out_writer: Option<PassId> = None;
+        let mut pending_gpu: Vec<SceneNode> = Vec::new();
+
+        let ensure_output_initialized =
+            |graph: &mut RenderGraph,
+             output_initialized: &mut bool,
+             last_out_writer: &mut Option<PassId>,
+             next_pass_id: &mut u32| {
+                if !*output_initialized {
+                    let pid = PassId(*next_pass_id);
+                    *next_pass_id += 1;
+                    graph.add_pass(PassNode {
+                        id: pid,
+                        label: "clear_output".into(),
+                        op: PassOp::Raster2D {
+                            scene: Scene::new(),
+                            clear: ClearOp::Clear(Color::TRANSPARENT),
+                            path_mask: None,
+                        },
+                        reads: Vec::new(),
+                        writes: vec![out],
+                        order_deps: Vec::new(),
+                        required_capabilities: CapabilityFlags::RASTER_2D_ANALYTIC,
+                    });
+                    *output_initialized = true;
+                    *last_out_writer = Some(pid);
+                }
+            };
+
+        let flush_gpu = |graph: &mut RenderGraph,
+                         pending: &mut Vec<SceneNode>,
+                         output_initialized: &mut bool,
+                         last_out_writer: &mut Option<PassId>,
+                         next_res_id: &mut u32,
+                         next_pass_id: &mut u32| {
+            if pending.is_empty() {
+                return;
+            }
+            let seg_nodes = std::mem::take(pending);
+            let seg_caps = required_capabilities_for_nodes(&seg_nodes);
+            if !*output_initialized {
+                let pid = PassId(*next_pass_id);
+                *next_pass_id += 1;
+                graph.add_pass(PassNode {
+                    id: pid,
+                    label: "gpu_base_segment".into(),
+                    op: PassOp::Raster2D {
+                        scene: Scene { nodes: seg_nodes },
+                        clear: ClearOp::Clear(Color::TRANSPARENT),
+                        path_mask: None,
+                    },
+                    reads: Vec::new(),
+                    writes: vec![out],
+                    order_deps: Vec::new(),
+                    required_capabilities: seg_caps,
+                });
+                *output_initialized = true;
+                *last_out_writer = Some(pid);
+            } else {
+                let seg_res = graph.add_resource(color_output_desc(
+                    ResourceId(*next_res_id),
+                    "gpu_segment",
+                    config.width,
+                    config.height,
+                    msaa,
+                    ResourceLifetime::Transient,
+                    TextureUsage::SAMPLED,
+                ));
+                *next_res_id += 1;
+                let p_draw = PassId(*next_pass_id);
+                *next_pass_id += 1;
+                graph.add_pass(PassNode {
+                    id: p_draw,
+                    label: "gpu_segment_raster".into(),
+                    op: PassOp::Raster2D {
+                        scene: Scene { nodes: seg_nodes },
+                        clear: ClearOp::Clear(Color::TRANSPARENT),
+                        path_mask: None,
+                    },
+                    reads: Vec::new(),
+                    writes: vec![seg_res],
+                    order_deps: Vec::new(),
+                    required_capabilities: seg_caps,
+                });
+                let p_comp = PassId(*next_pass_id);
+                *next_pass_id += 1;
+                graph.add_pass(PassNode {
+                    id: p_comp,
+                    label: "composite_gpu_segment".into(),
+                    op: PassOp::Composite {
+                        source: seg_res,
+                        opacity: 1.0,
+                        blend_mode: BlendMode::Normal,
+                        region: None,
+                    },
+                    reads: vec![seg_res, out],
+                    writes: vec![out],
+                    order_deps: (*last_out_writer).into_iter().chain(Some(p_draw)).collect(),
+                    required_capabilities: CapabilityFlags::OFFSCREEN_COMPOSITE,
+                });
+                *last_out_writer = Some(p_comp);
+            }
+        };
+
+        for item in items {
+            match item {
+                PartitionItem::GpuNode(node) => {
+                    pending_gpu.push(node.clone());
+                }
+                PartitionItem::GpuBlurLayer {
+                    opacity,
+                    radius,
+                    children,
+                } => {
+                    flush_gpu(
+                        &mut graph,
+                        &mut pending_gpu,
+                        &mut output_initialized,
+                        &mut last_out_writer,
+                        &mut next_res_id,
+                        &mut next_pass_id,
+                    );
+                    ensure_output_initialized(
+                        &mut graph,
+                        &mut output_initialized,
+                        &mut last_out_writer,
+                        &mut next_pass_id,
+                    );
+                    let layer_res = graph.add_resource(color_output_desc(
+                        ResourceId(next_res_id),
+                        "blur_layer_src",
+                        config.width,
+                        config.height,
+                        msaa,
+                        ResourceLifetime::Transient,
+                        TextureUsage::SAMPLED,
+                    ));
+                    next_res_id += 1;
+                    let p_layer = PassId(next_pass_id);
+                    next_pass_id += 1;
+                    let child_caps = required_capabilities_for_nodes(children);
+                    graph.add_pass(PassNode {
+                        id: p_layer,
+                        label: "blur_layer_raster".into(),
+                        op: PassOp::Raster2D {
+                            scene: Scene {
+                                nodes: children.to_vec(),
+                            },
+                            clear: ClearOp::Clear(Color::TRANSPARENT),
+                            path_mask: None,
+                        },
+                        reads: Vec::new(),
+                        writes: vec![layer_res],
+                        order_deps: Vec::new(),
+                        required_capabilities: child_caps,
+                    });
+
+                    let (comp_src, comp_dep) = if radius > 0 {
+                        let blur_h_res = graph.add_resource(ResourceDesc {
+                            id: ResourceId(next_res_id),
+                            label: "blur_h".into(),
+                            width: config.width,
+                            height: config.height,
+                            format: PixelFormat::Rgba8Unorm,
+                            color: ColorMetadata::srgb_premultiplied(),
+                            sample_count: 1,
+                            usage: TextureUsage::STORAGE.union(TextureUsage::SAMPLED),
+                            lifetime: ResourceLifetime::Transient,
+                        });
+                        next_res_id += 1;
+                        let blur_v_res = graph.add_resource(ResourceDesc {
+                            id: ResourceId(next_res_id),
+                            label: "blur_v".into(),
+                            width: config.width,
+                            height: config.height,
+                            format: PixelFormat::Rgba8Unorm,
+                            color: ColorMetadata::srgb_premultiplied(),
+                            sample_count: 1,
+                            usage: TextureUsage::STORAGE.union(TextureUsage::SAMPLED),
+                            lifetime: ResourceLifetime::Transient,
+                        });
+                        next_res_id += 1;
+                        let wg = [config.width.div_ceil(8), config.height.div_ceil(8), 1];
+                        let p_h = PassId(next_pass_id);
+                        next_pass_id += 1;
+                        graph.add_pass(PassNode {
+                            id: p_h,
+                            label: "compute_blur_h".into(),
+                            op: PassOp::Compute {
+                                kernel: KERNEL_SEPARABLE_BOX_BLUR_H.into(),
+                                workgroups: wg,
+                                params: vec![radius as f32],
+                            },
+                            reads: vec![layer_res],
+                            writes: vec![blur_h_res],
+                            order_deps: vec![p_layer],
+                            required_capabilities: CapabilityFlags::COMPUTE_PASS,
+                        });
+                        let p_v = PassId(next_pass_id);
+                        next_pass_id += 1;
+                        graph.add_pass(PassNode {
+                            id: p_v,
+                            label: "compute_blur_v".into(),
+                            op: PassOp::Compute {
+                                kernel: KERNEL_SEPARABLE_BOX_BLUR_V.into(),
+                                workgroups: wg,
+                                params: vec![radius as f32],
+                            },
+                            reads: vec![blur_h_res],
+                            writes: vec![blur_v_res],
+                            order_deps: vec![p_h],
+                            required_capabilities: CapabilityFlags::COMPUTE_PASS,
+                        });
+                        (blur_v_res, p_v)
+                    } else {
+                        (layer_res, p_layer)
+                    };
+
+                    let p_comp = PassId(next_pass_id);
+                    next_pass_id += 1;
+                    graph.add_pass(PassNode {
+                        id: p_comp,
+                        label: "composite_blur_layer".into(),
+                        op: PassOp::Composite {
+                            source: comp_src,
+                            opacity,
+                            blend_mode: BlendMode::Normal,
+                            region: None,
+                        },
+                        reads: vec![comp_src, out],
+                        writes: vec![out],
+                        order_deps: last_out_writer.into_iter().chain(Some(comp_dep)).collect(),
+                        required_capabilities: CapabilityFlags::OFFSCREEN_COMPOSITE,
+                    });
+                    last_out_writer = Some(p_comp);
+                }
+                PartitionItem::CpuIsland { node, bounds } => {
+                    flush_gpu(
+                        &mut graph,
+                        &mut pending_gpu,
+                        &mut output_initialized,
+                        &mut last_out_writer,
+                        &mut next_res_id,
+                        &mut next_pass_id,
+                    );
+                    ensure_output_initialized(
+                        &mut graph,
+                        &mut output_initialized,
+                        &mut last_out_writer,
+                        &mut next_pass_id,
+                    );
+                    let iw = (bounds.w as u32).max(1);
+                    let ih = (bounds.h as u32).max(1);
+                    let island_res = graph.add_resource(color_output_desc(
+                        ResourceId(next_res_id),
+                        "cpu_island_surface",
+                        iw,
+                        ih,
+                        1,
+                        ResourceLifetime::Transient,
+                        TextureUsage::SAMPLED.union(TextureUsage::COPY_DST),
+                    ));
+                    next_res_id += 1;
+                    let p_island = PassId(next_pass_id);
+                    next_pass_id += 1;
+                    graph.add_pass(PassNode {
+                        id: p_island,
+                        label: "bounded_cpu_island".into(),
+                        op: PassOp::CpuIsland {
+                            scene: Scene {
+                                nodes: vec![node.clone()],
+                            },
+                            bounds: Some(bounds),
+                            reason: "bounded CPU island for GPU-unsupported node".into(),
+                        },
+                        reads: Vec::new(),
+                        writes: vec![island_res],
+                        order_deps: Vec::new(),
+                        required_capabilities: CapabilityFlags::CPU_ISLAND,
+                    });
+                    let p_comp = PassId(next_pass_id);
+                    next_pass_id += 1;
+                    graph.add_pass(PassNode {
+                        id: p_comp,
+                        label: "composite_cpu_island".into(),
+                        op: PassOp::Composite {
+                            source: island_res,
+                            opacity: 1.0,
+                            blend_mode: BlendMode::Normal,
+                            region: Some(bounds),
+                        },
+                        reads: vec![island_res, out],
+                        writes: vec![out],
+                        order_deps: last_out_writer.into_iter().chain(Some(p_island)).collect(),
+                        required_capabilities: CapabilityFlags::OFFSCREEN_COMPOSITE,
+                    });
+                    last_out_writer = Some(p_comp);
+                }
+            }
+        }
+        flush_gpu(
+            &mut graph,
+            &mut pending_gpu,
+            &mut output_initialized,
+            &mut last_out_writer,
+            &mut next_res_id,
+            &mut next_pass_id,
+        );
+        return graph;
+    }
+
     // Default single-pass scene rasterization (or CPU island if required capabilities
     // exceed non-CPU capabilities and CPU_ISLAND is available).
+    let out = graph.add_resource(color_output_desc(
+        ResourceId(0),
+        "frame_output",
+        config.width,
+        config.height,
+        msaa,
+        ResourceLifetime::Output,
+        TextureUsage::CPU_READBACK,
+    ));
+    graph.set_output(out);
     let scene_caps = required_capabilities_for_nodes(&scene.nodes);
     let missing = scene_caps.missing(opts.capabilities);
     if !missing.is_empty() && opts.capabilities.contains(CapabilityFlags::CPU_ISLAND) {

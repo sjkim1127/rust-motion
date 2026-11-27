@@ -2,6 +2,7 @@
 #![cfg(feature = "gpu")]
 
 pub(crate) mod compile;
+pub(crate) mod compute;
 pub(crate) mod context;
 pub(crate) mod executor;
 pub(crate) mod metrics;
@@ -86,6 +87,10 @@ pub struct WgpuBackend {
     gpu_submit_no_readback_ns: AtomicU64,
     gpu_frame_count: AtomicU64,
     cpu_fallback_frame_count: AtomicU64,
+    cpu_island_frames: AtomicU64,
+    cpu_island_pixels: AtomicU64,
+    cpu_island_upload_bytes: AtomicU64,
+    compute_pass_count: AtomicU64,
     last_cpu_fallback_reason: Mutex<Option<String>>,
     profiling_enabled: AtomicBool,
     profile_samples: Mutex<Vec<FrameProfileSample>>,
@@ -124,6 +129,10 @@ impl WgpuBackend {
             gpu_submit_no_readback_ns: AtomicU64::new(0),
             gpu_frame_count: AtomicU64::new(0),
             cpu_fallback_frame_count: AtomicU64::new(0),
+            cpu_island_frames: AtomicU64::new(0),
+            cpu_island_pixels: AtomicU64::new(0),
+            cpu_island_upload_bytes: AtomicU64::new(0),
+            compute_pass_count: AtomicU64::new(0),
             last_cpu_fallback_reason: Mutex::new(None),
             profiling_enabled: AtomicBool::new(false),
             profile_samples: Mutex::new(Vec::new()),
@@ -139,6 +148,26 @@ impl WgpuBackend {
             texture_cache_hits: self.gpu_texture_cache_hits.load(Ordering::Relaxed),
             texture_cache_misses: self.gpu_texture_cache_misses.load(Ordering::Relaxed),
         }
+    }
+
+    /// Number of frames that executed at least one bounded CPU island pass.
+    pub fn cpu_island_frames(&self) -> u64 {
+        self.cpu_island_frames.load(Ordering::Relaxed)
+    }
+
+    /// Cumulative pixels rasterized inside bounded CPU island passes.
+    pub fn cpu_island_pixels(&self) -> u64 {
+        self.cpu_island_pixels.load(Ordering::Relaxed)
+    }
+
+    /// Cumulative RGBA bytes uploaded to GPU from bounded CPU island passes.
+    pub fn cpu_island_upload_bytes(&self) -> u64 {
+        self.cpu_island_upload_bytes.load(Ordering::Relaxed)
+    }
+
+    /// Cumulative GPU compute shader passes dispatched.
+    pub fn compute_pass_count(&self) -> u64 {
+        self.compute_pass_count.load(Ordering::Relaxed)
     }
 
     /// Return the most recent reason a frame was rendered by the CPU fallback.
@@ -389,7 +418,7 @@ impl RasterizerBackend for WgpuBackend {
                 })
                 .clone()
         };
-        let res = resource
+        let mut res = resource
             .lock()
             .map_err(|_| RasterError::Init("GPU frame resource mutex poisoned".into()))?;
 
@@ -441,6 +470,52 @@ impl RasterizerBackend for WgpuBackend {
             else {
                 while let Some(prev) = in_flight.pop_front() {
                     self.drain_slot(prev, &res, width, height, &mut scratch, sink)?;
+                }
+                if let Ok(plan) = self.compile_render_plan(&scene, &cfg) {
+                    let is_single_cpu_island = plan.pass_order.len() == 1
+                        && plan
+                            .pass_order
+                            .first()
+                            .and_then(|pid| plan.graph.pass(*pid))
+                            .is_some_and(|p| {
+                                matches!(p.op, crate::render_ir::PassOp::CpuIsland { .. })
+                            });
+                    if !is_single_cpu_island {
+                        drop(res);
+                        let (img, report) =
+                            crate::render_ir::RenderExecutor::execute_plan(self, &plan, &cfg)?;
+                        let enc_start = if is_profiling {
+                            Some(Instant::now())
+                        } else {
+                            None
+                        };
+                        sink.consume(frame, img.as_raw())?;
+                        let enc_ns = enc_start
+                            .map(|t| t.elapsed().as_nanos() as u64)
+                            .unwrap_or(0);
+                        if is_profiling {
+                            self.record_profile_sample(FrameProfileSample {
+                                frame_idx: frame,
+                                scene_eval_ns,
+                                decode_ns: 0,
+                                upload_ns: 0,
+                                upload_bytes: report.cpu_island_upload_bytes,
+                                compile_encode_ns: 0,
+                                submission_wait_ns: 0,
+                                gpu_exec_ns: None,
+                                readback_ns: 0,
+                                readback_bytes: u64::from(width) * u64::from(height) * 4,
+                                video_encode_ns: enc_ns,
+                                total_frame_ns: frame_started.elapsed().as_nanos() as u64,
+                                cpu_fallback: report.cpu_island_passes > 0
+                                    && report.gpu_passes == 0,
+                            });
+                        }
+                        res = resource.lock().map_err(|_| {
+                            RasterError::Init("GPU frame resource mutex poisoned".into())
+                        })?;
+                        continue;
+                    }
                 }
                 self.record_cpu_fallback(gpu_fallback_reason(&scene));
                 let fb_start = if is_profiling {

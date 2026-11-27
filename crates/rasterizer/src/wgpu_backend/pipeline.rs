@@ -423,6 +423,17 @@ fn fs_image(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 
 @fragment
+fn fs_premultiplied_image(in: VertexOutput) -> @location(0) vec4<f32> {
+    let instance = instances[in.instance_index];
+    let bounds = instance.shape_bounds;
+    let local = (in.local_position - bounds.xy) / max(bounds.zw, vec2<f32>(0.000001));
+    let uv = mix(instance.params.xy, instance.params.zw, clamp(local, vec2<f32>(0.0), vec2<f32>(1.0)));
+    let sampled = textureSample(image_texture, image_sampler, uv);
+    let op = instance.color.a * instance.opacity.x;
+    return sampled * op;
+}
+
+@fragment
 fn fs_text(in: VertexOutput) -> @location(0) vec4<f32> {
     let instance = instances[in.instance_index];
     let mask_coverage_value = mask_coverage(in.transformed_position, instance);

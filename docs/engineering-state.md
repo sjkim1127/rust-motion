@@ -30,7 +30,7 @@ This document tracks verified repository audits, architecture decisions, impleme
 
 ---
 
-## Cycle 1 — Active Issue: `#161` (Internal Render IR & Narrow Backend Execution Contract)
+## Cycle 1 — Issue `#161` (Committed: `db0e608`)
 
 ### Architecture Decisions
 - **Backend-Independent Render IR (`crates/rasterizer/src/render_ir/`)**:
@@ -64,11 +64,35 @@ This document tracks verified repository audits, architecture decisions, impleme
 
 ---
 
-## Remaining Roadmap & Next Recommended Action
+---
 
-- **Next Recommended Action**: **Issue `#162`** (`[GPU] Replace whole-frame fallback with dependency-safe CPU islands and GPU compute passes`) — split mixed supported/unsupported scene subgraphs into bounded `PassOp::CpuIsland` + `PassOp::Composite` passes in `render_ir::lower` (instead of whole-frame fallback), and implement the first real `PassOp::Compute` kernel (e.g., separable blur / color LUT) on `WgpuBackend` + `CpuReferenceExecutor` with CPU/GPU differential verification (`#166`).
-- **Subsequent Priorities**:
+## Cycle 2 — Issue `#162` (GPU Compute Kernels, Dummy Resource Hoisting & Bounded CPU Islands)
+
+### Implemented Changes
+- **Static Dummy GPU Resource Hoisting**:
+  - Hoisted persistent `dummy_image_bg` and `default_path_mask_bg` bind groups into `WgpuContext` (`crates/rasterizer/src/wgpu_backend/context.rs`) and reused them in `submit/frame.rs` and `submit/layers.rs`, eliminating per-frame 1x1 dummy texture allocations.
+  - Added `premultiplied_composite_pipeline` (`fs_premultiplied_image` + `PREMULTIPLIED_ALPHA_BLENDING`) in `pipeline.rs` and `context.rs` so translucent offscreen/compute/CPU-island surfaces composite with exact Porter-Duff premultiplied SourceOver without double-premultiplication.
+- **GPU Compute Kernels & CPU Reference Parity**:
+  - Created `crates/rasterizer/src/wgpu_backend/compute.rs` with WGSL `cs_box_blur` (exact `u32` integer arithmetic matching CPU `box_blur`) and `cs_color_matrix` compute pipelines.
+  - Added `KERNEL_SEPARABLE_BOX_BLUR_H`, `KERNEL_SEPARABLE_BOX_BLUR_V`, and `KERNEL_COLOR_MATRIX` in `render_ir/types.rs` and implemented exact reference execution on both `CpuReferenceExecutor` and `WgpuBackend::execute_general_dag`.
+  - Removed 12 lines of dead/buggy sliding-window stride arithmetic at the tail of `box_blur` in `tiny_skia_backend/filters.rs`.
+- **Bounded `CpuIsland` Lowering & Streaming Integration**:
+  - Extended `render_ir::lower` to partition mixed scenes in painter order into GPU segments, 2-pass compute blur layers (`layer_has_only_gpu_basic_effects`), and tight bounding-box `PassOp::CpuIsland` passes (`isolatable_cpu_node_bounds`), composited with bounded `Composite { region }`.
+  - Extended `ExecutionReport` and `WgpuBackend` telemetry with `cpu_island_frames`, `cpu_island_pixels`, `cpu_island_upload_bytes`, and `compute_pass_count`.
+  - Wired `WgpuBackend::render_stream` to execute multi-pass `ExecutionPlan`s (releasing `resource` mutex before `execute_plan` to avoid deadlock).
+
+---
+
+## Remaining Roadmap & Next Priorities
+
+- **Active Immediate Directive (Cycle 3+) — Rust Motion Media Engine (FFmpeg Decoupling P0–P5)**:
+  - **P0**: Isolate FFmpeg (`media-core`, `EncoderBackend`, auto fallback, `doctor` passes without FFmpeg).
+  - **P1**: Standalone streaming native H.264 + MP4 output (`media-container`, `co64`, `ctts`, `colr`, multi-track, `faststart`) wired into `rasterizer` & `cli`.
+  - **P2**: Native container metadata probing (eliminating `ffprobe` hard dependency).
+  - **P3**: Native video decoding & keyframe seek cache.
+  - **P4**: Apple Silicon native Metal executor (`#163`) + VideoToolbox IOSurface/CVPixelBuffer hardware encoder (`#164`).
+  - **P5**: Full independent multimedia engine (AV1, ProRes, WebM, WASM).
+- **Parallel Platform Priorities**:
   - `#160` / `#166`: Reproducible CPU/WGPU profiling harness + differential test suite.
-  - `#163`: Native Apple Silicon Metal executor (`objc2-metal`) against `RenderExecutor`.
   - `#168` / `#169` / `#174`: Isolate core scene/render contracts from creative-suite dependencies and define feature profiles.
   - `#194`–`#205`: Geometry kernel, mesh modeling, parametric CAD, procedural node graph, materials, 3D/raytracing, animation, simulation, runtime, and agent platform integration.

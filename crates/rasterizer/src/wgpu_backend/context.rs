@@ -1,3 +1,4 @@
+use super::compute::GpuComputePipelines;
 use super::pipeline::*;
 use super::types::*;
 use crate::backend::RasterError;
@@ -14,8 +15,18 @@ pub(crate) struct GpuContext {
     /// layer texture into the resolved frame target.
     #[allow(dead_code)]
     pub(crate) image_composite_pipeline: wgpu::RenderPipeline,
+    pub(crate) premultiplied_composite_pipeline: wgpu::RenderPipeline,
     pub(crate) path_mask_pipeline: wgpu::RenderPipeline,
     pub(crate) text_pipeline: wgpu::RenderPipeline,
+    pub(crate) compute: GpuComputePipelines,
+    _dummy_image_texture: wgpu::Texture,
+    _dummy_image_view: wgpu::TextureView,
+    _dummy_image_sampler: wgpu::Sampler,
+    pub(crate) dummy_image_bg: wgpu::BindGroup,
+    _default_path_mask_texture: wgpu::Texture,
+    _default_path_mask_view: wgpu::TextureView,
+    _default_path_mask_sampler: wgpu::Sampler,
+    pub(crate) default_path_mask_bg: wgpu::BindGroup,
     pub(crate) multiply_pipeline: wgpu::RenderPipeline,
     pub(crate) multiply_mesh_pipeline: wgpu::RenderPipeline,
     pub(crate) multiply_image_pipeline: wgpu::RenderPipeline,
@@ -452,6 +463,127 @@ impl GpuContext {
                 cache: None,
             });
 
+        let premultiplied_composite_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("rust_motion_premultiplied_composite_pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: "vs_main",
+                    buffers: &[],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: "fs_premultiplied_image",
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: RENDER_FORMAT,
+                        blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            });
+
+        let compute = GpuComputePipelines::new(&device);
+
+        let dummy_image_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("dummy_image_texture"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            dummy_image_texture.as_image_copy(),
+            &[0, 0, 0, 0],
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(4),
+                rows_per_image: Some(1),
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+        let dummy_image_view =
+            dummy_image_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let dummy_image_sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+        let dummy_image_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("dummy_image_bg"),
+            layout: &image_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&dummy_image_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&dummy_image_sampler),
+                },
+            ],
+        });
+
+        let default_path_mask_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("default_path_mask_texture"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            default_path_mask_texture.as_image_copy(),
+            &[255],
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(1),
+                rows_per_image: Some(1),
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+        let default_path_mask_view =
+            default_path_mask_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let default_path_mask_sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+        let default_path_mask_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("default_path_mask_bg"),
+            layout: &path_mask_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&default_path_mask_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&default_path_mask_sampler),
+                },
+            ],
+        });
+
         let path_mask_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("rust_motion_path_mask_pipeline"),
             layout: Some(&pipeline_layout),
@@ -521,8 +653,18 @@ impl GpuContext {
             mesh_pipeline,
             image_pipeline,
             image_composite_pipeline,
+            premultiplied_composite_pipeline,
             path_mask_pipeline,
             text_pipeline,
+            compute,
+            _dummy_image_texture: dummy_image_texture,
+            _dummy_image_view: dummy_image_view,
+            _dummy_image_sampler: dummy_image_sampler,
+            dummy_image_bg,
+            _default_path_mask_texture: default_path_mask_texture,
+            _default_path_mask_view: default_path_mask_view,
+            _default_path_mask_sampler: default_path_mask_sampler,
+            default_path_mask_bg,
             multiply_pipeline,
             multiply_mesh_pipeline,
             multiply_image_pipeline,

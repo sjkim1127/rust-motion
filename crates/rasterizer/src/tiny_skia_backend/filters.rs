@@ -1101,18 +1101,6 @@ pub(crate) fn box_blur(pixmap: &mut Pixmap, radius: usize) {
                 for channel in 0..4 {
                     row[offset + channel] = (sums[channel] / kernel) as u8;
                 }
-                if y >= radius {
-                    let remove = ((y - radius) * width + x) * 4;
-                    for channel in 0..4 {
-                        sums[channel] -= u32::from(horizontal[remove + channel]);
-                    }
-                }
-                if y + radius + 1 < height {
-                    let add = (y + radius + 1) * width + x;
-                    for channel in 0..4 {
-                        sums[channel] += u32::from(horizontal[add + channel]);
-                    }
-                }
             }
         });
 }

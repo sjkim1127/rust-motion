@@ -8,6 +8,13 @@ use crate::scene::{BlendMode, Color, Scene, Transform2D};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+/// Built-in compute kernel identifier for horizontal separable box blur.
+pub(crate) const KERNEL_SEPARABLE_BOX_BLUR_H: &str = "separable_box_blur_h";
+/// Built-in compute kernel identifier for vertical separable box blur.
+pub(crate) const KERNEL_SEPARABLE_BOX_BLUR_V: &str = "separable_box_blur_v";
+/// Built-in compute kernel identifier for 3x4 premultiplied RGBA color matrix.
+pub(crate) const KERNEL_COLOR_MATRIX: &str = "color_matrix";
+
 /// Typed handle to a logical surface/buffer resource within a [`RenderGraph`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub(crate) struct ResourceId(pub(crate) u32);
