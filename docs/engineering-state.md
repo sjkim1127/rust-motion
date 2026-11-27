@@ -11,6 +11,7 @@ This document tracks verified repository audits, architecture decisions, impleme
   - Cycle 3 (`P0/P1`): `2ae5511`
   - Cycle 4 (`P2`): `e603b34`
   - Cycle 5 (`P3`): `75112ba`
+  - Cycle 6 (`P3/P4, #164`): `83f268f`
 - **Active Working Branch**: `autonomous_engineering_mission`
 - **Host / Hardware**: macOS (`Darwin 25.5.0`, `arm64`), **Apple M4 Pro**
 - **Toolchain**: `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `cargo 1.100.0 (3acc79c0c 2026-11-05)`, `/opt/homebrew/bin/ffmpeg`
@@ -181,11 +182,29 @@ This document tracks verified repository audits, architecture decisions, impleme
 
 ---
 
+## Cycle 7 — Native Audio Timeline Mixer & Apple AudioToolbox AAC MP4 Encoding (P1/P4)
+
+### Architecture Decisions
+- **Apple AudioToolbox AAC-LC Encoder (`crates/media-hwaccel/src/audiotoolbox.rs`)**:
+  - Direct macOS `AudioToolbox.framework` FFI (`AudioConverterNew`, `AudioConverterFillComplexBuffer`, `AudioConverterDispose`) encoding interleaved `f32` PCM (`lpcm`) into MPEG-4 AAC-LC (`aac `, 1024 samples/packet) with exact ISO 14496-3 `AudioSpecificConfig` extraction from `kAudioConverterCompressionMagicCookie` (fallback bit-packed ASC). Zero third-party dependencies and clean non-macOS/WASM stubs (`is_audiotoolbox_available()`).
+- **Pure-Rust Sample-Accurate Audio Timeline Mixer (`crates/rasterizer/src/render/audio.rs`)**:
+  - Reuses `crate::audio_cache::decode_audio_file` (Symphonia) instead of duplicating codec decoding logic.
+  - Mixes active composition tracks at `48_000 Hz` stereo `f32` with `timeline_start`, `start_from`, `duration`, `playback_rate` linear resampling, `looped` wraparound, linear `volume_keyframes`, and bounded output duration (`MAX_MIX_DURATION_SECS = 7200.0`).
+- **Interleaved Multi-Track Native MP4 Export (`native_h264.rs` & `pipe.rs`)**:
+  - Interleaves encoded H.264/HEVC video frames and AAC audio access units (`stream_index = 1`, `48 kHz` timescale) in presentation order inside `Mp4Muxer`, unlocking FFmpeg-free video+audio MP4 exports on macOS (`EncoderBackend::Auto` & `Native`).
+
+### Verification
+- `media-hwaccel`: `audiotoolbox_aac_encodes_sine_wave_and_muxes_playable_mp4` (48 kHz stereo AAC muxed MP4 verified by native `probe_isobmff_path`, `ffprobe`, and `ffmpeg` decoded RMS > 0.1).
+- `rasterizer`: `native_audio_mixer_applies_delay_loop_and_additive_mixing` and `native_mp4_mixes_and_encodes_audio_tracks_without_ffmpeg`.
+- `cli`: `e2e_ffmpeg_free_doctor_and_mp4_render` asserts `"aac (audiotoolbox)"` in `doctor --json` `native_encoders` on macOS.
+
+---
+
 ## Remaining Roadmap & Next Priorities
 
-- **Next Immediate Priority — Cycle 7 (`#163` Apple Silicon Native Metal `RenderExecutor` & `#164` Zero-Copy `IOSurface` GPU-to-VideoToolbox Path)**:
+- **Next Immediate Priority — Cycle 8 (`#163` Apple Silicon Native Metal `RenderExecutor` & `#164` Zero-Copy `IOSurface` GPU-to-VideoToolbox Path)**:
   - Prototype native `RenderExecutor` on macOS Metal (`MTLDevice`/`MTLCommandQueue`/`MTLComputePipelineState`) OR zero-copy `IOSurface`-backed `MTLTexture` -> `CVPixelBuffer` encoding into `HardwareVideoEncoder` to eliminate CPU RGBA readback/swizzle on Apple Silicon.
 - **Subsequent Milestones**:
   - **#168 / #169 / #174**: Workspace dependency cleanup (remaining unused deps & isolating creative-suite crates behind feature profiles in `rasterizer`).
-  - **P5**: Full independent multimedia engine (AV1, ProRes, WebM/MKV muxing, pure-Rust AAC/Opus audio mixing, WASM export).
+  - **P5**: Full independent multimedia engine (AV1, ProRes, WebM/MKV muxing, pure-Rust AAC/Opus audio encoding for Linux/Windows, WASM export).
   - **#194–#205**: Unified creative engine vertical slices (3D/CAD geometry kernel, procedural node graph, material graph, deterministic simulation, agent MCP editing).

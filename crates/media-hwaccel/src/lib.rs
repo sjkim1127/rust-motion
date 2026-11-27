@@ -10,6 +10,8 @@ use rust_motion_media_core::{
 };
 
 #[cfg(target_os = "macos")]
+mod audiotoolbox;
+#[cfg(target_os = "macos")]
 mod videotoolbox;
 
 /// Decoded RGBA8 video frame produced by [`HardwareVideoDecoder`].
@@ -24,6 +26,101 @@ pub struct DecodedVideoFrame {
 /// Returns `true` when Apple VideoToolbox hardware acceleration is available on this platform.
 pub const fn is_videotoolbox_available() -> bool {
     cfg!(target_os = "macos")
+}
+
+/// Returns `true` when Apple AudioToolbox hardware/OS AAC encoding is available on this platform.
+pub const fn is_audiotoolbox_available() -> bool {
+    cfg!(target_os = "macos")
+}
+
+/// Hardware/OS-accelerated AAC-LC audio encoder (`f32` interleaved PCM -> `mp4a` AAC access units).
+pub struct HardwareAacEncoder {
+    #[cfg(target_os = "macos")]
+    inner: audiotoolbox::AtAacEncoder,
+}
+
+impl HardwareAacEncoder {
+    /// Construct an AAC-LC encoder targeting `sample_rate` Hz (e.g. 48000), `channels` (1 or 2),
+    /// and target bitrate in bps (e.g. `192_000`).
+    pub fn new(sample_rate: u32, channels: u16, bitrate: u32) -> Result<Self, MediaError> {
+        #[cfg(target_os = "macos")]
+        {
+            Ok(Self {
+                inner: audiotoolbox::AtAacEncoder::new(sample_rate, channels, bitrate)?,
+            })
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (sample_rate, channels, bitrate);
+            Err(MediaError::Unsupported(
+                "AAC encoding via AudioToolbox is only available on macOS".into(),
+            ))
+        }
+    }
+
+    pub fn sample_rate(&self) -> u32 {
+        #[cfg(target_os = "macos")]
+        {
+            self.inner.sample_rate()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            0
+        }
+    }
+
+    pub fn channels(&self) -> u16 {
+        #[cfg(target_os = "macos")]
+        {
+            self.inner.channels()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            0
+        }
+    }
+
+    /// ISO 14496-3 `AudioSpecificConfig` bytes for the MP4 `esds` descriptor.
+    pub fn audio_specific_config(&self) -> Vec<u8> {
+        #[cfg(target_os = "macos")]
+        {
+            self.inner.audio_specific_config()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Vec::new()
+        }
+    }
+
+    /// Feed interleaved 32-bit float PCM samples (`frames * channels`) and drain complete AAC packets.
+    pub fn encode_interleaved_f32(
+        &mut self,
+        samples: &[f32],
+    ) -> Result<Vec<EncodedPacket>, MediaError> {
+        #[cfg(target_os = "macos")]
+        {
+            self.inner.encode_interleaved_f32(samples)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = samples;
+            Err(MediaError::Unsupported(
+                "AAC encoding via AudioToolbox is only available on macOS".into(),
+            ))
+        }
+    }
+
+    /// Zero-pad any partial frame and drain trailing AAC access units.
+    pub fn flush(&mut self) -> Result<Vec<EncodedPacket>, MediaError> {
+        #[cfg(target_os = "macos")]
+        {
+            self.inner.flush()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Ok(Vec::new())
+        }
+    }
 }
 
 /// Returns the list of codecs supported by native hardware acceleration on this host.
@@ -657,6 +754,174 @@ mod tests {
                 frames as f64 / pure_secs,
                 pure_bytes / 1024
             );
+        }
+
+        #[test]
+        fn audiotoolbox_aac_encodes_sine_wave_and_muxes_playable_mp4() {
+            use rust_motion_media_container::probe_isobmff_path;
+            use rust_motion_media_core::{AudioCodecId, AudioTrackConfig};
+
+            let sr = 48_000u32;
+            let channels = 2u16;
+            let mut aac = HardwareAacEncoder::new(sr, channels, 192_000).unwrap();
+            let asc = aac.audio_specific_config();
+            assert!(!asc.is_empty());
+
+            // Generate 0.5s (24,000 frames) of 440 Hz stereo sine wave.
+            let num_frames = sr as usize / 2;
+            let mut pcm = Vec::with_capacity(num_frames * 2);
+            for n in 0..num_frames {
+                let sample =
+                    (2.0 * std::f32::consts::PI * 440.0 * (n as f32) / (sr as f32)).sin() * 0.5;
+                pcm.push(sample);
+                pcm.push(sample);
+            }
+
+            let mut audio_pkts = aac.encode_interleaved_f32(&pcm).unwrap();
+            audio_pkts.extend(aac.flush().unwrap());
+            assert!(
+                audio_pkts.len() >= 20,
+                "expected ~24 AAC access units for 0.5s @ 48kHz, got {}",
+                audio_pkts.len()
+            );
+
+            // Pair with an 8-frame VideoToolbox H.264 stream into an MP4.
+            let (w, h) = (128u32, 96u32);
+            let mut venc = HardwareVideoEncoder::new(VideoCodecId::H264).unwrap();
+            venc.configure(&VideoEncodeConfig {
+                width: w,
+                height: h,
+                fps: Rational::new(16, 1),
+                codec: VideoCodecId::H264,
+                crf: 22,
+                preset: "fast".into(),
+                color: ColorDescription::bt709_limited(),
+            })
+            .unwrap();
+
+            let dir = tempfile::tempdir().unwrap();
+            let mp4_path = dir.path().join("av_audiotoolbox.mp4");
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&mp4_path)
+                .unwrap();
+
+            let tracks = [
+                TrackConfig::Video(VideoTrackConfig {
+                    width: w,
+                    height: h,
+                    timescale: 16,
+                    fps: Rational::new(16, 1),
+                    codec: VideoCodecId::H264,
+                    codec_config: Vec::new(),
+                    color: ColorDescription::bt709_limited(),
+                }),
+                TrackConfig::Audio(AudioTrackConfig {
+                    codec: AudioCodecId::Aac,
+                    sample_rate: sr,
+                    channels,
+                    timescale: sr,
+                    codec_config: asc,
+                }),
+            ];
+            let mut muxer = Mp4Muxer::new(file, &tracks, Mp4MuxerOptions::default()).unwrap();
+
+            let frames = synthetic_rgba_frames(w, h, 8);
+            for (idx, rgba) in frames.iter().enumerate() {
+                for pkt in venc
+                    .encode(&VideoFrame {
+                        width: w,
+                        height: h,
+                        pts: idx as i64,
+                        duration: 1,
+                        color: ColorDescription::bt709_limited(),
+                        buffer: VideoFrameBuffer::CpuRgba(rgba.clone()),
+                    })
+                    .unwrap()
+                {
+                    muxer.write_packet(&pkt).unwrap();
+                }
+            }
+            for pkt in venc.flush().unwrap() {
+                muxer.write_packet(&pkt).unwrap();
+            }
+            muxer
+                .set_video_codec_config(0, venc.codec_config())
+                .unwrap();
+            for pkt in &audio_pkts {
+                muxer.write_packet(pkt).unwrap();
+            }
+            muxer.finish().unwrap();
+
+            let meta = probe_isobmff_path(&mp4_path).unwrap();
+            assert_eq!(meta.video_streams.len(), 1);
+            assert_eq!(meta.audio_streams.len(), 1);
+            assert_eq!(meta.audio_streams[0].codec, AudioCodecId::Aac);
+            assert_eq!(meta.audio_streams[0].sample_rate, 48_000);
+            assert_eq!(meta.audio_streams[0].channels, 2);
+
+            if Command::new("ffprobe")
+                .arg("-version")
+                .output()
+                .is_ok_and(|o| o.status.success())
+            {
+                let probe = Command::new("ffprobe")
+                    .args([
+                        "-v",
+                        "error",
+                        "-select_streams",
+                        "a:0",
+                        "-show_entries",
+                        "stream=codec_name,sample_rate,channels",
+                        "-of",
+                        "default=noprint_wrappers=1",
+                    ])
+                    .arg(&mp4_path)
+                    .output()
+                    .unwrap();
+                assert!(probe.status.success());
+                let txt = String::from_utf8_lossy(&probe.stdout);
+                assert!(txt.contains("codec_name=aac"), "{txt}");
+                assert!(txt.contains("sample_rate=48000"), "{txt}");
+                assert!(txt.contains("channels=2"), "{txt}");
+            }
+
+            if Command::new("ffmpeg")
+                .arg("-version")
+                .output()
+                .is_ok_and(|o| o.status.success())
+            {
+                let dec = Command::new("ffmpeg")
+                    .args(["-v", "error", "-i"])
+                    .arg(&mp4_path)
+                    .args(["-vn", "-f", "f32le", "-acodec", "pcm_f32le", "-"])
+                    .output()
+                    .unwrap();
+                assert!(
+                    dec.status.success(),
+                    "ffmpeg AAC decode failed: {}",
+                    String::from_utf8_lossy(&dec.stderr)
+                );
+                let rms: f64 = dec
+                    .stdout
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|b| {
+                        let v = f64::from(f32::from_le_bytes(*b));
+                        v * v
+                    })
+                    .sum::<f64>()
+                    / ((dec.stdout.len() / 4).max(1) as f64);
+                assert!(
+                    rms.sqrt() > 0.1,
+                    "expected audible decoded sine wave RMS > 0.1, got {}",
+                    rms.sqrt()
+                );
+            }
         }
     }
 }

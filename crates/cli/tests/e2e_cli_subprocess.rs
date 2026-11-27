@@ -462,6 +462,14 @@ fn e2e_ffmpeg_free_doctor_and_mp4_render() {
     assert!(doc_json["supported_codecs"]
         .as_array()
         .is_some_and(|arr| arr.iter().any(|v| v == "h264")));
+    #[cfg(target_os = "macos")]
+    assert!(
+        doc_json["native_encoders"]
+            .as_array()
+            .is_some_and(|arr| arr.iter().any(|v| v == "aac (audiotoolbox)")),
+        "expected aac (audiotoolbox) in macOS doctor native_encoders: {}",
+        doc_json["native_encoders"]
+    );
 
     let dir = tmp_dir("ffmpeg_free_render");
     for (mode, encoder_arg) in [("auto", "auto"), ("native", "native")] {

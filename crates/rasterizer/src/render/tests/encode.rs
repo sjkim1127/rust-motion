@@ -311,3 +311,141 @@ fn native_h264_respects_cancellation_and_rejects_unsupported_inputs() {
 
     std::fs::remove_dir_all(temp).unwrap();
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn native_mp4_mixes_and_encodes_audio_tracks_without_ffmpeg() {
+    let temp = unique_temp_dir("native_av_mux");
+    std::fs::create_dir_all(&temp).unwrap();
+
+    let wav_path = temp.join("tone.wav");
+    write_stereo_sine_wav(&wav_path, 48_000, 1.0, 440.0);
+
+    let out_mp4 = temp.join("av_native.mp4");
+    let audio_track = AudioTrack::new(wav_path.to_string_lossy().into_owned())
+        .with_volume_keyframes([(0.0, 0.4), (0.5, 1.0)]);
+    let cfg = PipeConfig::new(128, 96, 24.0, 12, &out_mp4)
+        .with_encoder_backend(EncoderBackend::Native)
+        .with_security_policy(crate::security::MediaSecurityPolicy::Permissive)
+        .with_audio_tracks([audio_track]);
+
+    render_to_video(
+        &TinySkiaBackend::headless(),
+        &cfg,
+        solid_scene(Color::rgb(30, 140, 220)),
+    )
+    .unwrap();
+
+    let meta = rust_motion_media_container::probe_isobmff_path(&out_mp4).unwrap();
+    assert_eq!(meta.video_streams.len(), 1);
+    assert_eq!(meta.audio_streams.len(), 1);
+    assert_eq!(
+        meta.audio_streams[0].codec,
+        rust_motion_media_core::AudioCodecId::Aac
+    );
+    assert_eq!(meta.audio_streams[0].sample_rate, 48_000);
+    assert_eq!(meta.audio_streams[0].channels, 2);
+
+    if Command::new("ffmpeg")
+        .arg("-version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+    {
+        let dec = Command::new("ffmpeg")
+            .args(["-v", "error", "-i"])
+            .arg(&out_mp4)
+            .args(["-vn", "-f", "f32le", "-acodec", "pcm_f32le", "-"])
+            .output()
+            .unwrap();
+        assert!(
+            dec.status.success(),
+            "ffmpeg failed to decode native MP4 AAC track: {}",
+            String::from_utf8_lossy(&dec.stderr)
+        );
+        let rms: f64 = dec
+            .stdout
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| {
+                let s = f64::from(f32::from_le_bytes(*b));
+                s * s
+            })
+            .sum::<f64>()
+            / ((dec.stdout.len() / 4).max(1) as f64);
+        assert!(rms.sqrt() > 0.05, "expected audible mixed audio RMS > 0.05");
+    }
+
+    std::fs::remove_dir_all(temp).unwrap();
+}
+
+#[test]
+fn native_audio_mixer_applies_delay_loop_and_additive_mixing() {
+    let temp = unique_temp_dir("native_audio_mix_units");
+    std::fs::create_dir_all(&temp).unwrap();
+    let wav_a = temp.join("a.wav");
+    write_stereo_sine_wav(&wav_a, 44_100, 0.25, 440.0);
+
+    let mut delayed = AudioTrack::new(wav_a.to_string_lossy().into_owned());
+    delayed.timeline_start = 0.25;
+    delayed.looped = true;
+    let cfg = PipeConfig::new(64, 64, 10.0, 6, temp.join("unused.mp4"))
+        .with_security_policy(crate::security::MediaSecurityPolicy::Permissive)
+        .with_audio_tracks([delayed]);
+
+    let pcm = super::super::audio::mix_audio_tracks_pcm(&cfg, 48_000).unwrap();
+    let total_frames = pcm.len() / 2;
+    assert_eq!(total_frames, 28_800); // 0.6s @ 48 kHz
+
+    // First 0.20s (before timeline_start = 0.25s) must be silent.
+    let pre_peak = pcm[0..9_600 * 2]
+        .iter()
+        .map(|s| s.abs())
+        .fold(0.0f32, f32::max);
+    assert_eq!(pre_peak, 0.0);
+
+    // At 0.52s (inside looped repeat after 0.25s + 0.25s), must still be audible.
+    let tail_peak = pcm[24_000 * 2..28_800 * 2]
+        .iter()
+        .map(|s| s.abs())
+        .fold(0.0f32, f32::max);
+    assert!(
+        tail_peak > 0.2,
+        "expected looped tail audio, got {tail_peak}"
+    );
+
+    std::fs::remove_dir_all(temp).unwrap();
+}
+
+fn write_stereo_sine_wav(
+    path: &std::path::Path,
+    sample_rate: u32,
+    duration_secs: f64,
+    freq_hz: f64,
+) {
+    let num_frames = (f64::from(sample_rate) * duration_secs).round() as u32;
+    let data_bytes = num_frames * 4; // 2 channels * 16-bit
+    let mut wav = Vec::with_capacity(44 + data_bytes as usize);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data_bytes).to_le_bytes());
+    wav.extend_from_slice(b"WAVE");
+    wav.extend_from_slice(b"fmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    wav.extend_from_slice(&2u16.to_le_bytes()); // stereo
+    wav.extend_from_slice(&sample_rate.to_le_bytes());
+    wav.extend_from_slice(&(sample_rate * 4).to_le_bytes());
+    wav.extend_from_slice(&4u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data_bytes.to_le_bytes());
+    for n in 0..num_frames {
+        let s = (2.0 * std::f64::consts::PI * freq_hz * f64::from(n) / f64::from(sample_rate))
+            .sin()
+            * 0.5;
+        let q = (s * 32767.0).round() as i16;
+        wav.extend_from_slice(&q.to_le_bytes());
+        wav.extend_from_slice(&q.to_le_bytes());
+    }
+    std::fs::write(path, wav).unwrap();
+}

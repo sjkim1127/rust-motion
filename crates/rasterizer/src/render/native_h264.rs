@@ -1,5 +1,6 @@
 //! Built-in native MP4 video encoder sink (pure-Rust H.264 and Apple VideoToolbox H.264/HEVC).
 
+use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
 
 use rust_motion_h264enc::{
@@ -7,11 +8,15 @@ use rust_motion_h264enc::{
 };
 use rust_motion_media_container::{Mp4Muxer, Mp4MuxerOptions};
 use rust_motion_media_core::{
-    ColorDescription, ContainerMuxer, EncodedPacket, Rational, TrackConfig, VideoCodecId,
-    VideoEncodeConfig, VideoEncoder, VideoFrame, VideoFrameBuffer, VideoTrackConfig,
+    AudioCodecId, AudioTrackConfig, ColorDescription, ContainerMuxer, EncodedPacket, Rational,
+    TrackConfig, VideoCodecId, VideoEncodeConfig, VideoEncoder, VideoFrame, VideoFrameBuffer,
+    VideoTrackConfig,
 };
-use rust_motion_media_hwaccel::{is_videotoolbox_available, HardwareVideoEncoder};
+use rust_motion_media_hwaccel::{
+    is_audiotoolbox_available, is_videotoolbox_available, HardwareAacEncoder, HardwareVideoEncoder,
+};
 
+use super::audio::{mix_audio_tracks_pcm, NATIVE_AUDIO_SAMPLE_RATE};
 use super::*;
 
 enum NativeVideoEncoderImpl {
@@ -29,6 +34,7 @@ pub(super) struct NativeH264FrameSink<'a> {
     total: u32,
     start_frame: u32,
     frame_step: u32,
+    effective_fps: f64,
     frame_duration_ticks: i64,
     y_stride: usize,
     uv_stride: usize,
@@ -37,6 +43,7 @@ pub(super) struct NativeH264FrameSink<'a> {
     v_plane: Vec<u8>,
     encoder: NativeVideoEncoderImpl,
     muxer: Mp4Muxer<File>,
+    audio_packets: VecDeque<EncodedPacket>,
     codec_config_written: bool,
     encoded_count: u32,
 }
@@ -59,9 +66,11 @@ impl<'a> NativeH264FrameSink<'a> {
                 "built-in native H.265 encoding requires Apple VideoToolbox on macOS".into(),
             ));
         }
-        if !active_audio_tracks(config).is_empty() {
+
+        let has_audio = !active_audio_tracks(config).is_empty();
+        if has_audio && !is_audiotoolbox_available() {
             return Err(RasterError::ImageEncode(
-                "built-in native MP4 encoder does not yet support audio track mixing; install FFmpeg or render without audio tracks"
+                "built-in native MP4 audio mixing requires Apple AudioToolbox on macOS; install FFmpeg or render without audio tracks"
                     .into(),
             ));
         }
@@ -73,6 +82,32 @@ impl<'a> NativeH264FrameSink<'a> {
         let codec_id = match config.codec {
             VideoCodec::H265 => VideoCodecId::Hevc,
             _ => VideoCodecId::H264,
+        };
+
+        let (audio_track_cfg, audio_packets) = if has_audio {
+            let mixed_pcm = mix_audio_tracks_pcm(config, NATIVE_AUDIO_SAMPLE_RATE)?;
+            let mut aac_enc = HardwareAacEncoder::new(NATIVE_AUDIO_SAMPLE_RATE, 2, 192_000)
+                .map_err(|e| {
+                    RasterError::ImageEncode(format!("Failed to create native AAC encoder: {e}"))
+                })?;
+            let mut pkts = aac_enc
+                .encode_interleaved_f32(&mixed_pcm)
+                .map_err(|e| RasterError::ImageEncode(format!("Native AAC encode error: {e}")))?;
+            pkts.extend(
+                aac_enc.flush().map_err(|e| {
+                    RasterError::ImageEncode(format!("Native AAC flush error: {e}"))
+                })?,
+            );
+            let cfg = AudioTrackConfig {
+                codec: AudioCodecId::Aac,
+                sample_rate: NATIVE_AUDIO_SAMPLE_RATE,
+                channels: 2,
+                timescale: NATIVE_AUDIO_SAMPLE_RATE,
+                codec_config: aac_enc.audio_specific_config(),
+            };
+            (Some(cfg), VecDeque::from(pkts))
+        } else {
+            (None, VecDeque::new())
         };
 
         let (encoder, initial_codec_config, allocate_yuv) = if use_hardware {
@@ -144,7 +179,7 @@ impl<'a> NativeH264FrameSink<'a> {
             })?;
 
         let codec_config_written = !initial_codec_config.is_empty();
-        let track = TrackConfig::Video(VideoTrackConfig {
+        let video_track = TrackConfig::Video(VideoTrackConfig {
             width: output_width,
             height: output_height,
             timescale: rational_fps.num,
@@ -153,8 +188,12 @@ impl<'a> NativeH264FrameSink<'a> {
             codec_config: initial_codec_config,
             color: ColorDescription::bt709_limited(),
         });
+        let mut tracks = vec![video_track];
+        if let Some(audio_cfg) = audio_track_cfg {
+            tracks.push(TrackConfig::Audio(audio_cfg));
+        }
 
-        let muxer = Mp4Muxer::new(file, &[track], Mp4MuxerOptions::default()).map_err(|e| {
+        let muxer = Mp4Muxer::new(file, &tracks, Mp4MuxerOptions::default()).map_err(|e| {
             RasterError::ImageEncode(format!("Failed to initialize native MP4 muxer: {e}"))
         })?;
 
@@ -178,6 +217,7 @@ impl<'a> NativeH264FrameSink<'a> {
             total: config.duration_in_frames,
             start_frame: config.start_frame,
             frame_step: config.frame_step,
+            effective_fps,
             frame_duration_ticks: i64::from(rational_fps.den),
             y_stride,
             uv_stride,
@@ -186,6 +226,7 @@ impl<'a> NativeH264FrameSink<'a> {
             v_plane,
             encoder,
             muxer,
+            audio_packets,
             codec_config_written,
             encoded_count: 0,
         })
@@ -245,6 +286,20 @@ impl<'a> NativeH264FrameSink<'a> {
         self.write_media_packets(converted)
     }
 
+    fn flush_audio_up_to(&mut self, cutoff_secs: f64) -> Result<(), RasterError> {
+        let sr = f64::from(NATIVE_AUDIO_SAMPLE_RATE);
+        while let Some(front) = self.audio_packets.front() {
+            if (front.pts as f64 / sr) > cutoff_secs {
+                break;
+            }
+            let pkt = self.audio_packets.pop_front().expect("checked front");
+            self.muxer.write_packet(&pkt).map_err(|e| {
+                RasterError::ImageEncode(format!("Native MP4 audio mux error: {e}"))
+            })?;
+        }
+        Ok(())
+    }
+
     pub(super) fn finish(mut self) -> Result<(), RasterError> {
         match &mut self.encoder {
             NativeVideoEncoderImpl::PureRustH264(enc) => {
@@ -258,6 +313,7 @@ impl<'a> NativeH264FrameSink<'a> {
                 self.write_media_packets(trailing)?;
             }
         }
+        self.flush_audio_up_to(f64::INFINITY)?;
         self.sync_codec_config()?;
         self.muxer
             .finish()
@@ -316,6 +372,7 @@ impl FrameSink for NativeH264FrameSink<'_> {
                 self.write_media_packets(packets)?;
             }
         }
+        self.flush_audio_up_to(f64::from(frame + 1) / self.effective_fps)?;
 
         if let Some(callback) = &self.control.progress {
             callback(RenderProgress {
