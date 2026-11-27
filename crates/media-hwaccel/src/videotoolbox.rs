@@ -39,6 +39,8 @@ type CMVideoCodecType = FourCharCode;
 type CVImageBufferRef = *mut c_void;
 type CVPixelBufferRef = *mut c_void;
 type CVPixelBufferPoolRef = *mut c_void;
+type CVMetalTextureCacheRef = *mut c_void;
+type CVMetalTextureRef = *mut c_void;
 type CMFormatDescriptionRef = *const c_void;
 type CMVideoFormatDescriptionRef = *const c_void;
 type CMBlockBufferRef = *mut c_void;
@@ -153,6 +155,8 @@ extern "C" {
     static kCVPixelBufferWidthKey: CFStringRef;
     static kCVPixelBufferHeightKey: CFStringRef;
     static kCVPixelBufferIOSurfacePropertiesKey: CFStringRef;
+    static kCVPixelBufferMetalCompatibilityKey: CFStringRef;
+    static kCVMetalTextureUsage: CFStringRef;
     static kCVImageBufferColorPrimaries_ITU_R_709_2: CFStringRef;
     static kCVImageBufferColorPrimaries_ITU_R_2020: CFStringRef;
     static kCVImageBufferColorPrimaries_SMPTE_C: CFStringRef;
@@ -186,6 +190,27 @@ extern "C" {
     fn CVPixelBufferGetHeight(pixel_buffer: CVPixelBufferRef) -> usize;
     fn CVPixelBufferGetBytesPerRow(pixel_buffer: CVPixelBufferRef) -> usize;
     fn CVPixelBufferGetBaseAddress(pixel_buffer: CVPixelBufferRef) -> *mut c_void;
+    fn CVPixelBufferGetIOSurface(pixel_buffer: CVPixelBufferRef) -> *mut c_void;
+    fn CVMetalTextureCacheCreate(
+        allocator: CFAllocatorRef,
+        cache_attributes: CFDictionaryRef,
+        metal_device: *mut c_void,
+        texture_attributes: CFDictionaryRef,
+        cache_out: *mut CVMetalTextureCacheRef,
+    ) -> CVReturn;
+    fn CVMetalTextureCacheCreateTextureFromImage(
+        allocator: CFAllocatorRef,
+        texture_cache: CVMetalTextureCacheRef,
+        source_image: CVImageBufferRef,
+        texture_attributes: CFDictionaryRef,
+        pixel_format: usize,
+        width: usize,
+        height: usize,
+        plane_index: usize,
+        texture_out: *mut CVMetalTextureRef,
+    ) -> CVReturn;
+    fn CVMetalTextureGetTexture(image: CVMetalTextureRef) -> *mut c_void;
+    fn CVMetalTextureCacheFlush(texture_cache: CVMetalTextureCacheRef, options: CVOptionFlags);
 }
 
 #[link(name = "CoreMedia", kind = "framework")]
@@ -524,6 +549,7 @@ impl VtEncoder {
                 (kCVPixelBufferWidthKey, width_num.as_ptr()),
                 (kCVPixelBufferHeightKey, height_num.as_ptr()),
                 (kCVPixelBufferIOSurfacePropertiesKey, empty_dict.as_ptr()),
+                (kCVPixelBufferMetalCompatibilityKey, kCFBooleanTrue),
             ])?
         };
 
@@ -669,6 +695,56 @@ impl VtEncoder {
         self.drain_packets()
     }
 
+    pub fn acquire_pixel_buffer(&self) -> Result<OwnedPixelBuffer, MediaError> {
+        let session = self.session.ok_or_else(|| {
+            MediaError::InvalidConfig("VtEncoder::configure must be called first".into())
+        })?;
+        let pb = self.acquire_bgra_pixel_buffer(session)?;
+        Ok(OwnedPixelBuffer {
+            pb,
+            width: self.width,
+            height: self.height,
+        })
+    }
+
+    pub fn encode_pixel_buffer(
+        &mut self,
+        pb: &OwnedPixelBuffer,
+        pts: i64,
+        duration: i64,
+    ) -> Result<Vec<EncodedPacket>, MediaError> {
+        let session = self.session.ok_or_else(|| {
+            MediaError::InvalidConfig("VtEncoder::configure must be called first".into())
+        })?;
+        if pb.width != self.width || pb.height != self.height {
+            return Err(MediaError::InvalidConfig(format!(
+                "pixel buffer dimensions {}x{} do not match configured {}x{}",
+                pb.width, pb.height, self.width, self.height
+            )));
+        }
+
+        let pts_t = CMTime::new(pts, self.timescale);
+        let dur_t = CMTime::new(duration.max(1), self.timescale);
+        // SAFETY: `pb.pb` is a valid retained CVPixelBuffer matching this session's dimensions.
+        let status = unsafe {
+            VTCompressionSessionEncodeFrame(
+                session,
+                pb.pb,
+                pts_t,
+                dur_t,
+                null(),
+                null_mut(),
+                null_mut(),
+            )
+        };
+        if status != 0 {
+            return Err(MediaError::Codec(format!(
+                "VTCompressionSessionEncodeFrame failed with OSStatus {status}"
+            )));
+        }
+        self.drain_packets()
+    }
+
     pub fn flush(&mut self) -> Result<Vec<EncodedPacket>, MediaError> {
         let Some(session) = self.session else {
             return Ok(Vec::new());
@@ -711,12 +787,22 @@ impl VtEncoder {
                 }
             }
             let empty_dict = cf_dict(&[])?;
+            let fmt_num = cf_num_i32(K_CV_PIXEL_FORMAT_TYPE_32BGRA as i32)?;
+            let width_num = cf_num_i32(self.width as i32)?;
+            let height_num = cf_num_i32(self.height as i32)?;
+            let attrs = cf_dict(&[
+                (kCVPixelBufferPixelFormatTypeKey, fmt_num.as_ptr()),
+                (kCVPixelBufferWidthKey, width_num.as_ptr()),
+                (kCVPixelBufferHeightKey, height_num.as_ptr()),
+                (kCVPixelBufferIOSurfacePropertiesKey, empty_dict.as_ptr()),
+                (kCVPixelBufferMetalCompatibilityKey, kCFBooleanTrue),
+            ])?;
             let rc = CVPixelBufferCreate(
                 null(),
                 self.width as usize,
                 self.height as usize,
                 K_CV_PIXEL_FORMAT_TYPE_32BGRA,
-                empty_dict.as_ptr(),
+                attrs.as_ptr(),
                 &mut pb,
             );
             if rc != 0 || pb.is_null() {
@@ -1275,5 +1361,163 @@ unsafe extern "C" fn vt_decompression_output_callback(
 
     if let Some(frame) = frame_result {
         state.frames.push(frame);
+    }
+}
+
+/// Retained CoreVideo `CVPixelBuffer` backed by an `IOSurface` (zero-copy CPU/GPU/VideoToolbox).
+pub struct OwnedPixelBuffer {
+    pb: CVPixelBufferRef,
+    width: u32,
+    height: u32,
+}
+
+// SAFETY: CoreVideo pixel buffers are reference-counted CF objects safe to transfer between threads.
+unsafe impl Send for OwnedPixelBuffer {}
+
+impl OwnedPixelBuffer {
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// Underlying `IOSurfaceRef` pointer (non-null when backed by IOSurface).
+    pub fn iosurface_ptr(&self) -> *mut c_void {
+        // SAFETY: `self.pb` is a valid non-null retained CVPixelBuffer.
+        unsafe { CVPixelBufferGetIOSurface(self.pb) }
+    }
+}
+
+impl Drop for OwnedPixelBuffer {
+    fn drop(&mut self) {
+        if !self.pb.is_null() {
+            // SAFETY: `OwnedPixelBuffer` owns a retain on `self.pb`.
+            unsafe { CFRelease(self.pb.cast()) };
+            self.pb = null_mut();
+        }
+    }
+}
+
+/// CoreVideo `CVMetalTextureRef` binding a `CVPixelBuffer` plane directly as a `MTLTexture`.
+pub struct BoundMetalTexture {
+    cv_tex: CVMetalTextureRef,
+    mtl_tex: *mut c_void,
+}
+
+impl BoundMetalTexture {
+    /// Raw Objective-C `id<MTLTexture>` pointer valid for the lifetime of `self`.
+    pub fn mtl_texture_ptr(&self) -> *mut c_void {
+        self.mtl_tex
+    }
+}
+
+impl Drop for BoundMetalTexture {
+    fn drop(&mut self) {
+        if !self.cv_tex.is_null() {
+            // SAFETY: `BoundMetalTexture` owns a retain on `self.cv_tex`.
+            unsafe { CFRelease(self.cv_tex.cast()) };
+            self.cv_tex = null_mut();
+            self.mtl_tex = null_mut();
+        }
+    }
+}
+
+/// CoreVideo `CVMetalTextureCacheRef` creating zero-copy `MTLTexture` views over `IOSurface` `CVPixelBuffer`s.
+pub struct MetalTextureCache {
+    cache: CVMetalTextureCacheRef,
+}
+
+// SAFETY: `CVMetalTextureCache` calls synchronize internally via CoreVideo.
+unsafe impl Send for MetalTextureCache {}
+unsafe impl Sync for MetalTextureCache {}
+
+impl MetalTextureCache {
+    /// Create a `CVMetalTextureCache` bound to an Objective-C `id<MTLDevice>` pointer.
+    pub fn new(mtl_device_ptr: *mut c_void) -> Result<Self, MediaError> {
+        if mtl_device_ptr.is_null() {
+            return Err(MediaError::InvalidConfig(
+                "MTLDevice pointer must be non-null".into(),
+            ));
+        }
+        // kCVMetalTextureUsage: MTLTextureUsageShaderRead (1) | ShaderWrite (2) | RenderTarget (4) = 7.
+        let usage_num = cf_num_i32(7)?;
+        // SAFETY: `kCVMetalTextureUsage` is a static CoreVideo CFString constant.
+        let tex_attrs = unsafe { cf_dict(&[(kCVMetalTextureUsage, usage_num.as_ptr())])? };
+
+        let mut cache: CVMetalTextureCacheRef = null_mut();
+        // SAFETY: Valid `MTLDevice` pointer and CoreFoundation dictionary.
+        let rc = unsafe {
+            CVMetalTextureCacheCreate(
+                null(),
+                null(),
+                mtl_device_ptr,
+                tex_attrs.as_ptr(),
+                &mut cache,
+            )
+        };
+        if rc != 0 || cache.is_null() {
+            return Err(MediaError::Codec(format!(
+                "CVMetalTextureCacheCreate failed with CVReturn {rc}"
+            )));
+        }
+        Ok(Self { cache })
+    }
+
+    /// Bind `pb` (BGRA8 `IOSurface` `CVPixelBuffer`) directly as a Metal `MTLPixelFormatBGRA8Unorm` texture.
+    pub fn bind_bgra8_texture(
+        &self,
+        pb: &OwnedPixelBuffer,
+    ) -> Result<BoundMetalTexture, MediaError> {
+        const MTL_PIXEL_FORMAT_BGRA8_UNORM: usize = 80;
+        let mut cv_tex: CVMetalTextureRef = null_mut();
+        // SAFETY: `self.cache` and `pb.pb` are valid non-null CoreVideo handles.
+        let rc = unsafe {
+            CVMetalTextureCacheCreateTextureFromImage(
+                null(),
+                self.cache,
+                pb.pb,
+                null(),
+                MTL_PIXEL_FORMAT_BGRA8_UNORM,
+                pb.width as usize,
+                pb.height as usize,
+                0,
+                &mut cv_tex,
+            )
+        };
+        if rc != 0 || cv_tex.is_null() {
+            return Err(MediaError::Codec(format!(
+                "CVMetalTextureCacheCreateTextureFromImage failed with CVReturn {rc}"
+            )));
+        }
+        // SAFETY: `cv_tex` was just retained and created cleanly.
+        let mtl_tex = unsafe { CVMetalTextureGetTexture(cv_tex) };
+        if mtl_tex.is_null() {
+            // SAFETY: release `cv_tex` before returning error.
+            unsafe { CFRelease(cv_tex.cast()) };
+            return Err(MediaError::Codec(
+                "CVMetalTextureGetTexture returned null".into(),
+            ));
+        }
+        Ok(BoundMetalTexture { cv_tex, mtl_tex })
+    }
+
+    pub fn flush(&self) {
+        // SAFETY: `self.cache` is valid and non-null.
+        unsafe { CVMetalTextureCacheFlush(self.cache, 0) };
+    }
+}
+
+impl Drop for MetalTextureCache {
+    fn drop(&mut self) {
+        if !self.cache.is_null() {
+            // SAFETY: `MetalTextureCache` owns a retain on `self.cache`.
+            unsafe {
+                CVMetalTextureCacheFlush(self.cache, 0);
+                CFRelease(self.cache.cast());
+            }
+            self.cache = null_mut();
+        }
     }
 }
