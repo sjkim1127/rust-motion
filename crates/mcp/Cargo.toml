@@ -18,6 +18,9 @@ thiserror = { workspace = true }
 image = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [features]
 default = []
 

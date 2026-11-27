@@ -67,6 +67,7 @@ pub mod time_remap;
 pub mod tiny_skia_backend;
 pub mod vfx;
 mod video_cache;
+mod video_probe;
 pub mod web;
 pub mod web_backend;
 #[cfg(feature = "gpu")]

@@ -47,7 +47,9 @@ pollster   = { version = "0.4", optional = true }
 lyon_tessellation = { workspace = true, optional = true }
 
 [features]
-default = []
+default = ["ffmpeg-cli"]
+# Spawn system ffmpeg/ffprobe for video probe/decode. Disable for ffmpeg-free builds.
+ffmpeg-cli = []
 # Enable wgpu GPU-accelerated offscreen rendering
 gpu = ["wgpu", "pollster", "lyon_tessellation"]
 

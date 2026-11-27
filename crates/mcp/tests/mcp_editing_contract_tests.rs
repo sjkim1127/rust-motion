@@ -1,7 +1,11 @@
 //! Regression tests for the agent-facing editing contract (#152-#156).
 
+use rust_motion_mcp::session::McpSession;
 use rust_motion_mcp::McpServer;
 use serde_json::{json, Value};
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use tempfile::TempDir;
 
 /// Call a tool over JSON-RPC and return `(is_error, first text block, full result)`.
 fn call(server: &mut McpServer, name: &str, arguments: Value) -> (bool, String, Value) {
@@ -63,6 +67,52 @@ fn project() -> (McpServer, String) {
     );
     let track = add_track(&mut server, "Main");
     (server, track)
+}
+
+/// [`project`] with a media root of its own.
+fn media_project() -> (McpServer, String, TempDir) {
+    let root = tempfile::tempdir().expect("media root");
+    let session = McpSession::with_media_root(root.path());
+    let mut server = McpServer::with_session(Arc::new(Mutex::new(session)));
+    ok(
+        &mut server,
+        "project_create",
+        json!({ "name": "Edit", "width": 640, "height": 360, "fps": 30.0, "duration_secs": 10.0 }),
+    );
+    let track = add_track(&mut server, "Main");
+    (server, track, root)
+}
+
+fn write_image(
+    dir: &Path,
+    name: &str,
+    width: u32,
+    height: u32,
+    color: impl Fn(u32, u32) -> [u8; 3],
+) {
+    image::RgbImage::from_fn(width, height, |x, y| image::Rgb(color(x, y)))
+        .save(dir.join(name))
+        .expect("save image");
+}
+
+fn import(server: &mut McpServer, path: &str, kind: &str, asset_id: &str) {
+    ok(
+        server,
+        "asset_import",
+        json!({ "path": path, "kind": kind, "asset_id": asset_id }),
+    );
+}
+
+fn insert_media(server: &mut McpServer, track: &str, asset: &str, start: f64, secs: f64) -> String {
+    ok(
+        server,
+        "clip_insert",
+        json!({ "track_id": track, "name": asset, "start_secs": start,
+                "duration_secs": secs, "asset_id": asset }),
+    )["clip_id"]
+        .as_str()
+        .expect("clip id")
+        .to_string()
 }
 
 fn add_track(server: &mut McpServer, name: &str) -> String {
@@ -276,7 +326,9 @@ fn project_follows_insert_trim_and_split() {
 
 #[test]
 fn trimming_a_media_clip_before_its_source_start_is_rejected() {
-    let (mut server, track) = project();
+    let (mut server, track, root) = media_project();
+    write_image(root.path(), "footage.png", 4, 4, |_, _| [255, 0, 0]);
+    import(&mut server, "footage.png", "image", "footage");
     let clip = ok(
         &mut server,
         "clip_insert",
@@ -296,23 +348,31 @@ fn trimming_a_media_clip_before_its_source_start_is_rejected() {
 
 // ---------------------------------------------------------------------------------------- #155
 
-fn preview(server: &mut McpServer, time_secs: f64) -> Vec<u8> {
+/// The preview's report (the JSON in the text block) and its RGBA pixels.
+fn preview_with_report(server: &mut McpServer, time_secs: f64) -> (Value, image::RgbaImage) {
     let result = ok(
         server,
         "preview_frame",
         json!({ "time_secs": time_secs, "width": 320, "height": 180 }),
     );
-    assert!(result["content"][0]["text"]
-        .as_str()
-        .expect("text")
-        .contains("Schematic"));
+    let text = result["content"][0]["text"].as_str().expect("text");
+    let (summary, report) = text.split_once('\n').expect("report");
+    assert!(summary.contains("not a final render"), "{summary}");
+    let report: Value = serde_json::from_str(report).expect("report json");
+    assert!(!report["limitations"].as_array().expect("list").is_empty());
+    assert!(report.get("image_data_url").is_none());
     let data = result["content"][1]["data"].as_str().expect("png");
     let png =
         base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data).expect("base64");
-    image::load_from_memory(&png)
-        .expect("png")
-        .to_rgba8()
-        .into_raw()
+    let pixels = image::load_from_memory(&png).expect("png").to_rgba8();
+    (report, pixels)
+}
+
+/// Pixels of a preview made of placeholders and captions only.
+fn preview(server: &mut McpServer, time_secs: f64) -> Vec<u8> {
+    let (report, pixels) = preview_with_report(server, time_secs);
+    assert_ne!(report["preview_kind"], "mixed");
+    pixels.into_raw()
 }
 
 #[test]
@@ -398,6 +458,299 @@ fn unsupported_or_unknown_requests_are_errors() {
         let message = fail(&mut server, tool, arguments);
         assert!(message.contains(needle), "{tool}: {message}");
     }
+}
+
+#[test]
+fn preview_decodes_distinct_source_images_with_captions_and_exposure() {
+    let (mut server, track, root) = media_project();
+    write_image(root.path(), "red.png", 64, 36, |_, _| [200, 0, 0]);
+    // Left half green, right half blue, so that placement is observable.
+    write_image(root.path(), "split.png", 64, 36, |x, _| {
+        if x < 32 {
+            [0, 200, 0]
+        } else {
+            [0, 0, 200]
+        }
+    });
+    import(&mut server, "red.png", "image", "red");
+    import(&mut server, "split.png", "image", "split");
+    let red = insert_media(&mut server, &track, "red", 0.0, 1.0);
+    let split = insert_media(&mut server, &track, "split", 1.0, 1.0);
+
+    let (report, first) = preview_with_report(&mut server, 0.5);
+    assert_eq!(report["preview_kind"], "media");
+    assert_eq!(report["media_clips"], json!([red]));
+    assert_eq!(report["placeholder_clips"], json!([]));
+    assert_eq!(first.get_pixel(160, 90).0, [200, 0, 0, 255]);
+    assert_eq!(first.get_pixel(5, 5).0, [200, 0, 0, 255]);
+
+    let (report, second) = preview_with_report(&mut server, 1.5);
+    assert_eq!(report["media_clips"], json!([split]));
+    assert_eq!(second.get_pixel(60, 90).0, [0, 200, 0, 255]);
+    assert_eq!(second.get_pixel(260, 90).0, [0, 0, 200, 255]);
+
+    ok(
+        &mut server,
+        "color_grade_apply",
+        json!({ "clip_id": red, "exposure": -1.0 }),
+    );
+    let (_, darker) = preview_with_report(&mut server, 0.5);
+    let level = darker.get_pixel(160, 90).0[0];
+    assert!((98..=102).contains(&level), "-1 EV gave {level}");
+
+    let titles = add_track(&mut server, "Titles");
+    let caption = ok(
+        &mut server,
+        "subtitles_generate",
+        json!({ "track_id": titles, "text": "HELLO WORLD", "start_secs": 0.0, "duration_secs": 1.0 }),
+    )["clip_id"]
+        .as_str()
+        .expect("clip id")
+        .to_string();
+    let (report, captioned) = preview_with_report(&mut server, 0.5);
+    // A caption is drawn over the media, not as a block that hides it.
+    assert_eq!(report["preview_kind"], "media");
+    assert_eq!(report["placeholder_clips"], json!([]));
+    assert_eq!(captioned.get_pixel(5, 5), darker.get_pixel(5, 5));
+    assert_ne!(captioned, darker, "caption glyphs are not drawn");
+    ok(
+        &mut server,
+        "color_grade_apply",
+        json!({ "clip_id": caption, "exposure": -5.0 }),
+    );
+    let (_, dim_caption) = preview_with_report(&mut server, 0.5);
+    assert_ne!(dim_caption, captioned, "caption grade is ignored");
+}
+
+#[test]
+fn preview_fits_media_inside_the_project_canvas() {
+    let (mut server, track, root) = media_project();
+    write_image(root.path(), "square.png", 36, 36, |_, _| [200, 0, 0]);
+    import(&mut server, "square.png", "image", "square");
+    insert_media(&mut server, &track, "square", 0.0, 1.0);
+
+    let (_, pixels) = preview_with_report(&mut server, 0.0);
+    // 180 pixels square in the middle of a 320x180 frame.
+    assert_eq!(pixels.get_pixel(160, 90).0, [200, 0, 0, 255]);
+    assert_eq!(pixels.get_pixel(75, 90).0, [200, 0, 0, 255]);
+    assert_eq!(pixels.get_pixel(60, 90).0, [18, 18, 24, 255]);
+
+    // A square preview of a 16:9 project letterboxes the canvas.
+    let result = ok(
+        &mut server,
+        "preview_frame",
+        json!({ "width": 320, "height": 320 }),
+    );
+    let data = result["content"][1]["data"].as_str().expect("png");
+    let png =
+        base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data).expect("base64");
+    let square = image::load_from_memory(&png).expect("png").to_rgba8();
+    assert_eq!(square.get_pixel(160, 160).0, [200, 0, 0, 255]);
+    assert_eq!(square.get_pixel(160, 30).0, [18, 18, 24, 255]);
+}
+
+#[test]
+fn preview_reports_placeholders_and_omitted_clips() {
+    let (mut server, track, root) = media_project();
+    write_image(root.path(), "red.png", 64, 36, |_, _| [200, 0, 0]);
+    std::fs::write(root.path().join("music.wav"), b"not decoded").expect("audio");
+    import(&mut server, "red.png", "image", "red");
+    import(&mut server, "music.wav", "audio", "music");
+    let red = insert_media(&mut server, &track, "red", 0.0, 1.0);
+    let sound = ok(
+        &mut server,
+        "timeline_add_track",
+        json!({ "track_type": "audio", "name": "Sound" }),
+    )["track_id"]
+        .as_str()
+        .expect("track id")
+        .to_string();
+    let music = insert_media(&mut server, &sound, "music", 0.0, 1.0);
+
+    // Audio does not paint over the picture.
+    let (report, pixels) = preview_with_report(&mut server, 0.5);
+    assert_eq!(report["preview_kind"], "media");
+    assert_eq!(report["omitted_clips"], json!([music]));
+    assert_eq!(pixels.get_pixel(160, 90).0, [200, 0, 0, 255]);
+
+    let overlay = add_track(&mut server, "Overlay");
+    let block = insert(&mut server, &overlay, "block", 0, 30);
+    let (report, pixels) = preview_with_report(&mut server, 0.5);
+    assert_eq!(report["preview_kind"], "mixed");
+    assert_eq!(report["media_clips"], json!([red]));
+    assert_eq!(report["placeholder_clips"], json!([block]));
+    assert_ne!(pixels.get_pixel(160, 90).0, [200, 0, 0, 255]);
+}
+
+#[test]
+fn preview_shows_the_source_video_frame_the_clip_points_at() {
+    let (mut server, track, root) = media_project();
+    // One second of red followed by one second of blue.
+    let generated = std::process::Command::new("ffmpeg")
+        .args(["-hide_banner", "-loglevel", "error"])
+        .args(["-f", "lavfi", "-i", "color=c=red:s=64x36:r=30:d=1"])
+        .args(["-f", "lavfi", "-i", "color=c=blue:s=64x36:r=30:d=1"])
+        .args(["-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0"])
+        .args(["-c:v", "ffv1"])
+        .arg(root.path().join("two.mkv"))
+        .status();
+    let Ok(generated) = generated else {
+        eprintln!("skipping video preview test: FFmpeg is unavailable");
+        return;
+    };
+    assert!(generated.success());
+    import(&mut server, "two.mkv", "video", "two");
+    let clip = insert_media(&mut server, &track, "two", 2.0, 2.0);
+
+    let center = |server: &mut McpServer, time| {
+        let (report, pixels) = preview_with_report(server, time);
+        assert_eq!(report["preview_kind"], "media");
+        pixels.get_pixel(160, 90).0
+    };
+    let is_red = |p: [u8; 4]| p[0] > 200 && p[2] < 50;
+    let is_blue = |p: [u8; 4]| p[2] > 200 && p[0] < 50;
+    assert!(is_red(center(&mut server, 2.5)));
+    assert!(is_blue(center(&mut server, 3.5)));
+
+    // Splitting keeps each part's place in the source.
+    let parts = ok(
+        &mut server,
+        "clip_split",
+        json!({ "clip_id": clip, "split_time_secs": 3.5 }),
+    );
+    assert!(parts["clip2"].is_string());
+    assert!(is_blue(center(&mut server, 3.75)));
+    // Trimming the head moves the source in-point along with it.
+    ok(
+        &mut server,
+        "clip_trim",
+        json!({ "clip_id": clip, "edge_in": true, "new_time_secs": 2.9 }),
+    );
+    assert!(is_blue(center(&mut server, 3.2)));
+    assert!(is_red(center(&mut server, 2.9)));
+}
+
+#[test]
+fn unusable_media_is_rejected_without_changing_state() {
+    let (mut server, track, root) = media_project();
+    let outside = tempfile::tempdir().expect("outside");
+    write_image(outside.path(), "secret.png", 4, 4, |_, _| [1, 2, 3]);
+    let secret = outside.path().join("secret.png");
+    let secret = secret.to_str().expect("path");
+    write_image(root.path(), "ok.png", 4, 4, |_, _| [1, 2, 3]);
+    std::fs::write(root.path().join("broken.png"), b"not an image").expect("broken");
+    std::fs::write(root.path().join("broken.mp4"), b"not a video").expect("broken");
+    std::fs::write(
+        root.path().join("vector.svg"),
+        "<svg xmlns='http://www.w3.org/2000/svg'/>",
+    )
+    .expect("svg");
+    import(&mut server, "ok.png", "image", "ok");
+
+    for (arguments, needle) in [
+        (json!({ "path": secret, "kind": "image" }), "outside"),
+        (
+            json!({ "path": format!("file://{secret}"), "kind": "audio" }),
+            "outside",
+        ),
+        (
+            json!({ "path": "https://example.com/a.png", "kind": "image" }),
+            "local",
+        ),
+        (json!({ "path": "missing.png", "kind": "image" }), "path"),
+        (json!({ "path": ".", "kind": "audio" }), "not a file"),
+        (json!({ "path": "broken.png", "kind": "image" }), "decode"),
+        (json!({ "path": "broken.mp4", "kind": "video" }), "video"),
+        (json!({ "path": "vector.svg", "kind": "image" }), "SVG"),
+        (json!({ "path": "ok.png", "kind": "font" }), "kind"),
+        (
+            json!({ "path": "ok.png", "kind": "image", "asset_id": "ok" }),
+            "already",
+        ),
+        (
+            json!({ "path": "ok.png", "kind": "image", "asset_id": " " }),
+            "asset_id",
+        ),
+    ] {
+        let message = fail(&mut server, "asset_import", arguments);
+        assert!(message.contains(needle), "{needle}: {message}");
+    }
+
+    let message = fail(
+        &mut server,
+        "clip_insert",
+        json!({ "track_id": track, "name": "x", "start_secs": 0.0,
+                "duration_secs": 1.0, "asset_id": "never_imported" }),
+    );
+    assert!(message.contains("never_imported"), "{message}");
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(secret, root.path().join("link.png")).expect("symlink");
+        let message = fail(
+            &mut server,
+            "asset_import",
+            json!({ "path": "link.png", "kind": "image" }),
+        );
+        assert!(message.contains("outside"), "{message}");
+
+        // A file swapped for a link after import is caught when it is read.
+        insert_media(&mut server, &track, "ok", 0.0, 1.0);
+        std::fs::remove_file(root.path().join("ok.png")).expect("remove");
+        std::os::unix::fs::symlink(secret, root.path().join("ok.png")).expect("symlink");
+        let message = fail(&mut server, "preview_frame", json!({}));
+        assert!(message.contains("outside"), "{message}");
+    }
+}
+
+#[test]
+fn preview_notices_changed_and_damaged_files() {
+    let (mut server, track, root) = media_project();
+    write_image(root.path(), "a.png", 64, 36, |_, _| [200, 0, 0]);
+    import(&mut server, "a.png", "image", "a");
+    insert_media(&mut server, &track, "a", 0.0, 1.0);
+    let (_, before) = preview_with_report(&mut server, 0.0);
+    assert_eq!(before.get_pixel(160, 90).0, [200, 0, 0, 255]);
+
+    write_image(root.path(), "a.png", 64, 36, |_, _| [0, 200, 0]);
+    let (_, after) = preview_with_report(&mut server, 0.0);
+    assert_eq!(after.get_pixel(160, 90).0, [0, 200, 0, 255]);
+
+    std::fs::write(root.path().join("a.png"), b"damaged").expect("damage");
+    let message = fail(&mut server, "preview_frame", json!({}));
+    assert!(message.contains("a.png"), "{message}");
+    std::fs::remove_file(root.path().join("a.png")).expect("remove");
+    let message = fail(&mut server, "preview_frame", json!({}));
+    assert!(message.contains("asset 'a'"), "{message}");
+}
+
+#[test]
+fn assets_need_a_project_and_are_exported_with_it() {
+    let root = tempfile::tempdir().expect("media root");
+    write_image(root.path(), "My Shot.png", 4, 4, |_, _| [1, 2, 3]);
+    let session = McpSession::with_media_root(root.path());
+    let mut server = McpServer::with_session(Arc::new(Mutex::new(session)));
+    let arguments = json!({ "path": "My Shot.png", "kind": "image" });
+    let message = fail(&mut server, "asset_import", arguments.clone());
+    assert!(message.contains("project_create"), "{message}");
+
+    ok(&mut server, "project_create", json!({ "name": "P" }));
+    let first = ok(&mut server, "asset_import", arguments.clone());
+    assert_eq!(first["asset_id"], "asset_my_shot");
+    assert_eq!(first["path"], "My Shot.png");
+    let second = ok(&mut server, "asset_import", arguments);
+    assert_eq!(second["asset_id"], "asset_my_shot_2");
+
+    let track = add_track(&mut server, "Main");
+    insert_media(&mut server, &track, "asset_my_shot", 0.0, 1.0);
+    assert_synchronized(&server);
+    let session = server.session.lock().expect("lock");
+    let project = session.project.clone().expect("project");
+    assert_eq!(project.assets.len(), 2);
+    // The exported paths resolve when the project is saved in the media root.
+    project
+        .validate_asset_files(root.path())
+        .expect("assets resolve");
 }
 
 // ---------------------------------------------------------------------------------------- #156

@@ -1,4 +1,4 @@
-//! MCP editing session state: project, timeline tracks, clips, and the schematic preview.
+//! MCP editing session state: project, timeline tracks, and clips.
 //!
 //! The NLE timeline is the canonical editing representation. The exportable [`Project`] is derived
 //! from it after every edit, and an edit is committed only when the derived project validates, so
@@ -8,12 +8,10 @@ use rust_motion_project::nle::{
     insert_clip, split_clip_at_index, trim_clip, NleClip, NleTimeline, NleTrack, TrackKind,
     TrimEdge, TrimMode,
 };
-use rust_motion_project::{BackendKind, Clip, Project, ProjectSettings, Track};
-use rust_motion_rasterizer::backend::{FrameConfig, RasterizerBackend};
+use rust_motion_project::{AssetKind, BackendKind, Clip, Project, ProjectSettings, Track};
 use rust_motion_rasterizer::lut3d::Lut3d;
-use rust_motion_rasterizer::scene::{Color, Scene, SceneFilter, SceneNode};
-use rust_motion_rasterizer::TinySkiaBackend;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Largest frame index the session accepts, so that frame deltas always fit in `i32`.
 pub const MAX_TIMELINE_FRAMES: u32 = i32::MAX as u32;
@@ -23,15 +21,6 @@ pub const MAX_FPS: f64 = 1000.0;
 pub const MAX_CANVAS_SIDE: u32 = 16_384;
 /// Largest accepted preview width or height.
 pub const MAX_PREVIEW_SIDE: u32 = 4096;
-
-/// What the preview does not show. Reported with every preview so an agent cannot mistake it for
-/// the rendered composition.
-pub const PREVIEW_LIMITATIONS: &[&str] = &[
-    "Each visible clip is drawn as a colored block by track type; source media is not decoded",
-    "Captions are drawn as plain text without animation",
-    "Exposure is applied as a 2^EV multiplier on encoded values, not in scene-linear light",
-    "Transitions, speed changes and audio are not represented",
-];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ColorGradeParams {
@@ -72,12 +61,13 @@ impl ColorGradeParams {
 pub struct McpSession {
     pub project: Option<Project>,
     pub timeline: NleTimeline,
-    pub backend: TinySkiaBackend,
     pub active_grades: Vec<(String, ColorGradeParams)>,
     /// Caption text by clip ID.
     pub captions: Vec<(String, String)>,
     /// Requested composition length; edits can extend the timeline past it but not shorten it.
     base_duration_frames: u32,
+    /// Canonical directory media may be read from; `None` permits no files.
+    pub(crate) media_root: Option<PathBuf>,
 }
 
 /// A copy of everything an edit may change.
@@ -186,7 +176,7 @@ fn require_text(field: &str, value: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn require_side(field: &str, value: u32, max: u32) -> Result<(), String> {
+pub(crate) fn require_side(field: &str, value: u32, max: u32) -> Result<(), String> {
     if value == 0 || value > max {
         return Err(format!(
             "invalid '{field}': {value} is outside 1..={max} pixels"
@@ -256,10 +246,14 @@ impl McpSession {
         Self {
             project: None,
             timeline: NleTimeline::new("Untitled", 30.0, 1920, 1080),
-            backend: TinySkiaBackend::new(),
             active_grades: Vec::new(),
             captions: Vec::new(),
             base_duration_frames: 0,
+            // Hosts may start servers in `/`, which would open up the whole file system.
+            media_root: std::env::current_dir()
+                .and_then(|dir| dir.canonicalize())
+                .ok()
+                .filter(|dir| dir.parent().is_some()),
         }
     }
 
@@ -416,6 +410,55 @@ impl McpSession {
         caption: Option<String>,
     ) -> Result<String, String> {
         require_text("name", name)?;
+        let asset_kind = if let Some(asset_id) = &asset_id {
+            let asset = self
+                .project
+                .iter()
+                .flat_map(|project| &project.assets)
+                .find(|asset| &asset.id == asset_id)
+                .ok_or_else(|| {
+                    format!(
+                        "invalid 'asset_id': '{asset_id}' is not a registered asset; import it with asset_import first"
+                    )
+                })?;
+            Some(asset.kind)
+        } else {
+            None
+        };
+        let track_kind = self
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.id == track_id)
+            .map(|track| track.kind)
+            .ok_or_else(|| format!("Track '{track_id}' not found"))?;
+        if let Some(kind) = asset_kind {
+            match (track_kind, kind) {
+                (TrackKind::Audio, AssetKind::Audio) => {}
+                (TrackKind::Audio, other) => {
+                    return Err(format!(
+                        "invalid 'asset_id': {other:?} assets cannot be inserted on an audio track"
+                    ));
+                }
+                (_, AssetKind::Audio) => {
+                    return Err(
+                        "invalid 'asset_id': audio assets can only be inserted on an audio track"
+                            .to_string(),
+                    );
+                }
+                (TrackKind::Video, AssetKind::Image | AssetKind::Video) => {}
+                (track, media @ (AssetKind::Image | AssetKind::Video)) => {
+                    return Err(format!(
+                        "invalid 'asset_id': {media:?} assets cannot be inserted on a {track:?} track"
+                    ));
+                }
+                (_, other) => {
+                    return Err(format!(
+                        "invalid 'asset_id': {other:?} assets cannot be inserted on this track"
+                    ));
+                }
+            }
+        }
         let fps = self.timeline.fps;
         let track_in = secs_to_frame("start_secs", start_secs, fps)?;
         let duration = duration_to_frames("duration_secs", duration_secs, fps)?;
@@ -567,146 +610,5 @@ impl McpSession {
             draft.grades.push((clip_id.to_string(), params));
             Ok(format!("Applied color grading to clip '{clip_id}'"))
         })
-    }
-
-    /// Render a schematic preview at `time_secs` and return it as a base64 PNG data URL.
-    ///
-    /// See [`PREVIEW_LIMITATIONS`] for what it does not show.
-    pub fn render_frame_preview(
-        &self,
-        time_secs: f64,
-        width: u32,
-        height: u32,
-    ) -> Result<String, String> {
-        require_side("width", width, MAX_PREVIEW_SIDE)?;
-        require_side("height", height, MAX_PREVIEW_SIDE)?;
-        let fps = self.timeline.fps;
-        let frame = secs_to_frame("time_secs", time_secs, fps)?;
-
-        let mut scene = Scene::new();
-
-        // Background
-        scene.push(SceneNode::Rect {
-            x: 0.0,
-            y: 0.0,
-            w: width as f32,
-            h: height as f32,
-            fill: Color::rgb(18, 18, 24),
-            stroke: None,
-            stroke_width: 0.0,
-            corner_radius: 0.0,
-        });
-
-        let font_size = (height as f32 * 0.07).max(8.0);
-        let mut captions = Vec::new();
-
-        // Collect visible clips at this frame
-        for track in &self.timeline.tracks {
-            if track.muted {
-                continue;
-            }
-            for clip in &track.clips {
-                if frame >= clip.track_in && frame < clip.track_out {
-                    let mut filters = Vec::new();
-
-                    // Check if clip has active color grading
-                    if let Some((_, grade)) =
-                        self.active_grades.iter().find(|(id, _)| id == &clip.id)
-                    {
-                        if let Some(exposure) = grade.exposure {
-                            push_exposure(&mut filters, exposure);
-                        }
-                        if let Some(cube) = &grade.lut_cube {
-                            filters.push(SceneFilter::Lut3D {
-                                cube_content: cube.clone(),
-                                amount: 1.0,
-                                tetrahedral: true,
-                            });
-                        }
-                        if grade.contrast.is_some()
-                            || grade.saturation.is_some()
-                            || grade.gamma.is_some()
-                        {
-                            filters.push(SceneFilter::ColorGrading {
-                                contrast: grade.contrast.unwrap_or(1.0),
-                                saturation: grade.saturation.unwrap_or(1.0),
-                                gamma: grade.gamma.unwrap_or(1.0),
-                                tint: None,
-                            });
-                        }
-                    }
-
-                    scene.push(SceneNode::Layer {
-                        opacity: clip.opacity,
-                        blend_mode: rust_motion_rasterizer::scene::BlendMode::Normal,
-                        clip: None,
-                        mask: None,
-                        mask_mode: rust_motion_rasterizer::scene::MaskMode::Alpha,
-                        filters,
-                        shadow: None,
-                        children: vec![SceneNode::Rect {
-                            x: 50.0,
-                            y: 50.0,
-                            w: (width as f32 - 100.0).max(10.0),
-                            h: (height as f32 - 100.0).max(10.0),
-                            fill: match track.kind {
-                                TrackKind::Video => Color::rgb(45, 120, 220),
-                                TrackKind::Audio => Color::rgb(50, 180, 100),
-                                TrackKind::Title => Color::rgb(220, 160, 40),
-                                _ => Color::rgb(120, 120, 140),
-                            },
-                            stroke: Some(Color::WHITE),
-                            stroke_width: 2.0,
-                            corner_radius: 8.0,
-                        }],
-                    });
-
-                    if let Some((_, text)) = self.captions.iter().find(|(id, _)| id == &clip.id) {
-                        captions.push(text.clone());
-                    }
-                }
-            }
-        }
-
-        // Captions go on top of every block, stacked upwards from the lower part of the frame.
-        for (line, content) in captions.into_iter().enumerate() {
-            scene.push(SceneNode::Text {
-                x: width as f32 * 0.08,
-                y: height as f32 * 0.72 - line as f32 * font_size * 1.3,
-                content,
-                font_size,
-                color: Color::WHITE,
-                font_weight: 700,
-                font_sources: Vec::new(),
-            });
-        }
-
-        let config = FrameConfig::new(width, height, frame, fps);
-        let img = self
-            .backend
-            .render_frame(&scene, &config)
-            .map_err(|e| e.to_string())?;
-
-        let mut png_bytes = Vec::new();
-        img.write_to(
-            &mut std::io::Cursor::new(&mut png_bytes),
-            image::ImageFormat::Png,
-        )
-        .map_err(|e| e.to_string())?;
-
-        let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &png_bytes);
-        Ok(format!("data:image/png;base64,{b64}"))
-    }
-}
-
-/// Express `exposure` EV as brightness multipliers (each filter accepts at most 10x).
-fn push_exposure(filters: &mut Vec<SceneFilter>, exposure: f32) {
-    let gain = exposure.exp2();
-    if gain > 10.0 {
-        let half = gain.sqrt();
-        filters.push(SceneFilter::Brightness { amount: half });
-        filters.push(SceneFilter::Brightness { amount: half });
-    } else {
-        filters.push(SceneFilter::Brightness { amount: gain });
     }
 }

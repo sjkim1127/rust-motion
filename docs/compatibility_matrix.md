@@ -20,7 +20,7 @@ This document records the source-backed compatibility and capability inventory o
 | `@remotion/captions` (SRT, WebVTT, ASS Karaoke, TikTok word paging, TTS) | **Supported** | `crates/captions` | `crates/captions/src/ass.rs`, `crates/captions/src/tts.rs` |
 | `@remotion/gif` & `@remotion/lottie` | **Supported** | `crates/rasterizer/src/gif_cache.rs`, `lottie_cache.rs` | `crates/rasterizer/tests/lottie_and_emoji_tests.rs` |
 | `@remotion/three` & Web DOM Hybrid Rendering | **Supported** | `crates/rasterizer/src/web_backend.rs`, `crates/rasterizer/src/camera3d.rs` | `docs/hybrid-rendering.md` |
-| `@remotion/mcp` (Model Context Protocol Server) | **Supported** | `crates/mcp` (`rust-motion-mcp`) | `crates/mcp/src/lib.rs` (9 tools + PNG frame inspection) |
+| `@remotion/mcp` (Model Context Protocol Server) | **Supported** | `crates/mcp` (`rust-motion-mcp`) | `crates/mcp/src/lib.rs` (10 tools + PNG frame preview) |
 | `@remotion/motion-blur` (Subframe Shutter-Angle Motion Blur) | **Supported** | `crates/rasterizer/src/motion_blur.rs` | `crates/rasterizer/tests/visual_effects_tests.rs` |
 | `@remotion/video-matting` (Green-screen-less AI Video Matting) | **Supported** | `crates/rasterizer/src/ai_vision.rs` | `crates/rasterizer/tests/ai_vision_matting_tests.rs` |
 | `@remotion/lambda` (serverless rendering) | **Not supported** | Only a scheduling primitive exists: `DistributedWorkerCluster` in `crates/rasterizer/src/genai_orchestrator.rs` selects a worker and partitions frame ranges. There is no remote transport, deployment, or job execution. | `crates/rasterizer/tests/genai_math_schedule_media_tests.rs` (scheduler logic only) |
