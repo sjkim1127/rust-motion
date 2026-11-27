@@ -43,6 +43,7 @@ rust-motion-lensdb   = { workspace = true }
 rust-motion-dng      = { workspace = true }
 rust-motion-inpaint  = { workspace = true }
 rust-motion-h264enc  = { workspace = true }
+rust-motion-hevc     = { workspace = true }
 rust-motion-media-core = { workspace = true }
 rust-motion-media-container = { workspace = true }
 wgpu       = { version = "22", optional = true }

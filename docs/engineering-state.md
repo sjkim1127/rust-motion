@@ -9,6 +9,7 @@ This document tracks verified repository audits, architecture decisions, impleme
   - Cycle 1 (`#161`): `db0e608`
   - Cycle 2 (`#162`): `118856e`
   - Cycle 3 (`P0/P1`): `2ae5511`
+  - Cycle 4 (`P2`): `e603b34`
 - **Active Working Branch**: `autonomous_engineering_mission`
 - **Host / Hardware**: macOS (`Darwin 25.5.0`, `arm64`), **Apple M4 Pro**
 - **Toolchain**: `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `cargo 1.100.0 (3acc79c0c 2026-11-05)`, `/opt/homebrew/bin/ffmpeg`
@@ -130,10 +131,28 @@ This document tracks verified repository audits, architecture decisions, impleme
 
 ---
 
+## Cycle 5 — Media Engine P3 (Native MP4 Sample Demuxer, FFprobe-Free `video_cache` Probing, Pure-Rust HEVC Decoding)
+
+### Implemented Changes
+- **MP4/MOV Sample Demuxer (`crates/media-container/src/demux.rs`)**:
+  - Added bounded ISO-BMFF sample-table demuxer (`Mp4Demuxer<R: Read + Seek>`, `DemuxedVideoTrack`, `SampleEntry`) parsing `stsd` (`avcC`/`hvcC`/`colr`), `stsz`, `stco`/`co64`, `stsc`, `stts`, `ctts` (v0/v1), `stss`, and `edts -> elst` media-time rebasing so B-frame presentation timelines align with FFmpeg/QuickTime (`min(pts) == 0`).
+  - Supports keyframe-based random-access seeking (`sample_index_for_time`, `keyframe_index_before_or_at`) and bounded reusable-buffer reads (`read_sample`).
+  - Changed absent-`colr` fallback from BT.709 to `ColorDescription::unspecified_limited()` in `media-core` & `media-container` so downstream color matrix inference respects VUI / resolution defaults.
+- **FFprobe-Free `video_cache` Probing & Pure-Rust HEVC Decoding (`crates/rasterizer/src/video_cache.rs`)**:
+  - Updated `video_cache::probe_path` to resolve MP4/MOV/M4A containers natively via `probe_isobmff_path` first (zero `ffprobe` subprocess), falling back to `ffprobe` only for non-ISOBMFF containers.
+  - Added `DecoderImpl::NativeHevc(Box<NativeHevcDecoder>)` backed by `Mp4Demuxer` + `rust_motion_hevc::Decoder::with_threads(1)` (`configure_hvcc`), keyframe seeking, deterministic DPB reordering past target PTS, and `hevc_picture_to_rgba` (8/10-bit YUV420p -> RGBA8 with VUI/CICP matrix selection, BT.601 SD fallback, and `0/90/180/270` rotation).
+  - Removed `unused_workspace_dependencies` warning for `rust-motion-hevc`.
+- **Verification**:
+  - `media-container/src/demux.rs`: `roundtrip_mux_demux_preserves_bframe_pts_dts_co64_and_sample_bytes`, `demuxer_rejects_malformed_tables_safely`, `demuxes_and_decodes_real_hevc_mp4_via_pure_rust_decoder`.
+  - `rasterizer/src/video_cache.rs`: `probe_video_metadata_resolves_mp4_without_ffprobe` (`PATH=""`), `native_hevc_mp4_decodes_frames_with_seek_and_matches_ffmpeg` (sequential + backward keyframe seek parity with FFmpeg RGBA on frames 0, 2, and 5).
+
+---
+
 ## Remaining Roadmap & Next Priorities
 
-- **Next Immediate Priority — Media Engine P3 & P4**:
-  - **P3**: Native video decoding & keyframe seek cache (wire native `probe_isobmff_path` + `hevc`/H.264/OS hardware decode into `crates/rasterizer/src/video_cache.rs`, removing the remaining `ffprobe` / `ffmpeg` persistent decode subprocess dependency for MP4/MOV inputs).
-  - **P4**: Apple Silicon native Metal executor (`#163`) + VideoToolbox `IOSurface`/`CVPixelBuffer` hardware H.264/HEVC encoder (`#164`) streaming into `Mp4Muxer`.
-  - **P5**: Full independent multimedia engine (AV1, ProRes, WebM/MKV muxing, WASM export).
+- **Next Immediate Priority — Cycle 6 (Media Engine P3/P4: Apple Silicon VideoToolbox Hardware Encode & Decode)**:
+  - On macOS (`cfg(target_os = "macos")`), introduce `crates/media-hwaccel` using VideoToolbox (`VTCompressionSession` / `VTDecompressionSession` / `CVPixelBuffer`) to decode H.264/HEVC MP4s natively without FFmpeg in `VideoFrameCache` (completing P3 for H.264 on macOS) and stream hardware-encoded frames directly into `Mp4Muxer` (P4).
+- **Subsequent Milestones**:
+  - **P4 GPU/Video**: Apple Silicon native Metal `RenderExecutor` (`#163`) + GPU-resident `MTLTexture`/`IOSurface` zero-copy hardware encode (`#164`).
+  - **P5**: Full independent multimedia engine (AV1, ProRes, WebM/MKV muxing, audio AAC/Opus mixing, WASM export).
   - **Parallel Platform Priorities**: `#160`/`#166` (profiling & differential test harness), `#168`/`#169`/`#174` (dependency decoupling & feature profiles), `#194`–`#205` (geometry/CAD/nodes/3D/runtime/agent platform).
