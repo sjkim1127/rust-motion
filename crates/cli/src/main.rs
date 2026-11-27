@@ -22,6 +22,7 @@ fn project_codec(output: &std::path::Path) -> anyhow::Result<rust_motion_cli::Re
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
         .with_env_filter("info,rust_motion_renderer=debug,rust_motion_rasterizer=debug")
         .init();
 

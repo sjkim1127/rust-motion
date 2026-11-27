@@ -522,6 +522,41 @@ fn e2e_ffmpeg_free_doctor_and_mp4_render() {
             assert!(txt.contains("codec_name=h264"), "{txt}");
             assert!(txt.contains("nb_frames=6"), "{txt}");
         }
+
+        // P2 verification: probe, probe --full, and inspect succeed with empty PATH (zero ffprobe).
+        let native_probe = Command::new(cli_bin())
+            .env("PATH", "")
+            .args(["probe", output.to_str().unwrap()])
+            .output()
+            .expect("Failed to spawn rust-motion probe");
+        assert!(
+            native_probe.status.success(),
+            "FFprobe-free probe ({mode}) failed: stderr={}",
+            String::from_utf8_lossy(&native_probe.stderr)
+        );
+        let probe_json: serde_json::Value =
+            serde_json::from_slice(&native_probe.stdout).expect("native probe stdout must be JSON");
+        assert_eq!(probe_json["width"], 160);
+        assert_eq!(probe_json["height"], 96);
+        assert_eq!(probe_json["fps"], 24.0);
+        assert_eq!(probe_json["duration_in_frames"], 6);
+
+        let full_probe = Command::new(cli_bin())
+            .env("PATH", "")
+            .args(["probe", "--full", output.to_str().unwrap()])
+            .output()
+            .expect("Failed to spawn rust-motion probe --full");
+        assert!(full_probe.status.success());
+        let full_json: serde_json::Value = serde_json::from_slice(&full_probe.stdout).unwrap();
+        assert_eq!(full_json["video"]["width"], 160);
+        assert_eq!(full_json["video"]["height"], 96);
+
+        let inspect_out = Command::new(cli_bin())
+            .env("PATH", "")
+            .args(["inspect", output.to_str().unwrap()])
+            .output()
+            .expect("Failed to spawn rust-motion inspect");
+        assert!(inspect_out.status.success());
     }
 
     let _ = fs::remove_dir_all(&dir);

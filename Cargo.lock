@@ -3372,6 +3372,8 @@ dependencies = [
  "image",
  "rust-motion-audio-dsp",
  "rust-motion-composition",
+ "rust-motion-media-container",
+ "rust-motion-media-core",
  "rust-motion-rasterizer",
  "serde",
  "serde_json",
@@ -3386,6 +3388,7 @@ version = "1.1.0"
 dependencies = [
  "rust-motion-h264enc",
  "rust-motion-media-core",
+ "serde_json",
  "tempfile",
  "thiserror 1.0.69",
 ]

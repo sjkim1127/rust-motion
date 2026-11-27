@@ -9,5 +9,7 @@
 //! - bounded-memory in-place `+faststart` (`moov` before `mdat`).
 
 pub mod mp4;
+pub mod probe;
 
 pub use mp4::{Mp4Muxer, Mp4MuxerOptions};
+pub use probe::{probe_isobmff, probe_isobmff_path, IsobmffProbe};
