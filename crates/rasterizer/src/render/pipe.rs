@@ -254,9 +254,14 @@ where
                 )?;
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                if config.codec == VideoCodec::H264 && active_audio_tracks(config).is_empty() {
+                let native_hevc_ok = config.codec == VideoCodec::H265
+                    && rust_motion_media_hwaccel::is_videotoolbox_available();
+                if active_audio_tracks(config).is_empty()
+                    && (config.codec == VideoCodec::H264 || native_hevc_ok)
+                {
                     tracing::info!(
-                        "FFmpeg not found; falling back to built-in pure-Rust H.264/MP4 encoder"
+                        codec = ?config.codec,
+                        "FFmpeg not found; falling back to built-in native MP4 encoder"
                     );
                     render_with_native_h264(
                         backend,

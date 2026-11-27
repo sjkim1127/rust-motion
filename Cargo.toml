@@ -8,6 +8,7 @@ members = [
     "crates/media",
     "crates/media-core",
     "crates/media-container",
+    "crates/media-hwaccel",
     "crates/renderer",
     "crates/transitions",
     "crates/cli",
@@ -121,6 +122,7 @@ rust-motion-composition = { version = "1.1.0", path = "crates/composition" }
 rust-motion-media       = { version = "1.1.0", path = "crates/media" }
 rust-motion-media-core  = { version = "1.1.0", path = "crates/media-core" }
 rust-motion-media-container = { version = "1.1.0", path = "crates/media-container" }
+rust-motion-media-hwaccel = { version = "1.1.0", path = "crates/media-hwaccel" }
 rust-motion-renderer    = { version = "1.1.0", path = "crates/renderer" }
 rust-motion-transitions = { version = "1.1.0", path = "crates/transitions" }
 rust-motion-shapes      = { version = "1.1.0", path = "crates/shapes" }

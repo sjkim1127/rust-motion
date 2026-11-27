@@ -82,23 +82,25 @@ pub fn run_doctor() -> DoctorReport {
         "none (cpu rasterizer)".into()
     };
 
-    let native_encoders = vec![
+    let vt_available = rust_motion_media_hwaccel::is_videotoolbox_available();
+    let mut native_encoders = vec![
         "h264 (pure-rust)".into(),
         "mp4 (streaming)".into(),
         "png".into(),
         "jpeg".into(),
         "webp".into(),
     ];
+    if vt_available {
+        native_encoders.push("h264 (videotoolbox)".into());
+        native_encoders.push("hevc (videotoolbox)".into());
+    }
 
     let mut supported_codecs = vec!["h264".into(), "png".into(), "jpeg".into(), "webp".into()];
+    if vt_available || ffmpeg_avail {
+        supported_codecs.push("h265".into());
+    }
     if ffmpeg_avail {
-        supported_codecs.extend([
-            "h265".into(),
-            "vp9".into(),
-            "av1".into(),
-            "prores".into(),
-            "gif".into(),
-        ]);
+        supported_codecs.extend(["vp9".into(), "av1".into(), "prores".into(), "gif".into()]);
     }
 
     // Core H.264/MP4 and still image rendering are natively built into Rust Motion;

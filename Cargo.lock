@@ -3244,6 +3244,7 @@ dependencies = [
  "rust-motion-charts",
  "rust-motion-composition",
  "rust-motion-media",
+ "rust-motion-media-hwaccel",
  "rust-motion-paths",
  "rust-motion-project",
  "rust-motion-rasterizer",
@@ -3403,6 +3404,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-motion-media-hwaccel"
+version = "1.1.0"
+dependencies = [
+ "rust-motion-h264enc",
+ "rust-motion-hevc",
+ "rust-motion-media-container",
+ "rust-motion-media-core",
+ "tempfile",
+]
+
+[[package]]
 name = "rust-motion-mxf"
 version = "1.1.0"
 
@@ -3526,6 +3538,7 @@ dependencies = [
  "rust-motion-lensdb",
  "rust-motion-media-container",
  "rust-motion-media-core",
+ "rust-motion-media-hwaccel",
  "rust-motion-paint",
  "rust-motion-plugins",
  "rust-motion-psd",

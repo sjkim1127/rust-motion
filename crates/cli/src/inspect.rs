@@ -59,9 +59,10 @@ pub fn run_inspect_codecs() -> Vec<CodecCapability> {
             codec: "hevc".into(),
             extensions: vec!["mp4".into(), "mov".into()],
             is_video: true,
-            available: ffmpeg_avail
-                && (check_ffmpeg_encoder_supported("libx265")
-                    || check_ffmpeg_encoder_supported("hevc")),
+            available: rust_motion_media_hwaccel::is_videotoolbox_available()
+                || (ffmpeg_avail
+                    && (check_ffmpeg_encoder_supported("libx265")
+                        || check_ffmpeg_encoder_supported("hevc"))),
         },
         CodecCapability {
             codec: "vp9".into(),

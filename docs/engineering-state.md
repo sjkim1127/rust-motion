@@ -10,6 +10,7 @@ This document tracks verified repository audits, architecture decisions, impleme
   - Cycle 2 (`#162`): `118856e`
   - Cycle 3 (`P0/P1`): `2ae5511`
   - Cycle 4 (`P2`): `e603b34`
+  - Cycle 5 (`P3`): `75112ba`
 - **Active Working Branch**: `autonomous_engineering_mission`
 - **Host / Hardware**: macOS (`Darwin 25.5.0`, `arm64`), **Apple M4 Pro**
 - **Toolchain**: `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `cargo 1.100.0 (3acc79c0c 2026-11-05)`, `/opt/homebrew/bin/ffmpeg`
@@ -148,11 +149,43 @@ This document tracks verified repository audits, architecture decisions, impleme
 
 ---
 
+## Cycle 6 — Media Engine P3 Completion + P4 (`#164`: Native Apple VideoToolbox Hardware Encode & Decode)
+
+### Architecture Decisions
+- **Zero-External-Dependency Hardware Codec Crate (`crates/media-hwaccel`)**:
+  - Depends only on `rust-motion-media-core` at runtime, using direct macOS framework FFI (`VideoToolbox`, `CoreMedia`, `CoreVideo`, `CoreFoundation`) wrapped in RAII `CfGuard` lifetime management and session-invalidating `Drop` handlers.
+  - Non-macOS and `wasm32` targets compile cleanly with `is_videotoolbox_available() == false` and explicit `MediaError::Unsupported`.
+- **Streaming HEVC (`hvc1`/`hvcC`) + Deferred Codec Config (`crates/media-container/src/mp4.rs`)**:
+  - Added `Mp4Muxer::set_video_codec_config(track_idx, codec_config)` so hardware encoders that emit `avcC`/`hvcC` on the first encoded keyframe can stream packets immediately into `mdat` and finalize `stsd` at `finish()`.
+  - Extended `ftyp` (`hvc1` compatible brand) and `stsd` (`hvc1`/`hvcC` sample entry) for HEVC MP4 output.
+- **Hardware Decoder Constraints Observed (`OSStatus -8969`)**:
+  - Verified on both Apple `VTDecompressionSession` and `ffmpeg -hwaccel videotoolbox` (`videotoolbox_vld`) that Apple VideoToolbox hardware H.264/HEVC decoders reject sub-macroblock streams (`width < 16` or `height < 16`, e.g. `8x16` VFR fixtures). `HardwareMp4Decoder::try_open` therefore guards on `width >= 16 && height >= 16`, cleanly falling back for sub-16px synthetic clips.
+
+### Implemented Changes
+- Created `crates/media-hwaccel/` (`Cargo.toml`, `src/lib.rs`, `src/videotoolbox.rs`) exposing `HardwareVideoEncoder` (`VideoEncoder` for H.264 & HEVC from RGBA8 or YUV420p via `CVPixelBuffer`), `HardwareVideoDecoder` (`H264` & `HEVC` length-prefixed MP4/MOV decode -> RGBA8), `is_videotoolbox_available()`, and `hardware_video_codecs()`.
+- Updated `crates/media-container/src/mp4.rs` for HEVC (`hvc1`/`hvcC`) muxing and deferred `codec_config`.
+- Wired `HardwareMp4Decoder` (`DecoderImpl::Hardware`) into `crates/rasterizer/src/video_cache.rs` for native keyframe-seeking H.264/HEVC MP4 decoding without `ffprobe`/`ffmpeg`.
+- Wired `HardwareVideoEncoder` into `crates/rasterizer/src/render/native_h264.rs` & `pipe.rs` (`VideoCodec::H265` on macOS and `VideoCodec::H264` with `HwAccel::VideoToolbox`, plus `EncoderBackend::Auto` HEVC fallback when FFmpeg is absent).
+- Updated `crates/cli/src/{doctor.rs,inspect.rs}` to report VideoToolbox `h264`/`hevc` availability independently of FFmpeg.
+
+### Benchmark & Verification (Apple M4 Pro)
+- Release benchmark (`cargo test --release -p rust-motion-media-hwaccel videotoolbox_vs_pure_rust_1080p_throughput -- --ignored --nocapture`, 60 frames @ `1920x1080`):
+  - `vt_h264` (direct RGBA -> `CVPixelBuffer` -> hardware H.264): **203.9 fps** (`0.294s`, `9 KiB`)
+  - `vt_hevc` (direct RGBA -> `CVPixelBuffer` -> hardware HEVC): **208.8 fps** (`0.287s`, `19 KiB`)
+  - `pure_rust_h264` (`h264enc` `Preset::Speed`, flat YUV420p reference): **433.7 fps** (`0.138s`, `16 KiB`)
+- Tests added & verified:
+  - `media-container`: `hevc_hvc1_mux_and_deferred_codec_config_roundtrips_through_demuxer`
+  - `media-hwaccel`: H.264 & HEVC encode->mux->decode roundtrips, `ffprobe` conformance, B-frame H.264 FFmpeg differential parity
+  - `rasterizer`: `native_h264_mp4_decodes_frames_with_seek_and_matches_ffmpeg`, `native_videotoolbox_renders_h264_and_hevc_without_ffmpeg`
+  - `cli`: FFmpeg-free (`PATH=""`) `--codec h265 --encoder native` E2E render + `probe` + `ffprobe` check
+
+---
+
 ## Remaining Roadmap & Next Priorities
 
-- **Next Immediate Priority — Cycle 6 (Media Engine P3/P4: Apple Silicon VideoToolbox Hardware Encode & Decode)**:
-  - On macOS (`cfg(target_os = "macos")`), introduce `crates/media-hwaccel` using VideoToolbox (`VTCompressionSession` / `VTDecompressionSession` / `CVPixelBuffer`) to decode H.264/HEVC MP4s natively without FFmpeg in `VideoFrameCache` (completing P3 for H.264 on macOS) and stream hardware-encoded frames directly into `Mp4Muxer` (P4).
+- **Next Immediate Priority — Cycle 7 (`#163` Apple Silicon Native Metal `RenderExecutor` & `#164` Zero-Copy `IOSurface` GPU-to-VideoToolbox Path)**:
+  - Prototype native `RenderExecutor` on macOS Metal (`MTLDevice`/`MTLCommandQueue`/`MTLComputePipelineState`) OR zero-copy `IOSurface`-backed `MTLTexture` -> `CVPixelBuffer` encoding into `HardwareVideoEncoder` to eliminate CPU RGBA readback/swizzle on Apple Silicon.
 - **Subsequent Milestones**:
-  - **P4 GPU/Video**: Apple Silicon native Metal `RenderExecutor` (`#163`) + GPU-resident `MTLTexture`/`IOSurface` zero-copy hardware encode (`#164`).
-  - **P5**: Full independent multimedia engine (AV1, ProRes, WebM/MKV muxing, audio AAC/Opus mixing, WASM export).
-  - **Parallel Platform Priorities**: `#160`/`#166` (profiling & differential test harness), `#168`/`#169`/`#174` (dependency decoupling & feature profiles), `#194`–`#205` (geometry/CAD/nodes/3D/runtime/agent platform).
+  - **#168 / #169 / #174**: Workspace dependency cleanup (remaining unused deps & isolating creative-suite crates behind feature profiles in `rasterizer`).
+  - **P5**: Full independent multimedia engine (AV1, ProRes, WebM/MKV muxing, pure-Rust AAC/Opus audio mixing, WASM export).
+  - **#194–#205**: Unified creative engine vertical slices (3D/CAD geometry kernel, procedural node graph, material graph, deterministic simulation, agent MCP editing).
