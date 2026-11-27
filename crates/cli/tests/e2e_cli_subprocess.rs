@@ -636,5 +636,45 @@ fn e2e_ffmpeg_free_doctor_and_mp4_render() {
         }
     }
 
+    #[cfg(all(target_os = "macos", feature = "metal"))]
+    {
+        let metal_output = dir.join("out_metal_hevc.mp4");
+        let res = Command::new(cli_bin())
+            .env("PATH", "")
+            .args([
+                "render",
+                "--composition",
+                "HelloWorld",
+                "--backend",
+                "metal",
+                "--encoder",
+                "native",
+                "--codec",
+                "h265",
+                "--output",
+                metal_output.to_str().unwrap(),
+                "--width",
+                "160",
+                "--height",
+                "96",
+                "--fps",
+                "24",
+                "--duration",
+                "6",
+                "--crf",
+                "22",
+            ])
+            .output()
+            .expect("Failed to spawn Metal HEVC native render with empty PATH");
+        assert!(
+            res.status.success(),
+            "FFmpeg-free Metal HEVC render failed: stderr={}",
+            String::from_utf8_lossy(&res.stderr)
+        );
+        let bytes = fs::read(&metal_output).unwrap();
+        assert_eq!(&bytes[4..8], b"ftyp");
+        assert!(bytes.windows(4).any(|w| w == b"hvc1"));
+    }
+
     let _ = fs::remove_dir_all(&dir);
 }
