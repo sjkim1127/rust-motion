@@ -150,7 +150,11 @@ impl Composition for BrowserComposition {
 }
 
 pub(crate) fn uses_project_timeline(backend: RenderBackend, has_tracks: bool) -> bool {
-    has_tracks && matches!(backend, RenderBackend::Native | RenderBackend::Gpu)
+    has_tracks
+        && matches!(
+            backend,
+            RenderBackend::Native | RenderBackend::Gpu | RenderBackend::Metal
+        )
 }
 
 #[cfg(test)]

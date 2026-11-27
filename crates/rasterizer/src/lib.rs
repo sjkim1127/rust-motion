@@ -49,6 +49,8 @@ pub mod math_typeset;
 pub mod mesh3d;
 #[cfg(all(target_os = "macos", feature = "metal"))]
 pub mod metal_backend;
+#[cfg(all(target_os = "macos", feature = "metal"))]
+pub use metal_backend::MetalComputeExecutor;
 pub mod motion_blur;
 pub mod neural_face;
 pub mod panorama;

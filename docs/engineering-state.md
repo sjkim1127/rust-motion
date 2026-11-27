@@ -13,6 +13,7 @@ This document tracks verified repository audits, architecture decisions, impleme
   - Cycle 5 (`P3`): `75112ba`
   - Cycle 6 (`P3/P4, #164`): `83f268f`
   - Cycle 7 (`P1/P4`): `20b0859`
+  - Cycle 8 (`#163, #164, #168`): `89b8652`
 - **Active Working Branch**: `autonomous_engineering_mission`
 - **Host / Hardware**: macOS (`Darwin 25.5.0`, `arm64`), **Apple M4 Pro**
 - **Toolchain**: `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `cargo 1.100.0 (3acc79c0c 2026-11-05)`, `/opt/homebrew/bin/ffmpeg`
@@ -221,9 +222,29 @@ This document tracks verified repository audits, architecture decisions, impleme
 
 ---
 
+## Cycle 9 — End-to-End Streaming Zero-Copy Metal Pipeline (`#165`)
+
+### Implemented Changes
+- **Zero-Copy `FrameSink` Fast Path (`crates/rasterizer/src/backend.rs`, `crates/rasterizer/src/render/native_h264.rs`)**:
+  - Extended `FrameSink` with backward-compatible default-implemented macOS/Metal methods `try_acquire_hardware_pixel_buffer` and `consume_hardware_pixel_buffer`.
+  - Implemented zero-copy `IOSurface`/`CVPixelBuffer` acquisition and direct submission (`HardwareVideoEncoder::encode_pixel_buffer`) in `NativeH264FrameSink`, preserving frame ordering, interleaved AudioToolbox AAC audio muxing, and progress callbacks, while returning `Ok(None)` when scaled output or pure-Rust H.264 is selected.
+- **`RasterizerBackend` + Streaming Integration (`crates/rasterizer/src/metal_backend/mod.rs`, `crates/rasterizer/src/lib.rs`)**:
+  - Added atomic counters (`gpu_frames`, `cpu_fallback_frames`, `zero_copy_frames`, `gpu_submit_readback_ns`) plus `with_image_cache_bytes`, `with_security_policy`, and `zero_copy_frames()` on `MetalComputeExecutor`, and re-exported `MetalComputeExecutor` under `#[cfg(all(target_os = "macos", feature = "metal"))]`.
+  - Implemented `RasterizerBackend` for `MetalComputeExecutor` with `supports_streaming() == true` and `render_stream` driving the zero-copy `Scene -> RenderGraph -> Metal -> IOSurface CVPixelBuffer -> VideoToolbox` path whenever the sink yields a matching `HardwarePixelBuffer`.
+- **CLI Integration (`crates/cli`)**:
+  - Added `metal = ["rust-motion-rasterizer/metal"]` feature in `crates/cli/Cargo.toml`, `RenderBackend::Metal` in `args.rs` (`--backend metal`), `uses_project_timeline` support in `composition_shim.rs`, `"metal (apple-silicon zero-copy)"` reporting in `doctor.rs`, and `RenderBackend::Metal` dispatch in `render.rs` (defaulting `HwAccel::Auto -> HwAccel::VideoToolbox` and `EncoderBackend::Auto -> EncoderBackend::Native` for H.264/H.265).
+
+### Verification (Bounded Concurrency: `RAYON_NUM_THREADS=2`, `-j 4`, `--test-threads=2`)
+- `rust-motion-rasterizer --features "gpu metal" metal_backend`: 4 passed (`metal_backend_streams_zero_copy_av_mp4_via_render_to_video` checking HEVC + 48 kHz AAC MP4 & `zero_copy_frames() == 15`, `metal_backend_falls_back_cleanly_for_scaled_and_pure_rust_h264`, plus existing Cycle 8 parity & IOSurface tests; 1 `#[ignore]` benchmark).
+- `rust-motion-rasterizer --features "gpu metal" render::tests`: passed.
+- `rust-motion-cli --features "gpu metal" --test native_media_integration`: 3 passed, including `cli_metal_backend_renders_zero_copy_hevc_mp4_without_ffmpeg`.
+- `cargo clippy --locked -j 4 --workspace --all-targets --all-features -- -D warnings`: exited 0.
+- Default-feature `cargo check --locked -j 4 -p rust-motion-rasterizer -p rust-motion-cli` and `cargo check --locked -j 4 -p rust-motion-wasm`: exited 0.
+
+---
+
 ## Remaining Roadmap & Next Priorities
 
-- **Next Immediate Priority — Cycle 9**:
-  - **Option A (`#169` / `#171` Feature Isolation)**: Gate creative-suite crates (`psd`, `affinity`, `dng`, `inpaint`, `algo`, `plugins`, etc.) behind optional feature flags in `rasterizer` while preserving default features so headless video/WASM callers build minimally.
-  - **Option B (`#165` Streaming Metal Execution / `Wgpu` Parity + CLI `--gpu metal`)**: Expose native `MetalComputeExecutor` into `render_to_video` on macOS for zero-copy GPU-rendered MP4 exports end-to-end.
-  - **Option C (`#194`–`#205` Unified Creative Engine Vertical Slice)**: Strengthen 3D/geometry (`geom`, `scene3d`, `mesh3d`) + procedural node graph + agent MCP inspection/transactional scene editing.
+- **Next Immediate Priority — Cycle 10**:
+  - **Option A (`#169` / `#171` Feature Isolation)**: Gate creative-suite crates (`psd`, `affinity`, `dng`, `inpaint`, `algo`, `plugins`, etc.) behind optional feature flags in `rasterizer` while preserving default features so minimal headless video/WASM callers build minimally.
+  - **Option B (`#194`–`#205` Unified Creative Engine Vertical Slice)**: Strengthen 3D/geometry (`geom`, `scene3d`, `mesh3d`) + procedural node graph + agent MCP inspection/transactional scene editing & real native MP4 export (`mcp/tools.rs::render_composition` & `session.rs`).

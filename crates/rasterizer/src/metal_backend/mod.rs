@@ -6,7 +6,9 @@
 
 use std::collections::BTreeMap;
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use image::RgbaImage;
 use metal::foreign_types::{ForeignType, ForeignTypeRef};
@@ -17,7 +19,9 @@ use metal::{
 };
 use rust_motion_media_hwaccel::{HardwarePixelBuffer, MetalTextureCache};
 
-use crate::backend::{FrameConfig, RasterError};
+use crate::backend::{
+    BackendCapabilities, BackendRenderStats, FrameConfig, FrameSink, RasterError, RasterizerBackend,
+};
 use crate::render_ir::{
     lower_scene_to_plan, CapabilityFlags, ClearOp, ExecutionError, ExecutionPlan, ExecutionReport,
     ExecutorCapabilities, LowerOptions, PassOp, PixelFormat, RenderExecutor, ResourceId,
@@ -218,6 +222,10 @@ pub struct MetalComputeExecutor {
     surface_out_pipeline: ComputePipelineState,
     texture_cache: Mutex<MetalTextureCache>,
     cpu_ref: TinySkiaBackend,
+    gpu_frames: AtomicU64,
+    cpu_fallback_frames: AtomicU64,
+    zero_copy_frames: AtomicU64,
+    gpu_submit_readback_ns: AtomicU64,
 }
 
 impl MetalComputeExecutor {
@@ -264,11 +272,44 @@ impl MetalComputeExecutor {
             surface_out_pipeline,
             texture_cache: Mutex::new(texture_cache),
             cpu_ref: TinySkiaBackend::headless(),
+            gpu_frames: AtomicU64::new(0),
+            cpu_fallback_frames: AtomicU64::new(0),
+            zero_copy_frames: AtomicU64::new(0),
+            gpu_submit_readback_ns: AtomicU64::new(0),
         })
+    }
+
+    pub fn with_image_cache_bytes(mut self, max_bytes: usize) -> Self {
+        self.cpu_ref = self.cpu_ref.with_image_cache_bytes(max_bytes);
+        self
+    }
+
+    pub fn with_security_policy(mut self, policy: crate::security::MediaSecurityPolicy) -> Self {
+        self.cpu_ref = self.cpu_ref.with_security_policy(policy);
+        self
     }
 
     pub fn device_name(&self) -> String {
         self.device.name().to_string()
+    }
+
+    /// Number of frames rendered directly into `IOSurface`-backed hardware pixel buffers
+    /// without CPU readback.
+    pub fn zero_copy_frames(&self) -> u64 {
+        self.zero_copy_frames.load(Ordering::Relaxed)
+    }
+
+    fn record_execution_stats(&self, report: &ExecutionReport, zero_copy: bool, elapsed: Duration) {
+        if report.gpu_passes > 0 {
+            self.gpu_frames.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.cpu_fallback_frames.fetch_add(1, Ordering::Relaxed);
+        }
+        if zero_copy {
+            self.zero_copy_frames.fetch_add(1, Ordering::Relaxed);
+        }
+        let ns = elapsed.as_nanos().min(u128::from(u64::MAX)) as u64;
+        self.gpu_submit_readback_ns.fetch_add(ns, Ordering::Relaxed);
     }
 
     fn create_shared_texture(&self, width: u32, height: u32, format: MTLPixelFormat) -> Texture {
@@ -933,6 +974,7 @@ impl MetalComputeExecutor {
         config: &FrameConfig,
         pb: &HardwarePixelBuffer,
     ) -> Result<(), RasterError> {
+        let started = Instant::now();
         let caps = <Self as RenderExecutor>::capabilities(self);
         let plan = lower_scene_to_plan(
             scene,
@@ -944,7 +986,8 @@ impl MetalComputeExecutor {
             },
         )
         .map_err(ExecutionError::from)?;
-        self.execute_plan_into_pixel_buffer(&plan, config, pb)?;
+        let report = self.execute_plan_into_pixel_buffer(&plan, config, pb)?;
+        self.record_execution_stats(&report, true, started.elapsed());
         Ok(())
     }
 
@@ -1069,6 +1112,75 @@ impl RenderExecutor for MetalComputeExecutor {
             ))
         })?;
         Ok((img, report))
+    }
+}
+
+impl RasterizerBackend for MetalComputeExecutor {
+    fn render_frame(&self, scene: &Scene, config: &FrameConfig) -> Result<RgbaImage, RasterError> {
+        let started = Instant::now();
+        let caps = <Self as RenderExecutor>::capabilities(self);
+        let plan = lower_scene_to_plan(
+            scene,
+            config,
+            &LowerOptions {
+                max_texture_dimension_2d: caps.max_texture_dimension_2d,
+                capabilities: caps.flags,
+                msaa_samples: 1,
+            },
+        )
+        .map_err(ExecutionError::from)?;
+        let (img, report) = <Self as RenderExecutor>::execute_plan(self, &plan, config)?;
+        self.record_execution_stats(&report, false, started.elapsed());
+        Ok(img)
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            native_scene: true,
+            browser_runtime: false,
+            gpu_accelerated: true,
+            supports_streaming: true,
+        }
+    }
+
+    fn render_stats(&self) -> BackendRenderStats {
+        BackendRenderStats {
+            gpu_frames: self.gpu_frames.load(Ordering::Relaxed),
+            cpu_fallback_frames: self.cpu_fallback_frames.load(Ordering::Relaxed),
+            texture_cache_hits: 0,
+            texture_cache_misses: 0,
+            video_decode_ns: 0,
+            texture_upload_ns: 0,
+            gpu_submit_readback_ns: self.gpu_submit_readback_ns.load(Ordering::Relaxed),
+            browser_frame_ns: 0,
+        }
+    }
+
+    fn supports_streaming(&self) -> bool {
+        true
+    }
+
+    fn render_stream(
+        &self,
+        total: u32,
+        scene_fn: &(dyn Fn(u32) -> Result<Scene, RasterError> + Sync),
+        config_fn: &(dyn Fn(u32) -> FrameConfig + Sync),
+        sink: &mut dyn FrameSink,
+    ) -> Result<(), RasterError> {
+        for frame in 0..total {
+            let scene = scene_fn(frame)?;
+            let cfg = config_fn(frame);
+            if let Some(pb) = sink.try_acquire_hardware_pixel_buffer()? {
+                if pb.width() == cfg.width && pb.height() == cfg.height {
+                    self.render_scene_into_pixel_buffer(&scene, &cfg, &pb)?;
+                    sink.consume_hardware_pixel_buffer(frame, pb)?;
+                    continue;
+                }
+            }
+            let img = self.render_frame(&scene, &cfg)?;
+            sink.consume(frame, &img.into_raw())?;
+        }
+        Ok(())
     }
 }
 
@@ -1525,5 +1637,144 @@ mod tests {
             frames as f64 / secs,
             bytes / 1024
         );
+    }
+
+    fn write_test_wav_sine(path: &std::path::Path, sample_rate: u32, duration_secs: f32) {
+        let num_samples = (sample_rate as f32 * duration_secs) as u32;
+        let channels: u16 = 2;
+        let bits_per_sample: u16 = 16;
+        let data_size = num_samples * u32::from(channels) * u32::from(bits_per_sample / 8);
+        let riff_size = 36 + data_size;
+        let mut buf = Vec::with_capacity((44 + data_size) as usize);
+        buf.extend_from_slice(b"RIFF");
+        buf.extend_from_slice(&riff_size.to_le_bytes());
+        buf.extend_from_slice(b"WAVE");
+        buf.extend_from_slice(b"fmt ");
+        buf.extend_from_slice(&16u32.to_le_bytes());
+        buf.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        buf.extend_from_slice(&channels.to_le_bytes());
+        buf.extend_from_slice(&sample_rate.to_le_bytes());
+        let byte_rate = sample_rate * u32::from(channels) * u32::from(bits_per_sample / 8);
+        buf.extend_from_slice(&byte_rate.to_le_bytes());
+        let block_align = channels * (bits_per_sample / 8);
+        buf.extend_from_slice(&block_align.to_le_bytes());
+        buf.extend_from_slice(&bits_per_sample.to_le_bytes());
+        buf.extend_from_slice(b"data");
+        buf.extend_from_slice(&data_size.to_le_bytes());
+        for i in 0..num_samples {
+            let t = i as f32 / sample_rate as f32;
+            let sample = (t * 440.0 * std::f32::consts::TAU).sin() * 0.25;
+            let pcm = (sample * i16::MAX as f32) as i16;
+            buf.extend_from_slice(&pcm.to_le_bytes());
+            buf.extend_from_slice(&pcm.to_le_bytes());
+        }
+        std::fs::write(path, buf).unwrap();
+    }
+
+    #[test]
+    fn metal_backend_streams_zero_copy_av_mp4_via_render_to_video() {
+        use crate::render::{render_to_video, EncoderBackend, HwAccel, PipeConfig, VideoCodec};
+        use crate::scene::AudioTrack;
+        use rust_motion_media_container::Mp4Demuxer;
+        use rust_motion_media_core::AudioCodecId;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let wav_path = temp_dir.path().join("tone.wav");
+        let mp4_path = temp_dir.path().join("metal_zero_copy_av.mp4");
+        write_test_wav_sine(&wav_path, 48_000, 1.0);
+
+        let metal_exec = MetalComputeExecutor::new().unwrap();
+        let mut audio_track = AudioTrack::new(wav_path.to_string_lossy().into_owned());
+        audio_track.volume = 0.8;
+        audio_track.duration = Some(1.0);
+        let cfg = PipeConfig::new(320, 240, 30.0, 15, &mp4_path)
+            .with_codec(VideoCodec::H265)
+            .with_hw_accel(HwAccel::VideoToolbox)
+            .with_encoder_backend(EncoderBackend::Native)
+            .with_audio_tracks(vec![audio_track]);
+
+        render_to_video(&metal_exec, &cfg, |frame| {
+            let mut s = Scene::new();
+            s.push(SceneNode::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 320.0,
+                h: 240.0,
+                fill: Color::rgb(16, 32, 64),
+                stroke: None,
+                stroke_width: 0.0,
+                corner_radius: 0.0,
+            });
+            s.push(SceneNode::Layer {
+                opacity: 0.9,
+                blend_mode: BlendMode::Normal,
+                clip: None,
+                mask: None,
+                mask_mode: MaskMode::Alpha,
+                filters: vec![SceneFilter::Blur { sigma: 2.0 }],
+                shadow: None,
+                children: vec![SceneNode::Rect {
+                    x: 20.0 + (frame as f32) * 8.0,
+                    y: 40.0,
+                    w: 80.0,
+                    h: 60.0,
+                    fill: Color::rgb(240, 120, 40),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    corner_radius: 8.0,
+                }],
+            });
+            s
+        })
+        .unwrap();
+
+        assert_eq!(metal_exec.zero_copy_frames(), 15);
+        let stats = metal_exec.render_stats();
+        assert_eq!(stats.gpu_frames, 15);
+        assert!(stats.gpu_submit_readback_ns > 0);
+
+        let probe = probe_isobmff_path(&mp4_path).unwrap();
+        let video = probe.video_streams.first().expect("missing HEVC video stream");
+        assert_eq!(video.width, 320);
+        assert_eq!(video.height, 240);
+        assert_eq!(video.codec, VideoCodecId::Hevc);
+
+        let audio = probe.audio_streams.first().expect("missing AAC audio stream");
+        assert_eq!(audio.codec, AudioCodecId::Aac);
+        assert_eq!(audio.sample_rate, 48_000);
+        assert_eq!(audio.channels, 2);
+        assert!(audio.duration_secs.unwrap_or(0.0) > 0.4);
+
+        let demux = Mp4Demuxer::open(std::fs::File::open(&mp4_path).unwrap()).unwrap();
+        assert_eq!(demux.video_tracks()[0].samples.len(), 15);
+    }
+
+    #[test]
+    fn metal_backend_falls_back_cleanly_for_scaled_and_pure_rust_h264() {
+        use crate::render::{render_to_video, EncoderBackend, HwAccel, PipeConfig, VideoCodec};
+        use rust_motion_media_container::Mp4Demuxer;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mp4_path = temp_dir.path().join("metal_scaled_h264.mp4");
+        let metal_exec = MetalComputeExecutor::new().unwrap();
+        let cfg = PipeConfig::new(320, 240, 30.0, 5, &mp4_path)
+            .with_scale(0.5)
+            .with_codec(VideoCodec::H264)
+            .with_hw_accel(HwAccel::Disabled)
+            .with_encoder_backend(EncoderBackend::Native);
+
+        render_to_video(&metal_exec, &cfg, |_| sample_mixed_scene()).unwrap();
+
+        assert_eq!(metal_exec.zero_copy_frames(), 0);
+        assert_eq!(metal_exec.render_stats().gpu_frames, 5);
+
+        let probe = probe_isobmff_path(&mp4_path).unwrap();
+        let video = probe.video_streams.first().expect("missing H.264 video stream");
+        assert_eq!(video.width, 160);
+        assert_eq!(video.height, 120);
+        assert_eq!(video.codec, VideoCodecId::H264);
+
+        let demux = Mp4Demuxer::open(std::fs::File::open(&mp4_path).unwrap()).unwrap();
+        assert_eq!(demux.video_tracks()[0].samples.len(), 5);
     }
 }
