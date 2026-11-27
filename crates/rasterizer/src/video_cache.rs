@@ -337,6 +337,7 @@ struct DecoderSession {
 
 enum DecoderImpl {
     NativeHevc(Box<NativeHevcDecoder>),
+    Hardware(Box<HardwareMp4Decoder>),
     Ffmpeg(Box<FfmpegDecoderSession>),
 }
 
@@ -498,6 +499,215 @@ impl NativeHevcDecoder {
     }
 }
 
+struct HardwareMp4Decoder {
+    path: PathBuf,
+    demuxer: rust_motion_media_container::Mp4Demuxer<std::fs::File>,
+    track: rust_motion_media_container::DemuxedVideoTrack,
+    decoder: rust_motion_media_hwaccel::HardwareVideoDecoder,
+    sampling_fps: f64,
+    rotation: u16,
+    next_sample_idx: usize,
+    eof_flushed: bool,
+    ready_frames: Vec<rust_motion_media_hwaccel::DecodedVideoFrame>,
+    sample_buf: Vec<u8>,
+}
+
+impl HardwareMp4Decoder {
+    fn try_open(
+        path: &Path,
+        metadata: &VideoMetadata,
+        sampling_fps: f64,
+        first_frame: u64,
+    ) -> Result<Self, RasterError> {
+        if !rust_motion_media_hwaccel::is_videotoolbox_available() {
+            return Err(media_error(
+                path.display().to_string(),
+                "VideoToolbox hardware decoder is not available on this platform",
+            ));
+        }
+        let demuxer = rust_motion_media_container::Mp4Demuxer::open_path(path).map_err(|e| {
+            media_error(
+                path.display().to_string(),
+                format!("native MP4 demuxer failed: {e}"),
+            )
+        })?;
+        let track = demuxer
+            .video_tracks()
+            .first()
+            .filter(|t| {
+                t.width >= 16
+                    && t.height >= 16
+                    && matches!(
+                        t.codec,
+                        rust_motion_media_core::VideoCodecId::H264
+                            | rust_motion_media_core::VideoCodecId::Hevc
+                    )
+                    && !t.codec_config.is_empty()
+            })
+            .cloned()
+            .ok_or_else(|| {
+                media_error(
+                    path.display().to_string(),
+                    "MP4 does not contain a >=16x16 hardware-decodable H.264/HEVC track with codec config",
+                )
+            })?;
+
+        let decoder = rust_motion_media_hwaccel::HardwareVideoDecoder::new(
+            track.codec,
+            track.width,
+            track.height,
+            track.timescale,
+            &track.codec_config,
+        )
+        .map_err(|e| {
+            media_error(
+                path.display().to_string(),
+                format!("hardware video decoder init failed: {e}"),
+            )
+        })?;
+
+        let start_time = first_frame as f64 / sampling_fps;
+        let target_sample = track.sample_index_for_time(start_time);
+        let keyframe_sample = track.keyframe_index_before_or_at(target_sample);
+
+        Ok(Self {
+            path: path.to_path_buf(),
+            demuxer,
+            track,
+            decoder,
+            sampling_fps,
+            rotation: metadata.rotation,
+            next_sample_idx: keyframe_sample,
+            eof_flushed: false,
+            ready_frames: Vec::new(),
+            sample_buf: Vec::new(),
+        })
+    }
+
+    fn read_frame(&mut self, output_frame: u64) -> Result<RgbaImage, RasterError> {
+        if self.track.samples.is_empty() {
+            return Err(media_error(
+                self.path.display().to_string(),
+                "video track contains no samples",
+            ));
+        }
+
+        let target_tick = if self.track.timescale > 0 {
+            let scaled =
+                (output_frame as f64 / self.sampling_fps) * f64::from(self.track.timescale);
+            if scaled >= i64::MAX as f64 {
+                i64::MAX
+            } else {
+                scaled.floor() as i64
+            }
+        } else {
+            0
+        };
+
+        while !self.eof_flushed {
+            let have_passed_target = self
+                .ready_frames
+                .last()
+                .is_some_and(|f| f.pts > target_tick);
+            if have_passed_target {
+                break;
+            }
+            if self.next_sample_idx < self.track.samples.len() {
+                let sample = self
+                    .demuxer
+                    .read_sample(0, self.next_sample_idx, &mut self.sample_buf)
+                    .map_err(|e| {
+                        media_error(
+                            self.path.display().to_string(),
+                            format!("MP4 sample read failed: {e}"),
+                        )
+                    })?;
+                self.next_sample_idx += 1;
+                let frames = self
+                    .decoder
+                    .decode(
+                        &self.sample_buf,
+                        sample.pts,
+                        sample.dts,
+                        i64::from(sample.duration),
+                    )
+                    .map_err(|e| {
+                        media_error(
+                            self.path.display().to_string(),
+                            format!("hardware video decode error: {e}"),
+                        )
+                    })?;
+                self.insert_frames(frames);
+            } else {
+                let trailing = self.decoder.flush().map_err(|e| {
+                    media_error(
+                        self.path.display().to_string(),
+                        format!("hardware video flush error: {e}"),
+                    )
+                })?;
+                self.insert_frames(trailing);
+                self.eof_flushed = true;
+            }
+        }
+
+        if self.ready_frames.is_empty() {
+            return Err(media_error(
+                self.path.display().to_string(),
+                format!("no hardware-decoded frame available at frame {output_frame}"),
+            ));
+        }
+
+        let chosen_idx = self
+            .ready_frames
+            .iter()
+            .rposition(|f| f.pts <= target_tick)
+            .unwrap_or(0);
+        if chosen_idx > 0 {
+            self.ready_frames.drain(0..chosen_idx);
+        }
+        let f = &self.ready_frames[0];
+        Ok(rotate_rgba_image(f.width, f.height, &f.rgba, self.rotation))
+    }
+
+    fn insert_frames(&mut self, frames: Vec<rust_motion_media_hwaccel::DecodedVideoFrame>) {
+        if frames.is_empty() {
+            return;
+        }
+        self.ready_frames.extend(frames);
+        self.ready_frames.sort_by_key(|f| f.pts);
+    }
+}
+
+fn rotate_rgba_image(width: u32, height: u32, rgba: &[u8], rotation: u16) -> RgbaImage {
+    let w = width as usize;
+    let h = height as usize;
+    if rotation == 0 || !matches!(rotation, 90 | 180 | 270) {
+        return RgbaImage::from_raw(width, height, rgba.to_vec())
+            .expect("decoded frame dimensions match buffer size");
+    }
+    let (out_w, out_h) = if rotation == 90 || rotation == 270 {
+        (h, w)
+    } else {
+        (w, h)
+    };
+    let mut out = vec![0u8; out_w * out_h * 4];
+    for y in 0..h {
+        for x in 0..w {
+            let si = (y * w + x) * 4;
+            let (dx, dy) = match rotation {
+                90 => (h - 1 - y, x),
+                180 => (w - 1 - x, h - 1 - y),
+                270 => (y, w - 1 - x),
+                _ => (x, y),
+            };
+            let di = (dy * out_w + dx) * 4;
+            out[di..di + 4].copy_from_slice(&rgba[si..si + 4]);
+        }
+    }
+    RgbaImage::from_raw(out_w as u32, out_h as u32, out)
+        .expect("rotated dimensions match buffer size")
+}
+
 impl DecoderSession {
     fn spawn(
         path: &Path,
@@ -512,6 +722,17 @@ impl DecoderSession {
                 return Ok(Self {
                     next_frame: first_frame,
                     inner: DecoderImpl::NativeHevc(Box::new(native)),
+                });
+            }
+        }
+        if matches!(metadata.codec_name.as_deref(), Some("h264") | Some("hevc"))
+            && rust_motion_media_hwaccel::is_videotoolbox_available()
+        {
+            if let Ok(hw) = HardwareMp4Decoder::try_open(path, metadata, sampling_fps, first_frame)
+            {
+                return Ok(Self {
+                    next_frame: first_frame,
+                    inner: DecoderImpl::Hardware(Box::new(hw)),
                 });
             }
         }
@@ -590,6 +811,7 @@ impl DecoderSession {
         let frame_idx = self.next_frame;
         match &mut self.inner {
             DecoderImpl::NativeHevc(native) => native.read_frame(frame_idx),
+            DecoderImpl::Hardware(hw) => hw.read_frame(frame_idx),
             DecoderImpl::Ffmpeg(ff) => ff.read_frame(frame_idx),
         }
     }
@@ -1388,6 +1610,108 @@ mod tests {
             assert!(
                 max_diff <= 10,
                 "native HEVC vs FFmpeg RGBA max channel diff too large at frame {frame_idx}: {max_diff} at {max_coord:?} (actual={max_actual:?}, expected={max_expected:?})"
+            );
+        }
+
+        cache.shutdown();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_h264_mp4_decodes_frames_with_seek_and_matches_ffmpeg() {
+        let ffmpeg_ok = Command::new("ffmpeg")
+            .arg("-version")
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if !ffmpeg_ok {
+            eprintln!("skipping VideoToolbox H.264 video_cache test: ffmpeg is unavailable");
+            return;
+        }
+        let encoders = Command::new("ffmpeg")
+            .args(["-hide_banner", "-encoders"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
+        let h264_enc = if encoders.contains("libx264") {
+            "libx264"
+        } else if encoders.contains("h264_videotoolbox") {
+            "h264_videotoolbox"
+        } else {
+            eprintln!("skipping VideoToolbox H.264 video_cache test: no H.264 encoder in ffmpeg");
+            return;
+        };
+
+        let dir =
+            std::env::temp_dir().join(format!("rust-motion-hw-h264-cache-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mp4 = dir.join("h264_clip.mp4");
+        let generated = Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=64x48:rate=10:duration=1",
+                "-c:v",
+                h264_enc,
+                "-pix_fmt",
+                "yuv420p",
+            ])
+            .arg(&mp4)
+            .status()
+            .unwrap();
+        assert!(generated.success());
+
+        let meta = probe_video_metadata(mp4.to_str().unwrap()).unwrap();
+        assert_eq!(meta.codec_name.as_deref(), Some("h264"));
+        assert_eq!((meta.width, meta.height), (64, 48));
+
+        let cache = VideoFrameCache::default();
+        let f0 = cache.load(mp4.to_str().unwrap(), 0.0, 10.0, false).unwrap();
+        let f5 = cache.load(mp4.to_str().unwrap(), 0.5, 10.0, false).unwrap();
+        cache.state.lock().unwrap().frames.clear();
+        cache.state.lock().unwrap().bytes = 0;
+        let f2 = cache.load(mp4.to_str().unwrap(), 0.2, 10.0, false).unwrap();
+
+        assert_eq!(f0.dimensions(), (64, 48));
+        assert_eq!(f5.dimensions(), (64, 48));
+        assert_eq!(f2.dimensions(), (64, 48));
+        assert!(cache.spawn_count() >= 2);
+        {
+            let pool = cache.decoders.lock().unwrap();
+            let (_, dec_arc) = pool.sessions.back().unwrap();
+            let dec = dec_arc.lock().unwrap();
+            assert!(
+                matches!(dec.inner, DecoderImpl::Hardware(_)),
+                "expected Hardware VideoToolbox decoder session for H.264"
+            );
+        }
+
+        let ff = Command::new("ffmpeg")
+            .args(["-v", "error", "-i"])
+            .arg(&mp4)
+            .args(["-f", "rawvideo", "-pix_fmt", "rgba", "-"])
+            .output()
+            .unwrap();
+        assert!(ff.status.success());
+        let frame_rgba_len = 64 * 48 * 4;
+        assert!(ff.stdout.len() >= 6 * frame_rgba_len);
+        for (frame_idx, img) in [(0usize, &f0), (2usize, &f2), (5usize, &f5)] {
+            let ff_slice = &ff.stdout[frame_idx * frame_rgba_len..(frame_idx + 1) * frame_rgba_len];
+            let mean_abs: f64 = img
+                .as_raw()
+                .iter()
+                .zip(ff_slice.iter())
+                .map(|(a, b)| f64::from(a.abs_diff(*b)))
+                .sum::<f64>()
+                / (frame_rgba_len as f64);
+            assert!(
+                mean_abs < 8.0,
+                "VideoToolbox H.264 cache vs FFmpeg RGBA mean abs diff too large at frame {frame_idx}: {mean_abs}"
             );
         }
 

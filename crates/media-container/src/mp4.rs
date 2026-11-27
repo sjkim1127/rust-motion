@@ -72,7 +72,7 @@ impl<W: Read + Write + Seek> Mp4Muxer<W> {
         }
 
         let start_pos = writer.stream_position()?;
-        let ftyp = build_ftyp();
+        let ftyp = build_ftyp(tracks);
         writer.write_all(&ftyp)?;
 
         let mdat_header_offset = start_pos + ftyp.len() as u64;
@@ -100,6 +100,42 @@ impl<W: Read + Write + Seek> Mp4Muxer<W> {
             mdat_payload_cursor: mdat_header_offset + MDAT_EXTENDED_HEADER_BYTES,
             finished: false,
         })
+    }
+
+    /// Set or update a video track's decoder configuration record (`avcC` / `hvcC`)
+    /// before calling [`finish`](ContainerMuxer::finish).
+    ///
+    /// Allows streaming hardware encoders that emit parameter sets on the first encoded
+    /// keyframe to write packets into `mdat` immediately and populate `stsd` at finalization.
+    pub fn set_video_codec_config(
+        &mut self,
+        track_idx: usize,
+        codec_config: Vec<u8>,
+    ) -> Result<(), MediaError> {
+        if self.finished {
+            return Err(MediaError::Container(
+                "cannot update codec_config after Mp4Muxer::finish".into(),
+            ));
+        }
+        if codec_config.is_empty() {
+            return Err(MediaError::InvalidConfig(
+                "video codec_config must be non-empty".into(),
+            ));
+        }
+        let Some(track) = self.tracks.get_mut(track_idx) else {
+            return Err(MediaError::InvalidConfig(format!(
+                "unknown track index {track_idx}"
+            )));
+        };
+        match &mut track.config {
+            TrackConfig::Video(v) => {
+                v.codec_config = codec_config;
+                Ok(())
+            }
+            TrackConfig::Audio(_) => Err(MediaError::InvalidConfig(format!(
+                "track {track_idx} is an audio track, not a video track"
+            ))),
+        }
     }
 
     /// Finish writing the MP4 container and return the underlying writer.
@@ -156,6 +192,16 @@ impl<W: Read + Write + Seek> Mp4Muxer<W> {
             return Err(MediaError::Container(
                 "no samples written to MP4 muxer".into(),
             ));
+        }
+        for (idx, t) in self.tracks.iter().enumerate() {
+            if let TrackConfig::Video(v) = &t.config {
+                if v.codec_config.is_empty() {
+                    return Err(MediaError::InvalidConfig(format!(
+                        "video track {idx} ({:?}) is missing codec_config (avcC/hvcC)",
+                        v.codec
+                    )));
+                }
+            }
         }
 
         let mdat_end = self.mdat_payload_cursor;
@@ -216,20 +262,15 @@ impl<W: Read + Write + Seek> ContainerMuxer for Mp4Muxer<W> {
 fn validate_track_config(track: &TrackConfig) -> Result<(), MediaError> {
     match track {
         TrackConfig::Video(v) => {
-            if v.codec != VideoCodecId::H264 {
+            if !matches!(v.codec, VideoCodecId::H264 | VideoCodecId::Hevc) {
                 return Err(MediaError::Unsupported(format!(
-                    "MP4 muxer currently supports H.264 video, got {:?}",
+                    "MP4 muxer currently supports H.264 and HEVC video, got {:?}",
                     v.codec
                 )));
             }
             if v.width == 0 || v.height == 0 || v.timescale == 0 {
                 return Err(MediaError::InvalidConfig(
                     "video track width, height, and timescale must be > 0".into(),
-                ));
-            }
-            if v.codec_config.is_empty() {
-                return Err(MediaError::InvalidConfig(
-                    "H.264 video track requires non-empty avcC codec_config".into(),
                 ));
             }
         }
@@ -275,11 +316,19 @@ fn shift_region_forward<RW: Read + Write + Seek>(
     Ok(())
 }
 
-fn build_ftyp() -> Vec<u8> {
+fn build_ftyp(tracks: &[TrackConfig]) -> Vec<u8> {
+    let has_hevc = tracks
+        .iter()
+        .any(|t| matches!(t, TrackConfig::Video(v) if v.codec == VideoCodecId::Hevc));
     let mut payload = Vec::with_capacity(24);
     payload.extend_from_slice(b"isom");
     payload.extend_from_slice(&512u32.to_be_bytes());
-    for brand in [b"isom", b"iso2", b"avc1", b"mp41"] {
+    let brands: [&[u8; 4]; 4] = if has_hevc {
+        [b"isom", b"iso2", b"hvc1", b"mp41"]
+    } else {
+        [b"isom", b"iso2", b"avc1", b"mp41"]
+    };
+    for brand in brands {
         payload.extend_from_slice(brand);
     }
     boxed(b"ftyp", &payload)
@@ -488,23 +537,27 @@ fn build_trak(
 }
 
 fn build_video_stsd(v: &VideoTrackConfig) -> Vec<u8> {
-    let mut avc1 = vec![0u8; 6];
-    avc1.extend_from_slice(&1u16.to_be_bytes()); // data_reference_index
-    avc1.extend_from_slice(&[0u8; 16]); // pre_defined / reserved
-    avc1.extend_from_slice(&(v.width as u16).to_be_bytes());
-    avc1.extend_from_slice(&(v.height as u16).to_be_bytes());
-    avc1.extend_from_slice(&u32s(&[0x0048_0000, 0x0048_0000, 0])); // 72 dpi
-    avc1.extend_from_slice(&1u16.to_be_bytes()); // frame_count
-    avc1.extend_from_slice(&[0u8; 32]); // compressorname
-    avc1.extend_from_slice(&0x0018u16.to_be_bytes()); // depth
-    avc1.extend_from_slice(&(-1i16).to_be_bytes()); // pre_defined
-    avc1.extend_from_slice(&boxed(b"avcC", &v.codec_config));
+    let (sample_entry_box, config_box) = match v.codec {
+        VideoCodecId::Hevc => (b"hvc1", b"hvcC"),
+        _ => (b"avc1", b"avcC"),
+    };
+    let mut entry = vec![0u8; 6];
+    entry.extend_from_slice(&1u16.to_be_bytes()); // data_reference_index
+    entry.extend_from_slice(&[0u8; 16]); // pre_defined / reserved
+    entry.extend_from_slice(&(v.width as u16).to_be_bytes());
+    entry.extend_from_slice(&(v.height as u16).to_be_bytes());
+    entry.extend_from_slice(&u32s(&[0x0048_0000, 0x0048_0000, 0])); // 72 dpi
+    entry.extend_from_slice(&1u16.to_be_bytes()); // frame_count
+    entry.extend_from_slice(&[0u8; 32]); // compressorname
+    entry.extend_from_slice(&0x0018u16.to_be_bytes()); // depth
+    entry.extend_from_slice(&(-1i16).to_be_bytes()); // pre_defined
+    entry.extend_from_slice(&boxed(config_box, &v.codec_config));
     if v.color.is_specified() {
-        avc1.extend_from_slice(&build_colr_nclx(v.color));
+        entry.extend_from_slice(&build_colr_nclx(v.color));
     }
 
     let mut stsd = u32s(&[1]);
-    stsd.extend_from_slice(&boxed(b"avc1", &avc1));
+    stsd.extend_from_slice(&boxed(sample_entry_box, &entry));
     full_box(b"stsd", 0, 0, &stsd)
 }
 
@@ -1042,5 +1095,58 @@ mod tests {
             String::from_utf8_lossy(&decode.stderr)
         );
         assert_eq!(decode.stdout.len(), 8 * (w as usize) * (h as usize) * 3);
+    }
+
+    #[test]
+    fn hevc_hvc1_mux_and_deferred_codec_config_roundtrips_through_demuxer() {
+        let hvcc = vec![
+            1u8, 1, 0x60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 90, 0xF0, 0, 0xFC, 0xFD, 0xF8, 0xF8, 0, 0, 3,
+            0,
+        ];
+        let track = TrackConfig::Video(VideoTrackConfig {
+            width: 128,
+            height: 72,
+            timescale: 24,
+            fps: Rational::new(24, 1),
+            codec: VideoCodecId::Hevc,
+            codec_config: Vec::new(),
+            color: ColorDescription::bt709_limited(),
+        });
+
+        let mut muxer = Mp4Muxer::new(
+            Cursor::new(Vec::new()),
+            &[track],
+            Mp4MuxerOptions::default(),
+        )
+        .unwrap();
+        muxer
+            .write_packet(&sample_packet(
+                0,
+                0,
+                true,
+                vec![0, 0, 0, 3, 0x26, 0x01, 0xAF],
+            ))
+            .unwrap();
+        muxer
+            .write_packet(&sample_packet(0, 1, false, vec![0, 0, 0, 2, 0x02, 0x01]))
+            .unwrap();
+        muxer.set_video_codec_config(0, hvcc.clone()).unwrap();
+
+        let mp4_bytes = muxer.into_inner().unwrap().into_inner();
+        assert!(find_box_offset(&mp4_bytes, b"hvc1").is_some());
+        assert!(find_box_offset(&mp4_bytes, b"hvcC").is_some());
+        assert_eq!(&mp4_bytes[16..28], b"isomiso2hvc1");
+
+        let mut demuxer = crate::Mp4Demuxer::open(Cursor::new(mp4_bytes)).unwrap();
+        let demuxed = &demuxer.video_tracks()[0];
+        assert_eq!(demuxed.codec, VideoCodecId::Hevc);
+        assert_eq!((demuxed.width, demuxed.height), (128, 72));
+        assert_eq!(demuxed.codec_config, hvcc);
+        assert_eq!(demuxed.samples.len(), 2);
+
+        let mut buf = Vec::new();
+        let s0 = demuxer.read_sample(0, 0, &mut buf).unwrap();
+        assert!(s0.is_keyframe);
+        assert_eq!(buf, vec![0, 0, 0, 3, 0x26, 0x01, 0xAF]);
     }
 }

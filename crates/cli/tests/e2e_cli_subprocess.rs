@@ -559,5 +559,74 @@ fn e2e_ffmpeg_free_doctor_and_mp4_render() {
         assert!(inspect_out.status.success());
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        let vt_hevc_output = dir.join("out_vt_hevc.mp4");
+        let res = Command::new(cli_bin())
+            .env("PATH", "")
+            .args([
+                "render",
+                "--composition",
+                "HelloWorld",
+                "--encoder",
+                "native",
+                "--codec",
+                "h265",
+                "--output",
+                vt_hevc_output.to_str().unwrap(),
+                "--width",
+                "160",
+                "--height",
+                "96",
+                "--fps",
+                "24",
+                "--duration",
+                "6",
+                "--crf",
+                "22",
+            ])
+            .output()
+            .expect("Failed to spawn VideoToolbox HEVC native render with empty PATH");
+        assert!(
+            res.status.success(),
+            "FFmpeg-free VideoToolbox HEVC render failed: stderr={}",
+            String::from_utf8_lossy(&res.stderr)
+        );
+        let bytes = fs::read(&vt_hevc_output).unwrap();
+        assert_eq!(&bytes[4..8], b"ftyp");
+        assert!(bytes.windows(4).any(|w| w == b"hvc1"));
+
+        let hevc_probe = Command::new(cli_bin())
+            .env("PATH", "")
+            .args(["probe", vt_hevc_output.to_str().unwrap()])
+            .output()
+            .unwrap();
+        assert!(hevc_probe.status.success());
+        let hevc_json: serde_json::Value = serde_json::from_slice(&hevc_probe.stdout).unwrap();
+        assert_eq!(hevc_json["width"], 160);
+        assert_eq!(hevc_json["height"], 96);
+        assert_eq!(hevc_json["fps"], 24.0);
+        assert_eq!(hevc_json["duration_in_frames"], 6);
+
+        if ffprobe_available() {
+            let probe = Command::new("ffprobe")
+                .args([
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "stream=codec_name,width,height,nb_frames",
+                    "-of",
+                    "default=noprint_wrappers=1",
+                ])
+                .arg(&vt_hevc_output)
+                .output()
+                .unwrap();
+            assert!(probe.status.success());
+            let txt = String::from_utf8_lossy(&probe.stdout);
+            assert!(txt.contains("codec_name=hevc"), "{txt}");
+            assert!(txt.contains("nb_frames=6"), "{txt}");
+        }
+    }
+
     let _ = fs::remove_dir_all(&dir);
 }

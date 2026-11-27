@@ -20,6 +20,7 @@ path = "src/main.rs"
 rust-motion-animation   = { workspace = true }
 rust-motion-composition = { workspace = true }
 rust-motion-media       = { workspace = true }
+rust-motion-media-hwaccel = { workspace = true }
 rust-motion-paths       = { workspace = true }
 rust-motion-rasterizer  = { workspace = true }
 rust-motion-shapes      = { workspace = true }

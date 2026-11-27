@@ -1,4 +1,4 @@
-//! Pure-Rust streaming H.264 + ISO-BMFF MP4 encoder sink (zero external FFmpeg dependency).
+//! Built-in native MP4 video encoder sink (pure-Rust H.264 and Apple VideoToolbox H.264/HEVC).
 
 use std::fs::{File, OpenOptions};
 
@@ -8,10 +8,16 @@ use rust_motion_h264enc::{
 use rust_motion_media_container::{Mp4Muxer, Mp4MuxerOptions};
 use rust_motion_media_core::{
     ColorDescription, ContainerMuxer, EncodedPacket, Rational, TrackConfig, VideoCodecId,
-    VideoTrackConfig,
+    VideoEncodeConfig, VideoEncoder, VideoFrame, VideoFrameBuffer, VideoTrackConfig,
 };
+use rust_motion_media_hwaccel::{is_videotoolbox_available, HardwareVideoEncoder};
 
 use super::*;
+
+enum NativeVideoEncoderImpl {
+    PureRustH264(Box<Encoder>),
+    Hardware(Box<HardwareVideoEncoder>),
+}
 
 pub(super) struct NativeH264FrameSink<'a> {
     control: &'a RenderControl,
@@ -29,8 +35,9 @@ pub(super) struct NativeH264FrameSink<'a> {
     y_plane: Vec<u8>,
     u_plane: Vec<u8>,
     v_plane: Vec<u8>,
-    encoder: Encoder,
+    encoder: NativeVideoEncoderImpl,
     muxer: Mp4Muxer<File>,
+    codec_config_written: bool,
     encoded_count: u32,
 }
 
@@ -41,11 +48,16 @@ impl<'a> NativeH264FrameSink<'a> {
         output_height: u32,
         started: Instant,
     ) -> Result<Self, RasterError> {
-        if config.codec != VideoCodec::H264 {
+        if !matches!(config.codec, VideoCodec::H264 | VideoCodec::H265) {
             return Err(RasterError::ImageEncode(format!(
-                "built-in native encoder currently supports H.264 output, got {:?}",
+                "built-in native encoder currently supports H.264 and H.265 output, got {:?}",
                 config.codec
             )));
+        }
+        if config.codec == VideoCodec::H265 && !is_videotoolbox_available() {
+            return Err(RasterError::ImageEncode(
+                "built-in native H.265 encoding requires Apple VideoToolbox on macOS".into(),
+            ));
         }
         if !active_audio_tracks(config).is_empty() {
             return Err(RasterError::ImageEncode(
@@ -56,35 +68,67 @@ impl<'a> NativeH264FrameSink<'a> {
 
         let effective_fps = config.fps / f64::from(config.frame_step.max(1));
         let rational_fps = Rational::from_fps(effective_fps);
-
-        let (preset, profile, bframes) = match config.preset.to_ascii_lowercase().as_str() {
-            "ultrafast" | "superfast" | "veryfast" => (Preset::Speed, Profile::Baseline, 0),
-            "faster" | "fast" => (Preset::Speed, Profile::Main, 0),
-            "slow" | "slower" | "veryslow" | "placebo" => (Preset::Quality, Profile::High, 2),
-            _ => (Preset::Balanced, Profile::High, 0),
+        let use_hardware = config.codec == VideoCodec::H265
+            || (config.hw_accel == HwAccel::VideoToolbox && is_videotoolbox_available());
+        let codec_id = match config.codec {
+            VideoCodec::H265 => VideoCodecId::Hevc,
+            _ => VideoCodecId::H264,
         };
 
-        let mut enc_cfg = EncoderConfig::new(
-            output_width,
-            output_height,
-            rational_fps.num,
-            rational_fps.den,
-        );
-        enc_cfg.rate = RateControl::Crf(config.crf.min(51) as f32);
-        enc_cfg.preset = preset;
-        enc_cfg.profile = profile;
-        enc_cfg.bframes = bframes;
-        enc_cfg.color = ColorConfig {
-            primaries: 1,
-            transfer: 1,
-            matrix: 1,
-            full_range: false,
-        };
-        enc_cfg.format = PacketFormat::LengthPrefixed;
+        let (encoder, initial_codec_config, allocate_yuv) = if use_hardware {
+            let mut hw = HardwareVideoEncoder::new(codec_id).map_err(|e| {
+                RasterError::ImageEncode(format!("Failed to create hardware video encoder: {e}"))
+            })?;
+            hw.configure(&VideoEncodeConfig {
+                width: output_width,
+                height: output_height,
+                fps: rational_fps,
+                codec: codec_id,
+                crf: config.crf.min(51),
+                preset: config.preset.clone(),
+                color: ColorDescription::bt709_limited(),
+            })
+            .map_err(|e| {
+                RasterError::ImageEncode(format!("Failed to configure hardware video encoder: {e}"))
+            })?;
+            let cfg = hw.codec_config();
+            (NativeVideoEncoderImpl::Hardware(Box::new(hw)), cfg, false)
+        } else {
+            let (preset, profile, bframes) = match config.preset.to_ascii_lowercase().as_str() {
+                "ultrafast" | "superfast" | "veryfast" => (Preset::Speed, Profile::Baseline, 0),
+                "faster" | "fast" => (Preset::Speed, Profile::Main, 0),
+                "slow" | "slower" | "veryslow" | "placebo" => (Preset::Quality, Profile::High, 2),
+                _ => (Preset::Balanced, Profile::High, 0),
+            };
 
-        let encoder = Encoder::new(enc_cfg).map_err(|e| {
-            RasterError::ImageEncode(format!("Failed to initialize native H.264 encoder: {e}"))
-        })?;
+            let mut enc_cfg = EncoderConfig::new(
+                output_width,
+                output_height,
+                rational_fps.num,
+                rational_fps.den,
+            );
+            enc_cfg.rate = RateControl::Crf(config.crf.min(51) as f32);
+            enc_cfg.preset = preset;
+            enc_cfg.profile = profile;
+            enc_cfg.bframes = bframes;
+            enc_cfg.color = ColorConfig {
+                primaries: 1,
+                transfer: 1,
+                matrix: 1,
+                full_range: false,
+            };
+            enc_cfg.format = PacketFormat::LengthPrefixed;
+
+            let encoder = Encoder::new(enc_cfg).map_err(|e| {
+                RasterError::ImageEncode(format!("Failed to initialize native H.264 encoder: {e}"))
+            })?;
+            let avcc = encoder.avcc();
+            (
+                NativeVideoEncoderImpl::PureRustH264(Box::new(encoder)),
+                avcc,
+                true,
+            )
+        };
 
         let file = OpenOptions::new()
             .read(true)
@@ -99,13 +143,14 @@ impl<'a> NativeH264FrameSink<'a> {
                 ))
             })?;
 
+        let codec_config_written = !initial_codec_config.is_empty();
         let track = TrackConfig::Video(VideoTrackConfig {
             width: output_width,
             height: output_height,
             timescale: rational_fps.num,
             fps: rational_fps,
-            codec: VideoCodecId::H264,
-            codec_config: encoder.avcc(),
+            codec: codec_id,
+            codec_config: initial_codec_config,
             color: ColorDescription::bt709_limited(),
         });
 
@@ -115,8 +160,13 @@ impl<'a> NativeH264FrameSink<'a> {
 
         let y_stride = output_width as usize;
         let uv_stride = y_stride / 2;
-        let y_len = y_stride * (output_height as usize);
-        let uv_len = uv_stride * ((output_height as usize) / 2);
+        let (y_plane, u_plane, v_plane) = if allocate_yuv {
+            let y_len = y_stride * (output_height as usize);
+            let uv_len = uv_stride * ((output_height as usize) / 2);
+            (vec![0u8; y_len], vec![0u8; uv_len], vec![0u8; uv_len])
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
 
         Ok(Self {
             control: &config.control,
@@ -131,33 +181,43 @@ impl<'a> NativeH264FrameSink<'a> {
             frame_duration_ticks: i64::from(rational_fps.den),
             y_stride,
             uv_stride,
-            y_plane: vec![0u8; y_len],
-            u_plane: vec![0u8; uv_len],
-            v_plane: vec![0u8; uv_len],
+            y_plane,
+            u_plane,
+            v_plane,
             encoder,
             muxer,
+            codec_config_written,
             encoded_count: 0,
         })
     }
 
-    fn write_encoded_packets(
-        &mut self,
-        packets: Vec<rust_motion_h264enc::Packet>,
-    ) -> Result<(), RasterError> {
-        let den = self.frame_duration_ticks;
-        for pkt in packets {
-            self.muxer
-                .write_packet(&EncodedPacket {
-                    stream_index: 0,
-                    data: pkt.data,
-                    pts: pkt.pts.saturating_mul(den),
-                    dts: pkt.dts.saturating_mul(den),
-                    duration: den,
-                    is_keyframe: pkt.keyframe,
-                })
-                .map_err(|e| {
-                    RasterError::ImageEncode(format!("Native MP4 mux write error: {e}"))
+    fn sync_codec_config(&mut self) -> Result<(), RasterError> {
+        if self.codec_config_written {
+            return Ok(());
+        }
+        if let NativeVideoEncoderImpl::Hardware(hw) = &self.encoder {
+            let cfg = hw.codec_config();
+            if !cfg.is_empty() {
+                self.muxer.set_video_codec_config(0, cfg).map_err(|e| {
+                    RasterError::ImageEncode(format!("Native MP4 codec config error: {e}"))
                 })?;
+                self.codec_config_written = true;
+            }
+        }
+        Ok(())
+    }
+
+    fn write_media_packets(&mut self, packets: Vec<EncodedPacket>) -> Result<(), RasterError> {
+        self.sync_codec_config()?;
+        let den = self.frame_duration_ticks;
+        for mut pkt in packets {
+            pkt.stream_index = 0;
+            pkt.pts = pkt.pts.saturating_mul(den);
+            pkt.dts = pkt.dts.saturating_mul(den);
+            pkt.duration = den;
+            self.muxer.write_packet(&pkt).map_err(|e| {
+                RasterError::ImageEncode(format!("Native MP4 mux write error: {e}"))
+            })?;
             self.encoded_count = self.encoded_count.saturating_add(1).min(self.total);
             self.control.report_encoding_progress(EncodingProgress {
                 encoded_frames: self.encoded_count,
@@ -167,9 +227,38 @@ impl<'a> NativeH264FrameSink<'a> {
         Ok(())
     }
 
+    fn write_h264enc_packets(
+        &mut self,
+        packets: Vec<rust_motion_h264enc::Packet>,
+    ) -> Result<(), RasterError> {
+        let converted = packets
+            .into_iter()
+            .map(|pkt| EncodedPacket {
+                stream_index: 0,
+                data: pkt.data,
+                pts: pkt.pts,
+                dts: pkt.dts,
+                duration: 1,
+                is_keyframe: pkt.keyframe,
+            })
+            .collect();
+        self.write_media_packets(converted)
+    }
+
     pub(super) fn finish(mut self) -> Result<(), RasterError> {
-        let trailing = self.encoder.flush();
-        self.write_encoded_packets(trailing)?;
+        match &mut self.encoder {
+            NativeVideoEncoderImpl::PureRustH264(enc) => {
+                let trailing = enc.flush();
+                self.write_h264enc_packets(trailing)?;
+            }
+            NativeVideoEncoderImpl::Hardware(hw) => {
+                let trailing = hw.flush().map_err(|e| {
+                    RasterError::ImageEncode(format!("Hardware encoder flush error: {e}"))
+                })?;
+                self.write_media_packets(trailing)?;
+            }
+        }
+        self.sync_codec_config()?;
         self.muxer
             .finish()
             .map_err(|e| RasterError::ImageEncode(format!("Native MP4 finish error: {e}")))
@@ -186,25 +275,47 @@ impl FrameSink for NativeH264FrameSink<'_> {
             self.output_width,
             self.output_height,
         )?;
-        rgba_to_yuv420_bt709(
-            &scaled,
-            self.output_width as usize,
-            self.output_height as usize,
-            &mut self.y_plane,
-            &mut self.u_plane,
-            &mut self.v_plane,
-        );
-        let yuv = YuvFrame {
-            y: &self.y_plane,
-            u: &self.u_plane,
-            v: &self.v_plane,
-            y_stride: self.y_stride,
-            uv_stride: self.uv_stride,
-        };
-        let packets = self.encoder.encode(&yuv, i64::from(frame)).map_err(|e| {
-            RasterError::ImageEncode(format!("Native H.264 encode error on frame {frame}: {e}"))
-        })?;
-        self.write_encoded_packets(packets)?;
+        match &mut self.encoder {
+            NativeVideoEncoderImpl::PureRustH264(enc) => {
+                rgba_to_yuv420_bt709(
+                    &scaled,
+                    self.output_width as usize,
+                    self.output_height as usize,
+                    &mut self.y_plane,
+                    &mut self.u_plane,
+                    &mut self.v_plane,
+                );
+                let yuv = YuvFrame {
+                    y: &self.y_plane,
+                    u: &self.u_plane,
+                    v: &self.v_plane,
+                    y_stride: self.y_stride,
+                    uv_stride: self.uv_stride,
+                };
+                let packets = enc.encode(&yuv, i64::from(frame)).map_err(|e| {
+                    RasterError::ImageEncode(format!(
+                        "Native H.264 encode error on frame {frame}: {e}"
+                    ))
+                })?;
+                self.write_h264enc_packets(packets)?;
+            }
+            NativeVideoEncoderImpl::Hardware(hw) => {
+                let video_frame = VideoFrame {
+                    width: self.output_width,
+                    height: self.output_height,
+                    pts: i64::from(frame),
+                    duration: 1,
+                    color: ColorDescription::bt709_limited(),
+                    buffer: VideoFrameBuffer::CpuRgba(scaled),
+                };
+                let packets = hw.encode(&video_frame).map_err(|e| {
+                    RasterError::ImageEncode(format!(
+                        "Hardware video encode error on frame {frame}: {e}"
+                    ))
+                })?;
+                self.write_media_packets(packets)?;
+            }
+        }
 
         if let Some(callback) = &self.control.progress {
             callback(RenderProgress {
